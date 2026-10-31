@@ -5,6 +5,7 @@ import { EXECUTION_PHASES } from "../../lib/constants.ts";
 import { phaseErrorDetails, phaseErrorSummary, phaseSummary } from "../../lib/details.ts";
 import { phaseElapsed, pipelineDuration, pipelineTimingView } from "../../lib/pipelineTiming.ts";
 import type { PipelineTimingGroup } from "../../lib/pipelineTiming.ts";
+import { qaProgress } from "../../lib/qaProgress.ts";
 import { statusLabel } from "../../lib/format.ts";
 import { pipelineProgressView } from "../../lib/pipelineProgress.ts";
 
@@ -56,6 +57,7 @@ function TimingTable({ group }: { group: PipelineTimingGroup }) {
 }
 
 export function PhaseList({ activeRun }: PhaseListProps) {
+  const qa = qaProgress(activeRun);
   const [now, setNow] = useState(() => Date.now());
   const terminal = ["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status ?? "");
   const running = !terminal && Object.values(activeRun.phases ?? {}).some((phase) => phase?.status === "running");
@@ -123,7 +125,12 @@ export function PhaseList({ activeRun }: PhaseListProps) {
                 <summary><span>{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count, true)}</span><span className="phase-import-toggle">登记明细</span></summary>
                 <p>{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count)}</p>
                 <p>文件登记、去重、元数据读取与预览准备；媒体处理见流水线。</p>
-              </details> : <p className="phase-summary">{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count)}</p>}
+              </details> : phaseDef.key === "qa_eval" ? <div className="phase-summary">
+                <p>答题已执行 {qa.agentRatio} · {qa.judgeEnabled ? `有效评分 ${qa.validRatio}` : "Judge 未配置"}</p>
+                {qa.judgeEnabled && qa.attempted !== null ? <p className="muted small">
+                  评分尝试已结束 {qa.attemptedRatio}（含失败）{qa.skipped ? ` · 未进入评分 ${qa.skipped} 题` : ""}
+                </p> : null}
+              </div> : <p className="phase-summary">{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count)}</p>}
               {errors.length > 0 ? (
                 <details className="phase-errors">
                   <summary>{phaseErrorSummary(phase)}</summary>

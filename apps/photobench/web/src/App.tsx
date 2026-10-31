@@ -291,6 +291,8 @@ export function App({ initialLoading = false }: AppProps) {
   const stopSuite = async () => {
     if (stopping || !window.confirm("确定停止全部测评、重判和内存画像任务？正在执行的调用需要完成清理。")) return;
     setStopping(true);
+    configApi.setError("");
+    runs.setError("");
     setStopStatus("正在发送取消请求…");
     try {
       const result = await api<{ errors?: Record<string, string> }>("/cancel-active", { method: "POST", body: "{}" });
@@ -298,11 +300,14 @@ export function App({ initialLoading = false }: AppProps) {
       const status = await api<ActiveWorkStatus>("/active-work/cleanup", { method: "POST", body: "{}" });
       setWorkBusy(status.cleanup_status !== "stopped");
       setStopStatus(status.cleanup_status === "stopped" ? "已停止，后台任务已退出" : "已请求取消，正在等待后台任务退出；清理完成前禁止新建任务");
-      await runs.loadRuns();
-      await runs.loadActiveRun();
+      try {
+        await runs.loadRuns();
+        await runs.loadActiveRun();
+      } catch (error) {
+        runs.setError(`停止请求已处理，刷新评测记录失败：${(error as Error).message || "请重新选择任务"}`);
+      }
     } catch (error) {
       setStopStatus("停止未确认：" + (error as Error).message);
-      configApi.setError((error as Error).message);
     } finally {
       setStopping(false);
     }

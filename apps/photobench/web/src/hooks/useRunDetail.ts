@@ -84,7 +84,7 @@ export interface RunDetailOptions {
   /** 同步可读的 run id；所有 await 后的陈旧判断都用它（1.0 `:2314`）。 */
   activeRunIdRef: ActiveRunIdRef;
   /** 1.0 `:2317-2319`：把现算 summary 合回 runs 列表行。 */
-  updateRunSummary?: (runId: string, summary: RunSummary) => void;
+  updateRunSummary?: (runId: string, summary: RunSummary, snapshot?: Run) => void;
   /** 1.0 `:2331` 并发拉逐题当前页；`page` 缺省表示「当前页」（1.0 `qaPage.value.page`）。 */
   loadQaPage?: (page?: number) => Promise<unknown>;
   /** 1.0 `:2324-2326`：清空 qaPage / qaDetails / openQaItems，归逐题 hook。 */
@@ -310,7 +310,7 @@ export function useRunDetail(options: RunDetailOptions) {
         lastTime: Number(payload.telemetry_live?.history?.at(-1)?.t ?? known?.lastTime ?? 0),
         terminal: full ? TERMINAL_STATUSES.has(payload.status || "") : known?.terminal ?? false };
       setActiveRun(previous => retainFullHistory(previous, payload));
-      updateRunSummary?.(runId, effectiveRunSummary(payload));
+      updateRunSummary?.(runId, effectiveRunSummary(payload), payload);
       if (resetPage) {
         analysisOpen.current = false;
         setKeyframeAnalysis(null);

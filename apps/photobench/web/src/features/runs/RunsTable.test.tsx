@@ -68,7 +68,7 @@ describe("状态列（1.0 :3023-3025）", () => {
     renderTable([run({ qa_count: 487, summary: { completed: 487, judge_valid_count: 484 },
       phases: { qa_eval: { progress: { completed: 487, total: 487 } } } })]);
     expect(screen.getByText("484/487")).toBeTruthy();
-    expect(screen.queryByText("487/487")).toBeNull();
+    expect(screen.getByText("487/487").parentElement?.textContent).toBe("答题 487/487");
   });
 
   it("0和未知值如实显示，评分失败不当作完成，异常计数不截断", () => {

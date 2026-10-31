@@ -241,3 +241,21 @@ describe("停止全部", () => {
     expect(screen.queryByText("已停止，后台任务已退出")).toBeNull();
   });
 });
+
+it("取消成功但刷新失败时保留停止结果，并说明读取错误", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const fallback = mockApi.getMockImplementation()!;
+  let stopped = false;
+  mockApi.mockImplementation((path: string) => {
+    if (path === "/cancel-active") { stopped = true; return Promise.resolve({ cancelled: ["r"] }); }
+    if (path === "/active-work/cleanup") return Promise.resolve({ cleanup_status: "stopped" });
+    if (stopped && path.startsWith("/runs?")) return Promise.reject(new Error("read unavailable"));
+    return fallback(path);
+  });
+  render(<App />);
+  await screen.findByTestId("runs-view");
+  fireEvent.click(screen.getByRole("button", { name: /停止全部/ }));
+  expect(await screen.findByText("已停止，后台任务已退出")).toBeTruthy();
+  expect(await screen.findByText("停止请求已处理，刷新评测记录失败：read unavailable")).toBeTruthy();
+  expect(screen.queryByText(/停止未确认/)).toBeNull();
+});

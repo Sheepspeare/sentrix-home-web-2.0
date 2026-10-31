@@ -8,6 +8,7 @@
  * `#runs-region` 上而不是另造一层包装节点——1.0 没有那层节点，多一个会偏离 DOM。
  *
  */
+import { qaProgress } from "../../lib/qaProgress.ts";
 import type { RefObject } from "react";
 
 import type { Run } from "../../api/types.ts";
@@ -15,18 +16,13 @@ import type { RunPageState } from "../../hooks/useRuns.ts";
 import { albumName, duration, fmtDate, fmtPct, modelName, statusLabel } from "../../lib/format.ts";
 import { modeBadgeClass, modeLabel } from "../../lib/qaBrowser.ts";
 
-/** A sample completes after a valid Judge score; Agent and Judge attempt counts are not substitutes. */
 function RunProgress({ run }: { run: Run }) {
-  const phase = run.phases?.qa_eval;
-  const progress = phase?.progress;
-  if (run.mode === "build" || progress?.judge_concurrency === 0) return <span className="muted">—</span>;
-  const count = (value: unknown): number | null =>
-    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
-  const completed = count(run.summary?.judge_valid_count);
-  const total = run.qa_count === null ? null :
-    count(run.qa_count) ?? count(run.summary?.total) ?? count(progress?.total) ?? count(progress?.judge_total) ?? count(phase?.judge_total);
-  const label = completed === null && total === null ? "—" : `${completed ?? "—"}/${total ?? "—"}`;
-  return <span className="run-progress-count" aria-label={`评分完成 ${label}`}>{label}</span>;
+  const progress = qaProgress(run);
+  if (!progress.applicable || !progress.judgeEnabled) return <span className="muted">—</span>;
+  return <div className="run-progress-count">
+    {progress.agent !== null ? <div>答题 <span>{progress.agentRatio}</span></div> : null}
+    <div aria-label={`有效评分 ${progress.validRatio}`}>评分 <span>{progress.validRatio}</span></div>
+  </div>;
 }
 
 export interface RunsTableProps {

@@ -19,8 +19,9 @@ describe("阶段卡（1.0 :3099-3129）", () => {
       status: "running", judge_completed: 70, judge_total: 487,
       progress: { completed: 71, total: 487 },
     } })} />);
-    expect(container.textContent).toContain("Agent 71/487 · Judge 已结束 70/487");
-    expect(container.textContent).not.toContain("Judge 已结束 0/487");
+    expect(container.textContent).toContain("答题已执行 71/487 · 有效评分 —/487");
+    expect(container.textContent).not.toContain("评分尝试已结束 0/487");
+    expect(container.textContent).toContain("评分尝试已结束 70/487（含失败）");
   });
 
   it("固定渲染 6 张卡，状态文案随 phase.status 变化", () => {
@@ -240,4 +241,13 @@ it("导入首屏保留数量、失败和墙钟，登记细节折叠且终态不�
   expect(card.querySelector("details")?.open).toBe(false);
   expect(card.textContent).toContain("登记落库累计 0.1s");
   expect(card.querySelector(".phase-bar")).toBeNull();
+});
+
+it("取消任务的9题答题与3题有效评分分别展示，跳过题不当作已完成", () => {
+  const { container } = render(<PhaseList activeRun={{ run_id: "cancelled", status: "cancelled", qa_count: 12,
+    summary: { judge_valid_count: 3 }, phases: { qa_eval: { status: "cancelled", progress: {
+      completed: 9, total: 12, judge_completed: 9, judge_total: 12, judge_skipped: 3,
+    } } } }} />);
+  expect(container.textContent).toContain("答题已执行 9/12 · 有效评分 3/12");
+  expect(container.textContent).toContain("评分尝试已结束 9/12（含失败） · 未进入评分 3 题");
 });

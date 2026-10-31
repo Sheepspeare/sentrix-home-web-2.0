@@ -276,3 +276,28 @@ it.each([
   });
   expect(result.current.error).toBe(expected);
 });
+
+it("详情读取成功同时同步列表答题和评分进度，并清除先前读取错误", async () => {
+  let ready = false;
+  const snapshot = { run_id: "a", status: "cancelled", qa_count: 12, summary: { judge_valid_count: 3 },
+    phases: { qa_eval: { progress: { completed: 9, total: 12, judge_completed: 9 } } } };
+  apiMock.mockImplementation(async (path) => {
+    if (path.startsWith("/runs?")) return pagePayload(0, "cancelled");
+    if (path.startsWith("/runs/a?")) {
+      if (!ready) throw new Error("'a'");
+      return snapshot;
+    }
+    return {};
+  });
+  const { result } = renderHook(() => useRuns());
+  await act(async () => {
+    await result.current.loadRuns();
+    result.current.selectRun({ run_id: "a", status: "running" });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(result.current.error).toContain("读取评测详情失败");
+  ready = true;
+  await act(async () => { await result.current.loadActiveRun(); });
+  expect(result.current.error).toBe("");
+  expect(result.current.runs[0]).toMatchObject(snapshot);
+});
