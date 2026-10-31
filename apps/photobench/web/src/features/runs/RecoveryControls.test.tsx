@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResumeCard } from "./ResumeCard.tsx";
 import { RejudgeCard, type RejudgeCardProps } from "./RejudgeCard.tsx";
@@ -83,4 +83,17 @@ describe("评分面板的操作语义", () => {
     const prompt = screen.getByText("评分提示词").closest("details") as HTMLDetailsElement;
     expect(prompt.open).toBe(false);
   });
+});
+
+it("续跑提交尚未结束时阻止重复点击", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  const resume = vi.fn(() => pending);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<ResumeCard plan={{...plan, product_version_changed:false}} busy={false} onResume={resume} />);
+  fireEvent.click(screen.getByRole("button", {name:"继续剩余 QA 答题"}));
+  fireEvent.click(screen.getByRole("button", {name:"正在提交…"}));
+  expect(resume).toHaveBeenCalledTimes(1);
+  expect((screen.getByRole("button", {name:"正在提交…"}) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { finish(); await pending; });
 });

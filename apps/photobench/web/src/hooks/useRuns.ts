@@ -267,18 +267,20 @@ export function useRuns(options: UseRunsOptions = {}) {
   const resumingRef = useRef(false);
   const [resuming, setResuming] = useState(false);
   const resumeRun = useCallback(async (runId: string, body: Record<string, unknown>) => {
-    if (resumingRef.current || hasRunningNow()) return;
+    const plan = detail.recoveryPlan;
+    if (resumingRef.current || hasRunningNow() || detail.rejudgeSubmitting || detail.rejudgeConfirmation ||
+        activeRunIdRef.current !== runId || plan?.run_id !== runId || !plan.can_resume || plan.remaining_qa_count <= 0) return;
     resumingRef.current = true;
     setResuming(true);
     setError("");
     try {
       const result = await post<{run_id: string}>(`/runs/${encodeURIComponent(runId)}/resume`, body);
       await loadRuns();
-      selectRun({run_id: result.run_id});
+      selectRun({run_id: result.run_id, status: "pending"});
       startPolling();
     } catch (error) { setError((error as Error).message); }
     finally { resumingRef.current = false; setResuming(false); }
-  }, [hasRunningNow, loadRuns, selectRun, startPolling]);
+  }, [hasRunningNow, loadRuns, selectRun, startPolling, detail.recoveryPlan, detail.rejudgeSubmitting, detail.rejudgeConfirmation]);
 
   return {
     runs,

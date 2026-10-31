@@ -17,6 +17,8 @@ const PROMPT_KIND_LABELS: Record<string, string> = {
 };
 
 export interface RejudgeCardProps {
+  embedded?: boolean;
+  disabledReason?: string;
   scope?: RejudgeScope;
   onScopeChange?: (scope: RejudgeScope) => void;
   judgeUseGtImages?: boolean;
@@ -43,6 +45,7 @@ export interface RejudgeCardProps {
 }
 
 export function RejudgeCard({
+  embedded = false, disabledReason,
   activeRejudge, scope = "missing", onScopeChange, judgeUseGtImages = false, onJudgeUseGtImagesChange, recoveryPlan,
   judgePromptKinds,
   activePromptKind,
@@ -77,11 +80,11 @@ export function RejudgeCard({
   }, [rejudgeConfirmation, onConfirmRejudge, onCancelRejudge]);
 
   return (
-    <section className="rejudge-card scoring-card">
+    <section className={embedded ? "recovery-column scoring-card" : "rejudge-card scoring-card"} aria-label="重新评分">
       <div className="rejudge-head">
         <div>
-          <h3>为已有回答评分</h3>
-          <p>由 Judge（评分模型）为已保存的回答打分，答题模型不重新答题。</p>
+          {embedded ? <h4>重新评分</h4> : <h3>为已有回答评分</h3>}
+          <p>复用已有回答，只调用评分模型。</p>
         </div>
         {activeRejudge ? (
           <span className={"phase-status " + (activeRejudge.status || "")}>{statusLabel(activeRejudge.status)}</span>
@@ -108,6 +111,7 @@ export function RejudgeCard({
         <button type="button" className="btn" disabled={!canRejudge || rejudgeSubmitting || running || count?.turn_count === 0}
           onClick={() => onRequestRejudge()}>{running ? "评分进行中…" : rejudgeSubmitting ? "正在提交…" : actionLabel[scope]}</button>
       </div>
+      {disabledReason ? <p className="recovery-note">{disabledReason}</p> : null}
       {count?.turn_count === 0 ? <p className="muted small">此范围内没有需要评分的回答。</p> : null}
       <p className="scoring-note">{scope === "all" ? "本次将替换全部已有评分，旧评分保留在历史中。" : "保留已有有效评分，包括 0 分。"}</p>
       <details className="scoring-details">

@@ -152,12 +152,17 @@ export function RunDetail({
               ) : null}
             </div>
           ) : null}
-          {recovery}
-          {activeRun.mode !== "build" ? <RejudgeCard {...rejudge} /> : null}
+          {activeRun.mode !== "build" ? <section className="recovery-panel" aria-label="续跑与评分" key="recovery-actions">
+            <div className="recovery-panel-head"><h3>续跑与评分</h3><span>选择一项操作，已有结果保留</span></div>
+            <div className="recovery-grid">
+              <div className="recovery-column" aria-label="断点续跑">{recovery ?? <><h4>断点续跑</h4><p className="recovery-note">正在读取续跑条件。</p></>}</div>
+              <RejudgeCard {...rejudge} embedded />
+            </div>
+          </section> : null}
           <PhaseList activeRun={activeRun} />
           <KeyMetrics run={activeRun} />
           <ErrorAnalysisPanel key={`analysis-${activeRun.run_id}`} runId={activeRun.run_id} terminal={["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status || "")} />
-          {memory ? <MemoryLayerPanel key={activeRun.run_id} {...memory} /> : null}
+          {memory ? <MemoryLayerPanel key={`memory-${activeRun.run_id}`} {...memory} /> : null}
           <GraphQualityPanel quality={graphQuality ?? null} />
           <h3 className="result-heading">结果指标</h3>
           {activeRun.persistence?.status ? <p className="error">结果保存异常：{String(activeRun.persistence.status)} · {String(activeRun.persistence.error || "")}</p> : null}

@@ -5,6 +5,7 @@ import type { Mock } from "vitest";
 import type { Run } from "../../api/types.ts";
 import type { RejudgeCardProps } from "./RejudgeCard.tsx";
 import { RunDetail } from "./RunDetail.tsx";
+import { ResumeCard } from "./ResumeCard.tsx";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
 
 // 夹具口径：fatal_error 有 / 无；导出勾选三种组合；mode build / 非 build。
@@ -142,7 +143,7 @@ describe("重评卡的显隐（1.0 :3059 v-if mode !== 'build'）", () => {
   it("非 build 模式渲染重评卡", () => {
     renderDetail(run({ mode: "reuse" }));
     expect(screen.getByRole("button", { name: "补齐缺失评分" })).not.toBeNull();
-    expect(screen.getByText("为已有回答评分")).not.toBeNull();
+    expect(screen.getByText("重新评分")).not.toBeNull();
   });
 });
 
@@ -152,4 +153,21 @@ describe("无选中运行（1.0 :3040）", () => {
     expect(screen.getByText("点击上方列表中的某条记录查看详情")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "导出轨迹 JSON" })).toBeNull();
   });
+});
+
+it("同一任务反复读取详情且含记忆面板时只保留一份续跑入口", () => {
+  const memory: MemoryLayerPanelProps = {
+    run: null, manifests: [], qaDetails: {}, qaPageItems: [], memoryEffectiveness: null,
+    keyframeAnalysis: null, summary: null, chainDetail: null, onOpenChainNode: vi.fn(), onCloseChainDetail: vi.fn(),
+  };
+  const plan = { run_id: "r1", can_resume: true, inherited_qa_count: 9, remaining_qa_count: 3,
+    judge_use_gt_images: true, product_version_changed: false } as import("../../hooks/useRunDetail.ts").RecoveryPlan;
+  const props = { activeRun: run({ status: "cancelled" }), memory, rejudge: rejudgeProps(),
+    exportScores: [], onExportScoresChange: vi.fn(), onExportTraces: vi.fn(), onExportSftTraces: vi.fn() };
+  const recovery = () => <ResumeCard key="r1" plan={plan} busy={false} onResume={vi.fn()} />;
+  const view = render(<RunDetail {...props} recovery={recovery()} />);
+  for (let index = 0; index < 5; index++) {
+    view.rerender(<RunDetail {...props} activeRun={{...props.activeRun}} recovery={recovery()} />);
+    expect(screen.getAllByRole("button", {name: "继续剩余 QA 答题"})).toHaveLength(1);
+  }
 });
