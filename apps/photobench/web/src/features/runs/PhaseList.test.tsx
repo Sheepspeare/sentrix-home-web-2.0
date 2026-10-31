@@ -251,3 +251,50 @@ it("取消任务的9题答题与3题有效评分分别展示，跳过题不当�
   expect(container.textContent).toContain("答题已执行 9/12 · 有效评分 3/12");
   expect(container.textContent).toContain("评分尝试已结束 9/12（含失败） · 未进入评分 3 题");
 });
+
+it("复用相册的三个准备阶段显示跳过，不借用任务异常或虚构进度", () => {
+  const run: Run = { run_id: "resume", mode: "reuse", status: "completed_with_errors", phases: {
+    model_deploy: { status: "done", total_seconds: 0.042 },
+    scope_setup: { status: "done", total_seconds: 0 },
+    qa_eval: { status: "partial", progress: { completed: 1171, total: 1171 } },
+  } };
+  const saved = JSON.stringify(run);
+  const { container, queryByRole } = render(<PhaseList activeRun={run} />);
+  const cards = container.querySelectorAll(".phase-card");
+  expect(cards).toHaveLength(6);
+  expect(cards[0]?.textContent).toContain("模型连接");
+  expect(cards[1]?.textContent).toContain("连接已有相册");
+  expect(cards[1]?.textContent).toContain("使用已有相册，不创建新相册");
+  expect(cards[1]?.textContent).not.toContain("<1ms");
+  for (const index of [2, 3, 4]) {
+    expect(cards[index]?.querySelector(".phase-status")?.textContent).toBe("跳过");
+    expect(cards[index]?.querySelector("details")).toBeNull();
+    expect(cards[index]?.textContent).not.toMatch(/等待|\?|有异常/);
+  }
+  expect(queryByRole("progressbar")).toBeNull();
+  expect(cards[5]?.querySelector(".phase-status")?.textContent).toBe("部分完成");
+  expect(JSON.stringify(run)).toBe(saved);
+});
+
+it("复用模式尚未开始时仍区分待执行与跳过，明确跳过的阶段不显示登记详情", () => {
+  const { container } = render(<PhaseList activeRun={{run_id: "reuse", mode: "reuse", status: "pending",
+    phases: { identity_seed: {status: "pending"}, photo_import: {status: "skipped"} },
+  }} />);
+  const cards = container.querySelectorAll(".phase-card");
+  expect(cards[0]?.querySelector(".phase-status")?.textContent).toBe("等待");
+  expect(cards[1]?.querySelector(".phase-status")?.textContent).toBe("等待");
+  expect(container.querySelectorAll(".phase-status.skipped")).toHaveLength(3);
+  expect(cards[3]?.querySelector("details")).toBeNull();
+});
+
+it("复用历史实际记录的失败保留错误，全链路缺失阶段继续显示等待", () => {
+  const { container, rerender } = render(<PhaseList activeRun={{run_id: "legacy", mode: "reuse", phases: {
+    pipeline_processing: { status: "failed", error_details: [{reason: "真实历史错误"}] },
+  }}} />);
+  expect(container.querySelectorAll(".phase-card")[4]?.textContent).toContain("真实历史错误");
+  expect(container.querySelectorAll(".phase-card")[4]?.querySelector(".phase-status")?.textContent).toBe("失败");
+  rerender(<PhaseList activeRun={{run_id: "full", mode: "full", status: "running", phases: {}}} />);
+  expect(container.querySelectorAll(".phase-status.skipped")).toHaveLength(0);
+  expect(container.querySelectorAll(".phase-card")[1]?.textContent).toContain("创建相册");
+  expect(container.querySelectorAll(".phase-card")[2]?.querySelector(".phase-status")?.textContent).toBe("等待");
+});

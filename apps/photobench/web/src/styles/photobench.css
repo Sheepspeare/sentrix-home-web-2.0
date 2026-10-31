@@ -1122,7 +1122,9 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .model-call-body .call-purpose-grid { margin:8px 0; }
 
 /* 阶段卡按内容确定高度，展开详情仅延展所在行。 */
-.execution-phase-list { align-items:start; align-content:start; grid-auto-rows:auto; gap:10px; }
+.execution-phase-list { align-items:stretch; align-content:start; grid-auto-rows:auto; gap:10px; }
+.phase-mode-note { margin:0 0 10px; color:var(--muted); font-size:12px; }
+.phase-status.skipped { color:var(--muted); background:#e9ecef; }
 .execution-phase-list > .phase-card { min-width:0; }
 .execution-phase-list .phase-title { min-height:22px; }
 .execution-phase-list .phase-summary { line-height:1.55; }
@@ -1209,7 +1211,12 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 
 /* 单一恢复面板：两类操作各占一栏，窄屏顺序排列。 */
 .recovery-panel { min-width:0; margin:14px 0; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); overflow:hidden; }
-.recovery-panel-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 16px; padding:13px 18px; background:#f6f8fd; border-bottom:1px solid var(--border); }
+.recovery-panel-head { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; padding:13px 18px; background:#f6f8fd; cursor:pointer; list-style:none; }
+.recovery-panel-head::-webkit-details-marker { display:none; }
+.recovery-panel-head::before { content:"▸"; color:var(--muted); font-size:12px; }
+.recovery-panel[open]>.recovery-panel-head { border-bottom:1px solid var(--border); }
+.recovery-panel[open]>.recovery-panel-head::before { content:"▾"; }
+.recovery-panel-head>span { margin-left:auto; }
 .recovery-panel-head h3 { margin:0; font-size:14px; color:var(--text); }
 .recovery-panel-head>span { font-size:11px; color:var(--muted); }
 .recovery-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }

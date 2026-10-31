@@ -77,10 +77,10 @@ describe("RunsView 装配", () => {
     };
     const { rerender } = render(<RunsView runs={{ ...result.current, activeRunId: interrupted.run_id,
       activeRun: interrupted, recoveryPlan }} judgeModel="" saveJudgePrompt={() => {}} />);
-    expect(screen.getByRole("button", { name: "继续剩余 QA 答题" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "继续剩余 QA 答题", hidden: true })).toBeTruthy();
     rerender(<RunsView runs={{ ...result.current, activeRunId: completed.run_id,
       activeRun: completed, recoveryPlan }} judgeModel="" saveJudgePrompt={() => {}} />);
-    expect((screen.getByRole("button", { name: "继续剩余 QA 答题" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "继续剩余 QA 答题", hidden: true }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("heading", { level: 2, name: /new-model/ })).toBeTruthy();
   });
 });

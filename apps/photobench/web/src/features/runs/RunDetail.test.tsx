@@ -137,12 +137,12 @@ describe("导出轨迹控制（1.0 :3046-3054）", () => {
 describe("重评卡的显隐（1.0 :3059 v-if mode !== 'build'）", () => {
   it("build 模式不渲染重评卡", () => {
     renderDetail(run({ mode: "build" }));
-    expect(screen.queryByRole("button", { name: "补齐缺失评分" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "补齐缺失评分", hidden: true })).toBeNull();
   });
 
   it("非 build 模式渲染重评卡", () => {
     renderDetail(run({ mode: "reuse" }));
-    expect(screen.getByRole("button", { name: "补齐缺失评分" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "补齐缺失评分", hidden: true })).not.toBeNull();
     expect(screen.getByText("重新评分")).not.toBeNull();
   });
 });
@@ -168,6 +168,19 @@ it("同一任务反复读取详情且含记忆面板时只保留一份续跑入�
   const view = render(<RunDetail {...props} recovery={recovery()} />);
   for (let index = 0; index < 5; index++) {
     view.rerender(<RunDetail {...props} activeRun={{...props.activeRun}} recovery={recovery()} />);
-    expect(screen.getAllByRole("button", {name: "继续剩余 QA 答题"})).toHaveLength(1);
+    expect(screen.getAllByRole("button", {name: "继续剩余 QA 答题", hidden: true})).toHaveLength(1);
   }
+});
+
+
+it("续跑与评分默认折叠，展开后才显示双栏操作，再次点击可收起", () => {
+  const { container } = renderDetail(run({ mode: "reuse" }));
+  const panel = container.querySelector<HTMLDetailsElement>("details.recovery-panel")!;
+  expect(panel.open).toBe(false);
+  expect(panel.querySelector(".recovery-grid")).toBeTruthy();
+  fireEvent.click(panel.querySelector("summary")!);
+  expect(panel.open).toBe(true);
+  expect(screen.getByRole("button", { name: "补齐缺失评分" })).toBeTruthy();
+  fireEvent.click(panel.querySelector("summary")!);
+  expect(panel.open).toBe(false);
 });
