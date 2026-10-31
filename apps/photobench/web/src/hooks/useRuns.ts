@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, post } from "../api/client.ts";
+import { api, post, type RequestError } from "../api/client.ts";
 import type { Run, RunPage, RunSummary } from "../api/types.ts";
 import { useRunDetail } from "./useRunDetail.ts";
 import type { RunDetailApi } from "./useRunDetail.ts";
@@ -86,6 +86,7 @@ export function useRuns(options: UseRunsOptions = {}) {
   const [runPage, setRunPage] = useState<RunPageState>(INITIAL_RUN_PAGE);
   const [activeRunId, setActiveRunIdState] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [detailError, setDetailError] = useState<{ runId: string; message: string } | null>(null);
   const [polling, setPolling] = useState(false);
 
   // 1.0 的 `activeRunId.value` 是同步可读的；state 读不到本轮 set 的值，
@@ -188,7 +189,13 @@ export function useRuns(options: UseRunsOptions = {}) {
       timer = null;
       try {
         await loadRuns();
-        if (activeRunIdRef.current) await pollDetailLoader.current();
+        const runId = activeRunIdRef.current;
+        if (runId) {
+          await pollDetailLoader.current();
+          if (activeRunIdRef.current === runId) {
+            setDetailError(previous => previous?.runId === runId ? null : previous);
+          }
+        }
         if (cancelled) return;
         if (hasRunningNow() || ["pending", "running"].includes(String(runPageRef.current.scan?.state))) {
           timer = window.setTimeout(poll, 2000);
@@ -226,11 +233,13 @@ export function useRuns(options: UseRunsOptions = {}) {
   const selectRun = useCallback(
     (run: Run) => {
       setActiveRunId(run.run_id);
+      setDetailError(null);
       setActiveRun({ ...run });
       scrollToRunDetail();
       void loadActiveRun({ resetPage: true }).catch((err: unknown) => {
         if ((err as Error).name !== "AbortError" && activeRunIdRef.current === run.run_id) {
-          setError((err as Error).message || "读取评测详情失败");
+          if (run.status === "pending" && (err as RequestError).status === 404) return;
+          setDetailError({ runId: run.run_id, message: `读取评测详情失败：${(err as Error).message || "请稍后重试"}` });
         }
       });
     },
@@ -275,7 +284,7 @@ export function useRuns(options: UseRunsOptions = {}) {
     resuming, resumeRun,
     runPage,
     activeRunId,
-    error,
+    error: error || (detailError?.runId === activeRunId ? detailError.message : ""),
     setError,
     hasRunning,
     loadRuns,

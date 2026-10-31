@@ -226,3 +226,53 @@ it("评分不足满额但已完成且有错误时停止轮询", async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
   expect(apiMock).toHaveBeenCalledTimes(1);
 });
+
+
+describe("详情读取错误的恢复", () => {
+  it("同一任务读取恢复后清除旧错误，保留独立操作错误", async () => {
+    let ready = false;
+    apiMock.mockImplementation(async (path) => {
+      if (path.startsWith("/runs?")) return pagePayload(1, "running");
+      if (path.startsWith("/runs/a?")) {
+        if (!ready) throw new Error("'a'");
+        return { run_id: "a", status: "running", summary: {} };
+      }
+      return {};
+    });
+    const { result } = renderHook(() => useRuns());
+    await act(async () => {
+      result.current.selectRun({ run_id: "a", status: "running" });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.error).toBe("读取评测详情失败：'a'");
+    ready = true;
+    await act(async () => {
+      result.current.startPolling();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.error).toBe("");
+    await act(async () => {
+      result.current.setError("补评请求失败");
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(result.current.error).toBe("补评请求失败");
+  });
+});
+
+
+it.each([
+  ["pending", 404, ""],
+  ["pending", 500, "读取评测详情失败：server error"],
+  ["completed", 404, "读取评测详情失败：server error"],
+])("%s任务读取HTTP%d时按初始化状态区分真正的错误", async (status, code, expected) => {
+  apiMock.mockImplementation(async (path) => {
+    if (path.startsWith("/runs/a?")) throw Object.assign(new Error("server error"), { status: code });
+    return {};
+  });
+  const { result } = renderHook(() => useRuns());
+  await act(async () => {
+    result.current.selectRun({ run_id: "a", status: String(status) });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(result.current.error).toBe(expected);
+});

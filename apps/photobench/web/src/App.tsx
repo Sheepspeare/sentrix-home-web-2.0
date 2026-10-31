@@ -277,7 +277,7 @@ export function App({ initialLoading = false }: AppProps) {
       // 1.0 :2682-2683：选中新 run。`useRuns` 没暴露 `setActiveRunId`，`selectRun` 是等价入口。
       await runs.loadRuns(1);
       const runId = result.run_ids?.[0];
-      if (runId) runs.selectRun({ run_id: runId });
+      if (runId) runs.selectRun({ run_id: runId, status: "pending" });
       runs.startPolling();
     } catch (e) {
       configApi.setError((e as Error).message);
