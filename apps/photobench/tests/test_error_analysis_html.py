@@ -61,6 +61,59 @@ def test_empty_scope_is_uncovered_and_embeds_no_cases():
     assert "0.0%" not in exported  # no valid denominator to report a rate
 
 
+def test_dashboard_separates_missing_labels_and_keeps_all_cases_in_collapsed_reader():
+    cases = [case_from_item(item(qa_id=f"q{i}", score=2 if i else None), i) for i in range(32)]
+    before = copy.deepcopy(cases)
+    exported = export_report(report(cases), cases, "html", {})
+    assert ReportData(exported).cases() == before
+    assert '<details id="case-reader" class="reader-shell">' in exported
+    assert 'id="reader-from"' in exported and 'id="reader-to"' in exported
+    assert "数据覆盖与分析边界" not in exported
+    assert 'id="coverage"' not in exported
+    assert "样本分布与表现：" not in exported
+    assert 'aria-label="任务质量分布：' in exported
+    assert cases == before
+
+
+def test_retrieval_charts_use_micro_counts_and_exclude_zero_gt():
+    from photobench.domain.error_analysis.html_dashboard import retrieval
+
+    cases = [case_from_item(item(qa_id=f"q{i}"), i) for i in range(3)]
+    for case, counts in zip(cases, [(1, 2, 1), (0, 1, 3), (0, 7, 0)], strict=True):
+        case["retrieval_counts"] = {
+            "candidate": dict(zip(("matched", "predicted", "gt"), counts, strict=True))
+        }
+    before = copy.deepcopy(cases)
+    exported = retrieval(cases)
+    assert "覆盖2 / 3题" in exported
+    assert "25.0%" in exported and "33.3%" in exported
+    assert "命中 1 / GT 4" in exported and "命中 1 / 返回 3" in exported
+    assert cases == before
+
+
+def test_turn_composition_and_multiturn_do_not_count_unselected_context():
+    from photobench.domain.error_analysis.html_dashboard import multiturn, score_composition
+
+    case = case_from_item(
+        item(
+            runtime_turns=[
+                {"message": "first", "judge": {"score": 0}, "expected_action": "clarify"},
+                {"message": "second", "judge": {"score": 2}, "expected_action": "answer"},
+            ]
+        ),
+        0,
+    )
+    case["turns"][0]["difficulty"] = ["unknown"]
+    case["turns"][1]["difficulty"] = ["easy"]
+    case["matched_turns"] = [0]
+    case["turns"][0]["ability_type"] = ["P1"]
+    case["turns"][1]["ability_type"] = ["P2"]
+    exported = score_composition([case], {"content_unit": "turn"}, {})
+    assert "0分 · 1轮" in exported and "2分 ·" not in exported
+    assert 'data-value="P1"' in exported and 'data-value="P2"' not in exported
+    assert "范围不完整 1题" in multiturn([case])
+
+
 def test_behavior_heatmap_shows_row_percentages_and_keeps_unknown_actions():
     matrix = [
         dict(expected="clarify", actual="answer", count=3),
@@ -206,3 +259,25 @@ def test_saved_v2_safety_labels_project_consistently_without_rewriting_artifacts
             assert (directory / name).read_text() == contents
     finally:
         backend.close()
+
+
+def test_score_composition_uses_donuts_only_for_exclusive_content_and_omits_empty_groups():
+    from photobench.domain.error_analysis.html_dashboard import score_composition
+
+    cases = [case_from_item(item(qa_id=f"q{i}", score=0), i) for i in range(2)]
+    for case, content, abilities in zip(cases, ["find", "describe"], [["P1", "P2"], ["P1"]], strict=True):
+        case["dimension_labels"]["content_type"] = [content]
+        case["dimension_labels"]["ability_type"] = abilities
+    before = copy.deepcopy(cases)
+    exported = score_composition(cases, {}, {"find": "查找", "describe": "描述"})
+    assert cases == before
+    assert 'aria-label="内容题型：' in exported
+    assert 'class="composition-row"' in exported
+    assert "2题 · 100.0%" in exported and "1题 · 50.0%" in exported
+    assert "1分 ·" not in exported and "未评分 ·" not in exported
+    cases[0]["dimension_labels"]["content_type"] = ["find", "describe"]
+    assert 'aria-label="内容题型：' not in score_composition(cases, {}, {})
+    assert before[0]["dimension_labels"]["content_type"] == ["find"]
+    for case in cases:
+        case["dimension_labels"] = {}
+    assert score_composition(cases, {}, {}) == ""

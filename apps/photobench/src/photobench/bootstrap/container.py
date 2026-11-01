@@ -308,7 +308,7 @@ class Container:
         # **``run_suites`` 先建、``runs`` 后建**：列表页要叠加「还在跑的 run」，
         # 而那些 run 只在 ``RunSuites._active`` 里（索引里没有它们，见
         # ``RunIndex.upsert``）。顺序反过来就拿不到那个回调。
-        analysis_backend: AnalysisBackend = FileAnalysisBackend(settings.results_root)
+        analysis_backend: AnalysisBackend = FileAnalysisBackend(settings.results_root, albums=album_source)
         error_analysis = ErrorAnalysis(analysis_backend, config)
         run_suites = RunSuites(
             store=run_store,

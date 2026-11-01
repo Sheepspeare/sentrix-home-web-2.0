@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.error_analysis.rules import (
     Aggregator,
@@ -19,6 +21,8 @@ from photobench.domain.error_analysis.rules import (
     fingerprint,
     snapshot_annotations,
 )
+from photobench.domain.runs.judge import judge_chat_url
+from photobench.infrastructure.error_analysis.ai_comparison_worker import run_ai_comparison
 from photobench.infrastructure.error_analysis.ai_worker import run_ai
 from photobench.infrastructure.results.store import committed_path, run_lock
 
@@ -213,8 +217,26 @@ def run_worker(
                 list(lines(right / "cases.jsonl")),
             )
             atomic(target / "comparison.json", report)
-        elif job["kind"] == "ai":
-            run_ai(target, job["options"], secret, check, progress, lines, atomic)
+        elif job["kind"] in {"ai", "ai_compare"}:
+            if not secret.get("model"):
+                check()
+                url = judge_chat_url(secret["url"]).removesuffix("/chat/completions") + "/models"
+                with httpx.Client(timeout=10, trust_env=False) as client:
+                    response = client.get(url)
+                if response.status_code != 200:
+                    raise ValueError(f"所选分析模型名称未配置，读取模型列表失败 HTTP {response.status_code}")
+                ids = [m.get("id") for m in response.json().get("data", []) if m.get("id")]
+                if len(ids) != 1:
+                    raise ValueError("所选分析服务未返回唯一模型，请先保存连接配置中的模型名称")
+                secret["model"] = ids[0]
+                atomic(
+                    target / "model-resolution.json",
+                    {"model": ids[0], "source": "configured_endpoint_models"},
+                )
+            if job["kind"] == "ai_compare":
+                run_ai_comparison(target, job["options"], secret, check, progress, atomic)
+            else:
+                run_ai(target, job["options"], secret, check, progress, lines, atomic)
         else:
             raise ValueError("unknown analysis kind")
         check()

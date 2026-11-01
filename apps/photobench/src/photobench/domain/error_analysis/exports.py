@@ -16,6 +16,19 @@ from photobench.domain.error_analysis.html_report import render_report
 from photobench.domain.error_analysis.taxonomy import QUALITY_DIMENSIONS
 
 DISPLAY_LABELS = {
+    "gt_conflict": "GT证据冲突",
+    "service_error": "服务请求失败",
+    "execution_failure": "答题执行失败",
+    "context_budget": "上下文或预算不足",
+    "format_error": "输出格式错误",
+    "tool_failure": "工具调用失败",
+    "retrieval_gap": "检索证据不足",
+    "incorrect_answer": "回答错误",
+    "unsupported_claim": "无依据推断",
+    "incomplete_answer": "回答不完整",
+    "judge_failure": "评分失败",
+    "record_missing": "执行记录缺失",
+    "no_issue": "未发现明确问题",
     "task_type": "原始任务标签",
     "content_type": "内容题型",
     "test_scenario": "测试场景",
@@ -66,6 +79,13 @@ DISPLAY_LABELS = {
     "turn": "按轮",
     "execution": "执行结果",
     "score": "质量分",
+    "ability_taxonomy_version": "能力标签版本",
+    "quality_score": "原质量评分",
+    "trace": "调用轨迹",
+    "gt": "参考答案",
+    "retrieval_gt": "检索GT",
+    "judge_call_records": "Judge调用记录",
+    "tool_model_call_records": "工具内部模型调用记录",
 }
 _taxonomy = taxonomy_document()
 DISPLAY_LABELS.update({key: val["label"] for key, val in _taxonomy["tasks"].items()})
@@ -191,7 +211,33 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
     """Comparison / AI artifacts keep factual provenance in each export."""
     if format == "json":
         return json.dumps(report, ensure_ascii=False, indent=2)
-    if kind == "ai" and report.get("schema_version") == 2:
+    if kind == "ai_compare":
+        if format == "html":
+            raise ValueError("AI对比请在页面中查看执行轨迹，不提供HTML导出。")
+        if format == "csv":
+            return _csv(
+                [
+                    ["qa_id", "valid", "result", "error"],
+                    *[
+                        [
+                            c["qa_id"],
+                            c["valid"],
+                            json.dumps(c.get("result"), ensure_ascii=False),
+                            c.get("error"),
+                        ]
+                        for c in report["cases"]
+                    ],
+                ]
+            )
+        raise ValueError("unknown format")
+    if kind == "ai" and report.get("schema_version") != 3:
+        message = "此分析为旧版格式，请重新生成分析。"
+        if format == "html":
+            return _document("<p>" + message + "</p>")
+        if format == "csv":
+            return _csv([["提示"], [message]])
+        raise ValueError("unknown format")
+    if kind == "ai":
         meta = {
             k: report.get(k)
             for k in (
@@ -215,11 +261,27 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
             if case["valid"]
             for c in case["result"].get("claims", [])
         ]
+        diagnoses = [
+            (c, c["result"]["diagnosis"])
+            for c in report["cases"]
+            if c["valid"] and c["result"].get("diagnosis")
+        ]
         if format == "csv":
             return _csv(
                 [
                     ["scope_or_index", "qa_id", "kind", "text", "evidence_refs", "limitations"],
                     ["metadata", "", "source_and_coverage", json.dumps(meta, ensure_ascii=False), "", ""],
+                    *[
+                        [
+                            str(c["index"]),
+                            c["qa_id"],
+                            "diagnosis",
+                            json.dumps(d, ensure_ascii=False),
+                            ";".join(d["evidence_refs"]),
+                            d["limitations"],
+                        ]
+                        for c, d in diagnoses
+                    ],
                     *[
                         [i, qa, c["kind"], c["text"], ";".join(c["evidence_refs"]), c["limitations"]]
                         for i, qa, c in claim_rows
@@ -232,10 +294,49 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
                 ]
             )
         if format == "html":
-            body = "<h2>AI 问题总览与逐题诊断</h2><p>" + _escape(report["note"]) + "</p>"
+            body = "<h2>AI 逐题诊断与汇总</h2><p>" + _escape(report["note"]) + "</p>"
             body += _table(["指标", "数量"], [[k, v] for k, v in report["coverage"].items()])
             if report.get("summary_error"):
-                body += "<p>汇总失败：" + _escape(report["summary_error"]) + "</p>"
+                body += "<p>汇总生成失败：" + _escape(report["summary_error"]) + "</p>"
+            for case, diagnosis in diagnoses:
+                body += (
+                    "<section><h3>"
+                    + _escape(case["qa_id"])
+                    + " · 诊断结论</h3><p>"
+                    + _escape(diagnosis["summary"])
+                    + "</p>"
+                )
+                body += (
+                    _table(
+                        ["项目", "内容"],
+                        [
+                            [
+                                "错误类型",
+                                " / ".join(
+                                    DISPLAY_LABELS.get(code, code) for code in diagnosis["error_types"]
+                                ),
+                            ],
+                            ["原因分析", diagnosis["cause"]],
+                            [
+                                "确定程度",
+                                {"confirmed": "记录支持", "likely": "原因推测", "unknown": "原因未确认"}[
+                                    diagnosis["certainty"]
+                                ],
+                            ],
+                            ["处理建议", diagnosis["next_step"]],
+                            ["判断限制", diagnosis["limitations"]],
+                            ["GT图片来源", json.dumps(case.get("gt_images", []), ensure_ascii=False)],
+                            [
+                                "GT证据缺口",
+                                json.dumps(case.get("gt_missing_evidence", []), ensure_ascii=False),
+                            ],
+                            ["关键依据", " / ".join(diagnosis["evidence_refs"])],
+                        ],
+                    )
+                    + "</section>"
+                )
+            if diagnoses:
+                body += "<details><summary>全部分析依据</summary>"
             for _i, qa, c in claim_rows:
                 body += (
                     "<section><h3>"
@@ -256,6 +357,8 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
                     + _escape(" / ".join(c["evidence_refs"]))
                     + "</p></section>"
                 )
+            if diagnoses:
+                body += "</details>"
             body += (
                 "<details><summary>来源、失败记录与实际用量</summary><pre>"
                 + _escape(json.dumps({**meta, "cases": report["cases"]}, ensure_ascii=False, indent=2))
@@ -263,7 +366,7 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
             )
             return _document(body)
         raise ValueError("unknown format")
-    rows = report.get("rows", []) if kind == "compare" else report.get("cases", [])
+    rows = report.get("rows", [])
     cells = [["qa_id", "pairing", "quality_change", "execution_changed", "valid", "details"]]
     cells.extend(
         [
@@ -283,7 +386,7 @@ def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:
     if format == "html":
         return _document(
             "<h2>"
-            + ("逐题对比" if kind == "compare" else "AI 诊断（建议）")
+            + "逐题对比"
             + "</h2><pre>"
             + _escape(json.dumps(report, ensure_ascii=False, indent=2))
             + "</pre>"

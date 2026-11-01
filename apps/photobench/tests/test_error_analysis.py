@@ -431,6 +431,15 @@ def test_ai_requires_known_refs_provider_explicit_selection_and_never_sends_secr
                 }
             ],
             "missing_evidence": [],
+            "diagnosis": {
+                "error_types": ["unknown"],
+                "summary": "diagnosis",
+                "cause": "pending verification",
+                "certainty": "unknown",
+                "next_step": "check the failed request",
+                "limitations": "",
+                "evidence_refs": ["i0:case"],
+            },
         }
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(answer)}}]})
 
@@ -441,6 +450,16 @@ def test_ai_requires_known_refs_provider_explicit_selection_and_never_sends_secr
     for i in range(2):
         target = tmp_path / f"ai{i}"
         target.mkdir()
+        (target / "gt").mkdir()
+        (target / "gt" / "input-0.json").write_text(
+            json.dumps(
+                {
+                    "index": 0,
+                    "gt_images": [],
+                    "missing_evidence": ["gt_references_not_recorded"],
+                }
+            )
+        )
         job = {
             "job_id": str(i) * 32,
             "kind": "ai",
@@ -709,8 +728,8 @@ def test_content_behavior_and_scenarios_have_separate_denominators_and_preserve_
     assert not matches(cases[1], {"test_scenario": "prompt_injection", "expected_action": "answer"})
     assert matches(cases[0], {"score": "0", "behavior_result": "correct"})
     html = export_report(r, cases, "html", {})
-    assert "行为判断" not in html and "按得分看内容题型" in html
-    assert "未标注内容题型" in html and "回答行为：预期与实际" in html
+    assert "行为判断" not in html and "各得分的题目主要属于哪些类别" in html
+    assert "数据覆盖与分析边界" not in html and "回答行为：预期与实际" in html
     assert "behavior_turns" in export_report(r, cases, "csv", {})
 
 

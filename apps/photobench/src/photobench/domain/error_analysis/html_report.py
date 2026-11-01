@@ -9,6 +9,8 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from photobench.domain.error_analysis.html_dashboard import render_charts, score_composition
+
 STYLES = """
 :root{color-scheme:light;--ink:#1c2c43;--muted:#62738a;--line:#dfe6ef;
 --green:#248278;--amber:#ba791c;--red:#bb5360;--gray:#8996a8;--blue:#315b92}
@@ -81,11 +83,68 @@ box-shadow:inset 0 0 0 2px #526985}.heat-cell[aria-pressed=true]{outline:3px sol
 .heat-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px}
 .pagination{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:18px}
 .empty{padding:28px;text-align:center;border:1px dashed var(--line);border-radius:10px}
+.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-top:30px}
+.section-heading p{max-width:680px}.chart-card{border:1px solid var(--line);border-radius:14px;
+background:white;padding:24px;min-width:0}.chart-card h3{font-size:18px;letter-spacing:-.3px}
+.chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:18px 0}
+.chart-card .note{line-height:1.7}.chart-card small{font-variant-numeric:tabular-nums}
+.donut-layout{display:flex;align-items:center;gap:28px;min-height:215px}
+.donut{width:180px;height:180px;flex:0 0 180px;border-radius:50%;padding:22px}
+.donut>div{background:white;border-radius:50%;height:100%;display:flex;flex-direction:column;
+align-items:center;justify-content:center}.donut strong{font-size:32px;font-variant-numeric:tabular-nums}
+.donut small{font-size:12px;color:var(--muted)}.chart-legend{list-style:none;padding:0;margin:0;flex:1}
+.chart-legend li{display:grid;grid-template-columns:8px minmax(0,1fr) auto auto;gap:9px;align-items:center;
+padding:10px 0;border-bottom:1px solid #edf0f5;font-size:13px}.chart-legend i{width:8px;height:8px;
+border-radius:50%}.chart-legend small{color:var(--muted);min-width:44px;text-align:right}
+.chart-link{border:0;padding:0;min-height:28px;background:none;color:var(--blue);font-size:13px;
+text-align:left;line-height:1.5;overflow-wrap:anywhere}.chart-link:hover:not(:disabled){background:#edf3fa}
+.chart-columns,.quality-row{display:grid;grid-template-columns:minmax(100px,1.25fr) minmax(70px,1fr) 58px;
+gap:14px;align-items:center}.chart-columns{font-size:11px;color:var(--muted);margin:20px 0 5px}
+.quality-row{padding:11px 0;border-bottom:1px solid #eef1f5}.quality-row small,.scenario-row small{
+display:block;font-size:11px;color:var(--muted);margin-top:4px}.quality-row strong{text-align:right;
+font-size:14px;font-variant-numeric:tabular-nums}.score-track{display:flex;border-radius:4px;
+overflow:hidden;height:18px;background:#f0f3f7}.score-track span{display:block;min-width:0}
+.metric-bar{display:grid;grid-template-columns:1fr auto;gap:8px;padding:15px 0}
+.metric-bar>div{grid-column:1/-1;height:12px;background:#edf2f7;border-radius:6px;overflow:hidden}
+.metric-bar i{display:block;height:100%;background:var(--green);border-radius:inherit}
+.metric-bar b{font-size:24px;line-height:1.1}.metric-bar small{grid-column:1/-1;color:var(--muted)}
+.transition-grid{display:grid;grid-template-columns:1.7fr repeat(3,1fr);gap:6px;text-align:center;
+align-items:center;margin:20px 0}.transition-grid>span:not(.note){padding:13px 5px;border-radius:6px;
+font-size:20px;font-variant-numeric:tabular-nums}.transition-grid b{font-size:12px}
+.scenario-row{display:flex;justify-content:space-between;align-items:center;padding:17px 0;
+border-bottom:1px solid var(--line)}.scenario-row strong{color:var(--green);font-size:25px}
+.signal-row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);
+padding:12px 0;font-size:13px}.signal-row b{font-variant-numeric:tabular-nums}.scope-note{padding:10px 14px;
+background:#edf4fa;border-radius:7px;color:var(--blue)}.range-control{max-width:100px}
+
+.score-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+#score-composition .chart-grid{align-items:start}
+.score-tabs [aria-selected=true]{background:var(--blue);color:white}
+.composition-row{padding:12px 0;border-bottom:1px solid var(--line)}
+.composition-row>div:first-child{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.composition-row span{font-size:13px;white-space:nowrap}
+.composition-track{height:12px;background:#edf2f7;border-radius:4px;margin-top:7px;overflow:hidden}
+.composition-track i{display:block;height:100%;background:var(--blue)}
+.review-heading{margin-top:28px!important;border-top:1px solid var(--line);padding-top:22px}
+.reader-shell{border:0;margin:0}.reader-shell>summary{padding:0;list-style:none;display:flex;
+justify-content:space-between;align-items:center;gap:16px}.reader-shell>summary::-webkit-details-marker{
+display:none}.reader-shell>summary:after{content:'展开全部样例 ＋';font-size:13px;color:var(--blue);
+white-space:nowrap}.reader-shell[open]>summary:after{content:'收起全部样例 −'}
+.reader-shell[open]>summary{padding-bottom:18px}.reader-shell>summary h2{margin:0}
+.report-legend{font-size:12px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;color:var(--muted)}
+.report-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
 [hidden]{display:none!important}.footer{padding:14px 0;color:var(--muted);font-size:12px}
 @media(min-width:1000px){.distribution th:nth-child(3){min-width:170px}}
 @media(max-width:800px){main{padding:16px}.grid{grid-template-columns:1fr}.kpis{gap:10px}
 .kpi{padding:15px}.kpi strong{font-size:25px}header{padding:26px}h1{font-size:27px}
 .panel{padding:18px}.answer-grid{grid-template-columns:1fr}}
+@media(max-width:1000px){.donut-layout{flex-direction:column;gap:10px}.chart-legend{width:100%}}
+@media(max-width:700px){.chart-grid{grid-template-columns:1fr}.chart-card{padding:18px}
+.donut-layout{flex-direction:row;gap:18px}.donut{width:130px;height:130px;flex-basis:130px;padding:16px}
+.donut strong{font-size:24px}.section-heading{display:block}.chart-columns,.quality-row{gap:9px;
+grid-template-columns:minmax(95px,1.2fr) minmax(55px,1fr) 52px}.reader-shell>summary{align-items:flex-start}
+.reader-shell>summary h2{font-size:19px}}
+@media(max-width:380px){.donut-layout{flex-direction:column}.reader-shell>summary{flex-wrap:wrap}}
 @media(max-width:520px){html{scroll-padding-top:120px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .case-card>summary{grid-template-columns:minmax(0,1fr) 20px;gap:8px;padding:14px}
 .case-card>summary>.case-identity{grid-column:1/-1}.case-id{display:inline;margin-left:7px}
@@ -95,12 +154,13 @@ nav a{padding:6px 10px}.turn{padding:12px}.controls label{flex:1;min-width:130px
 color:var(--ink);border-bottom:2px solid var(--ink);border-radius:0}header p{color:var(--muted)}
 nav,.controls,.pagination,.no-print{display:none!important}.panel,.kpi{box-shadow:none;
 break-inside:avoid}.case-card{break-inside:avoid}.scroll,pre{overflow:visible;max-height:none}
-.case-card[hidden]{display:block!important}.answer-grid{grid-template-columns:1fr 1fr}}
+.answer-grid{grid-template-columns:1fr 1fr}}
 """
 
 CONTROLLER = r"""
 (()=>{
-  const {cases, labels, scores} = JSON.parse(document.getElementById('report-data').textContent);
+  const data=JSON.parse(document.getElementById('report-data').textContent);
+  const {cases, labels, scores, content_unit}=data;
   const $ = id => document.getElementById(id);
   const cards = [...document.querySelectorAll('.case-card')];
   const size = 25;
@@ -177,6 +237,14 @@ CONTROLLER = r"""
   });
   options('reader-ability',cases.flatMap(c=>(c.dimension_labels || {}).ability_family || []));
   options('reader-execution',cases.map(c=>c.execution));
+  const turnsInScope=c=>c.turns.filter(t=>!c.matched_turns || c.matched_turns.includes(t.turn));
+  const values=(c,dim)=>content_unit==='turn' ? turnsInScope(c).flatMap(t=>t[dim] || []) :
+    (c.dimension_labels || {})[dim] || [];
+  function categoryOptions(){
+    $('reader-category').replaceChildren(new Option('全部类别',''));
+    const dim=$('reader-dimension').value;
+    if(dim)options('reader-category',cases.flatMap(c=>values(c,dim)));
+  }
   function render(){
     const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.max(0,Math.min(page,pages-1));
     cards.forEach(c=>{c.hidden=true;});
@@ -189,30 +257,60 @@ CONTROLLER = r"""
   function apply(){
     const q=$('reader-search').value.trim().toLocaleLowerCase(), s=$('reader-score').value,
       a=$('reader-ability').value,x=$('reader-execution').value,b=$('reader-behavior').value,
-      expected=$('reader-expected').value,actual=$('reader-actual').value;
+      expected=$('reader-expected').value,actual=$('reader-actual').value,
+      dim=$('reader-dimension').value,category=$('reader-category').value,
+      from=Number($('reader-from').value || 1),to=Number($('reader-to').value || cases.length);
     filtered=cases.flatMap((c,i)=>{
-      const matched=(!q || searches[i].includes(q)) && (!s || scoreKey(c.score)===s) &&
+      const matched=(!q || searches[i].includes(q)) &&
+        (!s || content_unit==='turn' || scoreKey(c.score)===s) &&
         (!a || ((c.dimension_labels || {}).ability_family || []).includes(a)) && (!x || c.execution===x) &&
-        ((!b && !expected && !actual) || c.turns.some(t=>
+        (i+1>=from && i+1<=to) &&
+        (!category || content_unit==='turn' || values(c,dim).includes(category)) &&
+        ((!b && !expected && !actual && !(category && content_unit==='turn') &&
+          !(s && content_unit==='turn')) || c.turns.some(t=>
           (!c.matched_turns || c.matched_turns.includes(t.turn)) &&
+          (!category || content_unit!=='turn' || (t[dim] || []).includes(category)) &&
+          (!s || content_unit!=='turn' || scoreKey(t.score)===s) &&
           (!b || (t.expected==='clarify' && t.actual==='answer')) &&
           (!expected || (t.expected || 'unknown')===expected) &&
           (!actual || (t.actual || 'unknown')===actual)));
       return matched?[i]:[];
     });page=0;render();
+    const scope=$('reader-scope');scope.hidden=!(category || s || x || expected || actual);
+    scope.textContent='当前筛选：'+[category ? label(dim)+' / '+label(category) : '',
+      s ? scores[s] : '',x ? label(x) : '',expected ? '预期'+label(expected) : '',
+      actual ? '实际'+label(actual) : ''].filter(Boolean).join(' · ');
     document.querySelectorAll('.heat-cell').forEach(cell=>cell.setAttribute('aria-pressed',
       String(!!expected && !!actual && cell.dataset.expected===expected && cell.dataset.actual===actual)));
   }
   for(const id of ['reader-search','reader-score','reader-ability','reader-execution','reader-behavior',
-    'reader-expected','reader-actual'])
+    'reader-expected','reader-actual','reader-category','reader-from','reader-to'])
     $(id).addEventListener('input',apply);
+  $('reader-dimension').addEventListener('input',()=>{categoryOptions();apply();});
   $('reader-reset').onclick=()=>{for(const e of document.querySelectorAll('.controls input,.controls select'))
-    e.value='';apply();};
+    e.value='';categoryOptions();apply();};
   for(const [id,key] of [['reader-expected','expected'],['reader-actual','actual']])
     options(id,cases.flatMap(c=>c.turns.map(t=>t[key] || 'unknown')));
   document.querySelectorAll('.heat-cell').forEach(cell=>cell.addEventListener('click',()=>{
     $('reader-reset').click();$('reader-expected').value=cell.dataset.expected;
-    $('reader-actual').value=cell.dataset.actual;apply();$('cases').scrollIntoView({block:'start'});
+    $('reader-actual').value=cell.dataset.actual;apply();$('case-reader').open=true;
+    $('cases').scrollIntoView({block:'start'});
+  }));
+  document.querySelectorAll('[data-composition-tab]').forEach(tab=>tab.addEventListener('click',()=>{
+    document.querySelectorAll('[data-composition-tab]').forEach(t=>t.setAttribute('aria-selected',String(t===tab)));
+    document.querySelectorAll('[data-composition-score]').forEach(p=>p.hidden=p.dataset.compositionScore!==tab.dataset.compositionTab);
+  }));
+  document.querySelectorAll('.chart-link[data-dimension]').forEach(link=>link.addEventListener('click',()=>{
+    $('reader-reset').click();const dim=link.dataset.dimension,value=link.dataset.value;
+    if(dim==='score')$('reader-score').value=value;
+    else if(dim==='execution')$('reader-execution').value=value;
+    else{$('reader-dimension').value=dim;categoryOptions();$('reader-category').value=value;}
+    const scorePanel=link.closest('[data-composition-score]');
+    if(scorePanel)$('reader-score').value=scorePanel.dataset.compositionScore;
+    apply();$('case-reader').open=true;$('cases').scrollIntoView({block:'start'});
+  }));
+  document.querySelectorAll('nav a[href="#cases"]').forEach(a=>a.addEventListener('click',()=>{
+    $('case-reader').open=true;
   }));
   $('reader-prev').onclick=()=>{page--;render();};$('reader-next').onclick=()=>{page++;render();};
   $('reader-open').onclick=()=>filtered.slice(page*size,(page+1)*size).forEach(i=>{hydrate(i);cards[i].open=true;});
@@ -220,7 +318,8 @@ CONTROLLER = r"""
   // Expand details for printing, then restore the reader state.
   let printState=[];
   window.addEventListener('beforeprint',()=>{printState=[...document.querySelectorAll('details[open]')];
-    cards.forEach((c,i)=>{hydrate(i);c.open=true;});});
+    // Printing respects the current compact report and sample fold state.
+    if($('case-reader').open)filtered.slice(page*size,(page+1)*size).forEach(i=>{hydrate(i);cards[i].open=true;});});
   window.addEventListener('afterprint',()=>{document.querySelectorAll('details[open]').forEach(d=>{d.open=false;});
     printState.forEach(d=>{d.open=true;});});
   $('reader-tools').hidden=false;render();
@@ -260,35 +359,6 @@ def fold(title: str, body: str) -> str:
 
 def raw(value: Any) -> str:
     return f"<pre>{escape(json.dumps(value, ensure_ascii=False, indent=2))}</pre>"
-
-
-def stack(row: Mapping[str, Any]) -> str:
-    total = max(1, row["total"])
-    return (
-        '<div class="stack" aria-hidden="true">'
-        + "".join(
-            f'<span class="s{s}" style="width:{row.get("score_" + s, 0) / total * 100:.3f}%"></span>'
-            for s in ("2", "1", "0", "None")
-        )
-        + "</div>"
-    )
-
-
-def distribution(rows: Sequence[dict[str, Any]], labels: Mapping[str, str], unit: str) -> str:
-    if not rows:
-        return '<p class="note">当前范围未覆盖。</p>'
-    body = '<div class="scroll"><table class="distribution"><thead><tr>'
-    body += f"<th>类别</th><th>{unit}数</th><th>得分分布</th><th>2 / 1 / 0 / 缺分</th><th>满分率</th>"
-    body += "</tr></thead><tbody>"
-    for row in sorted(rows, key=lambda r: -r["total"]):
-        valid = row["total"] - row.get("score_None", 0)
-        rate = f"{row.get('score_2', 0) / valid:.1%}" if valid else "未覆盖"
-        counts = " / ".join(str(row.get("score_" + s, 0)) for s in ("2", "1", "0", "None"))
-        body += (
-            f"<tr><td>{escape(labels.get(row['value'], row['value']))}</td><td>{row['total']}</td>"
-            f'<td>{stack(row)}</td><td class="numeric">{counts}</td><td>{rate}</td></tr>'
-        )
-    return body + "</tbody></table></div>"
 
 
 def behavior_heatmap(matrix: Sequence[dict[str, Any]], labels: Mapping[str, str]) -> str:
@@ -345,12 +415,10 @@ def render_report(
     counts, den = report["counts"], report["denominators"]
     source = report["source"]
     unit = "轮" if filters.get("content_unit") == "turn" else "题"
-    groups = report.get("turn_groups", {}) if unit == "轮" else report["groups"]
     prefix = "turn_score_" if unit == "轮" else "score_"
-    total = den["turns"] if unit == "轮" else len(cases)
     valid = den["turn_quality_valid"] if unit == "轮" else den["quality_valid"]
     full, partial = counts.get(prefix + "2", 0), counts.get(prefix + "1", 0)
-    failed, missing = counts.get(prefix + "0", 0), counts.get(prefix + "None", 0)
+    missing = counts.get(prefix + "None", 0)
     active_filters = {k: v for k, v in filters.items() if v is not None and v != ""}
     generated = report.get("generated_at")
     generated_text = (
@@ -366,7 +434,8 @@ def render_report(
         f"模型：{escape(source.get('model'))} · 规则版本：{escape(report['rule_version'])}"
         f" · 生成时间：{escape(generated_text)}</div></header>"
         '<nav aria-label="报告导航"><a href="#overview">总览</a><a href="#abilities">能力与题型</a>'
-        '<a href="#behavior">回答行为</a><a href="#execution">运行异常</a>'
+        '<a href="#behavior">回答行为</a><a href="#retrieval">检索与交付</a>'
+        '<a href="#execution">运行异常</a>'
         '<a href="#cases">题目明细</a><a href="#provenance">来源与口径</a></nav>'
     )
     if report.get("stale"):
@@ -401,68 +470,22 @@ def render_report(
         "存在运行异常", str(counts.get("affected_items", 0)), f"题 · {counts.get('events', 0)} 次异常事件"
     )
     body += kpi("最终执行失败", str(counts.get("execution_failed", 0)), "题 · 与任务质量分分别统计")
-    body += '</div><div class="panel"><h2>任务完成质量（当前范围）</h2>'
+    overview_charts, dimension_charts, retrieval_charts, behavior_charts = render_charts(
+        report, cases, filters, labels
+    )
+    body += '</div><div class="chart-grid">' + overview_charts + "</div></section>"
+    body += '<section id="abilities"><div class="section-heading"><h2>能力与题型</h2>'
+    body += '<p class="note">先看样本量，再比较满分率。条形依次为2分、1分、0分及缺分；'
+    body += "多标签可重叠，不把它们绘成互斥饼图。</p></div>"
     body += (
-        '<p class="note">2分：完成，1分：部分完成，0分：未完成。'
-        "适用于回答、拒答和澄清；行为是否符合预期另行统计。</p>"
+        '<div class="report-legend">'
+        + "".join(f'<span><i class="s{score}"></i>{escape(name)}</span>' for score, name in scores.items())
+        + "</div>"
     )
-    body += stack(
-        {"total": total, "score_2": full, "score_1": partial, "score_0": failed, "score_None": missing}
-    )
-    body += (
-        '<div class="legend">'
-        + "".join(
-            f'<span><i class="dot s{s}"></i>{escape(scores[s])} · {counts.get(prefix + s, 0)}{unit}</span>'
-            for s in scores
-        )
-        + "</div></div></section>"
-    )
-    body += '<section id="abilities" class="panel"><h2>能力与题型</h2>'
-    body += f'<p class="note">当前按{unit}统计；多标签可重叠。满分率以该类别有效评分为分母。</p>'
-    for dim in ("ability_family", "ability_type"):
-        if groups.get(dim):
-            body += f"<h3>{escape(labels[dim])}</h3>" + distribution(groups[dim], labels, unit)
-    for dim in dimensions:
-        if dim not in {"ability_family", "ability_type"}:
-            dim_labels = {**labels, "unknown": "未标注内容题型"} if dim == "content_type" else labels
-            body += fold(
-                "样本分布与表现：" + labels.get(dim, dim), distribution(groups.get(dim, []), dim_labels, unit)
-            )
-    score_tables = ""
-    for dim, title, denominator in (
-        ("content_type", "内容题型", "content"),
-        ("ability_family", "一级能力", "ability_family" if report["rule_version"] >= 8 else "ability"),
-        ("ability_type", "二级能力", "ability"),
-    ):
-        detail = ""
-        for score, name in scores.items():
-            rows = groups.get(dim, [])
-            valid_rows = [
-                r for r in rows if r["value"] not in {"unknown", "not_applicable", "pending_review"}
-            ]
-            if dim == "content_type":
-                excluded = sum(r.get("score_" + score, 0) for r in rows if r not in valid_rows)
-                valid_group = counts.get(prefix + score, 0) - excluded
-                detail += f'<p class="note">不适用、待核或未记录{excluded}{unit}。</p>'
-            else:
-                valid_group = counts.get(f"{'turn' if unit == '轮' else 'qa'}_{denominator}_score_{score}", 0)
-            detail += (
-                f'<h3>{escape(name)}</h3><p class="note">有效{valid_group}{unit}；多标签占比可重叠。</p>'
-            )
-            detail += table(
-                [title, f"{unit}数", "占有效样本"],
-                [
-                    [
-                        labels.get(r["value"], r["value"]),
-                        r.get("score_" + score, 0),
-                        f"{r.get('score_' + score, 0) / valid_group:.1%}" if valid_group else "未覆盖",
-                    ]
-                    for r in valid_rows
-                ],
-            )
-        score_tables += fold("按得分看" + title, detail)
-    body += fold("按得分查看类别占比与有效分母", score_tables) + "</section>"
+    body += '<div class="chart-grid">' + dimension_charts + "</div>"
+    body += "</section>" + score_composition(cases, filters, labels)
     body += '<section id="behavior" class="panel"><h2>回答行为：预期与实际</h2>'
+    body += '<div class="chart-grid">' + behavior_charts + "</div>"
     body += behavior_heatmap(report["behavior_matrix"], labels)
     body += (
         '<div class="heat-legend"><span><i style="background:#248278"></i>同名行为</span>'
@@ -497,7 +520,12 @@ def render_report(
         ],
     )
     body += fold("行为判定、测试场景与原始计数", behavior_tables) + "</section>"
+    body += '<section id="retrieval"><div class="section-heading"><h2>检索与最终交付</h2>'
+    body += '<p class="note">检索指标与原质量分分别统计。候选命中、最终交付和回答质量的关联'
+    body += "仅作定位线索，不能直接证明失败原因。</p></div>"
+    body += '<div class="chart-grid">' + retrieval_charts + "</div></section>"
     body += '<section id="execution" class="panel"><h2>运行异常分布</h2>'
+
     body += '<p class="note">异常类别可重叠；受影响题数、异常次数、最终失败及已恢复分别统计。</p>'
     body += (
         table(
@@ -528,7 +556,13 @@ def render_report(
                 ],
             ),
         )
-    body += '</section><section id="cases" class="panel"><h2>题目明细</h2>'
+    body += "</section>"
+    body += '<section id="cases" class="panel"><details id="case-reader" class="reader-shell">'
+    body += f"<summary><div><h2>全部样例 · {len(cases):,}题</h2>"
+    body += (
+        f'<span class="note">完整嵌入本文件 · {den["turns"]:,}轮 · 展开后筛选与分页</span></div></summary>'
+    )
+
     body += '<p class="note">展开查看逐轮问题、模型回答与本轮参考答案。配置和原始记录默认收起。'
     body += "本文件包含分析记录；完整模型与工具调用轨迹可在运行页另行导出。</p>"
     body += '<div id="reader-tools" hidden><div class="controls">'
@@ -544,12 +578,28 @@ def render_report(
         body += f'<label>{title}<select id="reader-{field}"><option value="">全部</option></select></label>'
     for field, title in (("expected", "预期行为"), ("actual", "实际行为")):
         body += f'<label>{title}<select id="reader-{field}"><option value="">全部</option></select></label>'
+    body += '<label>分析维度<select id="reader-dimension"><option value="">全部维度</option>'
+    body += (
+        "".join(
+            f'<option value="{escape(dim)}">{escape(labels.get(dim, dim))}</option>'
+            for dim in dimensions
+            if dim != "ability_taxonomy_version"
+        )
+        + "</select></label>"
+    )
+    body += '<label>类别<select id="reader-category"><option value="">全部类别</option></select></label>'
+    body += '<label>起始序号<input class="range-control" id="reader-from" type="number" min="1" '
+    body += f'max="{max(1, len(cases))}" placeholder="1"></label>'
+    body += '<label>结束序号<input class="range-control" id="reader-to" type="number" min="1" '
+    body += f'max="{max(1, len(cases))}" placeholder="{len(cases)}"></label>'
     body += '<label>快捷筛选<select id="reader-behavior"><option value="">全部行为</option>'
     body += (
         '<option value="direct">预期澄清却直接回答</option></select></label>'
         '<button id="reader-reset">重置明细筛选</button></div>'
     )
-    body += '<p class="note">这里的搜索和筛选只改变下方明细；上方统计始终对应本次导出范围。</p>'
+    body += '<p class="note">序号按本次导出顺序从1开始。搜索和筛选只改变下方明细；'
+    body += '上方统计始终对应本次导出范围。</p><p id="reader-scope" class="scope-note" hidden></p>'
+
     body += (
         '<div class="controls"><button id="reader-open">展开本页</button>'
         '<button id="reader-close">收起全部</button>'
@@ -576,7 +626,7 @@ def render_report(
         )
     body += '<p class="empty" id="reader-empty" hidden>没有符合条件的题目，请调整筛选或搜索词。</p>'
     body += '<div class="pagination"><button id="reader-prev">上一页</button><span id="reader-page"></span>'
-    body += '<button id="reader-next">下一页</button></div></section>'
+    body += '<button id="reader-next">下一页</button></div></details></section>'
     body += '<section id="provenance" class="panel"><h2>来源与统计口径</h2>'
     body += fold(
         "来源、运行配置与导出筛选",
@@ -612,9 +662,20 @@ def render_report(
         display_keys.update(c.get("dimension_labels", {}).get("ability_family", []))
         display_keys.update(str(t.get(k) or "unknown") for t in c["turns"] for k in ("expected", "actual"))
         display_keys.update(str(e.get("recovery")) for e in c["events"])
+    display_keys.update(dimensions)
+    for c in cases:
+        for dim in dimensions:
+            display_keys.update(c.get("dimension_labels", {}).get(dim, []))
     reader_labels = {k: v for k, v in labels.items() if k in display_keys}
     payload = json.dumps(
-        {"cases": cases, "labels": reader_labels, "scores": scores}, ensure_ascii=False, separators=(",", ":")
+        {
+            "cases": cases,
+            "labels": reader_labels,
+            "scores": scores,
+            "content_unit": filters.get("content_unit", "qa"),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
     # A question can contain HTML or a closing script tag; keep it inert in the data block.
     for char, escaped in (

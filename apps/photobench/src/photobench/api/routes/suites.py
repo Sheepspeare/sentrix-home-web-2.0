@@ -85,6 +85,7 @@ def delete_run(request: Request, run_id: str) -> dict[str, Any]:
 
 @router.get("/runs/{run_id}/recovery-plan")
 def recovery_plan(request: Request, run_id: str) -> dict[str, Any]:
+    """原任务续跑题数、产品版本和各补评范围的题/轮/评分项计数，只读。"""
     return get_container(request).run_suites.recovery_plan(run_id)
 
 

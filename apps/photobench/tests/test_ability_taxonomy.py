@@ -282,7 +282,7 @@ def test_v2_all_five_directions_have_distinct_unique_denominators():
     assert matches(injection, {"ability_type": "I1", "content_unit": "turn"})
     assert not matches(hallucination, {"ability_type": "P3"})
     html = export_report(r, cases, "html", {})
-    assert "抗幻觉" in html and "抗注入攻击" in html and "有效3题" in html
+    assert "抗幻觉" in html and "抗注入攻击" in html and "0 / 3 有效评分题" in html
 
 
 @pytest.mark.parametrize(
