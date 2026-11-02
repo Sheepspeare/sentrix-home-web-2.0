@@ -590,7 +590,7 @@ def test_jetson_and_nvidia_memory_remains_available_without_device_source(monkey
     def fail(*a, **k):
         raise OSError("GPU driver unavailable")
 
-    monkeypatch.setattr(nvidia, "_query", fail)
+    monkeypatch.setattr(nvidia, "_gpu_processes", fail)
     monkeypatch.setattr(
         providers,
         "_augment_host_process_memory",
@@ -600,6 +600,7 @@ def test_jetson_and_nvidia_memory_remains_available_without_device_source(monkey
     assert result["status"] == "available"
     assert result["data"]["model_process_system_memory_used_mib"] == 20
     assert result["data"]["process_memory_used_mib"] is None
+    assert result["data"]["memory_observations"]["gpu_process"]["status"] == "unavailable"
 
 
 def test_linux_memory_never_substitutes_memfree_for_memavailable(monkeypatch):

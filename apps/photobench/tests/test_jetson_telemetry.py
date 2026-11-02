@@ -85,6 +85,7 @@ def test_sampler_walks_each_process_once_even_when_device_stats_are_collected(mo
     monkeypatch.setattr(provider, "_llama_args", lambda pid: {})
     monkeypatch.setattr(provider, "_device", lambda: {})
     monkeypatch.setattr(jetson, "_meminfo_mib", lambda: {"system_memory_used_mib": 100})
+    monkeypatch.setattr(provider._cpu, "sample", lambda: None)
     jetson._nvmap_cache.clear()
     jetson._nvmap_cache.update(at=float("-inf"), table=None)
     # 这台机器上若有真实的 runtime_connection.json，scope 会覆盖关键词匹配路径，
