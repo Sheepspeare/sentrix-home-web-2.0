@@ -474,6 +474,7 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
         "deployment_profile",
         "agent_wall_time_s",
         "chat_timeout_s",
+        "vlm_timeout_s",
         "face_providers",
         "retinaface_providers",
         "agent_max_steps",
@@ -497,7 +498,7 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
         raise InvalidRequestError("unknown vlm_generation_profile")
     if "deployment_profile" in result and result["deployment_profile"] not in {"server", "mac"}:
         raise InvalidRequestError("deployment_profile must be server or mac")
-    for key in ("agent_wall_time_s", "chat_timeout_s"):
+    for key in ("agent_wall_time_s", "chat_timeout_s", "vlm_timeout_s"):
         if key in result:
             raw = result[key]
             if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not 0 < raw <= 86400:

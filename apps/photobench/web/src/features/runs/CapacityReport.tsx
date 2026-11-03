@@ -113,6 +113,17 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
       <td>{number(r.actual_batch_peak, 0)}</td><td>{number(r.queue_peak, 0)}</td><td>{number(r.memory_peak_gib)}</td><td>{number(r.swap_delta_gib, 2)}</td>
       <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : r.status}</td>
     </tr>)}</tbody></table></div>
+    {full ? <section aria-label="487 题独立测试总览">
+      <h3>487 题独立测试 · C{full.concurrency}</h3>
+      <p>{full.label} · {full.passed ? "验收通过" : full.status} · 独立恢复记忆库与会话</p>
+      <div className="capacity-cards">
+        <article><span>QA 完成 / 总题数</span><strong>{full.completed} / {full.questions}</strong><small>{number(full.qa_seconds)} 秒 · {number(full.qa_per_min)} 题/分钟</small></article>
+        <article><span>Judge 完成 / 失败</span><strong>{full.judge_completed} / {full.judge_failed}</strong><small>独立评分阶段 {number(full.judge_seconds)} 秒</small></article>
+        <article><span>实际模型批次 / 队列采样峰值</span><strong>{number(full.actual_batch_peak, 0)} / {number(full.queue_peak, 0)}</strong><small>客户端 QA 并发 {full.concurrency}</small></article>
+      </div>
+      <p>QA 延迟 P50 / P95：{number(full.latency_p50_s)} / {number(full.latency_p95_s)} 秒；首 token P95：{number(full.ttft_p95_s)} 秒。</p>
+      <p>活跃及有线内存峰值 {number(full.memory_peak_gib)} GiB；交换空间增量 {number(full.swap_delta_gib, 2)} GiB。</p>
+    </section> : null}
     {selected ? <>
       <div className="capacity-heading"><h3>{selected.label} · 资源与耗时</h3><select aria-label="选择资源曲线轮次" value={selected.run_id} onChange={(e) => setSelection(e.target.value)}>{report.rounds.map((r) => <option key={r.run_id} value={r.run_id}>{r.label}</option>)}</select></div>
       <p>QA {number(selected.qa_seconds)} 秒 · Judge {number(selected.judge_seconds)} 秒 · 状态 {selected.status} · {selected.completed}/{selected.questions} 题完成</p>

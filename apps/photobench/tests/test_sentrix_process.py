@@ -200,6 +200,7 @@ def test_restart_passes_frozen_mac_profile_and_cpu_providers(tmp_path: Path, mon
             "vlm_generation_profile": "qwen35_nonthinking",
             "vlm_exact_output_budget": True,
             "vlm_context_tokens": 65536,
+            "vlm_timeout_s": 1800.0,
         },
     }
     harness = _Harness()
@@ -234,6 +235,7 @@ def test_restart_passes_frozen_mac_profile_and_cpu_providers(tmp_path: Path, mon
     assert env["SENTRIX_VLM_GENERATION_PROFILE"] == "qwen35_nonthinking"
     assert env["SENTRIX_VLM_EXACT_OUTPUT_BUDGET"] == "True"
     assert env["SENTRIX_VLM_CONTEXT_TOKENS"] == "65536"
+    assert env["SENTRIX_VLM_TIMEOUT_S"] == "1800.0"
 
 
 def test_the_recorded_process_reports_the_endpoint_it_was_started_with(tmp_path: Path):

@@ -84,6 +84,12 @@ def diagnostic_failure_categories(items: Sequence[Mapping[str, Any]]) -> dict[st
     def errors(value: Any) -> list[str]:
         found: list[str] = []
         if isinstance(value, Mapping):
+            if (
+                "request_sent" in value
+                and value["request_sent"] is None
+                and value.get("error_category") in {"request_timeout", "service_error"}
+            ):
+                found.append("request_outcome_unknown")
             for key, child in value.items():
                 if key in {"error", "error_type", "error_category", "termination_reason"}:
                     found.append(str(child).lower())
@@ -257,7 +263,9 @@ def summarize_resources(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         ("num_requests_waiting", ("num_requests_waiting", "scheduler_waiting_requests")),
     ):
         values = [
-            sum(v for k, v in s["engine"].items() if k.split("{", 1)[0].endswith(aliases))
+            s["engine"]["sentrix_mlx_num_requests_waiting"]
+            if metric == "num_requests_waiting" and "sentrix_mlx_num_requests_waiting" in s["engine"]
+            else sum(v for k, v in s["engine"].items() if k.split("{", 1)[0].endswith(aliases))
             for s in samples
             if isinstance(s.get("engine"), dict)
             and any(k.split("{", 1)[0].endswith(aliases) for k in s["engine"])

@@ -71,6 +71,7 @@ class Settings(BaseSettings):
                 "wemm_url",
                 "agent_wall_time_s",
                 "chat_timeout_s",
+                "vlm_timeout_s",
                 "agent_max_steps",
                 "agent_max_tool_calls",
                 "vlm_generation_profile",

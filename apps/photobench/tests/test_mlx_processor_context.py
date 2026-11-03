@@ -24,3 +24,63 @@ def test_normal_decoder_context_is_not_duplicated_and_no_processors_stay_absent(
     complete = [[90, 4754]]
     assert adapter.processor_context(requests, complete, [[4754]]) == complete
     assert adapter.processor_context(requests, None, [[4754]]) is None
+
+
+def test_waiting_media_drains_existing_batch_before_admitting_new_text():
+    image = SimpleNamespace(images=["image"], videos=[], audio=[])
+    text = SimpleNamespace(images=[], videos=[], audio=[])
+    generator = SimpleNamespace(
+        unprocessed_requests=[image, text],
+        active_batch=["decoding"],
+        _partial=None,
+        _allow_mid_batch_extend=True,
+    )
+    calls = []
+
+    def chunked():
+        assert generator._allow_mid_batch_extend is False
+        calls.append("drain")
+        generator.active_batch = None
+
+    def canonical():
+        assert generator.unprocessed_requests == [image, text]
+        calls.append("media_batch")
+        generator.unprocessed_requests = []
+
+    adapter.fair_generation_step(generator, chunked, canonical)
+    adapter.fair_generation_step(generator, chunked, canonical)
+    assert calls == ["drain", "media_batch"]
+    assert generator._allow_mid_batch_extend is True
+
+
+def test_media_does_not_discard_partial_prefill_and_flags_restore_on_error():
+    import pytest
+
+    partial = {"remaining": 512}
+    generator = SimpleNamespace(
+        unprocessed_requests=[SimpleNamespace(images=["image"], videos=[], audio=[])],
+        active_batch=None,
+        _partial=partial,
+        _allow_mid_batch_extend=True,
+    )
+
+    def chunked():
+        assert generator._partial is partial
+        raise RuntimeError("prefill failed")
+
+    with pytest.raises(RuntimeError, match="prefill failed"):
+        adapter.fair_generation_step(generator, chunked, lambda: pytest.fail("discarded partial"))
+    assert generator._allow_mid_batch_extend is True
+
+
+def test_text_only_keeps_continuous_batching_and_queue_counts_pending_media():
+    generator = SimpleNamespace(
+        unprocessed_requests=[SimpleNamespace(images=[], videos=[], audio=[])],
+        active_batch=["decoding"],
+        _partial=None,
+        _allow_mid_batch_extend=True,
+    )
+    assert adapter.fair_generation_step(generator, lambda: "chunked", lambda: "wrong") == "chunked"
+    assert generator._allow_mid_batch_extend is True
+    scheduler = SimpleNamespace(waiting=["waiting"], batch_generator=generator)
+    assert adapter.pending_requests(scheduler) == 2

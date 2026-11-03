@@ -19,6 +19,9 @@ def prepare(source: Path, destination: Path) -> None:
     destination = destination.resolve()
     if destination.exists() or source in destination.parents:
         raise ValueError("use a new independent model directory")
+    record_path = destination.parent / (destination.name + ".compatibility.json")
+    if record_path.exists():
+        raise ValueError("refusing to overwrite an existing model compatibility record")
     config = source / "processor_config.json"
     original = config.read_bytes()
     processor = json.loads(original)
@@ -38,7 +41,7 @@ def prepare(source: Path, destination: Path) -> None:
         "derived_sha256": hashlib.sha256(derived).hexdigest(),
         "weights_tokenizer_template_unchanged": True,
     }
-    destination.with_suffix(".compatibility.json").write_text(json.dumps(record, indent=2) + "\n")
+    record_path.write_text(json.dumps(record, indent=2) + "\n")
 
 
 if __name__ == "__main__":

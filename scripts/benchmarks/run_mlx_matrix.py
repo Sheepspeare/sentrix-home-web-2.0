@@ -157,6 +157,9 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
     for e in terminal:
         if e["finish_reason"] != "stop":
             failures["model_" + str(e["finish_reason"])] += 1
+    for category, count in diagnostic_failure_categories(items).items():
+        if count:
+            failures["diagnostic_" + category] += count
     if resource["engine_metrics_missing_samples"]:
         failures["missing_engine_metrics"] += resource["engine_metrics_missing_samples"]
     batches = [e["actual_batch_size"] for e in events if e["event"] == "token_batch"]
@@ -243,6 +246,7 @@ def publish() -> None:
             "每轮重启推理引擎并进行同样的 4 请求预热；独立数据库、会话及模型缓存。",
             "QA 与云端 Judge 独立调度，评分排队不限制 QA。",
             "首 token 时间由模型调度器记录，包含模型队列等待；实际批次来自 token 生成批次。",
+            "等待队列包含已进入调度器、仍在等待预填充的请求；不把这些请求算作实际生成批次。",
             "资源曲线与汇总限定 QA 阶段；原始记录保留完整运行及评分阶段。",
             "内存曲线采用 macOS 活跃及有线内存；PhotoBench 原始遥测另保留含缓存的整机占用。",
             "最高通过档要求两轮均完成、没有执行或评分错误，且监测证据完整。",

@@ -227,6 +227,26 @@ def test_the_tools_field_carries_standard_json_schema(server: str):
     assert sent["tools"][0]["function"]["parameters"]["type"] == "object"
 
 
+def test_qwen_final_only_turn_enforces_the_only_advertised_function(server: str):
+    _Handler.response = reply(
+        tool_calls=[
+            {
+                "id": "final",
+                "type": "function",
+                "function": {"name": "final_answer", "arguments": '{"answer":"无法确认"}'},
+            }
+        ]
+    )
+    model = OpenAIChatModel(server, ServedModel(server, generation_profile="qwen35_nonthinking"))
+    final = tuple(tool for tool in TOOL_SPECS if tool.name == "final_answer")
+    result = model.complete(messages(), final)
+    assert result.tool_calls[0].name == "final_answer"
+    assert _Handler.received[-1]["body"]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "final_answer"},
+    }
+
+
 def test_the_system_message_is_first_and_only_once(server: str):
     """严格 chat template（Qwen 系、llama.cpp 的 jinja）要求 system 只能在开头。
 

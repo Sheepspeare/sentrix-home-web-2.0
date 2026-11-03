@@ -70,6 +70,42 @@ def install_chunked_context_fix() -> None:
     generator._step = step
 
 
+def fair_generation_step(instance: Any, chunked: Callable[[], Any], canonical: Callable[[], Any]) -> Any:
+    """Drain the current batch when media waits; do not admit newer text forever.
+
+    Upstream can only merge text into a decoding batch. Its chunked path also
+    selects text ahead of media when idle. Preserve an in-flight prefill, then
+    let the ordinary multimodal path admit the pending batch in arrival order.
+    """
+    if not any(r.images or r.videos or r.audio for r in instance.unprocessed_requests):
+        return chunked()
+    allowed = instance._allow_mid_batch_extend
+    instance._allow_mid_batch_extend = False
+    try:
+        if not instance.active_batch and getattr(instance, "_partial", None) is None:
+            return canonical()
+        return chunked()
+    finally:
+        instance._allow_mid_batch_extend = allowed
+
+
+def install_media_fairness_fix() -> None:
+    module: Any = importlib.import_module("vllm_mlx.mllm_batch_generator")
+    generator = module.MLLMBatchGenerator
+    canonical = generator._next
+
+    def next_batch(instance: Any) -> Any:
+        with module.mx.stream(generator._stream):
+            return fair_generation_step(instance, instance._next, lambda: canonical(instance))
+
+    generator.next = next_batch
+
+
+def pending_requests(scheduler: Any) -> int:
+    generator = scheduler.batch_generator
+    return len(scheduler.waiting) + (len(generator.unprocessed_requests) if generator is not None else 0)
+
+
 def install_telemetry() -> None:
     """Record actual scheduler token batches and terminal timing, never content."""
     destination = os.environ.get("SENTRIX_MLX_EVENTS")
@@ -81,6 +117,24 @@ def install_telemetry() -> None:
     scheduler: Any = importlib.import_module("vllm_mlx.mllm_scheduler").MLLMScheduler
     original_process = scheduler._process_batch_responses
     original_abort = scheduler.abort_request
+    original_step = scheduler.step
+    prometheus: Any = importlib.import_module("prometheus_client")
+    pending = prometheus.Gauge(
+        "sentrix_mlx_num_requests_waiting",
+        "Scheduler queue plus admitted requests awaiting prefill",
+        registry=None,
+    )
+    metrics_module: Any = importlib.import_module("vllm_mlx.metrics")
+    collector = metrics_module.MetricsCollector
+    original_init = collector._init_prometheus
+
+    def init_metrics(instance: Any) -> None:
+        original_init(instance)
+        instance._prom["registry"].register(pending)
+
+    collector._init_prometheus = init_metrics
+    if metrics_module.metrics._prom is not None:
+        metrics_module.metrics._prom["registry"].register(pending)
 
     def emit(event: dict[str, Any]) -> None:
         with lock, path.open("a") as stream:
@@ -113,6 +167,7 @@ def install_telemetry() -> None:
                     "actual_batch_size": size,
                     "scheduler_running": len(instance.running),
                     "scheduler_waiting": len(instance.waiting),
+                    "pending_prefill": pending_requests(instance),
                 }
             )
             instance._evidence_last_batch = size
@@ -131,6 +186,13 @@ def install_telemetry() -> None:
 
     scheduler._process_batch_responses = process
     scheduler.abort_request = abort
+
+    def step(instance: Any) -> Any:
+        result = original_step(instance)
+        pending.set(pending_requests(instance))
+        return result
+
+    scheduler.step = step
 
 
 def seeded_sampler(
@@ -212,6 +274,7 @@ def install_adapter() -> None:
     sampling: Any = importlib.import_module("mlx_lm.sample_utils")
     sampling.make_sampler = seeded_sampler
     install_chunked_context_fix()
+    install_media_fairness_fix()
     install_telemetry()
     server = importlib.import_module("vllm_mlx.server")
     app: FastAPI = server.app

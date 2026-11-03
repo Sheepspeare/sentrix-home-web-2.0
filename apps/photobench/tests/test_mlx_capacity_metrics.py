@@ -35,6 +35,39 @@ def test_fallback_engine_gauges_and_missing_values():
     assert summary["swap_in_bytes_delta"] is None
 
 
+def test_pending_prefill_queue_supersedes_scheduler_only_gauge_without_double_counting():
+    summary = capacity.summarize_resources(
+        [
+            {
+                "engine": {
+                    "sentrix_mlx_num_requests_waiting": 7,
+                    "vllm_mlx_scheduler_waiting_requests": 2,
+                }
+            }
+        ]
+    )
+    assert summary["engine_num_requests_waiting_peak"] == 7
+
+
+def test_tool_internal_unknown_timeout_is_counted_even_after_agent_returns_an_answer():
+    item = {
+        "tool_trace": [
+            {
+                "result": {
+                    "model_call_observations": [
+                        {
+                            "diagnostics": {"request_sent": None, "error_category": "request_timeout"},
+                            "error_type": "ReadTimeout",
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    counts = capacity.diagnostic_failure_categories([item])
+    assert counts["timeout"] == counts["unknown"] == 1
+
+
 def test_ambiguous_submission_is_never_replayed(tmp_path):
     import httpx
     import pytest

@@ -28,3 +28,21 @@ describe("capacity evidence", () => {
     expect(screen.getByText("尚未开始")).toBeTruthy();
   });
 });
+
+it("shows the independent 487 run's measurements separately from the 64-question matrix", () => {
+  const full: CapacityRound = {
+    ...round("C8-FULL487", 8, true), questions: 487, completed: 487, judge_completed: 487,
+    qa_seconds: 600, judge_seconds: 700, qa_per_min: 48.7, actual_batch_peak: 6, queue_peak: 2,
+  };
+  const evidence: CapacityEvidence = {
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "vllm-mlx",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [], rounds: [full],
+  };
+  render(<CapacityReport evidence={evidence} />);
+  const overview = screen.getByRole("region", { name: "487 题独立测试总览" });
+  expect(overview.textContent).toContain("487 题独立测试 · C8");
+  expect(overview.textContent).toContain("48.7 题/分钟");
+  expect(overview.textContent).toContain("6 / 2");
+  expect(overview.textContent).toContain("客户端 QA 并发 8");
+});

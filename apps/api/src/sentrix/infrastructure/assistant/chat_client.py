@@ -512,6 +512,15 @@ class OpenAIChatModel:
         if tools:
             payload["tools"] = list(openai_tools(tools))
             payload["tool_choice"] = "auto"
+            if (
+                self._model.generation_profile == "qwen35_nonthinking"
+                and len(tools) == 1
+                and tools[0].name == "final_answer"
+            ):
+                # The runtime has already removed every evidence tool. Enforce
+                # that advertised action instead of letting stale tool history
+                # drive repeated calls to tools that are no longer available.
+                payload["tool_choice"] = {"type": "function", "function": {"name": "final_answer"}}
         if response_format is not None:
             payload["response_format"] = dict(response_format)
         if chat_template_kwargs is not None:

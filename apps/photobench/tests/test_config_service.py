@@ -271,6 +271,7 @@ def test_product_settings_persist_and_survive_old_client_save(config_root):
             "vlm_generation_profile": "qwen35_nonthinking",
             "vlm_exact_output_budget": True,
             "vlm_context_tokens": 65536,
+            "vlm_timeout_s": 1800,
             "face_providers": "CPUExecutionProvider",
         },
     }
@@ -286,6 +287,7 @@ def test_product_settings_persist_and_survive_old_client_save(config_root):
         {"deployment_profile": "typo"},
         {"agent_wall_time_s": float("nan")},
         {"chat_timeout_s": True},
+        {"vlm_timeout_s": float("inf")},
         {"agent_max_steps": 2},
         {"agent_max_steps": True},
         {"vlm_context_tokens": 0},
