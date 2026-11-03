@@ -1,4 +1,4 @@
-import { EvaluationResult } from "../../components/EvaluationResult.tsx";
+import { EvaluationResult, EvaluationTypeBadge } from "../../components/EvaluationResult.tsx";
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 单题卡（列表项 + 展开体）。移植 1.0 `App.vue:3460-3674`。
@@ -119,6 +119,7 @@ export function QaItemCard({
         <span className="item-idx">{String(s.index + 1).padStart(2, "0")}</span>
         <strong>{s.display_question || conversationTurns(detail)[0]?.message || s.question}</strong>
         {Number(s.conversation_turn_count || conversationTurns(detail).length) > 1 ? <span className="qa-dialogue-badge">{s.conversation_turn_count || conversationTurns(detail).length} 轮对话</span> : null}
+        <EvaluationTypeBadge value={summary.evaluation || summary.evaluation_result || summary.judge} />
         <span className={`score ${scoreClass(s.judge?.score)} judge-round-${judgeRoundState(s, activeRejudge)}`}>
           {judgeScoreLabel(s, activeRejudge)}
         </span>

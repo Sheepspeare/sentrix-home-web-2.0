@@ -448,3 +448,30 @@ def test_a_running_run_is_not_served_from_a_stale_cache(results: Path):
     _write(results, "run-b", _state("run-b", status="completed"))
     assert reader.get_run("run-b")["status"] == "completed"  # 第二次必须看到新状态
     assert reader.get_run("run-b")["status"] == "completed"  # 终态之后走缓存
+
+
+def test_read_reconciles_saved_validity_without_changing_history(tmp_path: Path):
+    original = _state("partial", run_valid=True, phases={"pipeline_processing": {"status": "partial"}})
+    _write(tmp_path, "partial", original)
+    result = _read_runs(tmp_path).get_run("partial")
+    assert result["run_valid"] is False
+    assert result["summary"]["run_valid"] is False
+    assert json.loads((tmp_path / "partial/run.json").read_text()) == original
+
+
+def test_atm_type_filters_distinguish_number_and_open_answers(tmp_path: Path):
+    items = [
+        {
+            "qa_id": source,
+            "execution_status": "completed",
+            "judge_status": "completed",
+            "evaluation": {"source_qtype": source, "answer_format": fmt},
+        }
+        for source, fmt in [("number", "open"), ("open_end", "open"), ("list_recall", "media_list")]
+    ]
+    _write(tmp_path, "atm", _state("atm", items=items, qa_count=3))
+    reader = _read_runs(tmp_path)
+    for source in ["number", "open_end", "list_recall"]:
+        result = reader.get_run_items("atm", evaluation_type=source)
+        assert [item["qa_id"] for item in result["items"]] == [source]
+    assert reader.get_run_items("atm", evaluation_type="open")["total"] == 0

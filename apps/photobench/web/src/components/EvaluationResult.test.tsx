@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { EvaluationResult, EvaluationSummary } from "./EvaluationResult.tsx";
+import { EvaluationResult, EvaluationSummary, EvaluationTypeBadge } from "./EvaluationResult.tsx";
 import { scoreChoices } from "../features/analysis/presentation.ts";
 afterEach(cleanup);
 it("二分制满分与筛选类别一致", () => {
@@ -23,4 +23,16 @@ it("待复核与评分失败可区分，汇总披露覆盖", () => {
   expect(screen.getByText(/评分失败/)).toBeTruthy();
   rerender(<EvaluationSummary value={{count: 4, scored: 3, coverage: 0.75, mean: 0.5, by_type: {choice: {count: 4, scored: 3, mean: 0.5}}}} />);
   expect(screen.getByText(/覆盖 3\/4（75.0%）/)).toBeTruthy();
+});
+
+it("ATM 数值、列表和开放题独立标注，列表说明交付集合", () => {
+  const {rerender} = render(<EvaluationTypeBadge value={{source_qtype: "list_recall", answer_format: "media_list"}} />);
+  expect(screen.getByText("题型 · ATM 列表召回")).toBeTruthy();
+  rerender(<EvaluationTypeBadge value={{source_qtype: "number", answer_format: "open"}} />);
+  expect(screen.getByText("题型 · ATM 数值")).toBeTruthy();
+  rerender(<EvaluationResult value={{scorer: "atm_open", source_qtype: "open_end", answer_format: "open"}} />);
+  expect(screen.getByText("ATM 开放问答")).toBeTruthy();
+  expect(screen.getByText(/Judge 按回答内容判/)).toBeTruthy();
+  rerender(<EvaluationResult value={{scorer: "atm_list", source_qtype: "list_recall", answer_format: "media_list"}} />);
+  expect(screen.getByText(/按实际交付的图片 \/ 视频 ID 集合/)).toBeTruthy();
 });

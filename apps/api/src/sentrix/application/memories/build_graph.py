@@ -604,10 +604,16 @@ class BuildMemoryGraph:
     ) -> None:
         ordered = sorted(
             (event for event in events if event.time_start is not None),
-            key=lambda event: (event.time_start, event.id),
+            key=lambda event: (
+                event.time_start.utcoffset() is not None if event.time_start else False,
+                event.time_start,
+                event.id,
+            ),
         )
         for left, right in zip(ordered, ordered[1:], strict=False):
             assert left.time_start is not None and right.time_start is not None
+            if (left.time_start.utcoffset() is None) != (right.time_start.utcoffset() is None):
+                continue
             gap = (right.time_start - left.time_start).total_seconds()
             if 0 <= gap <= TEMPORAL_EDGE_MAX_SECONDS:
                 add_edge(

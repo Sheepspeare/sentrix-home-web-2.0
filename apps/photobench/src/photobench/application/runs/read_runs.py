@@ -324,6 +324,7 @@ class ReadRuns:
                 result["qa_snapshot"] = snapshot_metadata(result["qa_snapshot"])
             result["item_count"] = len(state.get("items") or [])
             result["summary"] = analysis.effective_summary(state)
+        result["run_valid"] = result["summary"]["run_valid"]
         result.setdefault("read_revision", revision or None)
         result["history_mode"] = "full" if include_history else "checkpoint"
         live = result.get("telemetry_live")
@@ -440,7 +441,10 @@ class ReadRuns:
                     and analysis.judge_bucket_for_summary(item.get("judge")) != score_filter
                 ):
                     continue
-                if evaluation_type and (item.get("evaluation") or {}).get("answer_format") != evaluation_type:
+                evaluation = item.get("evaluation") or {}
+                if evaluation_type and (
+                    evaluation.get("source_qtype") or evaluation.get("answer_format")
+                ) != evaluation_type:
                     continue
                 if question_type and item.get("question_type") != question_type:
                     continue

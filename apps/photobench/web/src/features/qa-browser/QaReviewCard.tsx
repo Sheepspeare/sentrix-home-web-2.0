@@ -1,4 +1,4 @@
-import { EvaluationDefinition } from "../../components/EvaluationResult.tsx";
+import { EvaluationDefinition, EvaluationTypeBadge, evaluationTypeLabel } from "../../components/EvaluationResult.tsx";
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 单条 QA 的审阅卡。逐行移植 1.0 `App.vue:3703-3761`：
@@ -96,7 +96,8 @@ export function QaReviewCard({ item, index, onOpenMedia }: QaReviewCardProps) {
             <span className={`qa-badge badge-${item.expected_action || "answer"}`}>
               {qaActionBadge(item.expected_action)}
             </span>
-            <span className="qa-type-tag">{item.task_type ? `${taxonomyLabel(item.task_type)} · ` : ""}{qaTypeLabel(item.question_type)}</span>
+            <EvaluationTypeBadge value={item.evaluation} />
+            {(item.task_type || item.question_type || !evaluationTypeLabel(item.evaluation)) && <span className="qa-type-tag">{item.task_type ? `${taxonomyLabel(item.task_type)} · ` : ""}{qaTypeLabel(item.question_type)}</span>}
             <span className="qa-answerability-tag">{qaAnswerabilityLabel(item.answerability)}</span>
             {item.difficulty ? <span className="qa-difficulty-tag">{taxonomyLabel(item.difficulty)}</span> : null}
             {(item.tags || []).map((tag) => (

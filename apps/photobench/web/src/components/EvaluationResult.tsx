@@ -1,14 +1,34 @@
 type Dict = Record<string, unknown>;
 const obj = (v: unknown): Dict => v && typeof v === "object" ? v as Dict : {};
 const pct = (v: unknown) => typeof v === "number" ? (v * 100).toFixed(1) + "%" : "未评分";
-const names: Record<string, string> = {choice: "选择题语义匹配", media_list: "媒体列表", open: "开放回答", number: "ATM 数值", list_recall: "ATM 列表", open_end: "ATM 开放题"};
+const names: Record<string, string> = {choice: "选择题语义匹配", media_list: "媒体列表", open: "开放回答", number: "ATM 数值", list_recall: "ATM 列表召回", open_end: "ATM 开放问答"};
+const scorerTypes: Record<string, string> = {atm_number: "number", atm_list: "list_recall", atm_open: "open_end"};
+export function evaluationTypeLabel(value: unknown): string {
+  const d = obj(value);
+  const key = String(d.source_qtype || scorerTypes[String(d.scorer)] || d.answer_format || "");
+  return names[key] || key;
+}
+export function EvaluationTypeBadge({value}: {value: unknown}) {
+  const label = evaluationTypeLabel(value);
+  return label ? <span className="evaluation-type-badge">题型 · {label}</span> : null;
+}
+function scoringExplanation(value: unknown): string {
+  const d = obj(value);
+  if (d.scorer === "atm_number") return "数值题：按 ATM 官方数值规则计主分；语义辅分单独展示。";
+  if (d.scorer === "atm_list") return "列表召回题：按实际交付的图片 / 视频 ID 集合计算主分；工具累计召回单列展示。";
+  if (d.source_qtype === "open_end" || d.scorer === "atm_open") return "开放问答题：Judge 按回答内容判 0 / 1 分；媒体交付和工具证据另列指标。";
+  if (d.answer_format === "media_list") return "列表召回题：按实际交付媒体集合评分。";
+  if (d.answer_format === "choice") return "选择题：匹配选项含义，再核对正确项。";
+  return "开放问答题：按题目定义评价回答内容，媒体指标单独计算。";
+}
 export function EvaluationResult({value, definition}: {value: unknown; definition?: unknown}) {
   const r = obj(value), d = obj(definition), metrics = obj(r.media_metrics);
   if (!r.scorer) return null;
   const comparisons = Array.isArray(r.comparisons) ? r.comparisons.map(obj) : [];
   const options = Array.isArray(d.options) ? d.options.map(obj) : [];
   return <section aria-label="题型评分" className="evaluation-panel">
-    <h4>{names[String(r.source_qtype || r.answer_format)] || String(r.scorer)} · {String(r.scorer)}</h4>
+    <h4>{evaluationTypeLabel(r) || String(r.scorer)}</h4>
+    <p className="muted small">{scoringExplanation(r)}</p>
     <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
     <p>{String(r.reason || "")}</p>
     {r.matched_option != null && <p>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</p>}
@@ -35,9 +55,10 @@ export function EvaluationDefinition({value}: {value: unknown}) {
   const d = obj(value);
   if (!d.scorer) return null;
   const options = Array.isArray(d.options) ? d.options.map(obj) : [];
-  return <details className="evaluation-definition"><summary><span>评分定义与选项</span><span className="evaluation-badge neutral">仅评测端</span></summary>
+  return <details className="evaluation-definition"><summary><span>评分定义与选项</span><EvaluationTypeBadge value={d} /><span className="evaluation-badge neutral">仅评测端</span></summary>
     <div className="evaluation-definition-body">
-      <p>{names[String(d.source_qtype || d.answer_format)] || String(d.answer_format)} · 第 {Number(d.applies_to_turn || 0) + 1} 轮 · 满分 {String(d.max_score)}</p>
+      <p>{scoringExplanation(d)}</p>
+      <p>{evaluationTypeLabel(d)} · 第 {Number(d.applies_to_turn || 0) + 1} 轮 · 满分 {String(d.max_score)}</p>
       {options.length > 0 && <ul className="evaluation-options">{options.map(o => <li className={o.id === d.correct_option ? "is-correct" : ""} key={String(o.id)}><span className="evaluation-option-id">{String(o.id)}</span><span className="evaluation-option-text">{String(o.text)}</span>{o.id === d.correct_option && <span className="evaluation-badge">正确项</span>}</li>)}</ul>}
       {d.answer_format === "media_list" && <p>{d.retrieval_requirement === "any" ? "命中任意一个目标即可" : "按完整目标集合评分"}</p>}
       <small>评分协议 {String(d.version)} · 选项和答案仅供评测使用</small>

@@ -259,7 +259,7 @@ export function judgeScoreLabel(item: unknown, task: unknown): string {
   if (state === "failed") return "评分失败";
   if (state === "interrupted") return "本轮未完成";
   if (judge.scorer && typeof judge.score === "number") {
-    if (judge.answer_format === "media_list") return '集合得分 ' + judge.score.toFixed(3);
+    if (judge.answer_format === "media_list") return '列表得分 ' + judge.score.toFixed(3);
     const label = judge.score === judge.max_score ? "正确" : judge.score === 0 ? "错误" : "部分正确";
     return label + '（' + judge.score + '/' + judge.max_score + '）';
   }

@@ -619,6 +619,9 @@ class RunExecution:
                     state.set("current_phase", None)
                     state.set("finished_at", now_iso())
                     state.set("status", terminal_status)
+                    summary = effective_summary(state.data)
+                    state.set("summary", summary)
+                    state.set("run_valid", summary["run_valid"])
             finally:
                 state.stop_persist_writer()
         return state.data

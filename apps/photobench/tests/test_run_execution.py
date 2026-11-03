@@ -537,6 +537,8 @@ def test_a_directory_that_loses_files_is_not_silently_ignored():
     assert phase["status"] == "partial"
     assert phase["failed_count"] == 1
     assert phase["error_details"][0]["sample_id"] == "b.jpg"
+    assert state["run_valid"] is False
+    assert state["summary"]["run_valid"] is False
     assert state["status"] == "completed_with_errors"
 
 
@@ -1086,10 +1088,12 @@ def test_a_failed_item_is_skipped_for_the_judge_and_a_good_one_is_pending():
     assert state["items"][0]["judge"] == {"score": None, "reason": "pending_judge"}
 
 
-def test_run_valid_requires_every_question_to_complete():
+def test_run_valid_requires_judging_as_well_as_execution():
     execution, _client, _writer, _lifecycle, _albums = _execution()
     state = execution.execute(_request())
-    assert state["run_valid"] is True
+    assert state["items"][0]["execution_status"] == "completed"
+    assert state["items"][0]["judge_status"] == "pending"
+    assert state["run_valid"] is state["summary"]["run_valid"] is False
     assert state["qa_count"] == 1
 
 
@@ -2038,3 +2042,32 @@ def test_resume_keeps_inherited_answers_when_preflight_fails(monkeypatch):
     assert state["resume_context"]["resumed_from"] == "original-run"
     assert state["input_integrity"]["qa_sha256"] == "original-r2"
     assert not any(name in {"start_turn", "seed_person", "import_directory"} for name in client.call_names())
+
+
+def test_completed_judging_does_not_make_partial_import_valid(monkeypatch):
+    client = FakeSentrixClient(
+        asset_polls=_polls(_assets()),
+        turns={"turn_1": [_completed_turn()]},
+        import_result={
+            "imported": 1,
+            "deduplicated": 0,
+            "events": 1,
+            "summarized": 1,
+            "failures": [{"file_name": "b.jpg", "reason": "pipeline failed"}],
+        },
+    )
+    execution, *_ = _execution(client=client)
+    monkeypatch.setattr(
+        execution, "_evaluate_one", lambda row, *_: {"qa_id": row["qa_id"], "execution_status": "completed"}
+    )
+    monkeypatch.setattr(
+        execution,
+        "_build_judge",
+        lambda *_: SimpleNamespace(
+            judge_item=lambda item, *_: {**item, "judge_status": "completed", "judge": {"score": 2}}
+        ),
+    )
+    state = execution.execute(_request())
+    assert state["items"][0]["judge_status"] == "completed"
+    assert state["status"] == "completed_with_errors"
+    assert state["run_valid"] is state["summary"]["run_valid"] is False

@@ -164,7 +164,7 @@ export function QaResults({
             value={qaFilters.search}
             onChange={(event) => setQaFilter("search", event.target.value)}
           />
-<select aria-label="评分题型" value={qaFilters.evaluation_type || ""} onChange={event => setQaFilter("evaluation_type", event.target.value)}><option value="">全部评分题型</option><option value="choice">选择题</option><option value="media_list">列表召回</option><option value="open">开放回答</option></select>
+<select aria-label="评分题型" value={qaFilters.evaluation_type || ""} onChange={event => setQaFilter("evaluation_type", event.target.value)}><option value="">全部评分题型</option><option value="number">ATM 数值</option><option value="list_recall">ATM 列表召回</option><option value="open_end">ATM 开放问答</option><option value="choice">选择题</option><option value="media_list">媒体列表召回</option><option value="open">开放回答</option></select>
           <select value={qaFilters.score} onChange={(event) => setQaFilter("score", event.target.value)}>
             <option value="">全部 Judge 分数</option>
             {scoreOptions.filter(s => s.value !== "None").map(s => <option key={s.value} value={s.value}>{s.label}</option>)}

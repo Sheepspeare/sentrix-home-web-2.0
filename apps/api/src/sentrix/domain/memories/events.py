@@ -288,11 +288,14 @@ def within_candidate_window(anchor_at: datetime | None, event_at: datetime | Non
     """1.0 ``db.py:1967``：时间差超过 6 小时的活动事件连打分都不打。"""
     if anchor_at is None or event_at is None:
         return True
+    if (anchor_at.utcoffset() is None) != (event_at.utcoffset() is None):
+        # 未知偏移无法和绝对时刻比较；保留为不同事件，不猜测时区。
+        return False
     return abs((anchor_at - event_at).total_seconds()) <= CANDIDATE_WINDOW_HOURS * 3600
 
 
 def _time_score(anchor_at: datetime | None, event_at: datetime | None) -> float:
-    if anchor_at and event_at:
+    if anchor_at and event_at and (anchor_at.utcoffset() is None) == (event_at.utcoffset() is None):
         minutes = abs((anchor_at - event_at).total_seconds()) / 60.0
         return _decay(minutes, TIME_DECAY_MINUTES)
     return MISSING_TIME_SCORE
