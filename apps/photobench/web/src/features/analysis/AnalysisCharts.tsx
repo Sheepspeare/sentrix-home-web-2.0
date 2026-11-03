@@ -2,7 +2,7 @@ import { qaTaxonomy, subtypeParent, abilityParent } from "../../lib/qaTaxonomy.t
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
-import { dimensions, displayWithLabels, reportAbilityLabels, percent, scores } from "./presentation.ts";
+import { dimensions, displayWithLabels, reportAbilityLabels, percent, scoreChoices } from "./presentation.ts";
 import type { AnalysisFilters, AnalysisReport } from "../../api/analysis.ts";
 
 export function AnalysisChart({
@@ -70,6 +70,7 @@ export function AnalysisCharts({ report: r, filter }: {
   const [perspective, setPerspective] = useState("category");
   const [score, setScore] = useState("2");
   if (r.rule_version < 4) return <p>此报告使用旧分类口径，请重新生成分析以查看内容题型与回答行为。</p>;
+  const scores = scoreChoices(r, unit);
   const selectedScore = scores.find(s => s.value === score)!;
   const isAbility = ["ability_family", "ability_type"].includes(dimension);
   const isContent = isAbility || ["content_type", "content_subtype"].includes(dimension);
@@ -160,7 +161,7 @@ export function AnalysisCharts({ report: r, filter }: {
   };
   return <>
     <article className="analysis-distribution">
-      <h4>任务完成质量 · 按内容与题目属性分组</h4>
+      <h4>答案正确性 · 按内容与题目属性分组</h4>
       <p>{unit === "turn" ? "按轮统计；点击后展示对应题目，同题多轮只列一次。" : "按题统计；能力取回答轮并集，旧内容题型采用最终任务，得分仍为题级最终分。"}</p>
       <div className="analysis-toolbar" role="group" aria-label="统计角度">
         <button className="btn compact" aria-pressed={perspective === "category"} onClick={() => setPerspective("category")}>按题型看得分</button>
@@ -227,7 +228,7 @@ export function AnalysisCharts({ report: r, filter }: {
     </article>
     <details className="analysis-advanced">
       <summary>运行异常与轮级质量</summary>
-      <p>运行异常独立于任务完成质量。</p>
+      <p>运行异常独立于答案正确性。</p>
       <div className="analysis-grid">
         <article><h4>运行异常分布 · 点击筛选</h4><p>全部 {r.item_count} 题中，{r.counts.affected_items || 0}题发生过异常，共 {r.counts.events || 0} 次；类别可重叠。</p>
           {!errors.length && <p>未记录到运行异常。</p>}

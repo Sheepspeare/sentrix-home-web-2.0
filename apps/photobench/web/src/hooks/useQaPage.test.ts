@@ -285,6 +285,7 @@ describe("useQaPage · 筛选与分页", () => {
       answerability: "",
       agent_status: "",
       primary: "",
+      evaluation_type: "",
     });
     const last = seen[seen.length - 1] ?? "";
     expect(last).not.toContain("tag=");

@@ -61,6 +61,7 @@ export function alignJourneys(left:JourneyNode[],right:JourneyNode[]):{left?:Jou
   return rows;
 }
 export function quality(item:RunItemDetail):string {
-  const score=object(item.judge).score;
+  const judge=object(item.judge), score=judge.score;
+  if (judge.scorer) return typeof score === "number" ? `${score}/${judge.max_score} 分 · ${typeof judge.normalized_score === "number" ? (judge.normalized_score * 100).toFixed(1) + "%" : "未评分"}` : "未评分";
   return typeof score==="number" && [0,1,2].includes(score) ? `${score}/2 分` : "未评分";
 }

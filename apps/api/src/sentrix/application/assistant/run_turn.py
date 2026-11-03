@@ -103,7 +103,7 @@ from sentrix.domain.assistant.ports import (
 from sentrix.domain.assistant.profile import DEFAULT_PROFILE, TurnProfile
 from sentrix.domain.assistant.task_state import ACTING, FINALIZING, TaskState, ToolCallRecord
 from sentrix.domain.assistant.tool_policy import ToolAction, ToolPolicy
-from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, TOOLS_BY_NAME, ToolSpec
+from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, RETRIEVAL_TOOLS, TOOLS_BY_NAME, ToolSpec
 from sentrix.domain.errors import DomainError
 from sentrix.domain.media.ports import OperationControl
 from sentrix.domain.media.progress import OperationCancelled
@@ -365,6 +365,32 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
         "delivered": [item.asset_id for item in session.delivered.items],
         "answer_coverage": session.best_coverage,
         "retrieved_candidates": list(state.retrieved_candidates),
+        "retrieval_observations": {
+            "version": 1,
+            "complete": all(
+                "returned_asset_ids" in record.observation
+                for record in state.records
+                if record.status == "ok" and record.tool in RETRIEVAL_TOOLS
+            ),
+            "asset_ids": list(
+                dict.fromkeys(
+                    str(asset_id)
+                    for record in state.records
+                    if record.status == "ok" and record.tool in RETRIEVAL_TOOLS
+                    for asset_id in record.observation.get("returned_asset_ids", [])
+                )
+            ),
+            "ordered_calls": [
+                {
+                    "tool": record.tool,
+                    "result_set_id": record.observation.get("result_set_id"),
+                    "page": record.observation.get("page"),
+                    "asset_ids": record.observation.get("returned_asset_ids", []),
+                }
+                for record in state.records
+                if record.status == "ok" and record.tool in RETRIEVAL_TOOLS
+            ],
+        },
         # **模型这一步看到什么、回答什么。** 只有 ``include_debug`` 时非空；
         # 按发生顺序排列（planner → agent → judge），每条都带当时的 messages 与
         # ``tools``，以及模型原始 content / thought / tool_calls。

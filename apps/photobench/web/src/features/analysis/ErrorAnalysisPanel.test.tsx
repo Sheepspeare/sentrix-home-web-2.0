@@ -239,7 +239,7 @@ describe("错误分析工作台", () => {
   it("页面筛选保留已有条件，顶部HTML始终导出完整报告", async () => {
     setup();
     await open();
-    fireEvent.change(screen.getByLabelText("完成质量"), {
+    fireEvent.change(screen.getByLabelText("答案正确性"), {
       target: { value: "0" },
     });
     fireEvent.click(await screen.findByRole("tab", { name: "执行问题" }));
@@ -276,7 +276,7 @@ describe("错误分析工作台", () => {
     fireEvent(window, new PopStateEvent("popstate"));
     await waitFor(() =>
       expect(
-        (screen.getByLabelText("完成质量") as HTMLSelectElement).value,
+        (screen.getByLabelText("答案正确性") as HTMLSelectElement).value,
       ).toBe("1"),
     );
   });

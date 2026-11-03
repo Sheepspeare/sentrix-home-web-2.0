@@ -449,6 +449,13 @@ paths:
           type: string
           default: ''
           title: Question Type
+      - name: evaluation_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Evaluation Type
       - name: tag
         in: query
         required: false

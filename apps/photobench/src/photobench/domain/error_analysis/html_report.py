@@ -9,7 +9,8 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from photobench.domain.error_analysis.html_dashboard import render_charts, score_composition
+from photobench.domain.error_analysis.html_dashboard import render_charts, score_composition, selected_turns
+from photobench.domain.evaluation.presentation import evaluation_html, evaluation_summary_html
 
 STYLES = """
 :root{color-scheme:light;--ink:#1c2c43;--muted:#62738a;--line:#dfe6ef;
@@ -453,9 +454,23 @@ def render_report(
     body += kpi(
         "任务满分率", f"{full / valid:.1%}" if valid else "未覆盖", f"{full} / {valid} 有效评分{unit}"
     )
+    typed_summary = report.get("evaluation_summary") or {}
+    records = [turn for case in cases for turn in selected_turns(case)] if unit == "轮" else list(cases)
+    normalized: list[float] = []
+    for record in records:
+        result = record.get("evaluation_result") or {}
+        value = (
+            result.get("normalized_score")
+            if result
+            else (record["score"] / 2 if record.get("score") in (0, 1, 2) else None)
+        )
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            normalized.append(float(value))
     body += kpi(
-        "平均质量分",
-        f"{(2 * full + partial) / valid:.3f} / 2" if valid else "未覆盖",
+        "平均答案正确性" if typed_summary.get("count") else "平均质量分",
+        (f"{sum(normalized) / len(normalized):.1%}" if normalized else "未覆盖")
+        if typed_summary.get("count")
+        else (f"{(2 * full + partial) / valid:.3f} / 2" if valid else "未覆盖"),
         f"缺分 {missing}{unit}",
     )
     behavior_valid = den["behavior_valid"]
@@ -473,9 +488,10 @@ def render_report(
     overview_charts, dimension_charts, retrieval_charts, behavior_charts = render_charts(
         report, cases, filters, labels
     )
-    body += '</div><div class="chart-grid">' + overview_charts + "</div></section>"
+    body += '</div><div class="chart-grid">' + overview_charts + "</div>"
+    body += evaluation_summary_html(typed_summary) + "</section>"
     body += '<section id="abilities"><div class="section-heading"><h2>能力与题型</h2>'
-    body += '<p class="note">先看样本量，再比较满分率。条形依次为2分、1分、0分及缺分；'
+    body += '<p class="note">先看样本量，再比较满分率。得分类别按当前量表展示，连续分保留原值；'
     body += "多标签可重叠，不把它们绘成互斥饼图。</p></div>"
     body += (
         '<div class="report-legend">'
@@ -614,6 +630,7 @@ def render_report(
         ability = " / ".join(
             case_labels.get(v, v) for v in case["dimensions"].get("ability_type", "unknown").split(" / ")
         )
+        body += evaluation_html(case.get("evaluation_result"), case.get("evaluation"))
         score_key = str(case["score"])
         body += (
             f'<details class="case-card" id="case-{i}"><summary><span class="case-identity">'

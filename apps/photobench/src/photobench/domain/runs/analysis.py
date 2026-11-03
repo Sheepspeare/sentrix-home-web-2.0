@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from photobench.domain.datasets.ability_taxonomy import ABILITY_FIELDS
+from photobench.domain.evaluation.contract import evaluation_summary
 from photobench.domain.runs.graph_quality import aggregate_graph_qa_by_type
 from photobench.domain.runs.judge import normalize_judge_score, parse_judge_json
 from photobench.domain.runtime.metrics import (
@@ -113,6 +114,8 @@ def judge_score_consistency(
 def judge_projection(judge: dict[str, Any] | None) -> dict[str, Any]:
     """Versioned read-only derivation; saved observations and execution status stay intact."""
     result = dict(judge or {})
+    if result.get("scorer"):
+        return result
     if result.get("score_normalization_version") == 1 or result.get("score_derivation"):
         return result
     original = result.get("score")
@@ -158,6 +161,8 @@ def judge_projection(judge: dict[str, Any] | None) -> dict[str, Any]:
 def judge_consistency_status(judge: dict[str, Any] | None) -> str | None:
     """1.0 ``:718``。"""
     judge = judge_projection(judge)
+    if judge.get("scorer"):
+        return None
     recorded_version = judge.get("consistency_version")
     version = JUDGE_CONSISTENCY_VERSION if judge.get("score_derivation") else 1
     if (
@@ -172,15 +177,27 @@ def judge_consistency_status(judge: dict[str, Any] | None) -> str | None:
     return str(value) if value is not None else None
 
 
-def judge_score_for_summary(judge: dict[str, Any] | None) -> int | None:
+def judge_score_for_summary(judge: dict[str, Any] | None) -> float | int | None:
     """1.0 ``:725``：只有 0/1/2 且不自相矛盾的分数才进汇总。"""
     judge = judge_projection(judge)
+    if judge.get("scorer"):
+        score = judge.get("normalized_score")
+        if isinstance(score, (int, float)) and judge.get("judge_status") == "completed":
+            scaled = score * 2
+            return int(scaled) if scaled == int(scaled) else scaled
+        return None
     score = normalize_judge_score(judge.get("score"))["score"]
     return (
         score
         if judge.get("judge_status") != "failed" and judge_consistency_status(judge) != "inconsistent"
         else None
     )
+
+
+def judge_bucket_for_summary(judge: dict[str, Any] | None) -> int | None:
+    """Display/filter category; fractional primary scores remain untouched."""
+    score = judge_score_for_summary(judge)
+    return None if score is None else 2 if score == 2 else 0 if score == 0 else 1
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +622,7 @@ def _round_or_none(metrics: dict[str, Any] | None, key: str) -> float | None:
 
 def derive_attribution(item: dict[str, Any]) -> dict[str, Any]:
     """1.0 ``:4202``。从已存的 turn 字段里判定失败层。"""
-    judge_score = judge_score_for_summary(item.get("judge"))
+    judge_score = judge_bucket_for_summary(item.get("judge"))
     recall = item.get("retrieval_recall")
     # **R 层问的是「检索找到了吗」，不是「交付了吗」。**
     #
@@ -1162,7 +1179,10 @@ def capability_summary(
     answer_scores = [
         score for judge in answer_judges if (score := judge_score_for_summary(judge)) is not None
     ]
-    answer_dist = {str(score): answer_scores.count(score) for score in (0, 1, 2)}
+    answer_dist = {
+        str(score): sum(judge_bucket_for_summary(judge) == score for judge in answer_judges)
+        for score in (0, 1, 2)
+    }
     metric_items = [item for item in items if retrieval_metric_eligible(item)]
     excluded_unanswerable_count = len(items) - len(metric_items)
     typed_retrieval_items = [item for item in metric_items if "retrieval_media_refs" in item]
@@ -1367,6 +1387,7 @@ def capability_summary(
         and any(call.get("call_type") for call in item["model_call_metrics"])
     ]
     return {
+        "evaluation_summary": evaluation_summary(items),
         "judge_distribution": answer_dist,
         "judge_valid_count": len(answer_scores),
         "answer_quality_mean": round(sum(answer_scores) / len(answer_scores), 3) if answer_scores else None,
@@ -1555,7 +1576,10 @@ def list_summary(state: dict[str, Any]) -> dict[str, Any]:
         if isinstance(item.get("retrieval_recall"), (int, float))
     ]
     scores = [score for item in items if (score := judge_score_for_summary(item.get("judge"))) is not None]
-    distribution = {str(score): scores.count(score) for score in (0, 1, 2)}
+    distribution = {
+        str(score): sum(judge_bucket_for_summary(item.get("judge")) == score for item in items)
+        for score in (0, 1, 2)
+    }
     saved.update(
         {
             "total": saved.get("total") or state.get("qa_count") or len(items),
@@ -1666,7 +1690,10 @@ def effective_summary(state: dict[str, Any]) -> dict[str, Any]:
     rates = [
         float(value) for call in calls if isinstance((value := call.get("tokens_per_second")), (int, float))
     ]
-    distribution = {str(score): scores.count(score) for score in (0, 1, 2)}
+    distribution = {
+        str(score): sum(judge_bucket_for_summary(item.get("judge")) == score for item in items)
+        for score in (0, 1, 2)
+    }
     attributions = [item.get("attribution") or derive_attribution(item) for item in items]
     attribution_primary: dict[str, int] = {}
     attribution_layers: dict[str, int] = {}
@@ -1929,7 +1956,21 @@ def item_summary(item: dict[str, Any], index: int, review: dict[str, Any] | None
         ),
         "ground_truth_image_count": len(item.get("retrieval_image_ids") or []),
         "ground_truth_video_count": len(item.get("retrieval_video_ids") or []),
+        "evaluation": item.get("evaluation"),
+        "evaluation_result": item.get("evaluation_result"),
         "judge": {
+            **{
+                key: judge[key]
+                for key in (
+                    "scorer",
+                    "answer_format",
+                    "max_score",
+                    "normalized_score",
+                    "judge_status",
+                    "version",
+                )
+                if key in judge
+            },
             "score": judge.get("score"),
             "status": judge.get("status"),
             "rejudge_id": judge.get("rejudge_id"),

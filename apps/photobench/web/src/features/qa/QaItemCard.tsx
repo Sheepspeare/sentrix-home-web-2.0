@@ -1,3 +1,4 @@
+import { EvaluationResult } from "../../components/EvaluationResult.tsx";
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 单题卡（列表项 + 展开体）。移植 1.0 `App.vue:3460-3674`。
@@ -207,6 +208,7 @@ function QaItemDetail({
           </span>
         ))}
       </div>
+      <EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} />
       <section className="qa-layer-chain">
         <div className="qa-layer-chain-head">
           <strong>本题证据链</strong>

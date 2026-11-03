@@ -79,12 +79,17 @@ def quality_chart(
         valid = total - row.get("score_None", 0)
         name = labels.get(row["value"], row["value"])
         counts = [row.get("score_" + score, 0) for score in ("2", "1", "0", "None")]
-        description = " / ".join(str(n) for n in counts)
+        description = "，".join(
+            f"{label}{n}"
+            for label, n in zip(("正确", "部分正确或集合未满分", "错误", "缺分"), counts, strict=True)
+            if n
+        )
         body += (
             '<div class="quality-row"><div>'
             + jump(name, dimension, row["value"])
             + f"<small>{total:,}{unit} · 有效评分{valid:,}</small></div>"
-            + f'<div class="score-track" role="img" aria-label="2/1/0/缺分：{description}">'
+            + '<div class="score-track" role="img" '
+            + f'aria-label="{description}">'
             + "".join(
                 f'<span style="width:{n / total * 100:.4f}%;background:{COLORS[i]}"></span>'
                 for i, n in enumerate(counts)
@@ -98,6 +103,23 @@ def selected_turns(case: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         t for t in case["turns"] if case.get("matched_turns") is None or t["turn"] in case["matched_turns"]
     ]
+
+
+def score_labels(cases: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    """Saved score categories; typed scales keep their original score in details."""
+    typed = any(case.get("evaluation") or case.get("evaluation_result") for case in cases)
+    if not typed:
+        return {"0": "0分", "1": "1分", "2": "2分", "None": "未评分"}
+    records = [record for case in cases for record in [case, *case.get("turns", [])]]
+    partial = any(
+        not record.get("evaluation_result")
+        or record["evaluation_result"].get("max_score") == 2
+        or record["evaluation_result"].get("scorer") in {"media_set", "atm_list"}
+        or record.get("score") == 1
+        for record in records
+    )
+    labels = {"0": "错误", "1": "部分正确／集合未满分", "2": "正确", "None": "未评分"}
+    return {key: value for key, value in labels.items() if key != "1" or partial}
 
 
 def retrieval(cases: Sequence[dict[str, Any]]) -> str:
@@ -179,13 +201,21 @@ def multiturn(cases: Sequence[dict[str, Any]]) -> str:
         pairs[first, last] += 1
         changes["末轮较高" if last > first else "原分相同" if last == first else "末轮较低"] += 1
     body = '<div class="transition-grid" role="table" aria-label="多轮首末质量分对比">'
-    body += '<span class="note">首轮 ↓ / 末轮 →</span><b>0分</b><b>1分</b><b>2分</b>'
-    for first in (0, 1, 2):
-        body += f"<b>{first}分</b>"
-        for last in (0, 1, 2):
+    labels = score_labels(cases)
+    categories = [int(key) for key in labels if key != "None"]
+    body = body[:-1] + f' style="grid-template-columns:repeat({len(categories) + 1},1fr)">'
+    body += '<span class="note">首轮 ↓ / 末轮 →</span>' + "".join(
+        f"<b>{labels[str(key)]}</b>" for key in categories
+    )
+    for first in categories:
+        body += f"<b>{labels[str(first)]}</b>"
+        for last in categories:
             n = pairs[first, last]
             color = "#e7f3f0" if last > first else "#fbecef" if last < first else "#edf2f8"
-            body += f'<span style="background:{color}" title="首轮{first}分，末轮{last}分">{n}</span>'
+            body += (
+                f'<span style="background:{color}" '
+                f'title="首轮{labels[str(first)]}，末轮{labels[str(last)]}">{n}</span>'
+            )
     body += "</div><p class=note>" + " · ".join(f"{esc(k)} {v}题" for k, v in changes.items()) + "</p>"
     return card(
         "多轮：首轮与末轮的原分变化",
@@ -206,7 +236,8 @@ def score_composition(
     )
     tabs: list[str] = []
     panels: list[str] = []
-    for score, name in ((0, "0分"), (1, "1分"), (2, "2分"), (None, "未评分")):
+    for key, name in score_labels(cases).items():
+        score = None if key == "None" else int(key)
         selected = [r for r in records if r.get("score") == score]
         charts = ""
         for dim, title in (
@@ -279,11 +310,12 @@ def render_charts(
         [
             (name, counts.get(prefix + score, 0), score)
             for name, score in (
-                ("满分 · 2分", "2"),
-                ("部分完成 · 1分", "1"),
-                ("未完成 · 0分", "0"),
+                ("正确", "2"),
+                ("部分正确／集合未满分", "1"),
+                ("错误", "0"),
                 ("未评分", "None"),
             )
+            if score in score_labels(cases)
         ],
         unit,
         "score" if unit == "题" else "",

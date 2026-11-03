@@ -21,6 +21,7 @@ from typing import Any
 
 from photobench.domain.datasets.catalog import ALBUM_MEDIA_COLLECTIONS
 from photobench.domain.datasets.qa_taxonomy import validate_qa_annotations
+from photobench.domain.evaluation.contract import validate_evaluation
 from photobench.infrastructure.datasets.qa_metadata import (
     apply_task_action_defaults,
     load_jsonl,
@@ -143,6 +144,12 @@ class JsonAlbumSource:
         except (OSError, json.JSONDecodeError) as exc:
             raise KeyError(f"{album_id}/{qa_set}") from exc
         definition = (manifest.get("qa_set_versions") or {}).get(qa_set) or {}
+        if definition.get("evaluation_version"):
+            if definition.get("qa_sha256") != sha256_file(path):
+                raise ValueError("Evaluation QA file fingerprint mismatch")
+            ids = [row.get("qa_id") for row in rows]
+            if not all(ids) or len(set(ids)) != len(rows):
+                raise ValueError("Evaluation QA IDs must be present and unique")
         if definition.get("schema_version") in {"2.0", "3.0"}:
             ids = [row.get("qa_id") for row in rows]
             if not all(ids) or len(set(ids)) != len(rows):
@@ -160,6 +167,7 @@ class JsonAlbumSource:
             rows, str(manifest.get("album_id") or album_id), qa_set, self._policy
         )
         for row in rows:
+            validate_evaluation(row)
             for source, target in (
                 ("dataset_version", "dataset_version"),
                 ("schema_version", "qa_schema_version"),

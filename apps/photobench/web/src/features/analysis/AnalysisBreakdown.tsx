@@ -8,7 +8,7 @@ import {
   displayWithLabels,
   percent,
   reportAbilityLabels,
-  scores,
+  scoreChoices,
 } from "./presentation.ts";
 
 type Row = AnalysisReport["groups"][string][number];
@@ -46,6 +46,7 @@ export function QualityRing({
   filter: (f: AnalysisFilters) => void;
   unit?: string;
 }) {
+  const scores = scoreChoices(report, unit);
   const turn = unit === "turn";
   const total = turn ? report.denominators.turns || 0 : report.item_count;
   const rows = scores.map((s) => ({
@@ -98,9 +99,9 @@ export function QualityRing({
   };
   return (
     <article className="analysis-chart-card">
-      <h4>完成质量构成</h4>
+      <h4>答案正确性构成</h4>
       <AnalysisChart
-        label="完成质量环形图"
+        label="答案正确性环形图"
         height={220}
         option={option}
         onClick={(name) => filter({ score: name, content_unit: unit })}
@@ -134,6 +135,7 @@ export function TagAnalysis({
   const [shape, setShape] = useState("pie");
   const [metric, setMetric] = useState("count");
   const [score, setScore] = useState("all");
+  const scores = scoreChoices(r, unit);
   const u = unit === "turn" ? "turn" : "qa";
   const noun = u === "turn" ? "轮" : "题";
   const label = (v: string) => displayWithLabels(v, reportAbilityLabels(r));

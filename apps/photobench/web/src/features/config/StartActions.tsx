@@ -1,15 +1,4 @@
-/**
- * 启动 / 停止评测按钮行。移植 1.0 `App.vue:2981-2985` 的 `<div class="actions">`。
- *
- * 与 1.0 的两处差别（都记在报告里）：
- *   1. 按钮的 `disabled` 由 `startDisabledReason`（1.0 `:2555-2564`，原样搬到
- *      `rules.ts`）决定；1.0 只把那个原因塞进 `:disabled`，用户看不到为什么点不动。
- *      这里额外把原因挂到 `title`，并在它与按钮文案不同时用一条 `.config-help` 显示
- *      出来——文案仍是 1.0 的原文，没有新造。
- *   2. 三个交互都是受控的（`onStart` / `onStop` / `onDeleteScopeAfterRunChange`）：
- *      `startSuite` / `stopSuite` / `deleteScopeAfterRun` 不在已写好的三个 hook 里，
- *      由组合层注入（1.0 它们是同一个组件里的方法，2.0 拆到 hook 之外）。
- */
+/** Controlled scoring settings and run actions. */
 import { GtImageToggle } from "../../components/GtImageToggle.tsx";
 import { runModeMeta, startDisabledReason, type StartDisabledInput } from "./rules.ts";
 
@@ -19,6 +8,10 @@ export interface StartActionsProps extends StartDisabledInput {
   onStart: () => void;
   onStop: () => void;
   stopping?: boolean;
+  openScale?: "ternary" | "binary";
+  onOpenScaleChange?: (value: "ternary" | "binary") => void;
+  choiceSemanticAux?: boolean;
+  onChoiceSemanticAuxChange?: (value: boolean) => void;
   judgeUseGtImages?: boolean;
   onJudgeUseGtImagesChange?: (value: boolean) => void;
 }
@@ -37,39 +30,53 @@ export function StartActions(props: StartActionsProps) {
   const reason = startDisabledReason(props);
   const buttonLabel = hasRunning ? "已有任务运行中" : runModeMeta(runMode).button;
 
+  const locked = suiteRunning || hasRunning;
   return (
-    <div className="actions">
-      {runMode !== "build" && <GtImageToggle checked={props.judgeUseGtImages ?? false}
-        disabled={suiteRunning || hasRunning} onChange={value => props.onJudgeUseGtImagesChange?.(value)} />}
-      {runMode === "full" && (
-        <label
-          className={`btn danger delete-scope-toggle${deleteScopeAfterRun ? " active" : ""}${
-            suiteRunning || hasRunning ? " disabled" : ""
-          }`}
-          title="只在完整链路测试结束后删除本次生成的相册，谨慎开启"
-        >
-          <input
-            type="checkbox"
-            checked={deleteScopeAfterRun}
-            disabled={suiteRunning || hasRunning}
-            onChange={(event) => onDeleteScopeAfterRunChange(event.target.checked)}
-          />
-          完成后删除相册
-        </label>
+    <div className="start-settings">
+      {runMode !== "build" && (
+        <div className="start-scoring-grid" aria-label="评分设置">
+          <div className="start-setting">
+            <span className="field-label">评分参考</span>
+            <GtImageToggle checked={props.judgeUseGtImages ?? false} disabled={locked}
+              onChange={value => props.onJudgeUseGtImagesChange?.(value)} />
+          </div>
+          <label className="start-setting">
+            <span className="field-label">开放题量表</span>
+            <select aria-label="开放题量表" value={props.openScale ?? "ternary"} disabled={locked}
+              onChange={event => props.onOpenScaleChange?.(event.target.value as "ternary" | "binary")}>
+              <option value="ternary">PhotoBench 0/1/2</option>
+              <option value="binary">0/1（ATM对齐）</option>
+            </select>
+            <span className="config-help">PhotoBench 开放题适用；ATM 使用官方量表</span>
+          </label>
+          <div className="start-setting">
+            <span className="field-label">选择题辅分</span>
+            <label className={`start-check${props.choiceSemanticAux ? " active" : ""}`}>
+              <input type="checkbox" checked={props.choiceSemanticAux ?? false} disabled={locked}
+                onChange={event => props.onChoiceSemanticAuxChange?.(event.target.checked)} />
+              选择题开放语义辅分
+            </label>
+            <span className="config-help">额外比较开放回答与参考答案，主分仍按选项匹配</span>
+          </div>
+        </div>
       )}
-      <button
-        className="btn"
-        type="button"
-        disabled={Boolean(reason)}
-        title={reason || undefined}
-        onClick={onStart}
-      >
-        {buttonLabel}
-      </button>
-      <button className="btn warn" type="button" disabled={Boolean(props.stopping)} onClick={onStop}>
-        停止全部
-      </button>
-      {reason && reason !== buttonLabel && <span className="config-help">{reason}</span>}
+      <div className="start-action-bar">
+        <div className="start-primary-actions">
+          <button className="btn" type="button" disabled={Boolean(reason)} title={reason || undefined} onClick={onStart}>
+            {buttonLabel}
+          </button>
+          <button className="btn warn" type="button" disabled={Boolean(props.stopping)} onClick={onStop}>停止全部</button>
+        </div>
+        {runMode === "full" && (
+          <label className={`delete-scope-toggle${deleteScopeAfterRun ? " active" : ""}${locked ? " disabled" : ""}`}
+            title="只在完整链路测试结束后删除本次生成的相册，谨慎开启">
+            <input type="checkbox" checked={deleteScopeAfterRun} disabled={locked}
+              onChange={event => onDeleteScopeAfterRunChange(event.target.checked)} />
+            完成后删除相册
+          </label>
+        )}
+      </div>
+      {reason && reason !== buttonLabel && <span className="config-help start-disabled-reason">{reason}</span>}
     </div>
   );
 }

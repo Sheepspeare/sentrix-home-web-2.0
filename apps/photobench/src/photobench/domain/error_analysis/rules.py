@@ -19,9 +19,15 @@ from photobench.domain.error_analysis.taxonomy import (
     project_case_abilities,
     scenarios,
 )
-from photobench.domain.runs.analysis import judge_score_for_summary, retrieval_metric_eligible
+from photobench.domain.evaluation.contract import evaluation_summary
+from photobench.domain.runs.analysis import judge_bucket_for_summary, retrieval_metric_eligible
 
-RULE_VERSION = 11
+
+def quality_bucket(judge: dict[str, Any] | None) -> int | None:
+    return judge_bucket_for_summary(judge)
+
+
+RULE_VERSION = 12
 TERMINAL = {"completed", "completed_with_errors", "failed", "cancelled", "interrupted"}
 NORMAL = {"answered", "answered_with_gap", "policy_refusal"}
 LABELS = {
@@ -426,7 +432,10 @@ def case_from_item(item: Mapping[str, Any], index: int) -> dict[str, Any]:
                 "test_scenarios": scenarios(
                     {"question_type": item.get("question_type"), **dict(turn_record)}
                 ),
-                "score": judge_score_for_summary(turn_record.get("judge")),
+                "score": quality_bucket(turn_record.get("judge")),
+                "evaluation_result": turn_record.get("judge")
+                if (turn_record.get("judge") or {}).get("scorer")
+                else None,
             }
         )
         judges = {
@@ -514,7 +523,7 @@ def case_from_item(item: Mapping[str, Any], index: int) -> dict[str, Any]:
             for e in events
             if event.get("call_key") and e.get("call_key") == event["call_key"] and e is not event
         ]
-    score = judge_score_for_summary(item.get("judge"))
+    score = quality_bucket(item.get("judge"))
     reasons = [t["termination_reason"] for t in turn_rows]
     status = (
         "cancelled"
@@ -722,6 +731,9 @@ def case_from_item(item: Mapping[str, Any], index: int) -> dict[str, Any]:
             }
         ),
         "score": score,
+        "evaluation": item.get("evaluation"),
+        "evaluation_result": item.get("evaluation_result")
+        or (item.get("judge") if (item.get("judge") or {}).get("scorer") else None),
         "execution": status,
         "dimensions": dimensions,
         "dimension_labels": dimension_labels,
@@ -756,6 +768,7 @@ class Aggregator:
     """Only compact cases are retained by storage; aggregate uses bounded counters."""
 
     def __init__(self) -> None:
+        self.evaluation_items: list[dict[str, Any]] = []
         self.total = 0
         self.ability_versions: set[str] = set()
         self.counts: Counter[str] = Counter()
@@ -796,6 +809,7 @@ class Aggregator:
         self.context_windows.update(case["context_windows"])
         self.gt_hash.update((case["qa_id"] + case["gt_fingerprint"]).encode())
         self.annotation_hash.update((case["qa_id"] + case["annotation_fingerprint"]).encode())
+        self.evaluation_items.append({k: case.get(k) for k in ("qa_id", "evaluation", "evaluation_result")})
         self.counts["score_" + str(case["score"])] += 1
         self.counts["execution_" + case["execution"]] += 1
         for key in (
@@ -904,6 +918,7 @@ class Aggregator:
     def report(self, metadata: dict[str, Any]) -> dict[str, Any]:
         return {
             "schema_version": 2,
+            "evaluation_summary": evaluation_summary(self.evaluation_items),
             "rule_version": RULE_VERSION,
             "ability_taxonomy_versions": sorted(self.ability_versions),
             "ability_labels": analysis_ability_labels(self.ability_versions),
@@ -987,7 +1002,7 @@ class Aggregator:
                 "不适用、待核定、未记录题型单列，不进入有效内容题型的占比分母。",
                 "证据指纹与标签指纹分开保存；标签变化不会标成GT变化，标签不同不提供改善汇总。",
                 "内容类型仅取明确的内容任务标签；行为测试、预期动作、测试场景不作为内容类型。未标注内容类型不推断。",
-                "0/1/2分表示任务完成质量（含回答、拒答与澄清）；行为符合率独立使用逐轮行为判定，不从质量分推算。",
+                "正确性分组按各题量表判定：满分/中间分/零分；原分、满分和归一化分分别保留。列表中间分是连续集合覆盖，不解释为开放回答部分正确。历史0/1/2含义保持；行为判定独立。",
                 "行为覆盖以全部对话轮为分母（含预期未知）；行为符合率以有效行为判定轮数为分母。案例列表按题去重。",
                 "异常事件数、受影响题数、最终执行失败题数分别统计；错误类别及多标签题型/角度可重叠，不能相加。",
                 "恢复仅根据同轮同一步重试成功或明确恢复事件判定，未知不计成功。",

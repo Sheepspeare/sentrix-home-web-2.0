@@ -41,6 +41,16 @@ def result_state(value: Any, kind: str) -> str:
         return "unscored"
     if value.get("status") == "failed" or value.get("judge_status") == "failed":
         return "failed"
+    if kind == "judge" and value.get("scorer"):
+        if value.get("judge_status") == "needs_review":
+            return "excluded"
+        score = value.get("score")
+        if (
+            isinstance(score, (int, float))
+            and not isinstance(score, bool)
+            and 0 <= score <= value.get("max_score", 1)
+        ):
+            return "valid"
     if kind == "task_judge":
         valid = isinstance(value.get("correct"), bool) and value.get("actual_action") in {
             "answer",
@@ -63,7 +73,7 @@ def result_state(value: Any, kind: str) -> str:
 
 
 def recovery_fields(record: Mapping[str, Any], scope: str, *, evidence: bool = False) -> tuple[str, ...]:
-    if not str(record.get("answer") or "").strip():
+    if not str(record.get("answer") or "").strip() and not record.get("predicted_media"):
         return ()
     if record.get("execution_status") in {"failed", "scheduled", "running"}:
         return ()

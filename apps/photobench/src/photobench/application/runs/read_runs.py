@@ -370,6 +370,7 @@ class ReadRuns:
         answerability: str = "",
         primary: str = "",
         question_type: str = "",
+        evaluation_type: str = "",
     ) -> dict[str, Any]:
         """``GET /api/runs/{id}/items``（1.0 ``get_run_items`` ``:6441``）。"""
         with self._item_locks[hash(run_id) % len(self._item_locks)]:
@@ -436,8 +437,10 @@ class ReadRuns:
                     continue
                 if (
                     score_filter is not None
-                    and analysis.judge_score_for_summary(item.get("judge")) != score_filter
+                    and analysis.judge_bucket_for_summary(item.get("judge")) != score_filter
                 ):
+                    continue
+                if evaluation_type and (item.get("evaluation") or {}).get("answer_format") != evaluation_type:
                     continue
                 if question_type and item.get("question_type") != question_type:
                     continue

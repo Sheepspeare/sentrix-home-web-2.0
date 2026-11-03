@@ -1,0 +1,46 @@
+type Dict = Record<string, unknown>;
+const obj = (v: unknown): Dict => v && typeof v === "object" ? v as Dict : {};
+const pct = (v: unknown) => typeof v === "number" ? (v * 100).toFixed(1) + "%" : "未评分";
+const names: Record<string, string> = {choice: "选择题语义匹配", media_list: "媒体列表", open: "开放回答", number: "ATM 数值", list_recall: "ATM 列表", open_end: "ATM 开放题"};
+export function EvaluationResult({value, definition}: {value: unknown; definition?: unknown}) {
+  const r = obj(value), d = obj(definition), metrics = obj(r.media_metrics);
+  if (!r.scorer) return null;
+  const comparisons = Array.isArray(r.comparisons) ? r.comparisons.map(obj) : [];
+  const options = Array.isArray(d.options) ? d.options.map(obj) : [];
+  return <section aria-label="题型评分" className="evaluation-panel">
+    <h4>{names[String(r.source_qtype || r.answer_format)] || String(r.scorer)} · {String(r.scorer)}</h4>
+    <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
+    <p>{String(r.reason || "")}</p>
+    {r.matched_option != null && <p>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</p>}
+    {comparisons.length > 0 && <ul className="evaluation-options">{comparisons.map(c => <li className={c.matches ? "is-match" : ""} key={String(c.option_id)}>{String(c.option_id)}：{String(options.find(o => o.id === c.option_id)?.text || "")} · {c.matches ? "匹配" : "不匹配"} · {String(c.reason)}</li>)}</ul>}
+    {Object.keys(metrics).length > 0 && <div className="evaluation-table-wrap"><table><thead><tr><th>集合</th><th>Recall</th><th>Jaccard</th><th>Precision</th><th>F1</th></tr></thead><tbody>{["delivery", "tools"].map(k => {const m = obj(metrics[k]); return <tr key={k}><td>{k === "delivery" ? "模型交付" : "工具累计召回"}</td>{["recall", "jaccard", "precision", "f1"].map(v => <td key={v}>{pct(m[v])}</td>)}</tr>;})}</tbody></table></div>}
+    {Object.keys(metrics).length > 0 && <details className="evaluation-disclosure"><summary>GT、预测、交集与差集</summary><pre>{JSON.stringify(metrics, null, 2)}</pre></details>}
+    {r.number_aux != null && <p>LLM 数值辅分 {pct(obj(r.number_aux).score)} · 与官方分{r.number_aux_disagrees === true ? "不一致" : r.number_aux_disagrees === false ? "一致" : "尚不可比较"}</p>}
+    {(r.number_aux != null || r.semantic_aux != null) && <details className="evaluation-disclosure"><summary>辅分与归一化依据</summary><pre>{JSON.stringify(r.number_aux || r.semantic_aux, null, 2)}</pre></details>}
+    <small>协议 {String(r.version)} · 模型 {String(r.judge_model || "确定性评分")}</small>
+  </section>;
+}
+export function EvaluationSummary({value}: {value: unknown}) {
+  const r = obj(value); if (!r.count) return null;
+  return <section aria-label="评分协议汇总" className="evaluation-panel"><h3>题型评分汇总</h3>
+    <p className="evaluation-score">逐题平均归一化分 {pct(r.mean)} · 覆盖 {String(r.scored)}/{String(r.count)}（{pct(r.coverage)}） · 其他 {String(r.other_count || 0)} 题</p>
+    <p>按当前题集逐题汇总，仅纳入有效评分；覆盖不全时不作为完整 QS。ATM 主集、hard 和小测集应分别比较。选项仅供评测端匹配，列表按实际交付媒体评分。</p>
+    <div className="evaluation-table-wrap"><table><thead><tr><th>题型</th><th>有效 / 总数</th><th>平均归一化分</th></tr></thead><tbody>{Object.entries(obj(r.by_type)).map(([k, v]) => {const row=obj(v); return <tr key={k}><td>{names[k] || k}</td><td>{String(row.scored)}/{String(row.count)}</td><td>{pct(row.mean)}</td></tr>;})}</tbody></table></div>
+    <p>数值辅分不一致题：{Array.isArray(r.number_disagreement_ids) ? r.number_disagreement_ids.join("、") || "无" : "未记录"}</p>
+    <details className="evaluation-disclosure"><summary>模型与工具集合平均指标</summary><pre>{JSON.stringify(r.media_metrics, null, 2)}</pre><p>累计集合指标不等于有序检索的 Recall@k 或 Recall@kGT。</p></details>
+  </section>;
+}
+
+export function EvaluationDefinition({value}: {value: unknown}) {
+  const d = obj(value);
+  if (!d.scorer) return null;
+  const options = Array.isArray(d.options) ? d.options.map(obj) : [];
+  return <details className="evaluation-definition"><summary><span>评分定义与选项</span><span className="evaluation-badge neutral">仅评测端</span></summary>
+    <div className="evaluation-definition-body">
+      <p>{names[String(d.source_qtype || d.answer_format)] || String(d.answer_format)} · 第 {Number(d.applies_to_turn || 0) + 1} 轮 · 满分 {String(d.max_score)}</p>
+      {options.length > 0 && <ul className="evaluation-options">{options.map(o => <li className={o.id === d.correct_option ? "is-correct" : ""} key={String(o.id)}><span className="evaluation-option-id">{String(o.id)}</span><span className="evaluation-option-text">{String(o.text)}</span>{o.id === d.correct_option && <span className="evaluation-badge">正确项</span>}</li>)}</ul>}
+      {d.answer_format === "media_list" && <p>{d.retrieval_requirement === "any" ? "命中任意一个目标即可" : "按完整目标集合评分"}</p>}
+      <small>评分协议 {String(d.version)} · 选项和答案仅供评测使用</small>
+    </div>
+  </details>;
+}

@@ -1,3 +1,4 @@
+import { EvaluationDefinition } from "../../components/EvaluationResult.tsx";
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 单条 QA 的审阅卡。逐行移植 1.0 `App.vue:3703-3761`：
@@ -109,6 +110,7 @@ export function QaReviewCard({ item, index, onOpenMedia }: QaReviewCardProps) {
         </div>
       </header>
 
+      <EvaluationDefinition value={item.evaluation} />
       <div className={`qa-review-layout${evidence.length ? "" : " no-evidence"}`}>
         <div className="qa-dialogue-panel">
           {turns.map((turn, ti) => (

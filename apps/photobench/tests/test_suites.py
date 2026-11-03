@@ -1098,3 +1098,50 @@ def test_recovery_plan_reads_legacy_frozen_required_product_revision(tmp_path):
     plan = suites.recovery_plan("run-1")
     assert plan["source_product_build_revision"] == "original-product"
     assert plan["product_version_changed"] is True
+
+
+def test_typed_rejudge_keeps_final_turn_result_when_earlier_turn_finishes_last(tmp_path, monkeypatch):
+    import copy
+
+    from photobench.application.run_execution.judge import JudgeRunner
+    from photobench.domain.evaluation.contract import VERSION
+
+    state = _judged_state()
+    state["qa_concurrency"] = 2
+    row = state["items"][0]
+    row["evaluation"] = {"version": VERSION, "scorer": "open_judge", "answer_format": "open"}
+    first = row["runtime_turns"][0]
+    first.update(message="first", reference_answer="a.jpg")
+    second = copy.deepcopy(first)
+    second["message"] = "final"
+    row["runtime_turns"].append(second)
+    final_finished = threading.Event()
+
+    def judge(_self, question, *_args, **_kwargs):
+        if question == "first":
+            assert final_finished.wait(3)
+            time.sleep(0.05)
+        else:
+            final_finished.set()
+        score = 0 if question == "first" else 1
+        return {
+            "version": VERSION,
+            "scorer": "open_judge",
+            "answer_format": "open",
+            "score": score,
+            "max_score": 1,
+            "normalized_score": score,
+            "judge_status": "completed",
+            "reason": question,
+        }
+
+    monkeypatch.setattr(JudgeRunner, "judge", judge)
+    monkeypatch.setattr(JudgeRunner, "judge_task_action", lambda *_args, **_kw: {"correct": True})
+    sentrix = _FakeSentrix()
+    monkeypatch.setattr(sentrix, "list_assets", lambda **_kw: [], raising=False)
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": state}), sentrix=sentrix)
+    suites.start_rejudge("run-1", {"system_prompt": "p"})
+    assert _wait_until(lambda: state["rejudge"]["status"] == "completed")
+    assert [t["judge"]["score"] for t in row["runtime_turns"]] == [0, 1]
+    assert row["judge"]["reason"] == row["evaluation_result"]["reason"] == "final"
+    assert row["evaluation_result"]["normalized_score"] == 1

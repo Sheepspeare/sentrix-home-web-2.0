@@ -168,7 +168,7 @@ function CaseCard({
     <details className="analysis-case" id={`analysis-i${c.index}:case`}>
       <summary>
         <span className={`analysis-outcome outcome-${c.score ?? "None"}`}>
-          {scoreLabel(c.score)}
+          {c.evaluation_result ? String(c.evaluation_result.score ?? "未评分") + "/" + String(c.evaluation_result.max_score) : scoreLabel(c.score)}
         </span>{" "}
         {c.question || c.qa_id || c.index}
         <small>

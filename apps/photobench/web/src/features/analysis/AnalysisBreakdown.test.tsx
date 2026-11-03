@@ -101,7 +101,7 @@ it("质量环形图覆盖缺分并保持轮级筛选", () => {
 it("v2题型按得分和执行问题下钻，图表同样带上标签条件", () => {
   const filter = vi.fn();
   render(<TagAnalysis report={report()} filter={filter} />);
-  fireEvent.click(screen.getByLabelText("信息获取与感知 未完成（0分）"));
+  fireEvent.click(screen.getByLabelText("信息获取与感知 错误（0分）"));
   expect(filter).toHaveBeenLastCalledWith({
     ability_family: "P",
     ability_type: "",
@@ -199,7 +199,7 @@ it("旧报告缺失安全二级标签时提示来源，轮级与题级得分独�
     ability_type: r.groups.ability_type,
   };
   render(<TagAnalysis report={r} filter={filter} unit="turn" />);
-  fireEvent.click(screen.getByLabelText("信息获取与感知 满分（2分）"));
+  fireEvent.click(screen.getByLabelText("信息获取与感知 正确（2分）"));
   expect(filter).toHaveBeenLastCalledWith(
     expect.objectContaining({ content_unit: "turn", score: "2" }),
   );

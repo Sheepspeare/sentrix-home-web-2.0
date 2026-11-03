@@ -11,6 +11,7 @@ from typing import Any
 
 from photobench.domain.datasets.ability_taxonomy import LEGACY_ABILITY_VERSION, ability_labels
 from photobench.domain.datasets.qa_taxonomy import taxonomy_document
+from photobench.domain.error_analysis.html_dashboard import score_labels
 from photobench.domain.error_analysis.html_report import document as _document
 from photobench.domain.error_analysis.html_report import render_report
 from photobench.domain.error_analysis.taxonomy import QUALITY_DIMENSIONS
@@ -99,7 +100,7 @@ DISPLAY_LABELS.update(_taxonomy["abilities"]["types"])
 DISPLAY_LABELS.update(_taxonomy["abilities"]["groups"])
 DISPLAY_LABELS.update(ability_family="一级能力", ability_type="二级能力", benchmark_group="测试分组")
 DISPLAY_LABELS["content_subtype"] = "细分题型"
-SCORE_LABELS = {"2": "满分（2分）", "1": "部分完成（1分）", "0": "未完成（0分）", "None": "未评分"}
+SCORE_LABELS = {"2": "正确", "1": "部分正确／集合未满分", "0": "错误", "None": "未评分"}
 
 
 def _escape(value: Any) -> str:
@@ -166,6 +167,8 @@ def export_report(
                     "ability_taxonomy_version",
                     "ability_family_label",
                     "ability_type_label",
+                    "evaluation_result",
+                    "evaluation_definition",
                 ],
                 *[
                     [
@@ -197,6 +200,8 @@ def export_report(
                             c.get("ability_labels", labels).get(v, v)
                             for v in c["dimensions"].get("ability_type", "unknown").split(" / ")
                         ),
+                        json.dumps(c.get("evaluation_result"), ensure_ascii=False),
+                        json.dumps(c.get("evaluation"), ensure_ascii=False),
                     ]
                     for c in cases
                 ],
@@ -204,7 +209,8 @@ def export_report(
         )
     if format != "html":
         raise ValueError("format must be html, json or csv")
-    return render_report(report, cases, filters, labels, SCORE_LABELS, QUALITY_DIMENSIONS)
+    display_scores = score_labels(cases) if any(c.get("evaluation") for c in cases) else SCORE_LABELS
+    return render_report(report, cases, filters, labels, display_scores, QUALITY_DIMENSIONS)
 
 
 def export_auxiliary(report: dict[str, Any], kind: str, format: str) -> str:

@@ -1,3 +1,4 @@
+import { scoreChoices } from "../analysis/presentation.ts";
 import { taxonomyLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 「QA 逐题结果」入口。移植 1.0 `App.vue:3432-3670` 的
@@ -72,6 +73,7 @@ export function QaResults({
   onOpenMedia,
 }: QaResultsProps) {
   const activeRejudge = activeRun?.rejudge ?? null;
+  const scoreOptions = scoreChoices({evaluation_summary: activeRun?.summary?.evaluation_summary});
   const {
     qaPage,
     qaDetails,
@@ -162,11 +164,10 @@ export function QaResults({
             value={qaFilters.search}
             onChange={(event) => setQaFilter("search", event.target.value)}
           />
+<select aria-label="评分题型" value={qaFilters.evaluation_type || ""} onChange={event => setQaFilter("evaluation_type", event.target.value)}><option value="">全部评分题型</option><option value="choice">选择题</option><option value="media_list">列表召回</option><option value="open">开放回答</option></select>
           <select value={qaFilters.score} onChange={(event) => setQaFilter("score", event.target.value)}>
             <option value="">全部 Judge 分数</option>
-            <option value="2">2 分</option>
-            <option value="1">1 分</option>
-            <option value="0">0 分</option>
+            {scoreOptions.filter(s => s.value !== "None").map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           <select value={qaFilters.task_type} onChange={(event) => setQaFilter("task_type", event.target.value)}>
             <option value="">全部任务类型</option>

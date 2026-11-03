@@ -64,6 +64,7 @@ from photobench.config import default_qa_concurrency
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import RequestOutcomeUnknownError
+from photobench.domain.evaluation.prompts import evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter
 from photobench.domain.runs.analysis import (
@@ -164,6 +165,9 @@ _DEFAULT_SLEEP = time.sleep
 
 #: 顺带搬过来的 item 字段（1.0 ``:3379``）。这些是题库侧的标签，主链只负责带过去。
 PASSTHROUGH_FIELDS = (
+    "evaluation",
+    "benchmark_id",
+    "source_qa_id",
     "ability_taxonomy_version",
     "ability_family_ids",
     "ability_primary_ids",
@@ -246,6 +250,8 @@ class RunRequest:
     judge_url: str = ""
     judge_model: str = ""
     judge_api_key: str = ""
+    evaluation_options: Mapping[str, Any] = field(default_factory=dict)
+    evaluation_prompts: Mapping[str, str] = field(default_factory=evaluation_prompts)
     judge_prompts: Mapping[str, str | None] = field(default_factory=dict)
     evidence_judge_enabled: bool = False
     judge_use_gt_images: bool = False
@@ -700,6 +706,8 @@ class RunExecution:
             or (self.judge_settings.judge_model if self.judge_settings else "")
             or None,
             "judge_use_gt_images": request.judge_use_gt_images,
+            "evaluation_options": dict(request.evaluation_options),
+            "evaluation_prompts": dict(request.evaluation_prompts),
             "evidence_judge_enabled": request.evidence_judge_enabled,
             "rejudge": None,
             "memory_profile": None,
@@ -760,6 +768,8 @@ class RunExecution:
                 request.evidence_judge_enabled or (defaults.evidence_enabled if defaults else False)
             ),
             judge_use_gt_images=request.judge_use_gt_images,
+            evaluation_options=request.evaluation_options,
+            evaluation_prompts=request.evaluation_prompts,
             sentrix_url=request.sentrix_url,
             cancel=state.cancel_event,
             inline_images=self.inline_images,
@@ -2454,6 +2464,16 @@ class RunExecution:
                         # 2.0 此前**从不写这一格**，于是证据判分一次都没跑过（实测那一轮
                         # 487/487 全是 ``{"score": null, "reason": "not_applicable"}``，
                         # 而实现早就从 1.0 逐段移植齐了）。
+                        "predicted_media": resolve_predicted_media(
+                            selected_asset_ids(last_result), assets_by_name
+                        ),
+                        "media_mapping_complete": all(
+                            i in {str(a.get("id")) for group in assets_by_name.values() for a in group}
+                            for i in selected_asset_ids(last_result)
+                        ),
+                        "retrieval_observations": (last_result.get("trace") or {}).get(
+                            "retrieval_observations", {}
+                        ),
                         "predicted_images": [
                             entry
                             for entry in resolve_predicted_media(

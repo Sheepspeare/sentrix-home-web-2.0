@@ -131,6 +131,8 @@ export function App({ initialLoading = false }: AppProps) {
     onDirty: configApi.markConnectionConfigDirty,
   });
 
+  const [openScale, setOpenScale] = useState<"ternary" | "binary">("ternary");
+  const [choiceSemanticAux, setChoiceSemanticAux] = useState(false);
   const [judgeUseGtImages, setJudgeUseGtImages] = useState(false);
   const [deleteScopeAfterRun, setDeleteScopeAfterRun] = useState(false);
   const [suiteRunning, setSuiteRunning] = useState(false);
@@ -263,6 +265,7 @@ export function App({ initialLoading = false }: AppProps) {
         judge_url: configApi.judgeUrl.trim(),
         judge_model: configApi.judgeModel.trim(),
         judge_use_gt_images: judgeUseGtImages,
+      evaluation_options: {open_scale: openScale, choice_semantic_aux: choiceSemanticAux},
         judge_provider_id: configApi.judgeProviderId,
         ...(configApi.judgeApiKeyDirty ? { judge_api_key: configApi.judgeApiKey } : {}),
         vllm_target_id: configApi.vllmTargetId,
@@ -393,6 +396,7 @@ export function App({ initialLoading = false }: AppProps) {
               album={{ selectedAlbum, setSelectedAlbum, selectedQa, setSelectedQa }}
               start={{
                 ...startInput,
+                openScale, onOpenScaleChange: setOpenScale, choiceSemanticAux, onChoiceSemanticAuxChange: setChoiceSemanticAux,
                 judgeUseGtImages, onJudgeUseGtImagesChange: setJudgeUseGtImages,
                 deleteScopeAfterRun,
                 onDeleteScopeAfterRunChange: setDeleteScopeAfterRun,

@@ -35,6 +35,9 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
+from photobench.domain.evaluation.contract import result_record, scoring_options
+from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.runs.analysis import (
     JUDGE_CONSISTENCY_VERSION,
@@ -92,12 +95,18 @@ class JudgeRunner:
         evidence_judge_prompt: str | None = None,
         evidence_enabled: bool = False,
         judge_use_gt_images: bool = False,
+        evaluation_options: Mapping[str, Any] | None = None,
+        evaluation_prompts: Mapping[str, str] | None = None,
         sentrix_url: str = "",
         inline_images: InlineImages | None = None,
         cancel: threading.Event | None = None,
         sleep: Callable[[float], None] = time.sleep,
         rand: Callable[[float, float], float] = random.uniform,
     ) -> None:
+        self.evaluation_options = scoring_options(dict(evaluation_options) if evaluation_options else None)
+        self.evaluation_prompts = (
+            dict(evaluation_prompts) if evaluation_prompts is not None else default_evaluation_prompts()
+        )
         self.http = http
         self.judge_url = str(judge_url or "").rstrip("/")
         self.judge_model = str(judge_model or "")
@@ -312,7 +321,59 @@ class JudgeRunner:
                 audit["status"] = "attachment_error"
         return content, audit
 
-    def judge(
+    def judge(self, question: str, reference: str, answer: str, **kwargs: Any) -> dict[str, Any]:
+        row = kwargs.get("gt_row") or {}
+        turns = kwargs.get("conversation") or []
+        definition = row.get("evaluation")
+        applies = definition and definition.get("applies_to_turn", 0) == max(0, len(turns) - 1)
+        if not applies and self.evaluation_options["open_scale"] != "binary":
+            return self._legacy_judge(question, reference, answer, **kwargs)
+        if not applies:
+            definition = {"scorer": "open_judge", "answer_format": "open", "max_score": 1}
+        assert isinstance(definition, dict)
+        if (
+            definition["scorer"] == "open_judge"
+            and self.evaluation_options["open_scale"] != "binary"
+            and definition["max_score"] == 2
+        ):
+            legacy = self._legacy_judge(question, reference, answer, **kwargs)
+            return {
+                **legacy,
+                **result_record(
+                    definition,
+                    legacy.get("score"),
+                    reason=legacy.get("reason", ""),
+                    status=legacy.get("judge_status"),
+                    media_metrics=media_metrics_for_turn(
+                        definition,
+                        row,
+                        turns[-1] if turns else {},
+                        turns,
+                        kwargs.get("assets_by_name") or {},
+                    ),
+                ),
+            }
+        record = {
+            **(turns[-1] if turns else {}),
+            "message": question,
+            "answer": answer,
+            "reference_answer": reference,
+            "expected_action": kwargs.get("expected_action"),
+        }
+        return score_typed(
+            definition=definition,
+            row=row,
+            record=record,
+            turns=[*turns[:-1], record] if turns else [record],
+            assets=kwargs.get("assets_by_name") or {},
+            request=self._request,
+            model=self.judge_model,
+            url=self.judge_url,
+            options=self.evaluation_options,
+            prompts=self.evaluation_prompts,
+        )
+
+    def _legacy_judge(
         self,
         question: str,
         reference: str,
@@ -680,6 +741,15 @@ class JudgeRunner:
             or value.get("status") == "failed"
         ):
             return False
+        if value.get("version") and value.get("scorer"):
+            if value.get("judge_status") == "needs_review":
+                return True
+            score = value.get("score")
+            return (
+                isinstance(score, (int, float))
+                and not isinstance(score, bool)
+                and 0 <= score <= value.get("max_score", 1)
+            )
         if kind == "task_judge":
             return isinstance(value.get("correct"), bool) and value.get("actual_action") in {
                 "answer",
@@ -694,7 +764,7 @@ class JudgeRunner:
 
     def missing_judge_fields(self, record: Mapping[str, Any]) -> tuple[str, ...]:
         """Only labeled, answered turns can need Judge recovery; zero is a valid score."""
-        if not str(record.get("answer") or "").strip():
+        if not str(record.get("answer") or "").strip() and not record.get("predicted_media"):
             return ()
         expected = record.get("expected_action")
         kinds: list[str] = []
@@ -869,6 +939,11 @@ class JudgeRunner:
         item.update(
             {
                 "judge": judge or {"score": None, "reason": "not_applicable"},
+                **(
+                    {"evaluation_result": copy.deepcopy(judge)}
+                    if isinstance(judge, dict) and judge.get("scorer")
+                    else {}
+                ),
                 "task_judge": task_judge,
                 "task_judges": task_judges,
                 "evidence_judge": evidence_judge or {"score": None, "reason": "not_applicable"},
@@ -877,6 +952,8 @@ class JudgeRunner:
                 "judged_at": now_iso(),
             }
         )
+        if not (isinstance(judge, dict) and judge.get("scorer")):
+            item.pop("evaluation_result", None)
         return item
 
 

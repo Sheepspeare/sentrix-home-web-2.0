@@ -44,6 +44,8 @@ export interface AnalysisTurn {
   behavior_correct: boolean | null;
   judge_reason: string;
   score: number | null;
+  evaluation_result?: Record<string, unknown>;
+  evaluation?: Record<string, unknown>;
   ability_family?: string[];
   ability_type?: string[];
   benchmark_group?: string[];
@@ -59,6 +61,8 @@ export interface AnalysisCase {
   answer: string;
   reference_answer: string;
   score: number | null;
+  evaluation_result?: Record<string, unknown>;
+  evaluation?: Record<string, unknown>;
   execution: string;
   ability_taxonomy_version?: string | null;
   ability_labels?: Record<string, string>;
@@ -80,6 +84,7 @@ export interface BehaviorGroup {
   missing: number;
 }
 export interface AnalysisReport {
+  evaluation_summary?: Record<string, unknown>;
   schema_version: number;
   rule_version: number;
   generated_at: number;

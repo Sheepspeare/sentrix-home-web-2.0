@@ -1,3 +1,5 @@
+import { scoreChoices } from "../analysis/presentation.ts";
+import { EvaluationSummary } from "../../components/EvaluationResult.tsx";
 /**
  * 运行详情外壳。逐行照搬 1.0
  * `services/photobench/frontend/src/App.vue:3039-3058`（只读权威）：标题 / 状态 /
@@ -113,7 +115,7 @@ export function RunDetail({
               <div className="export-control">
                 <span className="field-label">导出轨迹</span>
                 <span className="export-score-filter">
-                  {["0", "1", "2"].map((value) => (
+                  {scoreChoices({evaluation_summary: activeRun.summary?.evaluation_summary}).filter(s => s.value !== "None").slice().reverse().map(({value, label}) => (
                     <label className="checkbox-inline" key={value}>
                       <input
                         type="checkbox"
@@ -121,7 +123,7 @@ export function RunDetail({
                         checked={exportScores.includes(value)}
                         onChange={(event) => onExportScoresChange(toggleScore(exportScores, value, event.target.checked))}
                       />
-                      {value} 分
+                      {label}
                     </label>
                   ))}
                 </span>
@@ -134,6 +136,7 @@ export function RunDetail({
               </div>
             </div>
           </div>
+          <EvaluationSummary value={(activeRun.summary as Record<string, unknown> | undefined)?.evaluation_summary} />
           <p className="run-meta">
             开始 {fmtDate(activeRun.started_at)} · 总耗时 {duration(activeRun)}
             {runScopeMeta(activeRun)}

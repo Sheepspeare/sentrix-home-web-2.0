@@ -421,6 +421,8 @@ class AssistantToolbox:
             "total": page.total,
             "has_more": page.has_more,
             "asset_ids": list(result_set.asset_ids),
+            "returned_asset_ids": [entry.asset_id for entry in page.entries],
+            "page": page.page,
         }
         if extra:
             observation.update(extra)

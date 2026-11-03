@@ -251,12 +251,18 @@ export function judgeRoundState(item: unknown, task: unknown): string {
 /** 1.0 `:750-758` —— 同样把 `activeRejudge` 显式化为 `task`。 */
 export function judgeScoreLabel(item: unknown, task: unknown): string {
   const judge = dict(dict(item).judge);
+  if (judge.judge_status === "needs_review") return "题目待复核";
   if (judge.consistency_status === "inconsistent") return "评分异常";
   const state = judgeRoundState(item, task);
   if (state === "pending") return "待重新评分";
   if (state === "running") return "评分中";
   if (state === "failed") return "评分失败";
   if (state === "interrupted") return "本轮未完成";
+  if (judge.scorer && typeof judge.score === "number") {
+    if (judge.answer_format === "media_list") return '集合得分 ' + judge.score.toFixed(3);
+    const label = judge.score === judge.max_score ? "正确" : judge.score === 0 ? "错误" : "部分正确";
+    return label + '（' + judge.score + '/' + judge.max_score + '）';
+  }
   return judge.score == null ? "未评分" : `${String(judge.score)}分`;
 }
 

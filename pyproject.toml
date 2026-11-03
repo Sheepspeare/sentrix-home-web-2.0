@@ -13,6 +13,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 # 判分口径。**把这条豁免钉在一个文件上，而不是全局**。
 "apps/photobench/src/photobench/domain/runs/judge.py" = ["E501"]
 
+# Pinned upstream evaluator: retain algorithm bodies; prompts are versioned text.
+"apps/photobench/src/photobench/domain/evaluation/atm/*.py" = ["SIM", "F841"]
+"apps/photobench/src/photobench/domain/evaluation/prompts.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 # photobench 是**另一个发行包**（apps/photobench），不是 sentrix 的子包：设计文档
 # §145 定死「PhotoBench 不得读取主产品 Python 内部模块」。两个都是本仓库的一等包。

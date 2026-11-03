@@ -58,6 +58,8 @@ from photobench.config import default_import_timeout
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import InvalidRequestError
+from photobench.domain.evaluation.contract import scoring_options
+from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter, RunStore
 from photobench.domain.runs import analysis
@@ -350,6 +352,7 @@ class RunSuites:
                     judge_url=deps.judge.judge_url,
                     judge_model=deps.judge.judge_model,
                     judge_api_key=deps.judge.judge_api_key,
+                    evaluation_options=scoring_options(payload.get("evaluation_options")),
                     judge_prompts={
                         "answer_quality": deps.judge.answer_quality_prompt,
                         "task_decision": deps.judge.task_judge_prompt,
@@ -491,6 +494,8 @@ class RunSuites:
             judge_model=str(saved.get("judge_model") or ""),
             prior_items=prior_items,
             repair_missing_judges=repair_missing,
+            evaluation_options=scoring_options(saved.get("evaluation_options")),
+            evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
             evidence_judge_enabled=bool(saved.get("evidence_judge_enabled")),
             resume_context={
@@ -921,6 +926,9 @@ class RunSuites:
                 raise InvalidRequestError("cannot rejudge while the benchmark run is active")
             if (state.get("rejudge") or {}).get("status") == "running":
                 raise InvalidRequestError("rejudge is already running")
+            evaluation_options = scoring_options(
+                payload.get("evaluation_options", state.get("evaluation_options"))
+            )
             selection = self._recovery_selection(state, scope)
             targets = list(selection)
             if not targets:
@@ -953,6 +961,8 @@ class RunSuites:
                 state.setdefault("rejudge_history", []).append(previous)
             state["rejudge"] = {
                 "rejudge_id": rejudge_id,
+                "evaluation_options": evaluation_options,
+                "evaluation_prompts": default_evaluation_prompts(),
                 "status": "running",
                 "started_at": now_iso(),
                 "finished_at": None,
@@ -1142,8 +1152,14 @@ class RunSuites:
                     sentrix_url=str(state.get("sentrix_url") or self._config.sentrix_url),
                     inline_images=self._inline_images,
                     judge_use_gt_images=use_gt_images,
+                    evaluation_options=evaluation_options,
+                    evaluation_prompts=state["rejudge"]["evaluation_prompts"],
                 )
-                if use_gt_images or any("evidence_judge" in fields for fields in selection.values()):
+                if (
+                    use_gt_images
+                    or any("evidence_judge" in fields for fields in selection.values())
+                    or any(bool(r.get("evaluation")) for r in definitions.values())
+                ):
                     assets_by_name.update(
                         index_assets_by_name(
                             self._sentrix.list_assets(scope_id=str(state.get("scope_id") or ""), limit=1000)
@@ -1209,6 +1225,14 @@ class RunSuites:
                             result["status"] = (
                                 "completed" if JudgeRunner._valid_result(result, field) else "failed"
                             )
+                            if field in record:
+                                record.setdefault("scoring_history", []).append(
+                                    {
+                                        "field": field,
+                                        "previous": copy.deepcopy(record[field]),
+                                        "rejudge_id": rejudge_id,
+                                    }
+                                )
                             record[field] = result
                         if turns:
                             item["judge"] = turns[-1].get("judge") or {}
@@ -1218,6 +1242,11 @@ class RunSuites:
                                 "score": None,
                                 "reason": "not_applicable",
                             }
+                        final_judge = item.get("judge") or {}
+                        if final_judge.get("scorer"):
+                            item["evaluation_result"] = copy.deepcopy(final_judge)
+                        else:
+                            item.pop("evaluation_result", None)
                         # Current scoring state follows every judged turn; execution history stays unchanged.
                         records = turns or [item]
                         qualities = [entry.get("judge") or {} for entry in records]
