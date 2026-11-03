@@ -1,0 +1,85 @@
+"""Start the fixed MLX engine in an isolated experiment tree; record its PID."""
+
+import json
+import os
+import subprocess
+import time
+from pathlib import Path
+
+root = Path(os.environ["SENTRIX_MLX_EXPERIMENT_ROOT"]).resolve()
+context = str(
+    json.loads((root / "private/photobench-config/runtime_connection.json").read_text())["product_settings"][
+        "vlm_context_tokens"
+    ]
+)
+args = [
+    str(root / "envs/vllm-mlx/bin/python"),
+    str(root / "repo/scripts/benchmarks/serve_mlx.py"),
+    "serve",
+    str(root / "models/Qwen3.5-4B-MLX-4bit-hf"),
+    "--mllm",
+    "--continuous-batching",
+    "--max-num-seqs",
+    "16",
+    "--prefill-batch-size",
+    "4",
+    "--completion-batch-size",
+    "16",
+    "--mllm-prefill-step-size",
+    "512",
+    "--chunked-prefill-tokens",
+    "512",
+    "--disable-prefix-cache",
+    "--max-tokens",
+    context,
+    "--max-request-tokens",
+    context,
+    "--served-model-name",
+    "qwen35-4b-mlx-q4",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18100",
+    "--enable-auto-tool-choice",
+    "--tool-call-parser",
+    "qwen3_coder",
+    "--reasoning-parser",
+    "qwen3",
+    "--enable-metrics",
+    "--default-chat-template-kwargs",
+    '{"enable_thinking":false}',
+    "--timeout",
+    "900",
+]
+log = (root / "evidence/vllm-mlx-server.log").open("ab")
+env = {
+    **os.environ,
+    "NO_PROXY": "127.0.0.1,localhost",
+    "no_proxy": "127.0.0.1,localhost",
+    "TOKENIZERS_PARALLELISM": "false",
+    "MLX_BUFFER_CACHE_LIMIT": "512mb",
+    "SENTRIX_MLX_EVENTS": str(root / "evidence/model-events.jsonl"),
+    "SENTRIX_MLX_CONTEXT_TOKENS": context,
+}
+p = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env, cwd=root)
+(root / "runtime/vllm-mlx-process.json").write_text(
+    json.dumps(
+        {
+            "pid": p.pid,
+            "argv": args,
+            "started_at": time.time(),
+            "environment": {
+                k: env[k]
+                for k in [
+                    "MLX_BUFFER_CACHE_LIMIT",
+                    "SENTRIX_MLX_EVENTS",
+                    "TOKENIZERS_PARALLELISM",
+                    "NO_PROXY",
+                    "no_proxy",
+                ]
+            },
+        },
+        indent=2,
+    )
+)
+print("started", p.pid)

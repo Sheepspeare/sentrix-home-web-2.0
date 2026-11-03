@@ -46,7 +46,7 @@ function ResourceChart({ round, memory = false }: { round: CapacityRound; memory
   const maxX = Math.max(1, ...samples.map((s) => s.seconds));
   const maxY = memory ? Math.max(1, ...samples.flatMap((s) => [s.memory, s.swap])) * 1.1 : 100;
   const series = memory
-    ? [{ key: "memory" as const, label: "统一内存已用", color: "#2454a6" }, { key: "swap" as const, label: "交换空间", color: "#c75b37" }]
+    ? [{ key: "memory" as const, label: "活跃及有线内存", color: "#2454a6" }, { key: "swap" as const, label: "交换空间", color: "#c75b37" }]
     : [{ key: "cpu" as const, label: "CPU", color: "#2454a6" }, { key: "gpu" as const, label: "GPU", color: "#1b8b75" }];
   return <figure className="capacity-chart">
     <figcaption>{memory ? "内存与交换空间（GiB）" : "CPU / GPU 利用率（%）"}</figcaption>
@@ -106,7 +106,7 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
     <h3>四档并发 · 同一组 64 题 · 各两轮</h3>
     <p>客户端并发是同时执行的 QA 数；实际模型批次来自推理调度器。QA 与云端评分分别计时。</p>
     <div className="capacity-table-wrap"><table><thead><tr>
-      {["轮次", "QA 完成", "评分完成 / 失败", "QA 题/分钟", "QA P50 / P95 秒", "首 token P95 秒", "实际批次峰值", "队列峰值", "内存峰值 GiB", "交换增量 GiB", "验收"].map((h) => <th key={h}>{h}</th>)}
+      {["轮次", "QA 完成", "评分完成 / 失败", "QA 题/分钟", "QA P50 / P95 秒", "首 token P95 秒", "实际批次峰值", "队列峰值", "活跃/有线峰值 GiB", "交换增量 GiB", "验收"].map((h) => <th key={h}>{h}</th>)}
     </tr></thead><tbody>{formal.map((r) => <tr key={r.run_id}>
       <td><button onClick={() => setSelection(r.run_id)}>{r.label}</button></td><td>{r.completed}/{r.questions}</td><td>{r.judge_completed} / {r.judge_failed}</td>
       <td>{number(r.qa_per_min)}</td><td>{number(r.latency_p50_s)} / {number(r.latency_p95_s)}</td><td>{number(r.ttft_p95_s)}</td>

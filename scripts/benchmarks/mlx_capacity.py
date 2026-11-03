@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import plistlib
 import re
 import subprocess
@@ -30,6 +31,81 @@ def save(path: Path, value: Any) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
     temporary.replace(path)
+
+
+def submit_run_once(client: httpx.Client, destination: Path, payload: dict[str, Any]) -> str:
+    """Persist intent before POST; any existing intent requires manual reconciliation.
+
+    A timed-out or malformed response may follow an accepted run. Never infer
+    rejection from it and never automatically submit again.
+    """
+    with destination.open("x") as stream:
+        json.dump({"status": "submitting", "at": time.time(), "payload": payload}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    response = client.post("http://127.0.0.1:18772/api/v1/runs", json=payload, timeout=90)
+    receipt = {
+        "status_code": response.status_code,
+        "at": time.time(),
+        "payload": payload,
+        "response_text": response.text,
+    }
+    save(destination, receipt)
+    response.raise_for_status()
+    data = response.json()
+    run_ids = data.get("run_ids")
+    if (
+        not isinstance(run_ids, list)
+        or len(run_ids) != 1
+        or not isinstance(run_ids[0], str)
+        or not run_ids[0]
+    ):
+        raise ValueError("run submission response has no unique run id; reconcile without replay")
+    save(destination, {**receipt, "response": data, "status": "accepted"})
+    return run_ids[0]
+
+
+def diagnostic_failure_categories(items: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Count affected questions from error fields, never from QA/answer prose.
+
+    Categories overlap (e.g. an unknown timeout); they are not a total failure
+    count. Raw trace errors remain private and are not used as public labels.
+    """
+    patterns = {
+        "oom": ("out of memory", "outofmemory", "memory allocation failed"),
+        "lock_conflict": ("database is locked", "already accessed by another", "lock conflict"),
+        "service_exit": ("process exited", "service exited", "server exited"),
+        "timeout": ("timeout", "timed out"),
+        "truncation": ("truncated", "context_window_exceeded", "context_output_insufficient"),
+        "unknown": ("requestoutcomeunknown", "outcome_unknown", "request_outcome_unknown"),
+    }
+    counts = dict.fromkeys(patterns, 0)
+
+    def errors(value: Any) -> list[str]:
+        found: list[str] = []
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                if key in {"error", "error_type", "error_category", "termination_reason"}:
+                    found.append(str(child).lower())
+                elif isinstance(child, (Mapping, list)) and key not in {
+                    "messages",
+                    "request",
+                    "response",
+                    "arguments",
+                    "answer",
+                    "reference_answer",
+                }:
+                    found.extend(errors(child))
+        elif isinstance(value, list):
+            for child in value:
+                found.extend(errors(child))
+        return found
+
+    for item in items:
+        text = "\n".join(errors(item))
+        for category, needles in patterns.items():
+            counts[category] += any(needle in text for needle in needles)
+    return counts
 
 
 def freeze_subset(source: Path, destination: Path, *, count: int = 64) -> dict[str, Any]:
