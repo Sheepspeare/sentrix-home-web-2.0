@@ -34,6 +34,23 @@ def save(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def read_completed_round(path: Path, inspected_failure_sha256: str | None = None) -> dict[str, Any]:
+    """Resume past an inspected terminal failure without turning it into a pass.
+
+    An exact summary hash records which failed attempt was inspected. New or
+    changed failures still stop the owner; only later independent rounds resume.
+    """
+    raw = path.read_bytes()
+    summary: dict[str, Any] = json.loads(raw)
+    if summary.get("status") not in TERMINAL:
+        raise RuntimeError("round is not terminal; continue observing its existing run id")
+    if not summary.get("passed") and hashlib.sha256(raw).hexdigest() != inspected_failure_sha256:
+        raise RuntimeError(
+            "preserved failed round requires inspection before continuing: " + path.parent.name
+        )
+    return summary
+
+
 def submit_run_once(client: httpx.Client, destination: Path, payload: dict[str, Any]) -> str:
     """Persist intent before POST; any existing intent requires manual reconciliation.
 
@@ -148,6 +165,7 @@ def reconcile_model_calls(
     ids = [e.get("request_id") for e in terminal]
     journal_valid = bool(ids) and all(ids) and len(set(ids)) == len(ids)
     matched = expected == actual
+    output_consistent = all(e.get("output_counters_consistent", True) is True for e in terminal)
     return {
         "expected_calls": len(unique),
         "recorded_calls": len(terminal),
@@ -155,7 +173,13 @@ def reconcile_model_calls(
         "all_api_calls_complete": complete,
         "unique_terminal_ids": journal_valid,
         "conflicting_observations": conflicts,
-        "verified": bool(unique) and complete and matched and journal_valid and not conflicts,
+        "output_counters_consistent": output_consistent,
+        "verified": bool(unique)
+        and complete
+        and matched
+        and journal_valid
+        and not conflicts
+        and output_consistent,
     }
 
 

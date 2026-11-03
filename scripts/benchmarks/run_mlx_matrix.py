@@ -23,6 +23,7 @@ from scripts.benchmarks.mlx_capacity import (
     diagnostic_failure_categories,
     observe_run,
     percentile,
+    read_completed_round,
     reconcile_model_calls,
     save,
     submit_run_once,
@@ -232,11 +233,13 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def publish() -> None:
-    reports = []
+    reports: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
     for entry in state["rounds"]:
         p = r / "rounds" / entry["label"] / "public-summary.json"
         if p.exists():
-            reports.append(json.loads(p.read_text()))
+            destination = diagnostics if entry.get("purpose") == "diagnostic" else reports
+            destination.append(json.loads(p.read_text()))
     report = {
         "schema_version": 1,
         "execution_revision": state.get("inference_revision", state["revision"]),
@@ -264,6 +267,7 @@ def publish() -> None:
             "最高通过档要求两轮均完成、没有执行或评分错误，且监测证据完整。",
         ],
         "rounds": reports,
+        "diagnostic_rounds": diagnostics,
     }
     save(r / "results/capacity-report.json", report)
     web = r / "repo/apps/photobench/web/dist"
@@ -274,10 +278,10 @@ def publish() -> None:
 def execute(label: str, c: int, questions: int) -> dict[str, Any]:
     entry = next((x for x in state["rounds"] if x["label"] == label), None)
     if entry and entry.get("status") == "completed":
-        summary: dict[str, Any] = json.loads((r / "rounds" / label / "public-summary.json").read_text())
-        if not summary["passed"]:
-            raise RuntimeError("preserved failed round requires repair and a new series: " + label)
-        return summary
+        return read_completed_round(
+            r / "rounds" / label / "public-summary.json",
+            state.get("inspected_failure_sha256", {}).get(label),
+        )
     if entry and entry.get("status") == "observing" and entry.get("run_id"):
         stage = r / "rounds" / label
         checkpoint(status="running", current_round=label)

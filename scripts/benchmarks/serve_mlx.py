@@ -106,6 +106,20 @@ def pending_requests(scheduler: Any) -> int:
     return len(scheduler.waiting) + (len(generator.unprocessed_requests) if generator is not None else 0)
 
 
+def terminal_output_facts(request: Any, outputs: list[Any]) -> dict[str, Any]:
+    """Observe both scheduler state and emitted usage without rewriting either."""
+    finished = [o for o in outputs if o.request_id == request.request_id and o.finished]
+    output = finished[0] if len(finished) == 1 else None
+    return {
+        "terminal_output_count": len(finished),
+        "returned_prompt_tokens": output.prompt_tokens if output is not None else None,
+        "returned_completion_tokens": output.completion_tokens if output is not None else None,
+        "output_counters_consistent": output is not None
+        and output.prompt_tokens == request.num_prompt_tokens
+        and output.completion_tokens == request.num_output_tokens,
+    }
+
+
 def install_telemetry() -> None:
     """Record actual scheduler token batches and terminal timing, never content."""
     destination = os.environ.get("SENTRIX_MLX_EVENTS")
@@ -118,6 +132,7 @@ def install_telemetry() -> None:
     original_process = scheduler._process_batch_responses
     original_abort = scheduler.abort_request
     original_step = scheduler.step
+    original_generate = scheduler.generate
     prometheus: Any = importlib.import_module("prometheus_client")
     pending = prometheus.Gauge(
         "sentrix_mlx_num_requests_waiting",
@@ -140,7 +155,7 @@ def install_telemetry() -> None:
         with lock, path.open("a") as stream:
             stream.write(json.dumps({"at": time.time(), **event}) + "\n")
 
-    def terminal(request: Any, reason: str) -> None:
+    def terminal(request: Any, reason: str, outputs: list[Any] | None = None) -> None:
         emit(
             {
                 "event": "request_terminal",
@@ -153,6 +168,7 @@ def install_telemetry() -> None:
                 "latency_s": time.time() - request.arrival_time,
                 "prompt_tokens": request.num_prompt_tokens,
                 "completion_tokens": request.num_output_tokens,
+                **(terminal_output_facts(request, outputs) if outputs is not None else {}),
             }
         )
 
@@ -174,7 +190,7 @@ def install_telemetry() -> None:
         for request_id in finished:
             request = instance.running.get(request_id)
             if request is not None:
-                terminal(request, request.finish_reason or "unknown")
+                terminal(request, request.finish_reason or "unknown", outputs)
         return result
 
     def abort(instance: Any, request_id: str) -> Any:
@@ -193,6 +209,21 @@ def install_telemetry() -> None:
         return result
 
     scheduler.step = step
+
+    async def generate(instance: Any, *args: Any, **kwargs: Any) -> Any:
+        output = await original_generate(instance, *args, **kwargs)
+        emit(
+            {
+                "event": "request_return",
+                "request_id": output.request_id,
+                "prompt_tokens": output.prompt_tokens,
+                "completion_tokens": output.completion_tokens,
+                "finish_reason": output.finish_reason,
+            }
+        )
+        return output
+
+    scheduler.generate = generate
 
 
 def seeded_sampler(

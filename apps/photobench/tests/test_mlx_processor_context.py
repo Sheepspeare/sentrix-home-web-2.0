@@ -84,3 +84,15 @@ def test_text_only_keeps_continuous_batching_and_queue_counts_pending_media():
     assert generator._allow_mid_batch_extend is True
     scheduler = SimpleNamespace(waiting=["waiting"], batch_generator=generator)
     assert adapter.pending_requests(scheduler) == 2
+
+
+def test_terminal_evidence_keeps_disagreeing_counters_instead_of_normalizing_them():
+    request = SimpleNamespace(request_id="r", num_prompt_tokens=275, num_output_tokens=150)
+    output = SimpleNamespace(request_id="r", prompt_tokens=275, completion_tokens=144, finished=True)
+    facts = adapter.terminal_output_facts(request, [output])
+    assert facts["output_counters_consistent"] is False
+    assert facts["returned_completion_tokens"] == 144
+    assert request.num_output_tokens == 150 and output.completion_tokens == 144
+    output.completion_tokens = 150
+    assert adapter.terminal_output_facts(request, [output])["output_counters_consistent"] is True
+    assert adapter.terminal_output_facts(request, [output, output])["output_counters_consistent"] is False

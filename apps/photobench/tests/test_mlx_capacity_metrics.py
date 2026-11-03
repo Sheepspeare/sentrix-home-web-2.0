@@ -173,3 +173,50 @@ def test_unknown_submission_from_legacy_error_only_record_is_counted():
         )["unknown"]
         == 1
     )
+
+
+def test_inspected_failed_round_can_resume_later_trials_without_becoming_a_pass(tmp_path):
+    import hashlib
+    import json
+
+    import pytest
+
+    path = tmp_path / "public-summary.json"
+    failed = {"status": "completed", "passed": False, "failures": {"counter_mismatch": 1}}
+    path.write_text(json.dumps(failed))
+    with pytest.raises(RuntimeError, match="requires inspection"):
+        capacity.read_completed_round(path)
+    inspected = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert capacity.read_completed_round(path, inspected) == failed
+    assert json.loads(path.read_text())["passed"] is False
+    path.write_text(json.dumps({**failed, "failures": {"unknown": 1}}))
+    with pytest.raises(RuntimeError, match="requires inspection"):
+        capacity.read_completed_round(path, inspected)
+
+
+def test_nonterminal_round_cannot_be_skipped_even_with_a_matching_hash(tmp_path):
+    import hashlib
+
+    import pytest
+
+    path = tmp_path / "public-summary.json"
+    path.write_text('{"status":"running","passed":false}')
+    with pytest.raises(RuntimeError, match="not terminal"):
+        capacity.read_completed_round(path, hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def test_scheduler_output_disagreement_fails_even_when_application_pairs_match():
+    call = {"call_id": "c", "status": "complete", "prompt_tokens": 275, "completion_tokens": 150}
+    terminal = [
+        {
+            "request_id": "r",
+            "prompt_tokens": 275,
+            "completion_tokens": 150,
+            "output_counters_consistent": False,
+            "returned_completion_tokens": 144,
+        }
+    ]
+    evidence = capacity.reconcile_model_calls([{"model_call_metrics": [call]}], terminal)
+    assert evidence["token_multiset_matches"] is True
+    assert evidence["output_counters_consistent"] is False
+    assert evidence["verified"] is False
