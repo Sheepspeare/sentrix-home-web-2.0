@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { CapacityReport } from "./CapacityReport.tsx";
 import type { CapacityEvidence, CapacityRound } from "./CapacityReport.tsx";
+
+afterEach(cleanup);
 
 const round = (label: string, concurrency: number, passed: boolean): CapacityRound => ({
   label, run_id: label, concurrency, passed, questions: 64, completed: 64,
@@ -61,4 +63,20 @@ it("discloses scrape gaps separately from verified model execution", () => {
   expect(screen.getByText(/模型指标采样 337\/348 次成功/)).toBeTruthy();
   expect(screen.getByText(/实际模型调用记录 315\/315 次/)).toBeTruthy();
   expect(screen.getByText(/指标缺失 11 次/)).toBeTruthy();
+});
+
+it("labels completed QA as failed acceptance when model evidence disagrees", () => {
+  const failed = {
+    ...round("C4-R2", 4, false),
+    failures: { incomplete_model_call_evidence: 1 },
+    model_call_evidence: { expected_calls: 290, recorded_calls: 290, verified: false },
+  };
+  render(<CapacityReport evidence={{
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "vllm-mlx",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [], rounds: [round("C4-R1", 4, true), failed],
+  }} />);
+  expect(screen.getByRole("row", { name: /C4-R2/ }).textContent).toContain("未通过");
+  expect(screen.queryByText("C4")).toBeNull();
+  expect(screen.getByText(/尚未核对通过/)).toBeTruthy();
 });

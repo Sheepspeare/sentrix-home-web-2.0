@@ -114,11 +114,11 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
       <td><button onClick={() => setSelection(r.run_id)}>{r.label}</button></td><td>{r.completed}/{r.questions}</td><td>{r.judge_completed} / {r.judge_failed}</td>
       <td>{number(r.qa_per_min)}</td><td>{number(r.latency_p50_s)} / {number(r.latency_p95_s)}</td><td>{number(r.ttft_p95_s)}</td>
       <td>{number(r.actual_batch_peak, 0)}</td><td>{number(r.queue_peak, 0)}</td><td>{number(r.memory_peak_gib)}</td><td>{number(r.swap_delta_gib, 2)}</td>
-      <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : r.status}{r.resource_summary?.engine_metrics_missing_samples ? <small> · 指标缺失 {r.resource_summary.engine_metrics_missing_samples} 次</small> : null}</td>
+      <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : "未通过"}{r.resource_summary?.engine_metrics_missing_samples ? <small> · 指标缺失 {r.resource_summary.engine_metrics_missing_samples} 次</small> : null}</td>
     </tr>)}</tbody></table></div>
     {full ? <section aria-label="487 题独立测试总览">
       <h3>487 题独立测试 · C{full.concurrency}</h3>
-      <p>{full.label} · {full.passed ? "验收通过" : full.status} · 独立恢复记忆库与会话</p>
+      <p>{full.label} · {full.passed ? "验收通过" : "验收未通过"} · 独立恢复记忆库与会话</p>
       <div className="capacity-cards">
         <article><span>QA 完成 / 总题数</span><strong>{full.completed} / {full.questions}</strong><small>{number(full.qa_seconds)} 秒 · {number(full.qa_per_min)} 题/分钟</small></article>
         <article><span>Judge 完成 / 失败</span><strong>{full.judge_completed} / {full.judge_failed}</strong><small>独立评分阶段 {number(full.judge_seconds)} 秒</small></article>
