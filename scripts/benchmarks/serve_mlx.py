@@ -27,6 +27,49 @@ WINDOW = int(os.environ.get("SENTRIX_MLX_CONTEXT_TOKENS", "32768"))
 SEED = 42
 
 
+def processor_context(
+    requests: list[Any], histories: list[list[int]] | None, pending: list[list[int]]
+) -> list[list[int]] | None:
+    """Repair 0.6.0's chunked decoder context, preserving the ordinary path.
+
+    The ordinary decoder passes a copy including the current input token. The
+    chunked decoder passes the request's history object, which excludes that
+    pending token. Grammar and repetition processors need the same complete
+    history on both paths; do not mutate the request before it emits the token.
+    """
+    if histories is None:
+        return None
+    return [
+        history + token if history is request.output_tokens else history
+        for request, history, token in zip(requests, histories, pending, strict=True)
+    ]
+
+
+def install_chunked_context_fix() -> None:
+    generator: Any = importlib.import_module("vllm_mlx.mllm_batch_generator").MLLMBatchGenerator
+    original_step = generator._step
+
+    def step(
+        instance: Any,
+        input_tokens: Any,
+        cache: Any,
+        logits_processors: Any = None,
+        output_tokens: Any = None,
+        samplers: Any = None,
+        rope_deltas: Any = None,
+    ) -> Any:
+        if output_tokens is not None and instance.active_batch is not None:
+            pending = input_tokens.tolist()
+            if input_tokens.ndim == 1:
+                pending = [[token] for token in pending]
+            output_tokens = processor_context(instance.active_batch.requests, output_tokens, pending)
+        return original_step(
+            instance, input_tokens, cache, logits_processors, output_tokens, samplers, rope_deltas
+        )
+
+    generator._step = step
+
+
 def install_telemetry() -> None:
     """Record actual scheduler token batches and terminal timing, never content."""
     destination = os.environ.get("SENTRIX_MLX_EVENTS")
@@ -168,6 +211,7 @@ def install_adapter() -> None:
             raise RuntimeError(f"{package} must be {expected}")
     sampling: Any = importlib.import_module("mlx_lm.sample_utils")
     sampling.make_sampler = seeded_sampler
+    install_chunked_context_fix()
     install_telemetry()
     server = importlib.import_module("vllm_mlx.server")
     app: FastAPI = server.app
