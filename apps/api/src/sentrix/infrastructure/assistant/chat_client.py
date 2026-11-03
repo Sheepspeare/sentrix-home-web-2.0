@@ -36,7 +36,9 @@ import contextlib
 import json
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -289,7 +291,73 @@ class OpenAIChatModel:
         self._context_tokens = context_tokens
 
     def complete(self, messages: Sequence[ChatMessage], tools: Sequence[ToolSpec]) -> ModelReply:
+        if (
+            self._model.generation_profile == "qwen35_nonthinking"
+            and len(tools) == 1
+            and tools[0].name == "final_answer"
+        ):
+            return self._complete_final_answer(messages, tools[0])
         return self._complete(messages, tools)
+
+    def _complete_final_answer(self, messages: Sequence[ChatMessage], tool: ToolSpec) -> ModelReply:
+        """Constrain the already selected terminal action, without prompt-only fallback.
+
+        vllm-mlx 0.6 implements named tool_choice as an instruction only: a real
+        final-only turn repeatedly called an unavailable history tool. Its strict
+        JSON Schema decoder can constrain the arguments of this known action.
+        Preserve model-generated arguments, usage and finish reason; the runtime
+        still performs its usual evidence/claim/delivery checks within 30 steps.
+        """
+        request_messages = list(messages)
+        if request_messages:
+            request_messages[0] = replace(
+                request_messages[0],
+                content=request_messages[0].content
+                + "\n本次动作已确定为 final_answer。只输出该动作的 JSON 参数对象，"
+                "不要输出工具调用标记或其他工具。" + tool.description,
+            )
+        reply = self._complete(
+            request_messages,
+            (),
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": tool.name,
+                    "strict": True,
+                    "schema": dict(tool.parameters),
+                },
+            },
+        )
+        try:
+            arguments = json.loads(reply.content)
+            handles = arguments.get("selected_image_handles") if isinstance(arguments, dict) else None
+            valid = (
+                isinstance(arguments, dict)
+                and set(arguments) == {"answer", "selected_image_handles"}
+                and isinstance(arguments["answer"], str)
+                and isinstance(handles, list)
+                and all(isinstance(handle, str) for handle in handles)
+                and len(handles) <= tool.parameters["properties"]["selected_image_handles"]["maxItems"]
+                and not reply.tool_calls
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ModelServiceError(
+                "模型未返回 final_answer schema 规定的参数；未转换或重发该响应。",
+                diagnostics={
+                    **reply.diagnostics,
+                    "error_category": "forced_tool_schema_invalid",
+                    "tool_transport": "json_schema",
+                },
+            )
+        return replace(
+            reply,
+            content="",
+            tool_calls=(ToolCall(f"call_{uuid4().hex}", tool.name, reply.content),),
+            tool_argument_parse_facts=({"index": 0, "json_object_valid": True, "envelope_valid": True},),
+            diagnostics={**reply.diagnostics, "tool_transport": "json_schema", "forced_tool": tool.name},
+        )
 
     def complete_structured(
         self,
@@ -512,15 +580,6 @@ class OpenAIChatModel:
         if tools:
             payload["tools"] = list(openai_tools(tools))
             payload["tool_choice"] = "auto"
-            if (
-                self._model.generation_profile == "qwen35_nonthinking"
-                and len(tools) == 1
-                and tools[0].name == "final_answer"
-            ):
-                # The runtime has already removed every evidence tool. Enforce
-                # that advertised action instead of letting stale tool history
-                # drive repeated calls to tools that are no longer available.
-                payload["tool_choice"] = {"type": "function", "function": {"name": "final_answer"}}
         if response_format is not None:
             payload["response_format"] = dict(response_format)
         if chat_template_kwargs is not None:

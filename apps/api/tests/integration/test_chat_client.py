@@ -228,23 +228,71 @@ def test_the_tools_field_carries_standard_json_schema(server: str):
 
 
 def test_qwen_final_only_turn_enforces_the_only_advertised_function(server: str):
+    arguments = '{"answer":"无法确认", "selected_image_handles":[]}'
+    _Handler.response = reply(content=arguments)
+    model = OpenAIChatModel(server, ServedModel(server, generation_profile="qwen35_nonthinking"))
+    final = tuple(tool for tool in TOOL_SPECS if tool.name == "final_answer")
+    original_messages = messages()
+    result = model.complete(original_messages, final)
+    assert result.tool_calls[0].name == "final_answer"
+    assert result.tool_calls[0].arguments_json == arguments
+    assert result.content == ""
+    assert result.prompt_tokens == _Handler.response["usage"]["prompt_tokens"]
+    assert result.completion_tokens == _Handler.response["usage"]["completion_tokens"]
+    assert result.finish_reason == _Handler.response["choices"][0]["finish_reason"]
+    assert result.diagnostics["tool_transport"] == "json_schema"
+    sent = _Handler.received[-1]["body"]
+    assert "tools" not in sent and "tool_choice" not in sent
+    assert sent["response_format"]["json_schema"]["schema"] == final[0].parameters
+    assert sent["response_format"]["json_schema"]["strict"] is True
+    assert original_messages == messages()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not JSON",
+        "[]",
+        "{}",
+        '{"answer":42,"selected_image_handles":[]}',
+        '{"answer":"x","selected_image_handles":[42]}',
+        '{"answer":"x","selected_image_handles":[],"tool":"query_memory_facts"}',
+    ],
+)
+def test_qwen_final_schema_does_not_repair_or_retry_invalid_output(server: str, content: str):
+    _Handler.response = reply(content=content)
+    model = OpenAIChatModel(server, ServedModel(server, generation_profile="qwen35_nonthinking"))
+    final = tuple(tool for tool in TOOL_SPECS if tool.name == "final_answer")
+    with pytest.raises(ModelServiceError) as error:
+        model.complete(messages(), final)
+    assert error.value.diagnostics["error_category"] == "forced_tool_schema_invalid"
+    assert len(_Handler.received) == 1
+
+
+def test_qwen_final_schema_rejection_does_not_fall_back_to_prompt_only(server: str):
+    _Handler.reject_structured = True
+    model = OpenAIChatModel(server, ServedModel(server, generation_profile="qwen35_nonthinking"))
+    final = tuple(tool for tool in TOOL_SPECS if tool.name == "final_answer")
+    with pytest.raises(ModelServiceError):
+        model.complete(messages(), final)
+    assert len(_Handler.received) == 1
+
+
+def test_qwen_final_schema_never_renames_an_unavailable_tool_response(server: str):
     _Handler.response = reply(
         tool_calls=[
             {
-                "id": "final",
+                "id": "stale",
                 "type": "function",
-                "function": {"name": "final_answer", "arguments": '{"answer":"无法确认"}'},
+                "function": {"name": "query_memory_facts", "arguments": "{}"},
             }
         ]
     )
     model = OpenAIChatModel(server, ServedModel(server, generation_profile="qwen35_nonthinking"))
     final = tuple(tool for tool in TOOL_SPECS if tool.name == "final_answer")
-    result = model.complete(messages(), final)
-    assert result.tool_calls[0].name == "final_answer"
-    assert _Handler.received[-1]["body"]["tool_choice"] == {
-        "type": "function",
-        "function": {"name": "final_answer"},
-    }
+    with pytest.raises(ModelServiceError):
+        model.complete(messages(), final)
+    assert len(_Handler.received) == 1
 
 
 def test_the_system_message_is_first_and_only_once(server: str):
