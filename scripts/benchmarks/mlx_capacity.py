@@ -16,6 +16,7 @@ import plistlib
 import re
 import subprocess
 import time
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -112,6 +113,50 @@ def diagnostic_failure_categories(items: Sequence[Mapping[str, Any]]) -> dict[st
         for category, needles in patterns.items():
             counts[category] += any(needle in text for needle in needles)
     return counts
+
+
+def reconcile_model_calls(
+    items: Sequence[Mapping[str, Any]], terminal: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """Cross-check every real API/tool model call against the engine journal.
+
+    Cached tool replays can repeat the same observation; count its call_id once.
+    Missing Prometheus reads are a separate coverage limitation, not evidence of
+    a failed generation. Never accept incomplete or inconsistent call records.
+    """
+    calls = [call for item in items for call in item.get("model_call_metrics", [])]
+    calls += [
+        call
+        for item in items
+        for tool in item.get("tool_trace", [])
+        for call in (tool.get("result") or {}).get("model_call_observations", [])
+    ]
+    unique: dict[str, tuple[Any, Any, Any]] = {}
+    conflicts = 0
+    for index, call in enumerate(calls):
+        key = str(call.get("call_id") or f"unidentified:{index}")
+        fact = (call.get("prompt_tokens"), call.get("completion_tokens"), call.get("status"))
+        if key in unique and unique[key] != fact:
+            conflicts += 1
+        unique[key] = fact
+    complete = all(
+        status == "complete" and type(prompt) is int and type(output) is int
+        for prompt, output, status in unique.values()
+    )
+    expected = Counter((p, o) for p, o, _ in unique.values())
+    actual = Counter((e.get("prompt_tokens"), e.get("completion_tokens")) for e in terminal)
+    ids = [e.get("request_id") for e in terminal]
+    journal_valid = bool(ids) and all(ids) and len(set(ids)) == len(ids)
+    matched = expected == actual
+    return {
+        "expected_calls": len(unique),
+        "recorded_calls": len(terminal),
+        "token_multiset_matches": matched,
+        "all_api_calls_complete": complete,
+        "unique_terminal_ids": journal_valid,
+        "conflicting_observations": conflicts,
+        "verified": bool(unique) and complete and matched and journal_valid and not conflicts,
+    }
 
 
 def freeze_subset(source: Path, destination: Path, *, count: int = 64) -> dict[str, Any]:
@@ -216,6 +261,7 @@ def resource_sample(model_url: str) -> dict[str, Any]:
         "swap_used_bytes": swap.used,
         "swap_in_bytes": swap.sin,
         "swap_out_bytes": swap.sout,
+        "engine_probe_timeout_s": 30,
     }
     try:
         raw = subprocess.check_output(["/usr/sbin/ioreg", "-r", "-c", "AGXAccelerator", "-a"], timeout=5)
@@ -223,9 +269,12 @@ def resource_sample(model_url: str) -> dict[str, Any]:
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         sample["gpu_unavailable"] = type(error).__name__
     try:
-        response = httpx.get(model_url.rstrip("/") + "/metrics", timeout=5, trust_env=False)
+        began = time.monotonic()
+        response = httpx.get(model_url.rstrip("/") + "/metrics", timeout=30, trust_env=False)
         response.raise_for_status()
         sample["engine"] = prometheus_values(response.text)
+        sample["engine_observed_at"] = time.time()
+        sample["engine_probe_seconds"] = time.monotonic() - began
     except httpx.HTTPError as error:
         sample["engine_unavailable"] = type(error).__name__
     return sample

@@ -22,6 +22,9 @@ export interface CapacityRound {
   memory_peak_gib: number | null;
   swap_delta_gib: number | null;
   failures: Record<string, number>;
+  resource_summary?: { samples: number; engine_metrics_missing_samples: number };
+  model_call_evidence?: { expected_calls: number; recorded_calls: number; verified: boolean };
+  metrics_probe_timeout_s?: number[];
   samples: { seconds: number; cpu: number | null; gpu: number | null; memory: number; swap: number }[];
 }
 
@@ -111,7 +114,7 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
       <td><button onClick={() => setSelection(r.run_id)}>{r.label}</button></td><td>{r.completed}/{r.questions}</td><td>{r.judge_completed} / {r.judge_failed}</td>
       <td>{number(r.qa_per_min)}</td><td>{number(r.latency_p50_s)} / {number(r.latency_p95_s)}</td><td>{number(r.ttft_p95_s)}</td>
       <td>{number(r.actual_batch_peak, 0)}</td><td>{number(r.queue_peak, 0)}</td><td>{number(r.memory_peak_gib)}</td><td>{number(r.swap_delta_gib, 2)}</td>
-      <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : r.status}</td>
+      <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : r.status}{r.resource_summary?.engine_metrics_missing_samples ? <small> · 指标缺失 {r.resource_summary.engine_metrics_missing_samples} 次</small> : null}</td>
     </tr>)}</tbody></table></div>
     {full ? <section aria-label="487 题独立测试总览">
       <h3>487 题独立测试 · C{full.concurrency}</h3>
@@ -127,6 +130,9 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
     {selected ? <>
       <div className="capacity-heading"><h3>{selected.label} · 资源与耗时</h3><select aria-label="选择资源曲线轮次" value={selected.run_id} onChange={(e) => setSelection(e.target.value)}>{report.rounds.map((r) => <option key={r.run_id} value={r.run_id}>{r.label}</option>)}</select></div>
       <p>QA {number(selected.qa_seconds)} 秒 · Judge {number(selected.judge_seconds)} 秒 · 状态 {selected.status} · {selected.completed}/{selected.questions} 题完成</p>
+      {selected.resource_summary ? <p>模型指标采样 {selected.resource_summary.samples - selected.resource_summary.engine_metrics_missing_samples}/{selected.resource_summary.samples} 次成功；缺失 {selected.resource_summary.engine_metrics_missing_samples} 次，未补值。队列峰值是已观测到的采样峰值。</p> : null}
+      {selected.model_call_evidence ? <p>实际模型调用记录 {selected.model_call_evidence.recorded_calls}/{selected.model_call_evidence.expected_calls} 次；与应用调用及 token 数{selected.model_call_evidence.verified ? "完整对应" : "尚未核对通过"}。</p> : null}
+      {selected.metrics_probe_timeout_s ? <p>本轮只读指标查询期限：{selected.metrics_probe_timeout_s.join(" / ")} 秒；推理请求期限另按固定测试配置执行。</p> : null}
       <div className="capacity-charts"><ResourceChart round={selected} /><ResourceChart round={selected} memory /></div>
       {Object.keys(selected.failures).length ? <p>失败分类：{Object.entries(selected.failures).map(([name, count]) => `${name} ${count}`).join("；")}</p> : null}
     </> : null}

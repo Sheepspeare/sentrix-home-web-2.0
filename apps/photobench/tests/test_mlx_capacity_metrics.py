@@ -68,6 +68,44 @@ def test_tool_internal_unknown_timeout_is_counted_even_after_agent_returns_an_an
     assert counts["timeout"] == counts["unknown"] == 1
 
 
+def test_engine_journal_reconciles_main_calls_and_cached_tool_observations():
+    vision = {"call_id": "vision", "status": "complete", "prompt_tokens": 900, "completion_tokens": 20}
+    items = [
+        {
+            "model_call_metrics": [
+                {"call_id": "agent", "status": "complete", "prompt_tokens": 500, "completion_tokens": 30}
+            ],
+            "tool_trace": [{"result": {"model_call_observations": [vision]}}] * 2,
+        }
+    ]
+    terminal = [
+        {"request_id": "r1", "prompt_tokens": 900, "completion_tokens": 20},
+        {"request_id": "r2", "prompt_tokens": 500, "completion_tokens": 30},
+    ]
+    evidence = capacity.reconcile_model_calls(items, terminal)
+    assert evidence["verified"] is True
+    assert evidence["expected_calls"] == evidence["recorded_calls"] == 2
+    assert capacity.reconcile_model_calls(items, terminal[:1])["verified"] is False
+    terminal[1]["request_id"] = "r1"
+    assert capacity.reconcile_model_calls(items, terminal)["verified"] is False
+
+
+def test_incomplete_or_conflicting_application_observations_never_pass_reconciliation():
+    call = {"call_id": "c", "status": "complete", "prompt_tokens": 50, "completion_tokens": 3}
+    terminal = [{"request_id": "r", "prompt_tokens": 50, "completion_tokens": 3}]
+    assert (
+        capacity.reconcile_model_calls([{"model_call_metrics": [{**call, "status": "error"}]}], terminal)[
+            "verified"
+        ]
+        is False
+    )
+    evidence = capacity.reconcile_model_calls(
+        [{"model_call_metrics": [call, {**call, "completion_tokens": 4}]}], terminal
+    )
+    assert evidence["verified"] is False
+    assert evidence["conflicting_observations"] == 1
+
+
 def test_ambiguous_submission_is_never_replayed(tmp_path):
     import httpx
     import pytest

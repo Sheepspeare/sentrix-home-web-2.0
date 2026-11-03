@@ -23,6 +23,7 @@ from scripts.benchmarks.mlx_capacity import (
     diagnostic_failure_categories,
     observe_run,
     percentile,
+    reconcile_model_calls,
     save,
     submit_run_once,
     summarize_resources,
@@ -160,8 +161,11 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
     for category, count in diagnostic_failure_categories(items).items():
         if count:
             failures["diagnostic_" + category] += count
-    if resource["engine_metrics_missing_samples"]:
-        failures["missing_engine_metrics"] += resource["engine_metrics_missing_samples"]
+    model_evidence = reconcile_model_calls(items, terminal)
+    if not model_evidence["verified"]:
+        failures["incomplete_model_call_evidence"] += 1
+    if not samples or resource["engine_metrics_missing_samples"] == len(samples):
+        failures["missing_engine_metrics"] += 1
     batches = [e["actual_batch_size"] for e in events if e["event"] == "token_batch"]
     ttfts = [e["ttft_s"] for e in terminal if e["ttft_s"] is not None]
     if not batches:
@@ -169,6 +173,9 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
     qa = phase["agent_phase_wall_ms"] / 1000
     completed = sum(i.get("execution_status") == "completed" and not agent_completion_error(i) for i in items)
     value = {
+        "execution_revision": json.loads((stage / "diagnostics.private.json").read_text())["build_revision"],
+        "reporting_revision": state["revision"],
+        "metrics_probe_timeout_s": sorted({s.get("engine_probe_timeout_s", 5) for s in samples}),
         "label": entry["label"],
         "run_id": rid,
         "concurrency": entry["concurrency"],
@@ -209,6 +216,8 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
         "run_json_sha256": hashlib.sha256((r / "results" / rid / "run.json").read_bytes()).hexdigest(),
         "model_request_count": len(terminal),
         "resource_summary": resource,
+        "model_call_evidence": model_evidence,
+        "telemetry_status": "partial_scrapes" if resource["engine_metrics_missing_samples"] else "complete",
         "ttft_p50_s": percentile(ttfts, 0.5),
         "judge_per_min": sum(i.get("judge_status") == "completed" for i in items)
         / (phase.get("judge_phase_wall_ms", 0) / 1000)
@@ -230,6 +239,8 @@ def publish() -> None:
             reports.append(json.loads(p.read_text()))
     report = {
         "schema_version": 1,
+        "execution_revision": state.get("inference_revision", state["revision"]),
+        "reporting_revision": state["revision"],
         "updated_at": datetime.now(UTC).isoformat(),
         "hardware": "Apple M4 · 16 GB · macOS 26.6",
         "engine": "vllm-mlx 0.6.0 / mlx-vlm 0.7.6",
@@ -247,6 +258,7 @@ def publish() -> None:
             "QA 与云端 Judge 独立调度，评分排队不限制 QA。",
             "首 token 时间由模型调度器记录，包含模型队列等待；实际批次来自 token 生成批次。",
             "等待队列包含已进入调度器、仍在等待预填充的请求；不把这些请求算作实际生成批次。",
+            "指标查询缺口单独展示，不替换为零；实际模型调用必须与引擎终态及 token 记录完整对应。",
             "资源曲线与汇总限定 QA 阶段；原始记录保留完整运行及评分阶段。",
             "内存曲线采用 macOS 活跃及有线内存；PhotoBench 原始遥测另保留含缓存的整机占用。",
             "最高通过档要求两轮均完成、没有执行或评分错误，且监测证据完整。",

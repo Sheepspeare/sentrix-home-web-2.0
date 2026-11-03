@@ -46,3 +46,19 @@ it("shows the independent 487 run's measurements separately from the 64-question
   expect(overview.textContent).toContain("6 / 2");
   expect(overview.textContent).toContain("客户端 QA 并发 8");
 });
+
+it("discloses scrape gaps separately from verified model execution", () => {
+  const measured = {
+    ...round("C4-R1", 4, true),
+    resource_summary: { samples: 348, engine_metrics_missing_samples: 11 },
+    model_call_evidence: { expected_calls: 315, recorded_calls: 315, verified: true },
+  };
+  render(<CapacityReport evidence={{
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "vllm-mlx",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [], rounds: [measured],
+  }} />);
+  expect(screen.getByText(/模型指标采样 337\/348 次成功/)).toBeTruthy();
+  expect(screen.getByText(/实际模型调用记录 315\/315 次/)).toBeTruthy();
+  expect(screen.getByText(/指标缺失 11 次/)).toBeTruthy();
+});
