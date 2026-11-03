@@ -180,3 +180,12 @@ it("评分缺失以完成但有错误显示，保留实际评分数", () => {
   expect(screen.getByText("9/10")).toBeTruthy();
   expect(screen.queryByRole("progressbar")).toBeNull();
 });
+
+it("新版均分显示归一化百分比，历史分明确满分2", () => {
+  renderTable([run({summary: {answer_quality_mean: 0.533, evaluation_summary: {count: 10, mean: 0.2666666667}}}),
+    run({run_id: "old", summary: {answer_quality_mean: 1.5}})]);
+  expect(screen.getByRole("columnheader", {name: "答案得分"})).toBeTruthy();
+  expect(screen.getByText("26.7%")).toBeTruthy();
+  expect(screen.getByText("1.5 / 2")).toBeTruthy();
+  expect(screen.queryByText("0.533")).toBeNull();
+});

@@ -16,6 +16,12 @@ import type { RunPageState } from "../../hooks/useRuns.ts";
 import { albumName, duration, fmtDate, fmtPct, modelName, statusLabel } from "../../lib/format.ts";
 import { modeBadgeClass, modeLabel } from "../../lib/qaBrowser.ts";
 
+function answerScore(run: Run): string {
+  const evaluation = run.summary?.evaluation_summary as Record<string, unknown> | undefined;
+  if (Number(evaluation?.count) > 0) return fmtPct(evaluation?.mean);
+  return run.summary?.answer_quality_mean == null ? "-" : `${run.summary.answer_quality_mean} / 2`;
+}
+
 function RunProgress({ run }: { run: Run }) {
   const progress = qaProgress(run);
   if (!progress.applicable || !progress.judgeEnabled) return <span className="muted">—</span>;
@@ -87,7 +93,7 @@ export function RunsTable({
               <th>状态</th>
               <th>进度</th>
               <th>媒体召回率</th>
-              <th>质量均分</th>
+              <th>答案得分</th>
               <th></th>
             </tr>
           </thead>
@@ -116,7 +122,7 @@ export function RunsTable({
                       run.summary?.retrieval_recall_mean,
                   )}
                 </td>
-                <td>{run.summary?.answer_quality_mean ?? "-"}</td>
+                <td>{answerScore(run)}</td>
                 <td>
                   <button
                     className="btn danger compact"

@@ -21,6 +21,15 @@ function scoringExplanation(value: unknown): string {
   if (d.answer_format === "choice") return "选择题：匹配选项含义，再核对正确项。";
   return "开放问答题：按题目定义评价回答内容，媒体指标单独计算。";
 }
+export function evaluationReason(value: unknown): string {
+  const reason = String(value || "");
+  const labels: Record<string, string> = {
+    media_set: "按模型实际交付与目标媒体集合的重合度评分。",
+    delivery_unavailable: "交付媒体记录缺失，无法计算集合得分。",
+    "ATM-Bench ef4e5dff deterministic_accuracy": "按 ATM 官方数值匹配规则计主分；数值语义辅分单独展示。",
+  };
+  return labels[reason] || reason;
+}
 export function EvaluationResult({value, definition}: {value: unknown; definition?: unknown}) {
   const r = obj(value), d = obj(definition), metrics = obj(r.media_metrics);
   if (!r.scorer) return null;
@@ -30,7 +39,7 @@ export function EvaluationResult({value, definition}: {value: unknown; definitio
     <h4>{evaluationTypeLabel(r) || String(r.scorer)}</h4>
     <p className="muted small">{scoringExplanation(r)}</p>
     <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
-    <p>{String(r.reason || "")}</p>
+    <p>{evaluationReason(r.reason)}</p>
     {r.matched_option != null && <p>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</p>}
     {comparisons.length > 0 && <ul className="evaluation-options">{comparisons.map(c => <li className={c.matches ? "is-match" : ""} key={String(c.option_id)}>{String(c.option_id)}：{String(options.find(o => o.id === c.option_id)?.text || "")} · {c.matches ? "匹配" : "不匹配"} · {String(c.reason)}</li>)}</ul>}
     {Object.keys(metrics).length > 0 && <div className="evaluation-table-wrap"><table><thead><tr><th>集合</th><th>Recall</th><th>Jaccard</th><th>Precision</th><th>F1</th></tr></thead><tbody>{["delivery", "tools"].map(k => {const m = obj(metrics[k]); return <tr key={k}><td>{k === "delivery" ? "模型交付" : "工具累计召回"}</td>{["recall", "jaccard", "precision", "f1"].map(v => <td key={v}>{pct(m[v])}</td>)}</tr>;})}</tbody></table></div>}

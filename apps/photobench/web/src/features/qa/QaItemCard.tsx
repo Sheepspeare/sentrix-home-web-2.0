@@ -1,4 +1,4 @@
-import { EvaluationResult, EvaluationTypeBadge } from "../../components/EvaluationResult.tsx";
+import { EvaluationResult, EvaluationTypeBadge, evaluationReason } from "../../components/EvaluationResult.tsx";
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
  * 单题卡（列表项 + 展开体）。移植 1.0 `App.vue:3460-3674`。
@@ -188,7 +188,7 @@ function QaItemDetail({
   const timing = itemTimingBreakdown(detail);
   const qaSegments = qaLatencySegments(detail);
   const toolTrace = hasToolTrace(detail);
-  const qualityReason = judgeReason(detail.judge);
+  const qualityReason = evaluationReason(judgeReason(detail.judge));
   const behaviorReason = judgeReason(detail.task_judge);
   const evidenceReason = judgeReason(detail.evidence_judge);
 
