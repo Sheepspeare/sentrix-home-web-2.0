@@ -75,7 +75,7 @@ PhotoBench 的“并发实验”页读取 `capacity-report.json`，展示逐档�
 export SENTRIX_MLX_EXPERIMENT_ROOT=/absolute/path/to/isolated-experiment
 export SENTRIX_MLX_SERIES=unique-series-name
 cd "$SENTRIX_MLX_EXPERIMENT_ROOT/repo"
-.venv/bin/python scripts/benchmarks/run_mlx_matrix.py
+.venv/bin/python -m scripts.benchmarks.run_mlx_matrix
 ```
 
 编排器用文件锁排除重复启动。已知运行的观察可恢复；处于提交中但没有唯一 run_id 的状态必须先对照 PhotoBench 记录，禁止再次 POST。失败轮次保留后，修复与复测使用新的轮次/系列身份，不能把旧结果改成通过。资格测试、生成请求或运行提交发生未知结果时均不自动重发。

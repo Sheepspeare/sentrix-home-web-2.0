@@ -13,10 +13,13 @@ import traceback
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import psutil
-from mlx_capacity import (
+from PIL import Image
+
+from scripts.benchmarks.mlx_capacity import (
     diagnostic_failure_categories,
     observe_run,
     percentile,
@@ -24,7 +27,6 @@ from mlx_capacity import (
     submit_run_once,
     summarize_resources,
 )
-from PIL import Image
 
 r = Path(os.environ["SENTRIX_MLX_EXPERIMENT_ROOT"]).resolve()
 series = os.environ["SENTRIX_MLX_SERIES"]
@@ -37,16 +39,18 @@ python = r / "repo/.venv/bin/python"
 statefile = r / "runtime/matrix-state.json"
 lock = (r / "runtime/matrix.lock").open("a")
 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-state = json.loads(statefile.read_text()) if statefile.exists() else {"status": "starting", "rounds": []}
+state: dict[str, Any] = (
+    json.loads(statefile.read_text()) if statefile.exists() else {"status": "starting", "rounds": []}
+)
 client = httpx.Client(timeout=30, trust_env=False)
 
 
-def checkpoint(**kwargs):
+def checkpoint(**kwargs: Any) -> None:
     state.update(kwargs, updated_at=time.time())
     save(statefile, state)
 
 
-def owned_stop(pid, needle):
+def owned_stop(pid: int, needle: str) -> None:
     try:
         p = psutil.Process(pid)
     except psutil.NoSuchProcess:
@@ -61,7 +65,7 @@ def owned_stop(pid, needle):
         p.wait(10)
 
 
-def stop_round():
+def stop_round() -> None:
     current = r / "runtime/current-round.json"
     if not current.exists():
         return
@@ -71,7 +75,7 @@ def stop_round():
     current.unlink()
 
 
-def restart_engine():
+def restart_engine() -> None:
     p = json.loads((r / "runtime/vllm-mlx-process.json").read_text())
     owned_stop(p["pid"], "serve_mlx.py")
     subprocess.run([str(python), str(r / "repo/scripts/benchmarks/launch_mlx_engine.py")], check=True)
@@ -85,13 +89,13 @@ def restart_engine():
     raise RuntimeError("engine did not become ready")
 
 
-def warmup():
+def warmup() -> list[dict[str, Any]]:
     im = Image.new("RGB", (224, 224), "red")
     buf = io.BytesIO()
     im.save(buf, format="PNG")
     url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-    def call(i):
+    def call(i: int) -> dict[str, Any]:
         content = (
             "Reply with exactly READY."
             if i % 2 == 0
@@ -122,7 +126,7 @@ def warmup():
         return list(pool.map(call, range(4)))
 
 
-def summarize(entry):
+def summarize(entry: dict[str, Any]) -> dict[str, Any]:
     stage = r / "rounds" / entry["label"]
     rid = entry["run_id"]
     raw = json.loads((r / "results" / rid / "run.json").read_text())
@@ -137,7 +141,7 @@ def summarize(entry):
     terminal = [e for e in events if e["event"] == "request_terminal"]
     resource = summarize_resources(samples)
     latencies = [i["wall_clock_ms"] / 1000 for i in items if isinstance(i.get("wall_clock_ms"), (int, float))]
-    failures = Counter()
+    failures: Counter[str] = Counter()
     from photobench.domain.runs.execution import TASK_FAILURE_REASONS, agent_completion_error
 
     for item in items:
@@ -215,7 +219,7 @@ def summarize(entry):
     return value
 
 
-def publish():
+def publish() -> None:
     reports = []
     for entry in state["rounds"]:
         p = r / "rounds" / entry["label"] / "public-summary.json"
@@ -251,10 +255,10 @@ def publish():
         save(web / "capacity-report.json", report)
 
 
-def execute(label, c, questions):
+def execute(label: str, c: int, questions: int) -> dict[str, Any]:
     entry = next((x for x in state["rounds"] if x["label"] == label), None)
     if entry and entry.get("status") == "completed":
-        summary = json.loads((r / "rounds" / label / "public-summary.json").read_text())
+        summary: dict[str, Any] = json.loads((r / "rounds" / label / "public-summary.json").read_text())
         if not summary["passed"]:
             raise RuntimeError("preserved failed round requires repair and a new series: " + label)
         return summary
