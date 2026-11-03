@@ -372,11 +372,11 @@ def test_inspection_records_timeout_and_json_format_without_changing_fallback(
 
     import sentrix.infrastructure.media.vlm_observer as observer
 
-    class KnownModel:
+    class KnownModel(ServedModel):
         def current(self):
             return "vision"
 
-    inspector = OpenAIPhotoInspector("http://vision/v1", KnownModel())
+    inspector = OpenAIPhotoInspector("http://vision/v1", KnownModel("http://vision/v1"))
 
     def timeout(*args, **kwargs):
         raise httpx.ReadTimeout("timed out")

@@ -33,6 +33,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from photobench.domain.errors import RequestOutcomeUnknownError
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.runs.analysis import (
     JUDGE_CONSISTENCY_VERSION,
@@ -238,6 +239,11 @@ class JudgeRunner:
                         else "service_error",
                     },
                 )
+                if isinstance(exc, RequestOutcomeUnknownError):
+                    record["diagnostics"].update(
+                        error_category="request_outcome_unknown", automatic_replay=False
+                    )
+                    raise
                 if client_code is not None:
                     raise RuntimeError(
                         f"judge request rejected with HTTP {client_code} (client error, not retryable): {exc}"

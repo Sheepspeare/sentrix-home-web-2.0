@@ -17,6 +17,7 @@ import pytest
 from fakes_execution import FakeHttpClient, judge_reply
 
 from photobench.application.run_execution.judge import JudgeRunner
+from photobench.domain.errors import RequestOutcomeUnknownError
 from photobench.domain.runs.execution import RunCancelledError
 from photobench.domain.runs.judge import (
     ANSWER_QUALITY_RUBRICS,
@@ -470,6 +471,18 @@ def test_request_observations_keep_retry_ids_and_recovered_error():
     assert observations[0]["recovered_by_call_id"] == observations[1]["call_id"]
     assert observations[0]["call_id"] != observations[1]["call_id"]
     assert result["score"] == 2
+
+
+def test_judge_does_not_replay_an_unknown_post_outcome():
+    unknown = RequestOutcomeUnknownError(method="POST", cause_type="ReadTimeout", attempts=1)
+    http = FakeHttpClient([unknown, judge_reply('{"score":2,"reason":"must not be consumed"}')])
+    result = _runner(http).judge("Q", "A", "A")
+    assert len(http.calls) == 1
+    assert result.get("score") is None
+    observations = result["call_observations"]
+    assert len(observations) == 1
+    assert observations[0]["diagnostics"]["error_category"] == "request_outcome_unknown"
+    assert observations[0]["diagnostics"]["automatic_replay"] is False
 
 
 def test_mixed_action_validation_does_not_accept_unknown_action():

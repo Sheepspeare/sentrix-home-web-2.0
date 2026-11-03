@@ -240,6 +240,7 @@ class RunRequest:
     import_timeout: int = 7200
     turn_timeout: int = 900
     qa_concurrency: int = 0
+    judge_backpressure: bool = True
     runtime_framework: str = ""
     judge_url: str = ""
     judge_model: str = ""
@@ -281,6 +282,7 @@ def freeze_runtime_request(
             "import_timeout": request.import_timeout,
             "turn_timeout": request.turn_timeout,
             "qa_concurrency": request.qa_concurrency,
+            "judge_backpressure": request.judge_backpressure,
         },
         required_build_revision=revision if revision != "development" else None,
     )
@@ -2055,6 +2057,7 @@ class RunExecution:
         state.set("qa_concurrency_runtime_limit", resolved.runtime_limit)
         state.set("qa_assets", len(assets))
         state.set("judge_concurrency", judge_concurrency if judge is not None else 0)
+        state.set("judge_backpressure", request.judge_backpressure)
         state.record_phase("qa_eval", "agent_total", len(rows))
         state.record_phase("qa_eval", "agent_phase_started_at", now_iso())
         agent_phase_started = time.perf_counter()
@@ -2144,7 +2147,10 @@ class RunExecution:
                     nonlocal queue_exhausted
                     while (
                         len(futures) < concurrency
-                        and len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
+                        and (
+                            not request.judge_backpressure
+                            or len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
+                        )
                         and not state.cancelled
                     ):
                         next_row = next(queue, None)

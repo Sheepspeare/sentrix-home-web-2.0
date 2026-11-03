@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -32,6 +33,7 @@ from sentrix.domain.assistant.models import (
     TurnStatus,
 )
 from sentrix.domain.assistant.ports import ModelServiceError, PromptTooLongError
+from sentrix.domain.assistant.profile import DEFAULT_PROFILE
 from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, TOOL_SPECS, ToolSpec
 from sentrix.infrastructure.persistence.repositories.conversations import (
     SqliteConversationRepository,
@@ -965,6 +967,43 @@ def test_the_model_step_budget_ends_the_turn_with_a_reason(env):
     assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
     assert result.status is TurnStatus.PARTIAL
     assert "结束" in result.answer
+
+
+def test_strict_budget_does_not_add_an_extra_recovery_model_call(env):
+    conversations, turns, conversation, _db = env
+    model = ScriptedModel([tool_call("get_result_page", "c1", result_set_id="rs_1", page=1)])
+    run_turn = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox({"get_result_page": SEARCH_OK}),
+        profile=replace(DEFAULT_PROFILE, max_steps=3, strict_model_step_budget=True),
+    )
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
+    assert len(model.calls) == 3
+
+
+def test_strict_context_budget_preserves_history_and_does_not_retry_cropped_input(env):
+    conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="海边"),
+            PromptTooLongError("context exhausted"),
+            final_call("must not be generated", "photo_1"),
+        ]
+    )
+    run_turn = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox({"search_memories": SEARCH_OK}),
+        profile=replace(DEFAULT_PROFILE, strict_model_step_budget=True),
+    )
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.status is TurnStatus.FAILED
+    assert len(model.calls) == 2
+    assert any(message.role is ChatRole.TOOL for message in model.calls[-1])
 
 
 def test_the_tools_are_withdrawn_when_the_budget_is_gone(env):
