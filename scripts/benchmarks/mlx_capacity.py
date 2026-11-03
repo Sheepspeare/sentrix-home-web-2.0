@@ -78,7 +78,7 @@ def diagnostic_failure_categories(items: Sequence[Mapping[str, Any]]) -> dict[st
         "service_exit": ("process exited", "service exited", "server exited"),
         "timeout": ("timeout", "timed out"),
         "truncation": ("truncated", "context_window_exceeded", "context_output_insufficient"),
-        "unknown": ("requestoutcomeunknown", "outcome_unknown", "request_outcome_unknown"),
+        "unknown": ("requestoutcomeunknown", "outcome_unknown", "request_outcome_unknown", "outcome unknown"),
     }
     counts = dict.fromkeys(patterns, 0)
 

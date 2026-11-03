@@ -160,7 +160,7 @@ class HttpxJsonClient:
                 )
                 if self._retry_connections and not safe:
                     raise RequestOutcomeUnknownError(
-                        method=method, cause_type=type(exc).__name__, attempts=attempt + 1
+                        method=method, cause_type=type(exc).__name__, attempts=attempt + 1, cause=exc
                     ) from exc
                 remaining = deadline - self._clock()
                 if (

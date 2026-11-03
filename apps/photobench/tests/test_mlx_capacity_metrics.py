@@ -164,3 +164,12 @@ def test_failure_categories_use_diagnostics_not_question_or_answer_prose():
         "unknown": 1,
         "truncation": 1,
     }
+
+
+def test_unknown_submission_from_legacy_error_only_record_is_counted():
+    assert (
+        capacity.diagnostic_failure_categories(
+            [{"error": "POST outcome unknown after ReadError; request was not replayed"}]
+        )["unknown"]
+        == 1
+    )

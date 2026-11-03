@@ -51,6 +51,27 @@ def _client(handler: Handler) -> HttpxJsonClient:
     return HttpxJsonClient(client=httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True))
 
 
+def test_unknown_post_preserves_transport_errno_without_private_exception_text():
+    attempts = []
+
+    def handler(request):
+        attempts.append(request)
+        try:
+            raise ConnectionResetError(54, "private credential-bearing endpoint")
+        except OSError as cause:
+            raise httpx.ReadError("private request body", request=request) from cause
+
+    with pytest.raises(RequestOutcomeUnknownError) as caught:
+        _client(handler).request_json("http://local/turns", {"private": "payload"}, "POST")
+    assert len(attempts) == 1
+    assert caught.value.facts["transport_causes"] == [
+        {"type": "ReadError"},
+        {"type": "ConnectionResetError", "errno": 54},
+    ]
+    assert "private" not in json.dumps(caught.value.facts)
+    assert caught.value.facts["automatic_replay"] is False
+
+
 def test_get_returns_the_parsed_body():
     seen: dict = {}
 
