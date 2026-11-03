@@ -70,6 +70,33 @@ def install_chunked_context_fix() -> None:
     generator._step = step
 
 
+def process_queued_prompts(instance: Any, requests: list[Any], process: Callable[[], Any]) -> Any:
+    """Consume each successfully handled prefill admission exactly once.
+
+    0.6.0's inline short-prompt path during a partial prefill omits the queue
+    removal performed by its ordinary path. It can repeatedly append the same
+    request to the decoding batch. Capture IDs before preprocessing removes
+    failed inputs, and consume both successful and explicitly failed inputs.
+    Exceptions retain the caller's existing error handling.
+    """
+    requested_uids = {request.uid for request in requests}
+    result = process()
+    instance.unprocessed_requests = [
+        request for request in instance.unprocessed_requests if request.uid not in requested_uids
+    ]
+    return result
+
+
+def install_prefill_admission_fix() -> None:
+    generator: Any = importlib.import_module("vllm_mlx.mllm_batch_generator").MLLMBatchGenerator
+    original_process = generator._process_prompts
+
+    def process(instance: Any, requests: list[Any]) -> Any:
+        return process_queued_prompts(instance, requests, lambda: original_process(instance, requests))
+
+    generator._process_prompts = process
+
+
 def fair_generation_step(instance: Any, chunked: Callable[[], Any], canonical: Callable[[], Any]) -> Any:
     """Drain the current batch when media waits; do not admit newer text forever.
 
@@ -305,6 +332,7 @@ def install_adapter() -> None:
     sampling: Any = importlib.import_module("mlx_lm.sample_utils")
     sampling.make_sampler = seeded_sampler
     install_chunked_context_fix()
+    install_prefill_admission_fix()
     install_media_fairness_fix()
     install_telemetry()
     server = importlib.import_module("vllm_mlx.server")

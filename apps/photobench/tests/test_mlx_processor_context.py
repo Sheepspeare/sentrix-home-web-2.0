@@ -96,3 +96,46 @@ def test_terminal_evidence_keeps_disagreeing_counters_instead_of_normalizing_the
     output.completion_tokens = 150
     assert adapter.terminal_output_facts(request, [output])["output_counters_consistent"] is True
     assert adapter.terminal_output_facts(request, [output, output])["output_counters_consistent"] is False
+
+
+def test_inline_prefill_admits_short_request_once_while_preserving_other_waiters():
+    short = SimpleNamespace(uid=7, short=True)
+    waiting = SimpleNamespace(uid=8, short=False)
+    generator = SimpleNamespace(unprocessed_requests=[short, waiting])
+    admissions = []
+    for _ in range(3):
+        selected = [request for request in generator.unprocessed_requests if request.short]
+        if selected:
+            result = adapter.process_queued_prompts(
+                generator, selected, lambda selected=selected: admissions.extend(selected) or "batch"
+            )
+            assert result == "batch"
+    assert admissions == [short]
+    assert generator.unprocessed_requests == [waiting]
+
+
+def test_prefill_consumes_explicit_failures_even_when_processor_mutates_input_list():
+    failed, waiting = SimpleNamespace(uid=7), SimpleNamespace(uid=8)
+    selected = [failed]
+    generator = SimpleNamespace(unprocessed_requests=[failed, waiting])
+
+    def fail_input():
+        selected.remove(failed)
+        return None
+
+    assert adapter.process_queued_prompts(generator, selected, fail_input) is None
+    assert generator.unprocessed_requests == [waiting]
+
+
+def test_prefill_exception_keeps_original_caller_error_handling():
+    import pytest
+
+    request = SimpleNamespace(uid=7)
+    generator = SimpleNamespace(unprocessed_requests=[request])
+
+    def fail_batch():
+        raise RuntimeError("prefill failed")
+
+    with pytest.raises(RuntimeError, match="prefill failed"):
+        adapter.process_queued_prompts(generator, [request], fail_batch)
+    assert generator.unprocessed_requests == [request]
