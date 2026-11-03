@@ -1844,6 +1844,7 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
         "retrieval_recall_macro",
         "media_retrieval_recall_macro",
         "answer_quality_mean",
+        "evaluation_summary",
     }
     result: dict[str, Any] = {
         key: state.get(key)

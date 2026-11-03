@@ -69,9 +69,14 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
     with run_lock(run_dir):
         metadata = committed_path(run_dir, "metadata.json")
         if metadata.is_file():
-            entry = json.loads(metadata.read_text(encoding="utf-8"))["entry"]
+            payload = json.loads(metadata.read_text(encoding="utf-8"))
+            entry = payload["entry"]
             if not isinstance(entry, dict):
                 raise ValueError("invalid committed entry")
+            # 已提交元数据中的旧列表投影可能缺少题型汇总；从同一快照概览补齐。
+            evaluation = (payload.get("overview", {}).get("summary") or {}).get("evaluation_summary")
+            if evaluation is not None:
+                entry.setdefault("summary", {})["evaluation_summary"] = evaluation
             return entry
         path = run_dir / "run.json"
         stat = path.stat()

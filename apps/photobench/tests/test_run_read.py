@@ -475,3 +475,19 @@ def test_atm_type_filters_distinguish_number_and_open_answers(tmp_path: Path):
         result = reader.get_run_items("atm", evaluation_type=source)
         assert [item["qa_id"] for item in result["items"]] == [source]
     assert reader.get_run_items("atm", evaluation_type="open")["total"] == 0
+
+
+def test_committed_list_inherits_typed_score_from_same_snapshot(tmp_path: Path):
+    from photobench.infrastructure.results.store import read_entry
+
+    evaluation = {"count": 10, "mean": 0.2666666667}
+    run = tmp_path / "typed"
+    run.mkdir()
+    metadata = {
+        "entry": {"run_id": "typed", "summary": {"answer_quality_mean": 0.533}},
+        "overview": {"summary": {"evaluation_summary": evaluation}},
+    }
+    (run / "metadata.json").write_text(json.dumps(metadata))
+    original = (run / "metadata.json").read_bytes()
+    assert read_entry(run)["summary"]["evaluation_summary"] == evaluation
+    assert (run / "metadata.json").read_bytes() == original
