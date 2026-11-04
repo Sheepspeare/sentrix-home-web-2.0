@@ -40,7 +40,8 @@ import httpx
 
 from sentrix.domain.assistant.ports import ModelServiceError, PromptTooLongError
 
-# 探测是一次本地 HTTP 往返，不是推理：10 秒足够。超时本身就说明端点没在正常服务。
+# 独立探测的默认期限。应用装配使用已有模型请求期限：繁忙的 MLX 服务可能
+# 同时延迟元数据响应，10 秒没有响应不能证明推理服务已退出。
 PROBE_TIMEOUT_S = 10.0
 
 # 缓存有效期。取 60 秒是因为两边都不亏：
@@ -56,7 +57,7 @@ class ServedModel:
     """端点当前服务的模型名，带进程内缓存。
 
     **线程安全**：uvicorn 的同步端点在线程池里跑，多个回合会并发调用 ``current()``。
-    锁只保护缓存字段，HTTP 探测在锁外做——探测最坏要 10 秒，握着锁等会把并发请求串起来。
+    锁只保护缓存字段，HTTP 探测在锁外做——探测可能等到配置期限，不能握锁等待。
     代价是缓存未命中时可能有两个线程同时探一次；结果一样，多花的是一次本地往返，
     比串行化整个端点便宜。
     """
@@ -184,7 +185,14 @@ class ServedModel:
         try:
             response = httpx.get(f"{self._base_url}/models", timeout=self._timeout_s)
         except httpx.HTTPError as error:
-            raise ModelServiceError(f"模型端点 {self._base_url} 不可达：{error}") from error
+            raise ModelServiceError(
+                f"模型端点 {self._base_url} 元数据查询失败：{error}",
+                diagnostics={
+                    "request_sent": False,
+                    "error_category": "model_metadata_unavailable",
+                    "metadata_timeout_s": self._timeout_s,
+                },
+            ) from error
 
         if response.status_code != 200:
             raise ModelServiceError(

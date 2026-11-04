@@ -293,6 +293,10 @@ class Container:
         # 进程里存两份可能不一致的答案，还要多探一轮。
         served_model = ServedModel(
             settings.vlm_base_url,
+            # MLX media prefill can delay metadata on the same server. Discovery
+            # must honor the configured wait, while staying within both clients'
+            # deadlines because dialogue and vision share this resolver.
+            timeout_s=min(settings.chat_timeout_s, settings.vlm_timeout_s),
             generation_profile=settings.vlm_generation_profile,
             exact_output_budget=settings.vlm_exact_output_budget,
             context_tokens=settings.vlm_context_tokens,
