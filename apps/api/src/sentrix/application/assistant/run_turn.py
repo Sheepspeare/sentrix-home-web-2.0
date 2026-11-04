@@ -102,7 +102,7 @@ from sentrix.domain.assistant.ports import (
 )
 from sentrix.domain.assistant.profile import DEFAULT_PROFILE, TurnProfile
 from sentrix.domain.assistant.task_state import ACTING, FINALIZING, TaskState, ToolCallRecord
-from sentrix.domain.assistant.tool_policy import ToolAction, ToolPolicy
+from sentrix.domain.assistant.tool_policy import MAX_CONSECUTIVE_FAILURES, ToolAction, ToolPolicy
 from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, TOOLS_BY_NAME, ToolSpec
 from sentrix.domain.errors import DomainError
 from sentrix.domain.media.ports import OperationControl
@@ -991,6 +991,12 @@ class RunTurn:
                 has_result_set=state.current_result_set_id is not None,
                 tools_exhausted=not state.can_call_tool(),
                 page_available=_page_available(state),
+            )
+            # Match the existing execution policy: advertising a tool which
+            # already hit repeated_failure makes small models spend every
+            # remaining step requesting an action we will always deny.
+            specs = tuple(
+                spec for spec in specs if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
             )
             try:
                 reply = self._complete_recorded(session, messages, specs)

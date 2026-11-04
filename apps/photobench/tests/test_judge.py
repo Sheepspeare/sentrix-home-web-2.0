@@ -160,6 +160,38 @@ def test_a_retry_that_stays_inconsistent_yields_no_score_not_zero():
     assert result["reason"] == "judge_inconsistent_score_reason"
 
 
+def test_invalid_quality_json_gets_one_format_retry_without_repairing_the_score():
+    invalid = '{"score":2, reason":"正确"}'
+    http = FakeHttpClient([judge_reply(invalid), judge_reply('{"score":0,"reason":"核心结论错误"}')])
+    result = _runner(http).judge("q", "ref", "answer")
+    assert len(http.calls) == 2
+    assert result["attempts"][0]["raw_text"] == invalid
+    assert result["score"] == 0
+    assert result["judge_status"] == "completed"
+
+
+def test_twice_invalid_quality_json_is_failed_without_a_fallback_score():
+    http = FakeHttpClient([judge_reply("invalid"), judge_reply("invalid again")])
+    result = _runner(http).judge("q", "ref", "answer")
+    assert len(http.calls) == 2
+    assert result["score"] is None
+    assert result["judge_status"] == "failed"
+
+
+def test_reference_answer_can_be_scored_without_inventing_a_behavior_label():
+    http = FakeHttpClient([judge_reply('{"score":1,"reason":"只完成部分核心要求"}')])
+    item = {
+        "reference_answer": "地点信息",
+        "runtime_turns": [{"message": "地点？", "answer": "部分地点", "expected_action": None}],
+    }
+    _runner(http).judge_item(item, {}, {})
+    assert len(http.calls) == 1
+    assert item["judge"]["score"] == 1
+    assert item["judge_status"] == "completed"
+    assert item["task_judge"] == {"actual_action": None, "correct": None, "reason": "not_labeled"}
+    assert item["runtime_turns"][0]["expected_action"] is None
+
+
 def test_an_answerable_question_does_not_turn_a_valid_judge_zero_into_a_missing_score():
     http = FakeHttpClient(
         [judge_reply('{"score":0,"reason":"该问题可回答，正确地点已知。模型未给出正确答案，因此得0分。"}')]

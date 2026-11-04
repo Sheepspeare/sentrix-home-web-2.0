@@ -111,7 +111,17 @@ def fair_generation_step(instance: Any, chunked: Callable[[], Any], canonical: C
     instance._allow_mid_batch_extend = False
     try:
         if not instance.active_batch and getattr(instance, "_partial", None) is None:
-            return canonical()
+            # The ordinary 0.6 path uses completion_batch_size for admission,
+            # ignoring its smaller configured vision prefill limit. A mixed
+            # batch can retain many per-request caches and media tensors before
+            # the first decode. Bound that admission only; text decoding keeps
+            # its original capacity, and no waiting request is discarded.
+            decode_capacity = instance.completion_batch_size
+            instance.completion_batch_size = min(decode_capacity, instance.prefill_batch_size)
+            try:
+                return canonical()
+            finally:
+                instance.completion_batch_size = decode_capacity
         return chunked()
     finally:
         instance._allow_mid_batch_extend = allowed

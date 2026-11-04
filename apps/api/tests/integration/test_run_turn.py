@@ -938,6 +938,30 @@ def test_the_stall_reminder_is_given_only_once(env):
     assert max(per_call) == 1, f"提醒只能被加进对话一次，实际每轮出现 {per_call}"
 
 
+def test_repeatedly_failed_tool_is_removed_from_subsequent_model_offers(env):
+    _conversations, _turns, conversation, _db = env
+    failing = ToolOutcome(
+        observation={"failure_reason": "file_unavailable"},
+        model_visible={"error": "file_unavailable"},
+        failure_reason="file_unavailable",
+    )
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="海边"),
+            tool_call("inspect_photo", "c2", result_set_id="rs_1", question="是什么"),
+            tool_call("inspect_photo", "c3", result_set_id="rs_1", question="是什么"),
+            final("只能确认检索到两张海边的照片，无法核实视觉细节。"),
+        ],
+        planner=planner_reply("visual_observation"),
+    )
+    run_turn = build(env, model, StubToolbox({"search_memories": SEARCH_OK, "inspect_photo": failing}))
+    result = run_turn.run(start(run_turn, conversation))
+    assert "inspect_photo" in model.tool_sets[-2]
+    assert "inspect_photo" not in model.tool_sets[-1]
+    assert FINAL_ANSWER_TOOL in model.tool_sets[-1]
+    assert result.termination_reason is not TerminationReason.STEP_BUDGET_EXHAUSTED
+
+
 def test_a_repeated_identical_call_is_replayed_not_re_executed(env):
     _conversations, _turns, conversation, _db = env
     model = ScriptedModel(
