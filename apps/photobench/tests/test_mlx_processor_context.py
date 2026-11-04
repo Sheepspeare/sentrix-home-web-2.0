@@ -27,8 +27,8 @@ def test_normal_decoder_context_is_not_duplicated_and_no_processors_stay_absent(
 
 
 def test_waiting_media_drains_existing_batch_before_admitting_new_text():
-    image = SimpleNamespace(images=["image"], videos=[], audio=[])
-    text = SimpleNamespace(images=[], videos=[], audio=[])
+    image = SimpleNamespace(uid=0, images=["image"], videos=[], audio=[])
+    text = SimpleNamespace(uid=1, images=[], videos=[], audio=[])
     generator = SimpleNamespace(
         unprocessed_requests=[image, text],
         active_batch=["decoding"],
@@ -59,7 +59,7 @@ def test_media_canonical_admission_honors_prefill_limit_and_restores_decode_capa
     """The ordinary 0.6 path selects completion_batch_size even for vision prefill."""
     import pytest
 
-    requests = [SimpleNamespace(images=["frame"], videos=[], audio=[]) for _ in range(14)]
+    requests = [SimpleNamespace(uid=i, images=["frame"], videos=[], audio=[]) for i in range(14)]
     generator = SimpleNamespace(
         unprocessed_requests=requests,
         active_batch=None,
@@ -113,6 +113,39 @@ def test_text_only_keeps_continuous_batching_and_queue_counts_pending_media():
     assert generator._allow_mid_batch_extend is True
     scheduler = SimpleNamespace(waiting=["waiting"], batch_generator=generator)
     assert adapter.pending_requests(scheduler) == 2
+
+
+def test_waiting_media_is_admitted_despite_continuously_replenished_text_queue():
+    """0.6 insert() sorts text before media, even after the active batch drains."""
+    older_text = SimpleNamespace(uid=0, images=[], videos=[], audio=[])
+    image = SimpleNamespace(uid=1, images=["image"], videos=[], audio=[])
+    generator = SimpleNamespace(
+        unprocessed_requests=[older_text, image],
+        active_batch=None,
+        _partial=None,
+        _allow_mid_batch_extend=True,
+        prefill_batch_size=4,
+        completion_batch_size=16,
+    )
+    admitted = []
+
+    def canonical():
+        selected = generator.unprocessed_requests[: generator.completion_batch_size]
+        admitted.extend(request.uid for request in selected)
+        generator.unprocessed_requests = generator.unprocessed_requests[len(selected) :]
+
+    for cycle in range(4):
+        new_text = [SimpleNamespace(uid=2 + cycle * 8 + j, images=[], videos=[], audio=[]) for j in range(8)]
+        generator.unprocessed_requests.extend(new_text)
+        # The upstream insert() modality sort is stable, but it is not FIFO.
+        generator.unprocessed_requests.sort(key=lambda request: bool(request.images))
+        adapter.fair_generation_step(generator, canonical, canonical)
+
+    assert admitted[:4] == [0, 1, 2, 3]
+    assert len(admitted) == len(set(admitted))
+    assert sorted(admitted + [r.uid for r in generator.unprocessed_requests]) == list(range(34))
+    assert generator.completion_batch_size == 16
+    assert generator._allow_mid_batch_extend is True
 
 
 def test_terminal_evidence_keeps_disagreeing_counters_instead_of_normalizing_them():

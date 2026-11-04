@@ -154,6 +154,11 @@ def fair_generation_step(instance: Any, chunked: Callable[[], Any], canonical: C
     instance._allow_mid_batch_extend = False
     try:
         if not instance.active_batch and getattr(instance, "_partial", None) is None:
+            # insert() sorts text ahead of media. Draining alone does not
+            # prevent starvation: replenished text can fill every bounded
+            # ordinary admission. UIDs are assigned monotonically on insert,
+            # so restore arrival order before selecting the next batch.
+            instance.unprocessed_requests.sort(key=lambda request: request.uid)
             # The ordinary 0.6 path uses completion_batch_size for admission,
             # ignoring its smaller configured vision prefill limit. A mixed
             # batch can retain many per-request caches and media tensors before
