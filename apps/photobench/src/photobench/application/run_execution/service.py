@@ -896,7 +896,7 @@ class RunExecution:
         占位——**两个分支都要做**：没有 Manager 的「外部端点」正是 153 上的形态，
         而 2.0 的助手用哪个模型只由它自己的 ``vlm_base_url`` 决定，与有没有 Manager 无关。
         """
-        if request.mode == "reuse" or not request.manager_url:
+        if request.mode == "reuse" or request.model_profile == "__current__" or not request.manager_url:
             state.phase_done(
                 "model_deploy",
                 {

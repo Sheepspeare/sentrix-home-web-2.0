@@ -118,9 +118,20 @@ class JsonAlbumSource:
         except KeyError:
             return None
         media_root = (album_dir / collection).resolve()
-        media_path = (media_root / file_name).resolve()
-        if not media_path.is_relative_to(media_root) or not media_path.is_file():
+        relative = Path(file_name)
+        if relative.is_absolute() or ".." in relative.parts or "\\" in file_name:
             return None
+        media_path = (media_root / file_name).resolve()
+        if not media_path.is_file():
+            return None
+        if not media_path.is_relative_to(media_root):
+            # 跨机数据包通过 manifest 显式登记已校验原件的软链接。
+            try:
+                declared = self.manifest(album_id).get(collection) or []
+            except KeyError:
+                return None
+            if f"{collection}/{relative.as_posix()}" not in declared:
+                return None
         return str(media_path)
 
     def manifest(self, album_id: str) -> dict[str, Any]:

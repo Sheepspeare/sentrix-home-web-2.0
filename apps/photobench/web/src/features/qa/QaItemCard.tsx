@@ -26,6 +26,7 @@ import {
   fmtPct,
   judgeRoundState,
   judgeScoreLabel,
+  judgeScoreClass,
   scoreClass,
   turnTerminationLabel,
   taskDecisionLabel,
@@ -120,7 +121,7 @@ export function QaItemCard({
         <strong>{s.display_question || conversationTurns(detail)[0]?.message || s.question}</strong>
         {Number(s.conversation_turn_count || conversationTurns(detail).length) > 1 ? <span className="qa-dialogue-badge">{s.conversation_turn_count || conversationTurns(detail).length} 轮对话</span> : null}
         <EvaluationTypeBadge value={summary.evaluation || summary.evaluation_result || summary.judge} />
-        <span className={`score ${scoreClass(s.judge?.score)} judge-round-${judgeRoundState(s, activeRejudge)}`}>
+        <span className={`score ${judgeScoreClass(s)} judge-round-${judgeRoundState(s, activeRejudge)}`}>
           {judgeScoreLabel(s, activeRejudge)}
         </span>
         {Number(s.ground_truth_count) > 0 && summary.retrieval_metrics_applicable !== false && (
