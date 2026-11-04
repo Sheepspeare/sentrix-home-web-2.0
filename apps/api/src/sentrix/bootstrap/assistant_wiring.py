@@ -20,7 +20,7 @@ from sentrix.application.retrieval.retrieve_lexical import RetrieveLexical
 from sentrix.application.retrieval.retrieve_metadata import RetrieveMetadata
 from sentrix.application.retrieval.retrieve_text_ann import RetrieveTextAnn
 from sentrix.application.retrieval.retrieve_visual import RetrieveVisual
-from sentrix.domain.assistant.profile import CLOUD_PROFILE, DEFAULT_PROFILE, TurnProfile
+from sentrix.domain.assistant.profile import CLOUD_PROFILE, DEFAULT_PROFILE, REASONING_PROFILE, TurnProfile
 
 if TYPE_CHECKING:
     from sentrix.bootstrap.container import Container
@@ -128,7 +128,7 @@ def _tool_limits(container: Container) -> ToolLimits:
     )
 
 
-def build_run_turn(container: Container) -> RunTurn:
+def build_run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
     return RunTurn(
         model=container.chat_model,
         operation_control=container.operation_control,
@@ -152,7 +152,8 @@ def build_run_turn(container: Container) -> RunTurn:
             limits=_tool_limits(container),
         ),
         observations=container.observation_repository,
-        profile=_turn_profile(container),
+        profile=REASONING_PROFILE if reasoning else _turn_profile(container),
+        use_all_tools=reasoning,
     )
 
 

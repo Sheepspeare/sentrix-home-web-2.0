@@ -104,8 +104,8 @@ def _turn_summary(record: TurnRecord) -> TurnSummary:
     )
 
 
-def _run_turn(container: Container) -> RunTurn:
-    return build_run_turn(container)
+def _run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
+    return build_run_turn(container, reasoning=reasoning)
 
 
 @router.post("/assistant/conversations", status_code=201)
@@ -209,7 +209,7 @@ def start_turn(
     manage = ManageConversations(
         conversations=container.conversation_repository, turns=container.turn_repository
     )
-    run_turn = _run_turn(container)
+    run_turn = _run_turn(container, reasoning=payload.reasoning)
     # 回合的 scope 由会话决定，请求里没有这个字段可传。会话不存在时 ``start`` 抛
     # ``TurnNotFoundError``（带 404 的码），路由**只放行**——映射在 ``api/errors.py``。
     try:

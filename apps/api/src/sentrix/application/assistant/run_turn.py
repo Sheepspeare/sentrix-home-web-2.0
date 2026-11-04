@@ -110,7 +110,13 @@ from sentrix.domain.assistant.request_context import (
 )
 from sentrix.domain.assistant.task_state import ACTING, FINALIZING, TaskState, ToolCallRecord
 from sentrix.domain.assistant.tool_policy import MAX_CONSECUTIVE_FAILURES, ToolAction, ToolPolicy
-from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, RETRIEVAL_TOOLS, TOOLS_BY_NAME, ToolSpec
+from sentrix.domain.assistant.tools import (
+    FINAL_ANSWER_TOOL,
+    RETRIEVAL_TOOLS,
+    TOOLS_BY_NAME,
+    ToolSpec,
+    unrestricted_tools,
+)
 from sentrix.domain.errors import DomainError
 from sentrix.domain.media.ports import ObservationRepository, OperationControl
 from sentrix.domain.media.progress import OperationCancelled
@@ -797,6 +803,7 @@ class RunTurn:
         profile: TurnProfile = DEFAULT_PROFILE,
         operation_control: OperationControl | None = None,
         observations: ObservationRepository | None = None,
+        use_all_tools: bool = False,
     ) -> None:
         self._operation_control = operation_control
         self._model = model
@@ -805,6 +812,8 @@ class RunTurn:
         self._toolbox = toolbox
         self._observations = observations
         self._profile = profile
+        # 推理模式：不按证据需求剪工具，发全量契约让模型自己决定下一步。
+        self._use_all_tools = use_all_tools
         self._policy = ToolPolicy()
         self._guard = FinalGuard()
         # 规划是一次模型调用，与主循环同一个端点（1.0 也是同一个 ``chat_fn``）。
@@ -1240,6 +1249,9 @@ class RunTurn:
             #    发注定被拒的调用。
             if not state.can_call_tool():
                 specs = tuple(spec for spec in frozen_specs if spec.name == FINAL_ANSWER_TOOL)
+            elif self._use_all_tools:
+                # 推理模式不按证据需求剪枝，发全量契约让模型自己决定下一步。
+                specs = unrestricted_tools()
             else:
                 specs = tuple(
                     spec
