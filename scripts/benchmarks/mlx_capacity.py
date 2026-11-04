@@ -34,6 +34,51 @@ def save(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def reconcile_prefix_reuse(
+    terminal: Sequence[Mapping[str, Any]], events: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """Count accepted reused tokens once, excluding speculative cache lookups."""
+    requests = {event["request_id"]: event for event in terminal}
+    observations: dict[str, tuple[int, int]] = {}
+    errors: set[str] = set()
+    for event in events:
+        request_id = event.get("request_id")
+        if (
+            event.get("event") != "request_prefill"
+            or not isinstance(request_id, str)
+            or request_id not in requests
+        ):
+            continue
+        total, cached = event.get("prompt_tokens"), event.get("cached_tokens")
+        if (
+            type(total) is not int
+            or type(cached) is not int
+            or not 0 <= cached <= total
+            or total != requests[request_id]["prompt_tokens"]
+        ):
+            errors.add("invalid_prefix_token_count")
+            continue
+        pair = (total, cached)
+        if request_id in observations and observations[request_id] != pair:
+            errors.add("inconsistent_prefix_observation")
+        observations[request_id] = pair
+    complete = bool(requests) and len(observations) == len(requests)
+    total_tokens = sum(value[0] for value in observations.values())
+    reused = sum(value[1] for value in observations.values())
+    hits = sum(value[1] > 0 for value in observations.values())
+    return {
+        "verified": complete and not errors,
+        "observed_requests": len(observations),
+        "expected_requests": len(requests),
+        "errors": sorted(errors),
+        "requests_with_reuse": hits,
+        "cached_tokens": reused,
+        "uncached_tokens": total_tokens - reused,
+        "request_hit_rate": hits / len(observations) if observations else None,
+        "token_hit_rate": reused / total_tokens if total_tokens else None,
+    }
+
+
 def read_completed_round(path: Path, inspected_failure_sha256: str | None = None) -> dict[str, Any]:
     """Resume past an inspected terminal failure without turning it into a pass.
 

@@ -13,6 +13,25 @@ const round = (label: string, concurrency: number, passed: boolean): CapacityRou
   memory_peak_gib: null, swap_delta_gib: 0, failures: {}, samples: [],
 });
 
+it("keeps prior failed-speed rounds and diagnostics out of current acceptance", () => {
+  render(<CapacityReport evidence={{
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "prefix",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [],
+    prior_optimization_rounds: [round("C16-R1-v9", 16, true), round("C16-R2-v9", 16, true)],
+    diagnostic_rounds: [{ ...round("profile16", 16, true), questions: 16, completed: 16 }],
+    rounds: [{ ...round("C16-R1-prefix", 16, true), prefix_cache_evidence: {
+      verified: true, observed_requests: 260, expected_requests: 260, requests_with_reuse: 200,
+      cached_tokens: 204800, token_hit_rate: 0.4,
+    } }],
+  }} />);
+  expect(screen.queryByText("C16")).toBeNull();
+  expect(screen.getByRole("region", { name: "先前优化结果" }).textContent).toContain("速度门槛未通过");
+  expect(screen.getByRole("region", { name: "独立诊断结果" }).textContent).toContain("不计入正式速度门槛");
+  expect(screen.getByText(/实际前缀复用：200\/260 次调用/).textContent).toContain("40.0%");
+  expect(screen.getByRole("combobox", { name: "选择资源曲线轮次" }).querySelectorAll("option")).toHaveLength(4);
+});
+
 describe("capacity evidence", () => {
   it("requires both rounds and separates requested concurrency from actual model batch", () => {
     const evidence: CapacityEvidence = {

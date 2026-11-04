@@ -10,6 +10,33 @@ capacity = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(capacity)
 
 
+def test_accepted_prefix_counts_deduplicate_short_prompt_admission():
+    terminal = [{"request_id": "a", "prompt_tokens": 1600}, {"request_id": "b", "prompt_tokens": 200}]
+    hit = {"event": "request_prefill", "request_id": "a", "prompt_tokens": 1600, "cached_tokens": 1024}
+    miss = {"event": "request_prefill", "request_id": "b", "prompt_tokens": 200, "cached_tokens": 0}
+    evidence = capacity.reconcile_prefix_reuse(terminal, [hit, hit, miss])
+    assert evidence["verified"]
+    assert evidence["cached_tokens"] == 1024
+    assert evidence["uncached_tokens"] == 776
+    assert evidence["request_hit_rate"] == 0.5
+    assert evidence["token_hit_rate"] == 1024 / 1800
+    assert not capacity.reconcile_prefix_reuse(terminal, [hit])["verified"]
+    assert capacity.reconcile_prefix_reuse(terminal, [])["token_hit_rate"] is None
+
+
+def test_rejected_or_inconsistent_prefix_evidence_is_not_a_cache_hit():
+    terminal = [{"request_id": "a", "prompt_tokens": 1600}]
+    hit = {"event": "request_prefill", "request_id": "a", "prompt_tokens": 1600, "cached_tokens": 1024}
+    for invalid in [
+        {**hit, "cached_tokens": 1601},
+        {**hit, "prompt_tokens": 1599},
+        {**hit, "cached_tokens": True},
+    ]:
+        assert not capacity.reconcile_prefix_reuse(terminal, [invalid])["verified"]
+    assert not capacity.reconcile_prefix_reuse(terminal, [hit, {**hit, "cached_tokens": 0}])["verified"]
+    assert not capacity.reconcile_prefix_reuse(terminal, [{**hit, "request_id": "unrelated"}])["verified"]
+
+
 def test_histogram_bounds_and_outcomes_are_not_summed():
     parsed = capacity.prometheus_values(
         'vllm_mlx_inference_ttft_seconds_bucket{le="1.0"} 2\n'

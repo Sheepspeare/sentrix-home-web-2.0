@@ -26,6 +26,7 @@ from scripts.benchmarks.mlx_capacity import (
     percentile,
     read_completed_round,
     reconcile_model_calls,
+    reconcile_prefix_reuse,
     save,
     submit_run_once,
     summarize_resources,
@@ -167,6 +168,12 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
     model_evidence = reconcile_model_calls(items, terminal)
     if not model_evidence["verified"]:
         failures["incomplete_model_call_evidence"] += 1
+    prefix_evidence = reconcile_prefix_reuse(terminal, events)
+    if "shared_prefix" in os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", "").split(","):
+        if not prefix_evidence["verified"]:
+            failures["incomplete_prefix_cache_evidence"] += 1
+        elif prefix_evidence["cached_tokens"] == 0:
+            failures["prefix_cache_unused"] += 1
     if not samples or resource["engine_metrics_missing_samples"] == len(samples):
         failures["missing_engine_metrics"] += 1
     batches = [e["actual_batch_size"] for e in events if e["event"] == "token_batch"]
@@ -220,6 +227,7 @@ def summarize(entry: dict[str, Any]) -> dict[str, Any]:
         "model_request_count": len(terminal),
         "resource_summary": resource,
         "model_call_evidence": model_evidence,
+        "prefix_cache_evidence": prefix_evidence,
         "telemetry_status": "partial_scrapes" if resource["engine_metrics_missing_samples"] else "complete",
         "ttft_p50_s": percentile(ttfts, 0.5),
         "judge_per_min": sum(i.get("judge_status") == "completed" for i in items)
@@ -253,6 +261,10 @@ def publish() -> None:
             json.loads((r / "rounds" / x / "public-summary.json").read_text())
             for x in state.get("baseline_labels", [])
         ],
+        "prior_optimization_rounds": [
+            json.loads((r / "rounds" / label / "public-summary.json").read_text())
+            for label in state.get("prior_optimization_labels", [])
+        ],
         "speed_gate": state.get("speed_gate"),
         "interrupted_rounds": state.get("interrupted_rounds", []),
         "baseline_reference_mode": state.get("baseline_reference_mode", "paired"),
@@ -278,7 +290,11 @@ def publish() -> None:
             "最高通过档要求两轮均完成、没有执行或评分错误，且监测证据完整。",
         ],
         "rounds": reports,
-        "diagnostic_rounds": diagnostics,
+        "diagnostic_rounds": diagnostics
+        + [
+            json.loads((r / "rounds" / label / "public-summary.json").read_text())
+            for label in state.get("diagnostic_labels", [])
+        ],
     }
     save(r / "results/capacity-report.json", report)
     web = r / "repo/apps/photobench/web/dist"

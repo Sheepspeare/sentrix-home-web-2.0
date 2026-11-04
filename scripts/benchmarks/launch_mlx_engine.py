@@ -51,6 +51,11 @@ args = [
     "--timeout",
     "900",
 ]
+if "shared_prefix" in os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", "").split(","):
+    from scripts.benchmarks.mlx_prefix_cache import CACHE_MEMORY_MB
+
+    args.remove("--disable-prefix-cache")
+    args.extend(["--cache-memory-mb", str(CACHE_MEMORY_MB)])
 log = (root / "evidence/vllm-mlx-server.log").open("ab")
 env = {
     **os.environ,

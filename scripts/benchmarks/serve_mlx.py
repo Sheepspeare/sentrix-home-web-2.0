@@ -336,8 +336,12 @@ def install_adapter() -> None:
     sampling: Any = importlib.import_module("mlx_lm.sample_utils")
     sampling.make_sampler = seeded_sampler
     optimizations = set(filter(None, os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", "").split(",")))
-    if optimizations - {"strided_kv", "batch_grammar"}:
+    if optimizations - {"strided_kv", "batch_grammar", "shared_prefix"}:
         raise RuntimeError("unknown MLX optimization profile")
+    if "shared_prefix" in optimizations:
+        from scripts.benchmarks.mlx_prefix_cache import install_prefix_cache
+
+        install_prefix_cache()
     if "strided_kv" in optimizations:
         from scripts.benchmarks.apply_mlx_kv_patch import AFTER
         from scripts.benchmarks.mlx_batch_decode import install_attention_bridge, install_kv_observer
