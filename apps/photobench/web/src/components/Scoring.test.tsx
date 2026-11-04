@@ -107,6 +107,21 @@ describe('独立评分标准', () => {
     fireEvent.click(screen.getByRole('button',{name:'恢复默认'}));expect(reset).toHaveBeenCalledOnce();
     fireEvent.change(screen.getByRole('combobox',{name:'提示词所属标准'}),{target:{value:'shared'}});expect(change).toHaveBeenCalledWith('task_decision');
   });
+  it('双评分卡片突出分数，批次和理由默认折叠，公共诊断独立显示', () => {
+    const {container}=render(<ItemScoringResults results={[
+      {key:'open',profile_id:OPEN_PROFILE,batch_id:'open-batch',turn_index:0,status:'completed',score:2,max_score:2,is_evaluation_turn:true,reason:'开放式理由'},
+      {key:'qs',profile_id:ATM_PROFILE,batch_id:'qs-batch',turn_index:0,status:'completed',score:0,max_score:1,is_evaluation_turn:true,reason:'QS理由'},
+    ]}/>);
+    const cards=screen.getAllByRole('article');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('开放式回答')).toBeTruthy();
+    expect(within(cards[1]).getByText('ATM-Bench式QS')).toBeTruthy();
+    expect(within(cards[1]).getByText('0',{exact:false})).toBeTruthy();
+    expect(screen.getAllByText('已评分')).toHaveLength(2);
+    expect(container.querySelectorAll('.item-score-record')).toHaveLength(2);
+    expect(Array.from(container.querySelectorAll('.item-score-record')).every(d=>!(d as HTMLDetailsElement).open)).toBe(true);
+    expect(container.querySelector('.item-scoring-diagnostics')).toBeTruthy();
+  });
   it('逐题记录显示所属标准、轮次和真实请求，不丢弃合法0分', () => {
     const {container}=render(<ItemScoringResults results={[{key:'k',profile_id:ATM_PROFILE,batch_id:'batch-test',turn_index:0,status:'completed',score:0,max_score:1,requests:[{payload:{messages:[{role:'user',content:'exact saved input'}]},raw_response:{score:0}}]}]}/>);
     const request=Array.from(container.querySelectorAll('details')).find(d=>d.querySelector('summary')?.textContent==='真实Judge输入与响应（逐次请求）');

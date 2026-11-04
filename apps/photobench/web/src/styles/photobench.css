@@ -1355,3 +1355,41 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .judge-request h4 { margin:0; padding:12px 14px; font-size:12px; }
 .judge-request details { padding:10px 14px; font-size:12px; }
 .judge-request details summary { cursor:pointer; }
+
+/* 逐题双评分：分数优先展示，批次及原始记录按需展开。 */
+.item-scoring-results { margin:18px 0; min-width:0; }
+.item-scoring-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; margin-bottom:10px; }
+.item-scoring-heading h4 { margin:0; color:#47536d; font-size:12px; font-weight:650; }
+.item-scoring-heading>span { color:var(--muted); font-size:11px; }
+.item-scoring-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.item-score-card { --score-color:#4359b8; --score-tint:#eef1ff; min-width:0; overflow:hidden; border:1px solid #dce2f0; border-radius:10px; background:var(--surface); }
+.item-score-card.is-qs-score { --score-color:#167b70; --score-tint:#eaf7f3; }
+.item-score-card-head { display:flex; align-items:center; gap:10px; padding:13px 15px 10px; }
+.item-score-mark { display:grid; place-items:center; width:34px; height:34px; flex:none; color:var(--score-color); background:var(--score-tint); border-radius:9px; font-size:12px; font-weight:750; }
+.item-score-card-head h5 { margin:0; color:#303b52; font-size:13px; font-weight:650; }
+.item-score-card-head p { margin:1px 0 0; color:var(--muted); font-size:10px; }
+.item-score-record { border-top:1px solid #edf0f6; }
+.item-score-record>summary { display:block; padding:11px 15px 12px; cursor:pointer; list-style:none; }
+.item-score-record>summary::-webkit-details-marker { display:none; }
+.item-score-record>summary:hover { background:#fafbfe; }
+.item-score-record>summary:focus-visible { outline:2px solid var(--score-color); outline-offset:-3px; border-radius:5px; }
+.item-score-record-main,.item-score-record-meta { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.item-score-record-main>strong { color:var(--score-color); font-size:25px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.3; }
+.item-score-record-main small { color:#7b849b; font-size:12px; font-weight:400; }
+.item-score-status { padding:2px 7px; border-radius:5px; font-size:10px; color:#647087; background:#f1f3f7; }
+.item-score-status.is-scored { color:var(--score-color); background:var(--score-tint); }
+.item-score-record-meta { margin-top:7px; color:var(--muted); font-size:10px; flex-wrap:wrap; }
+.item-score-expand { color:var(--score-color); display:inline-flex; align-items:center; gap:5px; }
+.item-score-expand i { display:inline-block; font-style:normal; transition:transform .15s; }
+.item-score-record[open] .item-score-expand i { transform:rotate(180deg); }
+.item-score-record-body { padding:0 15px 14px; color:#36415a; font-size:12px; overflow-wrap:anywhere; }
+.item-score-batch { padding-top:11px; border-top:1px dashed #e2e7f0; color:var(--muted); font-size:10px; }
+.item-score-batch code { display:block; margin-top:3px; font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+.item-score-reason { margin:10px 0; line-height:1.75; }
+.item-score-formula { padding:8px 10px; border-radius:6px; background:#f6f8fb; font-size:11px; }
+.item-score-record-body>details { margin-top:10px; padding-top:9px; border-top:1px solid #edf0f6; }
+.item-score-record-body>details>summary,.item-scoring-diagnostics summary { color:#63718d; font-size:11px; cursor:pointer; }
+.item-score-record-body pre,.item-scoring-diagnostics pre { max-height:420px; overflow:auto; font-size:10px; }
+.item-score-empty { margin:0; padding:12px 15px 17px; color:var(--muted); font-size:12px; }
+.item-scoring-diagnostics { margin-top:10px; padding:10px 13px; border:1px solid #e1e5ef; border-radius:8px; background:#f8f9fc; }
+@media (max-width:700px) { .item-scoring-grid { grid-template-columns:minmax(0,1fr); } }

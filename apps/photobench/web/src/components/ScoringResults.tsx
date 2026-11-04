@@ -39,8 +39,25 @@ export function ScoringResults({summary}: {summary:unknown}) {
 }
 export function ItemScoringResults({results, diagnostics}: {results:unknown; diagnostics?:unknown}) {
   const rows = Array.isArray(results) ? results.map(obj) : [];
-  return <section aria-label='分标准评分记录'><h4>分标准评分记录</h4>
-    {Object.entries(PROFILE_LABELS).map(([id,label]) => {const selected=rows.filter(r => r.profile_id === id);return <div key={id}><b>{label}</b>{!selected.length ? <p>未采集</p> : selected.map(r => <details key={String(r.key)}><summary>{String(r.batch_id)} · 第{Number(r.turn_index)+1}轮 · {r.score == null ? String(r.status) : String(r.score)+'/'+String(r.max_score)}{r.is_evaluation_turn ? '（计入总分）' : '（诊断轮）'}</summary><p>{String(r.reason || '')}</p>{r.formula != null && <p>{String(r.formula)} · GT {JSON.stringify(r.target)} · 返回 {JSON.stringify(r.predicted)}</p>}<ScoringRequestLog requests={[...(Array.isArray(r.history) ? r.history : []).flatMap(h => Array.isArray(obj(h).requests) ? obj(h).requests as unknown[] : []),...(Array.isArray(r.requests) ? r.requests : [])]} /></details>)}</div>;})}
-    <ScoringRequestLog requests={diagnostics} title='公共诊断记录（相同配置复用）' />
+  return <section className='item-scoring-results' aria-label='分标准评分记录'>
+    <header className='item-scoring-heading'><h4>分标准评分记录</h4><span>同一回答 · 独立计分</span></header>
+    <div className='item-scoring-grid'>
+      {Object.entries(PROFILE_LABELS).map(([id,label]) => {
+        const selected = rows.filter(r => r.profile_id === id);
+        const isOpen = id === OPEN_PROFILE;
+        return <article className={'item-score-card ' + (isOpen ? 'is-open-score' : 'is-qs-score')} key={id} aria-label={label}>
+          <header className='item-score-card-head'><span className='item-score-mark' aria-hidden='true'>{isOpen ? '01' : 'QS'}</span><div><h5>{isOpen ? '开放式回答' : 'ATM-Bench式QS'}</h5><p>{isOpen ? 'Judge · 0 / 1 / 2 分' : '按题型规则评分'}</p></div></header>
+          {!selected.length ? <p className='item-score-empty'>未采集</p> : selected.map(r => {
+            const scored = typeof r.score === 'number';
+            const status = scored ? '已评分' : r.status === 'failed' || r.status === 'error' ? '评分失败' : r.status === 'running' ? '评分中' : '待评分';
+            return <details className='item-score-record' key={String(r.key)}>
+              <summary><span className='item-score-record-main'><strong>{scored ? String(r.score) : '—'}{scored && <small> / {String(r.max_score)} 分</small>}</strong><span className={'item-score-status ' + (scored ? 'is-scored' : 'is-pending')}>{status}</span></span><span className='item-score-record-meta'><span>第{Number(r.turn_index)+1}轮 · {r.is_evaluation_turn ? '计入总分' : '诊断轮'}</span><span className='item-score-expand'>评分详情 <i aria-hidden='true'>⌄</i></span></span></summary>
+              <div className='item-score-record-body'><div className='item-score-batch'>评分批次 <code>{String(r.batch_id)}</code></div>{r.reason != null && <p className='item-score-reason'>{String(r.reason)}</p>}{r.formula != null && <p className='item-score-formula'>{String(r.formula)} · GT {JSON.stringify(r.target)} · 返回 {JSON.stringify(r.predicted)}</p>}<ScoringRequestLog requests={[...(Array.isArray(r.history) ? r.history : []).flatMap(h => Array.isArray(obj(h).requests) ? obj(h).requests as unknown[] : []),...(Array.isArray(r.requests) ? r.requests : [])]} /></div>
+            </details>;
+          })}
+        </article>;
+      })}
+    </div>
+    <div className='item-scoring-diagnostics'><ScoringRequestLog requests={diagnostics} title='公共诊断记录（相同配置复用）' /></div>
   </section>;
 }
