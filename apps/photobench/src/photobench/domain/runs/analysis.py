@@ -1570,6 +1570,8 @@ def list_summary(state: dict[str, Any]) -> dict[str, Any]:
     """1.0 ``:6825`` 的 ``OrchestratorRepository._list_summary``。"""
     saved = dict(state.get("summary") or {})
     items = state.get("items") or []
+    if any(item.get("evaluation") or (item.get("evaluation_result") or {}).get("scorer") for item in items):
+        saved["evaluation_summary"] = evaluation_summary(items)
     recalls = [
         item.get("retrieval_recall")
         for item in items
@@ -1647,6 +1649,8 @@ def effective_summary(state: dict[str, Any]) -> dict[str, Any]:
     """
     saved = dict(state.get("summary") or {})
     items = state.get("items") or []
+    if any(item.get("evaluation") or (item.get("evaluation_result") or {}).get("scorer") for item in items):
+        saved["evaluation_summary"] = evaluation_summary(items)
     if not saved.get("image_ranking") or any(not retrieval_metric_eligible(item) for item in items):
         saved["image_ranking"] = (
             mean_ranking_metrics(

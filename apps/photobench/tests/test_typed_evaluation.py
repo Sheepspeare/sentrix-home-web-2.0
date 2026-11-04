@@ -16,7 +16,7 @@ from photobench.domain.evaluation.contract import (
     scoring_options,
     validate_evaluation,
 )
-from photobench.domain.runs.analysis import judge_score_for_summary
+from photobench.domain.runs.analysis import effective_summary, judge_score_for_summary, list_summary
 from photobench.domain.runs.execution import RunCancelledError
 from photobench.domain.runs.judge_recovery import result_state
 
@@ -143,6 +143,27 @@ def test_answer_lacking_details_cannot_claim_overlapping_options():
 def test_choice_invalid_json_gets_one_correction():
     result, requests = execute(definition(), ["not JSON", match("B")])
     assert result["score"] == 1 and len(requests) == 2
+
+
+@pytest.mark.parametrize("summarize", [effective_summary, list_summary])
+def test_summary_recomputes_typed_coverage_after_rejudge(summarize):
+    d = definition()
+    result = choice_result(d, match())
+    state = {
+        "qa_count": 1,
+        "summary": {"evaluation_summary": {"count": 1, "scored": 0, "coverage": 0, "mean": None}},
+        "items": [{"qa_id": "q", "evaluation": d, "evaluation_result": result, "judge": result}],
+    }
+    summary = summarize(state)["evaluation_summary"]
+    assert summary["scored"] == 1 and summary["coverage"] == 1
+    assert summary["mean"] == summary["complete_mean"] == 1
+
+
+@pytest.mark.parametrize("summarize", [effective_summary, list_summary])
+def test_summary_preserves_saved_legacy_evaluation(summarize):
+    saved = {"count": 1, "scored": 1, "coverage": 1, "mean": 0.5}
+    state = {"qa_count": 1, "summary": {"evaluation_summary": saved}, "items": [{"qa_id": "q"}]}
+    assert summarize(state)["evaluation_summary"] == saved
 
 
 def test_auxiliary_failure_preserves_primary_and_cancellation_propagates():

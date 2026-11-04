@@ -14,6 +14,17 @@ function activeRun(phases: Run["phases"]): Run {
 }
 
 describe("阶段卡（1.0 :3099-3129）", () => {
+  it("补评分完成后区分当前分数与首次执行错误", () => {
+    const run: Run = {
+      ...activeRun({qa_eval:{status:"partial",error_details:[{sample_id:"q1",reason:"旧错误"}]}}),
+      qa_count:1, summary:{judge_valid_count:1}, rejudge:{status:"completed"},
+    };
+    const {container}=render(<PhaseList activeRun={run}/>);
+    expect(container.textContent).toContain("有效评分 1/1");
+    expect(container.textContent).toContain("最新补评分已完成");
+    expect(container.querySelector(".phase-errors summary")?.textContent).toBe("首次执行：1 条错误记录");
+    expect(run.phases?.qa_eval?.status).toBe("partial");
+  });
   it("历史外层已有70个Judge终态时，阶段卡不能显示0/487", () => {
     const { container } = render(<PhaseList activeRun={activeRun({ qa_eval: {
       status: "running", judge_completed: 70, judge_total: 487,

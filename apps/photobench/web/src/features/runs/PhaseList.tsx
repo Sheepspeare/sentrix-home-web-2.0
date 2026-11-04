@@ -97,6 +97,7 @@ export function PhaseList({ activeRun }: PhaseListProps) {
           const finishedAt = (processingDetails ?? phase)?.finished_at ?? (terminal ? activeRun.finished_at : null);
           const end = typeof finishedAt === "string" ? Date.parse(finishedAt) : now;
           const errors = phaseErrorDetails(phase);
+          const rejudged = phaseDef.key === "qa_eval" && activeRun.rejudge?.status === "completed";
           const displayImport = !terminal && legacyImport?.status === "running" && typeof legacyImport.started_at === "string"
             ? { ...legacyImport, total_seconds: Math.max(0, (now - Date.parse(legacyImport.started_at)) / 1000) }
             : legacyImport;
@@ -141,13 +142,14 @@ export function PhaseList({ activeRun }: PhaseListProps) {
                 <p>文件登记、去重、元数据读取与预览准备；媒体处理见流水线。</p>
               </details> : phaseDef.key === "qa_eval" ? <div className="phase-summary">
                 <p>答题已执行 {qa.agentRatio} · {qa.judgeEnabled ? `有效评分 ${qa.validRatio}` : "Judge 未配置"}</p>
+                {rejudged ? <p className="muted small">最新补评分已完成；阶段状态和下方错误记录保留首次执行的情况，当前分数以有效评分与题型汇总为准。</p> : null}
                 {qa.judgeEnabled && qa.attempted !== null ? <p className="muted small">
                   评分尝试已结束 {qa.attemptedRatio}（含失败）{qa.skipped ? ` · 未进入评分 ${qa.skipped} 题` : ""}
                 </p> : null}
               </div> : <p className="phase-summary">{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count)}</p>}
               {errors.length > 0 ? (
                 <details className="phase-errors">
-                  <summary>{phaseErrorSummary(phase)}</summary>
+                  <summary>{rejudged ? "首次执行：" : ""}{phaseErrorSummary(phase)}</summary>
                   <ul>
                     {errors.slice(0, 20).map((raw, detailIndex) => {
                       const detail = raw as Record<string, unknown>;
