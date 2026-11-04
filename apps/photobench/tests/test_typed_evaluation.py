@@ -283,3 +283,24 @@ def test_judge_uses_the_prompt_frozen_in_the_run():
     assert result["score"] == 1
     assert sent[0]["messages"][0]["content"] == "frozen choice prompt"
     assert "SECRET_GT" not in json.dumps(sent)
+
+
+def test_explicit_other_status_scores_zero_and_preserves_comparisons():
+    result, _ = execute(definition(), [match("other", status="other")])
+    assert result["score"] == 0
+    assert result["judge_status"] == "completed"
+    assert result["matched_option"] == "other"
+    assert len(result["comparisons"]) == 2
+    with pytest.raises(ValueError):
+        choice_result(definition(), match("B", status="other"))
+    contradictory = match("other", status="other")
+    contradictory["comparisons"][0]["matches"] = True
+    with pytest.raises(ValueError):
+        choice_result(definition(), contradictory)
+
+
+def test_transport_failure_preserves_exact_judge_input():
+    result, requests = execute(definition(), [ValueError("offline")])
+    assert result["score"] is None
+    assert result["attempts"][0]["input"] == requests[0]
+    assert result["attempts"][0]["error"] == "offline"

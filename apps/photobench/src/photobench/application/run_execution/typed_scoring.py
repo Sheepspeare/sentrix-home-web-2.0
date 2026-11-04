@@ -87,9 +87,15 @@ def score_typed(
                 {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
             ],
         }
-        raw, count = request(payload, observations=calls)
+        attempt: dict[str, Any] = {"input": payload}
+        attempts.append(attempt)
+        try:
+            raw, count = request(payload, observations=calls)
+        except Exception as exc:
+            attempt["error"] = str(exc)
+            raise
         text = str((raw.get("choices") or [{}])[0].get("message", {}).get("content") or "")
-        attempts.append({"input": payload, "raw_response": raw, "raw_text": text, "request_attempts": count})
+        attempt.update(raw_response=raw, raw_text=text, request_attempts=count)
         parsed = parse_judge_json(text)
         if not parsed:
             raise ValueError("Invalid evaluator JSON")

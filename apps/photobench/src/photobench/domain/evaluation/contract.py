@@ -182,7 +182,8 @@ def choice_result(definition: Mapping[str, Any], parsed: Mapping[str, Any]) -> d
         )
     matched = parsed.get("matched_option")
     matches = {x["option_id"] for x in comparisons if x["matches"]}
-    if status != "matched" or matched not in ids | {"other"} or not str(parsed.get("reason") or "").strip():
+    valid_status = status == "matched" or (status == "other" and matched == "other")
+    if not valid_status or matched not in ids | {"other"} or not str(parsed.get("reason") or "").strip():
         raise ValueError("Invalid option match")
     if (matched == "other" and matches) or (matched != "other" and matches != {matched}):
         raise ValueError("Option selection contradicts per-option comparisons")

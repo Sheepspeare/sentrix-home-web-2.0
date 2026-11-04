@@ -36,3 +36,10 @@ it("ATM 数值、列表和开放题独立标注，列表说明交付集合", () 
   rerender(<EvaluationResult value={{scorer: "atm_list", source_qtype: "list_recall", answer_format: "media_list"}} />);
   expect(screen.getByText(/按实际交付的图片 \/ 视频 ID 集合/)).toBeTruthy();
 });
+
+it("评分失败时仍显示完整选项和正确项", () => {
+  render(<EvaluationResult value={{scorer: "choice_judge", answer_format: "choice", score: null, judge_status: "failed"}} definition={{correct_option: "A", options: [{id: "A", text: "紫纱幔和红床单"}, {id: "B", text: "其他布置"}]}} />);
+  expect(screen.getByText("A：紫纱幔和红床单（正确项）")).toBeTruthy();
+  expect(screen.getByText("B：其他布置")).toBeTruthy();
+  expect(screen.getByText(/选项仅供评测端使用/)).toBeTruthy();
+});

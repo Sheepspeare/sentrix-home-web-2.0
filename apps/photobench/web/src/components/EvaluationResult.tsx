@@ -18,7 +18,7 @@ function scoringExplanation(value: unknown): string {
   if (d.scorer === "atm_list") return "列表召回题：按实际交付的图片 / 视频 ID 集合计算主分；工具累计召回单列展示。";
   if (d.source_qtype === "open_end" || d.scorer === "atm_open") return "开放问答题：Judge 按回答内容判 0 / 1 分；媒体交付和工具证据另列指标。";
   if (d.answer_format === "media_list") return "列表召回题：按实际交付媒体集合评分。";
-  if (d.answer_format === "choice") return "选择题：匹配选项含义，再核对正确项。";
+  if (d.answer_format === "choice") return "选择题：选项仅供评测端使用，答题模型回答原问题。Judge 逐项匹配回答含义，程序核对正确项；全部不匹配归为“其他”，记 0 分。";
   return "开放问答题：按题目定义评价回答内容，媒体指标单独计算。";
 }
 export function evaluationReason(value: unknown): string {
@@ -40,6 +40,7 @@ export function EvaluationResult({value, definition}: {value: unknown; definitio
     <p className="muted small">{scoringExplanation(r)}</p>
     <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
     <p>{evaluationReason(r.reason)}</p>
+    {options.length > 0 && <div className="evaluation-choice-definition"><p className="muted small">评测选项 · 正确项 {String(d.correct_option || "未记录")}</p><ul className="evaluation-options">{options.map(o => <li className={o.id === d.correct_option ? "is-correct" : ""} key={String(o.id)}>{String(o.id)}：{String(o.text)}{o.id === d.correct_option ? "（正确项）" : ""}</li>)}</ul></div>}
     {r.matched_option != null && <p>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</p>}
     {comparisons.length > 0 && <ul className="evaluation-options">{comparisons.map(c => <li className={c.matches ? "is-match" : ""} key={String(c.option_id)}>{String(c.option_id)}：{String(options.find(o => o.id === c.option_id)?.text || "")} · {c.matches ? "匹配" : "不匹配"} · {String(c.reason)}</li>)}</ul>}
     {Object.keys(metrics).length > 0 && <div className="evaluation-table-wrap"><table><thead><tr><th>集合</th><th>Recall</th><th>Jaccard</th><th>Precision</th><th>F1</th></tr></thead><tbody>{["delivery", "tools"].map(k => {const m = obj(metrics[k]); return <tr key={k}><td>{k === "delivery" ? "模型交付" : "工具累计召回"}</td>{["recall", "jaccard", "precision", "f1"].map(v => <td key={v}>{pct(m[v])}</td>)}</tr>;})}</tbody></table></div>}
