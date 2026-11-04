@@ -340,7 +340,7 @@ def install_adapter() -> None:
         raise RuntimeError("unknown MLX optimization profile")
     if "strided_kv" in optimizations:
         from scripts.benchmarks.apply_mlx_kv_patch import AFTER
-        from scripts.benchmarks.mlx_batch_decode import install_kv_observer
+        from scripts.benchmarks.mlx_batch_decode import install_attention_bridge, install_kv_observer
 
         language = importlib.import_module("mlx_vlm.models.qwen3_5.language")
         if (
@@ -348,6 +348,7 @@ def install_adapter() -> None:
             or hashlib.sha256(Path(language.__file__).read_bytes()).hexdigest() != AFTER
         ):
             raise RuntimeError("upstream strided KV patch was not qualified/installed")
+        install_attention_bridge(language)
         install_kv_observer(language)
     if "batch_grammar" in optimizations:
         from scripts.benchmarks.mlx_batch_decode import install_batched_decode

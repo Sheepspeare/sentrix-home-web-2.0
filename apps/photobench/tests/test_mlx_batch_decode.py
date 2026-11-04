@@ -62,3 +62,29 @@ def test_kv_observation_preserves_outputs_and_fallback():
     assert module._qwen3_5_ragged_decode_attention(False) is None
     assert adapter.COUNTERS["strided_kv_calls"] == before["strided_kv_calls"] + 1
     assert adapter.COUNTERS["strided_kv_fallbacks"] == before["strided_kv_fallbacks"] + 1
+
+
+def test_attention_bridge_resolves_renamed_helper_before_compatibility_capture():
+    def helper(*args, **kwargs):
+        return args, kwargs
+
+    language = SimpleNamespace(
+        Qwen3_5Attention=type("Attention", (), {}), _qwen3_5_left_padded_attention=helper
+    )
+    adapter.install_attention_bridge(language)
+    # vllm-mlx captures this exact legacy name when installing its call method.
+    captured = getattr(language, "_target_verify_left_padded_attention", lambda *args: None)
+    assert captured is helper
+    assert captured("query", cache="left-padded") == (("query",), {"cache": "left-padded"})
+
+
+def test_attention_bridge_rejects_late_installation_or_unexpected_helper():
+    for language in [
+        SimpleNamespace(Qwen3_5Attention=type("Attention", (), {"_batch_patched": True})),
+        SimpleNamespace(
+            Qwen3_5Attention=type("Attention", (), {}), _target_verify_left_padded_attention=object()
+        ),
+    ]:
+        language._qwen3_5_left_padded_attention = lambda *args: None
+        with pytest.raises(RuntimeError):
+            adapter.install_attention_bridge(language)

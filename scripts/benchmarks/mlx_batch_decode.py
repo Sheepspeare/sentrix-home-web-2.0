@@ -19,6 +19,21 @@ COUNTERS: dict[str, int] = {
 }
 
 
+def install_attention_bridge(language: Any) -> None:
+    """Resolve the renamed 0.7.6 helper before vllm-mlx captures its legacy name.
+
+    Without this bridge, the compatibility call clears the left-padding marker
+    and falls back to unmasked attention. Keep the native helper and its fallback.
+    """
+    if getattr(language.Qwen3_5Attention, "_batch_patched", False):
+        raise RuntimeError("attention bridge must precede the vllm-mlx compatibility patch")
+    helper = language._qwen3_5_left_padded_attention
+    existing = getattr(language, "_target_verify_left_padded_attention", None)
+    if existing is not None and existing is not helper:
+        raise RuntimeError("unexpected legacy Qwen attention helper")
+    language._target_verify_left_padded_attention = helper
+
+
 def install_kv_observer(language: Any) -> None:
     original = language._qwen3_5_ragged_decode_attention
 
