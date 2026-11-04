@@ -35,7 +35,7 @@ import type {
   RunSummary,
 } from "../api/types.ts";
 
-export type RejudgeScope = "missing" | "failed" | "unscored" | "all";
+export type RejudgeScope = "missing" | "failed" | "unscored" | "needs_review" | "all";
 export interface RecoveryPlan {
   run_id: string;
   can_resume: boolean;
@@ -514,7 +514,7 @@ export function useRunDetail(options: RunDetailOptions) {
       evidence_system_prompt: promptDrafts.evidence || undefined,
     } };
     setRejudgeConfirmation({
-      message: `仅使用现有 ${activeRun?.item_count || 0} 条 Agent 回答重新调用 Judge。范围：${({missing:"仅失败或未评分",failed:"仅评分失败",unscored:"仅未评分",all:"全部重评"})[rejudgeScope]}；${judgeUseGtImages ? "使用 GT 图片辅助评分" : "仅文字 GT"}。已有有效评分在补评时保留，替换项归档。确定开始？`,
+      message: `仅使用现有 ${activeRun?.item_count || 0} 条 Agent 回答重新调用 Judge。范围：${({missing:"仅失败或未评分",failed:"仅评分失败",unscored:"仅未评分",needs_review:"仅待复核",all:"全部重评"})[rejudgeScope]}；${judgeUseGtImages ? "使用 GT 图片辅助评分" : "仅文字 GT"}。已有有效评分在补评时保留，替换项归档。确定开始？`,
     });
     return true;
   }, [canRejudge, activeRun, activeRunIdRef, rejudgeScope, judgeUseGtImages, promptDrafts, rejudgePrompt]);

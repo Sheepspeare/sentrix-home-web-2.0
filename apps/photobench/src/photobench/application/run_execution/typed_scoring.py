@@ -76,7 +76,9 @@ def score_typed(
     if effective["scorer"] == "open_judge" and options["open_scale"] == "binary":
         effective["max_score"] = 1
 
-    def ask(prompt: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    def ask(
+        prompt: str, data: Mapping[str, Any], *, correction: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
         payload = {
             "model": model,
             "temperature": 0,
@@ -87,6 +89,19 @@ def score_typed(
                 {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
             ],
         }
+        if correction is not None:
+            payload["messages"].extend(
+                [
+                    {"role": "assistant", "content": correction["response"]},
+                    {
+                        "role": "user",
+                        "content": "上次返回未通过格式与一致性校验："
+                        + str(correction["error"])
+                        + "。请重新比较并输出完整JSON；回答未说明区分选项所需的事实时归other。"
+                        "仅选项自身语义重叠才用ambiguous_options。不得猜测正确选项。",
+                    },
+                ]
+            )
         attempt: dict[str, Any] = {"input": payload}
         attempts.append(attempt)
         try:
@@ -110,16 +125,25 @@ def score_typed(
     try:
         scorer = effective["scorer"]
         if scorer == "choice_judge":
-            parsed = ask(
-                frozen_prompts["choice"],
-                {
-                    "question": question,
-                    "answer": answer,
-                    "conversation": context,
-                    "options": effective["options"],
-                },
-            )
-            result = choice_result(effective, parsed)
+            data = {
+                "question": question,
+                "answer": answer,
+                "conversation": context,
+                "options": effective["options"],
+            }
+            correction = None
+            for index in range(2):
+                try:
+                    parsed = ask(frozen_prompts["choice"], data, correction=correction)
+                    result = choice_result(effective, parsed)
+                    break
+                except ValueError as exc:
+                    if "raw_text" not in attempts[-1]:
+                        raise
+                    attempts[-1]["validation_error"] = str(exc)
+                    if index == 1:
+                        raise
+                    correction = {"response": attempts[-1]["raw_text"], "error": str(exc)}
             if options["choice_semantic_aux"]:
                 try:
                     auxiliary = ask(

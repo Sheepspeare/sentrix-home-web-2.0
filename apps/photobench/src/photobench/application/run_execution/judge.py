@@ -308,7 +308,11 @@ class JudgeRunner:
                 continue
             try:
                 attached = (
-                    self.inline_images(self.sentrix_url, [ref], assets_by_name) if self.inline_images else []
+                    self.inline_images(
+                        self.sentrix_url, [{**ref, "require_attachment": True}], assets_by_name
+                    )
+                    if self.inline_images
+                    else []
                 )
                 if len(attached) != 1:
                     raise ValueError("GT image could not be attached")

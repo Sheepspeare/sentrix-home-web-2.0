@@ -1037,6 +1037,26 @@ def test_recovery_scope_skips_execution_failures_empty_answers_and_unlabeled(tmp
         suites.start_rejudge("run-1", {"system_prompt": "p", "scope": "missing"})
 
 
+def test_review_scope_selects_only_review_primary_without_replacing_valid_subscores():
+    import copy
+
+    state = _judged_state()
+    row = state["items"][0]
+    first = row["runtime_turns"][0]
+    first["judge"] = {
+        "scorer": "choice_judge",
+        "score": None,
+        "judge_status": "needs_review",
+        "reason": "overlapping options",
+    }
+    first["task_judge"] = {"correct": True, "actual_action": "answer"}
+    second = copy.deepcopy(first)
+    second["judge"] = {"score": 0, "judge_status": "completed"}
+    row["runtime_turns"].append(second)
+    assert RunSuites._recovery_selection(state, "needs_review") == {(0, 0): ("judge",)}
+    assert RunSuites._recovery_selection(state, "missing") == {}
+
+
 def test_gt_rejudge_uses_frozen_gt_not_agent_predictions(tmp_path):
     import copy
     from types import SimpleNamespace

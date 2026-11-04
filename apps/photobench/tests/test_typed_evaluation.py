@@ -103,9 +103,46 @@ def test_other_requires_all_comparisons_and_cannot_hide_a_match():
     "status,expected", [("ambiguous_options", "needs_review"), ("unable_to_judge", "failed")]
 )
 def test_overlap_and_inability_do_not_become_other(status, expected):
-    r = choice_result(definition(), match(status=status))
+    parsed = match(status=status)
+    if status == "ambiguous_options":
+        for comparison in parsed["comparisons"]:
+            comparison["matches"] = True
+    r = choice_result(definition(), parsed)
     assert r["score"] is None and r["judge_status"] == expected
     assert "matched_option" not in r
+
+
+def test_choice_reasks_contradiction_and_preserves_both_real_requests():
+    invalid = match("other")
+    invalid["matched_option"] = "B"
+    result, requests = execute(definition(), [invalid, match("other")])
+    assert result["score"] == 0 and len(requests) == 2
+    assert "contradicts" in result["attempts"][0]["validation_error"]
+    assert requests[1]["messages"][2]["role"] == "assistant"
+    assert json.loads(requests[1]["messages"][2]["content"]) == invalid
+    assert [a["input"] for a in result["attempts"]] == requests
+    assert "correct_option" not in json.dumps(requests)
+
+
+def test_choice_correction_is_bounded_and_does_not_turn_failure_into_zero():
+    invalid = match("other")
+    invalid["matched_option"] = "B"
+    result, requests = execute(definition(), [invalid, invalid])
+    assert result["score"] is None and result["judge_status"] == "failed"
+    assert len(requests) == 2
+    assert all(a.get("validation_error") for a in result["attempts"])
+
+
+def test_answer_lacking_details_cannot_claim_overlapping_options():
+    invalid = match("other", status="ambiguous_options", matched_option=None)
+    result, requests = execute(definition(), [invalid, match("other")])
+    assert result["score"] == 0 and len(requests) == 2
+    assert "at least two" in result["attempts"][0]["validation_error"]
+
+
+def test_choice_invalid_json_gets_one_correction():
+    result, requests = execute(definition(), ["not JSON", match("B")])
+    assert result["score"] == 1 and len(requests) == 2
 
 
 def test_auxiliary_failure_preserves_primary_and_cancellation_propagates():

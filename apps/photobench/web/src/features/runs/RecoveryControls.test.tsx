@@ -13,6 +13,7 @@ const plan: RecoveryPlan = {
     failed:{qa_count:20,turn_count:20,subscore_count:20},
     unscored:{qa_count:177,turn_count:209,subscore_count:436},
     all:{qa_count:693,turn_count:800,subscore_count:1600},
+    needs_review:{qa_count:3,turn_count:3,subscore_count:3},
   },
 };
 const base: RejudgeCardProps = {
@@ -59,6 +60,14 @@ describe("恢复与评分范围",()=>{
   it("无目标时不允许补评",()=>{
     render(<RejudgeCard {...base} recoveryPlan={{...plan,scoring:{...plan.scoring,missing:{qa_count:0,turn_count:0,subscore_count:0}}}}/>);
     expect((screen.getByRole("button",{name:"补齐缺失评分"}) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it("待复核可以单独选择并显示数量",()=>{
+    const scope=vi.fn();
+    render(<RejudgeCard {...base} recoveryPlan={plan} scope="needs_review" onScopeChange={scope}/>);
+    expect(screen.getByLabelText("本次评分数量").textContent).toBe("3 题3 轮对话3 项评分");
+    expect(screen.getByRole("button",{name:"重新评估待复核回答"})).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"missing"}});
+    expect(scope).toHaveBeenCalledWith("missing");
   });
 });
 

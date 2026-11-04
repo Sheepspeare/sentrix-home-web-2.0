@@ -168,7 +168,10 @@ def choice_result(definition: Mapping[str, Any], parsed: Mapping[str, Any]) -> d
     if any(type(x.get("matches")) is not bool or not str(x.get("reason") or "").strip() for x in comparisons):
         raise ValueError("Every option requires a semantic comparison and reason")
     status = parsed.get("status")
+    matches = {x["option_id"] for x in comparisons if x["matches"]}
     if status == "ambiguous_options":
+        if len(matches) < 2:
+            raise ValueError("Overlapping options require at least two matching comparisons")
         return result_record(
             definition,
             None,
@@ -181,7 +184,6 @@ def choice_result(definition: Mapping[str, Any], parsed: Mapping[str, Any]) -> d
             definition, None, reason=str(parsed.get("reason") or "unable_to_judge"), comparisons=comparisons
         )
     matched = parsed.get("matched_option")
-    matches = {x["option_id"] for x in comparisons if x["matches"]}
     valid_status = status == "matched" or (status == "other" and matched == "other")
     if not valid_status or matched not in ids | {"other"} or not str(parsed.get("reason") or "").strip():
         raise ValueError("Invalid option match")

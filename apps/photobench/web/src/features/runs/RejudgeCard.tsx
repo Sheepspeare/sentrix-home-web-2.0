@@ -66,6 +66,7 @@ export function RejudgeCard({
   const running = activeRejudge?.status === "running";
   const actionLabel: Record<RejudgeScope, string> = {
     missing: "补齐缺失评分", failed: "重试失败评分", unscored: "为未评分回答打分", all: "重新评分全部回答",
+    needs_review: "重新评估待复核回答",
   };
   const count = recoveryPlan?.scoring?.[scope];
 
@@ -96,6 +97,7 @@ export function RejudgeCard({
             <option value="missing">失败或未评分的回答</option>
             <option value="failed">评分失败的回答</option>
             <option value="unscored">尚未评分的回答</option>
+            <option value="needs_review">待复核的回答</option>
             <option value="all">全部已有回答</option>
           </select>
         </label>
@@ -116,8 +118,9 @@ export function RejudgeCard({
       <p className="scoring-note">{scope === "all" ? "本次将替换全部已有评分，旧评分保留在历史中。" : "保留已有有效评分，包括 0 分。"}</p>
       <details className="scoring-details">
         <summary>评分说明</summary>
-        <p>GT 指标准答案与证据。开启图片辅助后，只将标注图片提供给质量评分模型，不附视频，也不传给答题模型。没有图片标注时使用文字评分；已标注的图片缺失或读取失败会记为评分失败。</p>
+        <p>GT 指标准答案与证据。图片辅助只适用于 PhotoBench 0/1/2 开放题，需评分模型支持图片输入；0/1 开放题、选择题和 ATM 专用评分不附图。图片只交给质量评分模型，不附视频，也不传给答题模型。没有图片标注时使用文字评分；已标注的图片读取失败会记为评分失败，并保留错误原因。</p>
         <p>每轮可包含回答质量、任务判断等多项评分；补评只处理所选范围内缺失或失败的项目，保留其他有效分数。已有评分保留当时的评分模式。</p>
+        <p>选择题的选项只供评分端匹配。回答过于笼统或缺少区分选项的事实时归“其他”，主分为 0；选项自身重叠才记为待复核。Judge 返回格式错误或前后矛盾时会纠正重问一次，仍失败则保留未评分状态。可选择“待复核的回答”单独重评，历史评分和每次 Judge 输入、返回均保留。</p>
       </details>
       <details className="scoring-details scoring-prompt-editor">
         <summary>评分提示词 <span>{judgeModel || "未配置评分模型"}</span></summary>

@@ -14,7 +14,7 @@ GT_IMAGE_QUALITY_GUIDANCE = (
     "不能把裁判看到的图片当成Agent已检索或交付成功的证明。"
 )
 
-RECOVERY_SCOPES = {"missing", "failed", "unscored", "all"}
+RECOVERY_SCOPES = {"missing", "failed", "unscored", "needs_review", "all"}
 GT_IMAGE_PROMPT = (
     "\nGT图片辅助评分：随后图片均为人工标注GT引用，仅供裁判核对回答，"
     "不是模型检索或交付的证据，不证明模型看过、找到了或提交了这些图片。"
@@ -91,5 +91,6 @@ def recovery_fields(record: Mapping[str, Any], scope: str, *, evidence: bool = F
         kind
         for kind in kinds
         if scope == "all"
+        or (scope == "needs_review" and (record.get(kind) or {}).get("judge_status") == "needs_review")
         or result_state(record.get(kind), kind) in ({"failed", "unscored"} if scope == "missing" else {scope})
     )

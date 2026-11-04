@@ -897,7 +897,7 @@ class RunSuites:
         """
         scope = str(payload.get("scope") or "all")
         if scope not in RECOVERY_SCOPES:
-            raise InvalidRequestError("scope must be missing, failed, unscored or all")
+            raise InvalidRequestError("scope must be missing, failed, unscored, needs_review or all")
         use_gt_images = self._gt_image_option(payload)
         system_prompt = str(payload.get("system_prompt") or "").strip()
         if not system_prompt:

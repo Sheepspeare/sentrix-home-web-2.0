@@ -11,7 +11,8 @@ vi.mock("./RunsTable.tsx", () => ({ RunsTable: () => null }));
 const plan: RecoveryPlan = {
   run_id: "old1171", can_resume: true, inherited_qa_count: 697, remaining_qa_count: 474,
   product_version_changed: false, judge_use_gt_images: false,
-  scoring: { missing: { qa_count: 0, turn_count: 0, subscore_count: 0 }, failed: { qa_count: 0, turn_count: 0, subscore_count: 0 }, unscored: { qa_count: 0, turn_count: 0, subscore_count: 0 }, all: { qa_count: 0, turn_count: 0, subscore_count: 0 } },
+  // Review scores have a separate scope and do not enter missing-score recovery.
+  scoring: { needs_review: { qa_count: 3, turn_count: 3, subscore_count: 3 }, missing: { qa_count: 0, turn_count: 0, subscore_count: 0 }, failed: { qa_count: 0, turn_count: 0, subscore_count: 0 }, unscored: { qa_count: 0, turn_count: 0, subscore_count: 0 }, all: { qa_count: 0, turn_count: 0, subscore_count: 0 } },
 };
 const resumeRun = vi.fn();
 function view(runId: string, status: string, recoveryPlan: RecoveryPlan | null, selectedId = runId) {
