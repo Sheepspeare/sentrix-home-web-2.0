@@ -1,5 +1,8 @@
 export const OPEN_PROFILE = 'photobench_open_v1';
 export const ATM_PROFILE = 'atm_qs_v1';
+export function newBatchNonce(): string {
+  return Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, '0')).join('');
+}
 export const PROFILE_LABELS: Record<string, string> = {
   [OPEN_PROFILE]: '开放式回答（0/1/2，历史口径）', [ATM_PROFILE]: 'ATM-Bench式QS',
 };

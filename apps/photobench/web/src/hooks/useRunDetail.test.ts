@@ -35,6 +35,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it('can mount over LAN HTTP without crypto.randomUUID', () => {
+  vi.stubGlobal('crypto', {getRandomValues: crypto.getRandomValues.bind(crypto)});
+  expect(() => mount(null)).not.toThrow();
 });
 
 describe("loadActiveRun 的并发关系（1.0 :2310-2332）", () => {

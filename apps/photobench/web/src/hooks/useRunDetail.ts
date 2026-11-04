@@ -21,7 +21,7 @@
  *     再 onRejudgeStarted」以保持 1.0 的先后。
  */
 
-import { defaultScoring, scoringPayload } from '../lib/scoring.ts';
+import { defaultScoring, newBatchNonce, scoringPayload } from '../lib/scoring.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, post } from "../api/client.ts";
@@ -169,7 +169,7 @@ export function useRunDetail(options: RunDetailOptions) {
   const [scoring, setScoring] = useState(defaultScoring);
   const [batchMode, setBatchMode] = useState<'auto' | 'resume' | 'new'>('auto');
   const [resumeBatches, setResumeBatches] = useState<Record<string,string>>({});
-  const [batchNonce, setBatchNonce] = useState(() => crypto.randomUUID());
+  const [batchNonce, setBatchNonce] = useState(newBatchNonce);
   const [readProfile, setReadProfile] = useState('');
   const [readBatch, setReadBatch] = useState('');
   const readQuery = readProfile ? new URLSearchParams({scoring_profile:readProfile, scoring_batch:readBatch}).toString() : '';
@@ -582,7 +582,7 @@ export function useRunDetail(options: RunDetailOptions) {
       setError?.("");
       try {
             await post(`/runs/${encodeURIComponent(runId)}/rejudge`, pending.body);
-        setBatchNonce(crypto.randomUUID());
+        setBatchNonce(newBatchNonce());
         reloadRecoveryPlan();
         await onRunsReloaded?.();
         await loadActiveRun();
