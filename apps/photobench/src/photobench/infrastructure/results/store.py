@@ -229,6 +229,8 @@ class FileRunStore:
                 overview = json.loads(path.read_text(encoding="utf-8"))["overview"]
                 if not isinstance(overview, dict):
                     raise ValueError("invalid committed overview")
+                if "scoring" not in (overview.get("summary") or {}):
+                    overview = _overview(self.load_state(run_id))
             else:
                 overview = _overview(self.load_state(run_id))
             live_path = run_dir / "telemetry-live.json"

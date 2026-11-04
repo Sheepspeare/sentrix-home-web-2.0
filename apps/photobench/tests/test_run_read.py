@@ -491,3 +491,23 @@ def test_committed_list_inherits_typed_score_from_same_snapshot(tmp_path: Path):
     original = (run / "metadata.json").read_bytes()
     assert read_entry(run)["summary"]["evaluation_summary"] == evaluation
     assert (run / "metadata.json").read_bytes() == original
+
+
+def test_legacy_overview_adapts_scoring_and_media_without_rewriting_snapshot(tmp_path: Path):
+    state = _state("legacy")
+    media = {"media_type": "video", "media_id": "v1", "asset_id": "a1"}
+    state["items"][0].update(
+        retrieval_media_refs=[media],
+        retrieved_candidate_media=[media],
+        retrieved_candidate_asset_ids=["a1"],
+    )
+    _write(tmp_path, "legacy", state)
+    run = tmp_path / "legacy"
+    (run / "metadata.json").write_text(json.dumps({"overview": {"run_id": "legacy", "summary": {}}}))
+    originals = {p.name: p.read_bytes() for p in run.iterdir() if p.is_file()}
+    overview = FileRunStore(tmp_path).load_overview("legacy")
+    assert overview["summary"]["legacy_scoring_label"] == "历史混合评分"
+    assert overview["summary"]["scoring"]["profiles"]["atm_qs_v1"]["status"] == "not_collected"
+    assert overview["summary"]["media_ranking"]["recall_at_5"] == 1
+    assert overview["summary"]["media_ranking"]["included"] == 1
+    assert all((run / name).read_bytes() == data for name, data in originals.items())

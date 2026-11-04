@@ -130,7 +130,7 @@ export function RejudgeCard({
       {batchMode === 'resume' ? <p className="small muted">沿用所选批次冻结的Judge、提示词和GT配置。修改配置请使用另外两种批次处理方式。</p> : <ScoringPromptEditor {...{judgePromptKinds,activePromptKind,onSwitchPromptKind,rejudgePrompt,onRejudgePromptChange,judgeModel,onSavePrompt,onResetPrompt,running}} />}
       {activeRejudge ? (
         <div className="rejudge-progress">
-          {"judge_use_gt_images" in activeRejudge ? <p className="muted small">本次评分方式：{activeRejudge.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}</p> : null}
+          {"judge_use_gt_images" in activeRejudge ? <p className="muted small">最近任务的GT方式：{activeRejudge.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}</p> : null}
           <div className="rejudge-progress-meta">
             <span>
               {activeRejudge.completed || 0}/{activeRejudge.total || 0} 项
