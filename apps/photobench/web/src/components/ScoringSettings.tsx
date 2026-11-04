@@ -1,17 +1,21 @@
 import { ATM_PROFILE, OPEN_PROFILE, PROFILE_LABELS, type ScoringSelection } from '../lib/scoring.ts';
 export function ScoringSettings({value, onChange, disabled = false, hideGt = false}: {value: ScoringSelection; onChange: (v: ScoringSelection) => void; disabled?: boolean; hideGt?:boolean}) {
   return <fieldset className='scoring-standards' disabled={disabled}><legend>评分标准</legend>
-    {Object.entries(PROFILE_LABELS).map(([id,label]) => <div key={id} className='start-setting'>
-      <label><input type='checkbox' checked={value.profiles.includes(id)} onChange={e => {
+    <p className='scoring-selection-hint'>可只选一套，也可同时选择两套；共用同一份答卷，分别计分。至少保留一套。</p>
+    <div className='scoring-choices'>
+    {Object.entries(PROFILE_LABELS).map(([id,label]) => <div key={id} className={'scoring-choice' + (value.profiles.includes(id) ? ' is-selected' : '')}>
+      <label className='scoring-choice-title'><input aria-label={label} type='checkbox' checked={value.profiles.includes(id)} onChange={e => {
         const profiles = e.target.checked ? [...value.profiles,id] : value.profiles.filter(p => p !== id);
         if (profiles.length) onChange({...value,profiles});
-      }} />{label}</label>
-      {!hideGt && <div className='muted small'>{(['use_gt_images','use_gt_metadata'] as const).map(flag => <label key={flag}>
+      }} /><span>{label}</span><span className='scoring-choice-state' aria-hidden='true'>{value.profiles.includes(id) ? '已选择' : '未选择'}</span></label>
+      <p className='scoring-choice-description'>{id === OPEN_PROFILE ? '所有题由Judge对照参考答案评0、1、2分。' : '选择与数值题匹配计0/1；列表Jaccard；开放题计0/1。'}</p>
+      {!hideGt && <div className='scoring-gt-options'>{(['use_gt_images','use_gt_metadata'] as const).map(flag => <label key={flag}>
         <input aria-label={label + ' · ' + (flag === 'use_gt_images' ? 'GT图片辅助' : 'GT元数据辅助')} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.[flag] ?? false}
           onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], [flag]:e.target.checked}}})} />
         {flag === 'use_gt_images' ? 'GT图片辅助' : 'GT元数据辅助'}
       </label>)}</div>}
     </div>)}
+    </div>
     <details className='scoring-details'><summary>评分方式与补评说明</summary>
       <p>{PROFILE_LABELS[OPEN_PROFILE]}：所有题统一对照文字参考答案，由Judge评0/1/2；0为错误或未有效回答，1为部分正确，2为完整正确，保留历史行为规则。</p>
       <p>{PROFILE_LABELS[ATM_PROFILE]}：选择题由Judge逐项匹配，再核对答案键；不匹配任何选项归“其他”，得0分。数值题由Judge对照参考答案匹配，计0/1；开放题按ATM规则计0/1。列表题由程序计算Jaccard＝返回与GT的交集数量÷并集数量，真实空返回为0，缺记录或映射不完整则不可评分。</p>

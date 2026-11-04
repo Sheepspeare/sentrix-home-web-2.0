@@ -202,7 +202,7 @@ export function App({ initialLoading = false }: AppProps) {
       return;
     }
     autoSelected.current = true;
-    const current = runs.runs.find((run) => ["running", "pending"].includes(String(run.status)));
+    const current = runs.runs.find((run) => ["running", "pending"].includes(String(run.status)) || run.rejudge?.status === 'running');
     if (!current) return;
     runs.selectRun(current);
     runs.startPolling();

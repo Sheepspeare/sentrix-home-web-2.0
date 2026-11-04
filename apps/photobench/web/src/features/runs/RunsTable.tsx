@@ -25,10 +25,13 @@ function answerScore(run: Run): string {
 
 function RunProgress({ run }: { run: Run }) {
   const progress = qaProgress(run);
-  if (!progress.applicable || !progress.judgeEnabled) return <span className="muted">—</span>;
+  const scoring = run.rejudge?.status === 'running';
+  const showOriginal = progress.applicable && progress.judgeEnabled;
+  if (!scoring && !showOriginal) return <span className="muted">—</span>;
   return <div className="run-progress-count">
-    {progress.agent !== null ? <div>答题 <span>{progress.agentRatio}</span></div> : null}
-    <div aria-label={`有效评分 ${progress.validRatio}`}>评分 <span>{progress.validRatio}</span></div>
+    {scoring && <div className='run-scoring-progress'>补评 <span>{run.rejudge?.completed ?? 0}/{run.rejudge?.total ?? '—'}</span> 项</div>}
+    {showOriginal && progress.agent !== null ? <div>答题 <span>{progress.agentRatio}</span></div> : null}
+    {showOriginal && <div aria-label={`有效评分 ${progress.validRatio}`}>评分 <span>{progress.validRatio}</span></div>}
   </div>;
 }
 
@@ -113,7 +116,7 @@ export function RunsTable({
                 <td className="muted small">{fmtDate(run.started_at)}</td>
                 <td className="muted small">{duration(run)}</td>
                 <td>
-                  <span className={"phase-status " + (run.status || "")}>{statusLabel(run.status)}</span>
+                  {run.rejudge?.status === 'running' ? <div className='run-status-stack'><span className='phase-status running'>补评运行中</span><small>原测评：{statusLabel(run.status)}</small></div> : <span className={"phase-status " + (run.status || "")}>{statusLabel(run.status)}</span>}
                 </td>
                 <td><RunProgress run={run} /></td>
                 <td>
@@ -123,11 +126,11 @@ export function RunsTable({
                       run.summary?.retrieval_recall_mean,
                   )}
                 </td>
-                <td>
+                <td className='run-scoring-cell'>
                   {Object.entries(PROFILE_LABELS).map(([profile,label]) => {
                     const scoring=run.summary?.scoring as {profiles?:Record<string,{total_score?:number|null;normalized_mean?:number|null;scored?:number;total?:number;status?:string}>}|undefined;
                     const result=scoring?.profiles?.[profile];
-                    return <div className="small" key={profile}>{label}：{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '未完成；已评分均值 '+fmtPct(result.normalized_mean) : fmtPct(result.total_score)}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</div>;
+                    return <div className="run-score-line" key={profile}><span title={label}>{profile === 'photobench_open_v1' ? '开放式0/1/2' : label}</span><span>{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '均值 '+fmtPct(result.normalized_mean)+'（未完成）' : fmtPct(result.total_score)}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</span></div>;
                   })}
                   {(!(Array.isArray(run.scoring_profiles) && run.scoring_profiles.length) || Boolean(run.summary?.legacy_scoring_label)) && <div className="small muted">历史混合评分 <span>{answerScore(run)}</span></div>}
                 </td>

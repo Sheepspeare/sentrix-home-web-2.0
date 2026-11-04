@@ -93,27 +93,40 @@ export function RejudgeCard({
           <span className={"phase-status " + (activeRejudge.status || "")}>{statusLabel(activeRejudge.status)}</span>
         ) : null}
       </div>
+      {activeRejudge ? (
+        <div className="rejudge-progress" aria-label="最近评分任务进度">
+          <div className="rejudge-progress-meta">
+            <strong>评分项目 {activeRejudge.completed || 0}/{activeRejudge.total || 0} 项</strong>
+            <span>失败 {Number(activeRejudge.failed || 0)} · {rejudgePercent}%</span>
+          </div>
+          <div className="phase-bar"><div className="phase-bar-fill" style={{ width: `${rejudgePercent}%` }} /></div>
+          {activeRejudge.qa_count != null && <p className='scoring-task-scope'>{Number(activeRejudge.qa_count)}题 · {Number(activeRejudge.turn_count)}轮对话 · {Number(activeRejudge.subscore_count)}个评分项目；同一轮按每套标准各计1项。</p>}
+          {running && <p className='scoring-task-scope'>当前任务使用提交时冻结的评分配置，可在两套评分结果中查看。下方为下一次补评的配置。</p>}
+          {"judge_use_gt_images" in activeRejudge ? <p className="muted small">最近任务的GT方式：{activeRejudge.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}</p> : null}
+          {activeRejudge.error ? <p className="error">{String(activeRejudge.error)}</p> : null}
+        </div>
+      ) : null}
+      <div className='scoring-controls'>
       <label>批次处理<select aria-label="批次处理" value={batchMode} disabled={running || rejudgeSubmitting} onChange={e => onBatchModeChange?.(e.target.value as 'auto'|'resume'|'new')}>
         <option value="auto">按当前配置补评（相同配置续写原批次）</option>
         <option value="resume">续评已有批次（沿用冻结配置）</option>
         <option value="new">新建批次重新评分</option>
       </select></label>
+      <label>评分范围
+        <select aria-label="评分范围" value={scope} disabled={running || rejudgeSubmitting} onChange={event => onScopeChange?.(event.target.value as RejudgeScope)}>
+          <option value="missing">失败或未评分的回答</option>
+          <option value="failed">评分失败的回答</option>
+          <option value="unscored">尚未评分的回答</option>
+          <option value="needs_review">待复核的回答</option>
+          <option value="all">全部已有回答</option>
+        </select>
+      </label>
+      </div>
       <ScoringSettings value={scoring} onChange={v => onScoringChange?.(v)} disabled={running || rejudgeSubmitting} hideGt={batchMode === 'resume'} />
       {batchMode === 'resume' && scoring.profiles.map(profile => <label key={profile}>{PROFILE_LABELS[profile]}续评批次
         <select value={resumeBatches[profile] || batches.filter(b => b.profile_id === profile).at(-1)?.batch_id || ''} onChange={e => onResumeBatchChange?.(profile,e.target.value)} disabled={running || rejudgeSubmitting}>
           <option value="">请选择已有批次</option>{batches.filter(b => b.profile_id === profile).map(b => <option key={b.batch_id} value={b.batch_id}>{b.created_at} · {b.batch_id}</option>)}
         </select></label>)}
-      <div className="scoring-options">
-        <label className="scoring-scope">评分范围
-          <select aria-label="评分范围" value={scope} disabled={running || rejudgeSubmitting} onChange={event => onScopeChange?.(event.target.value as RejudgeScope)}>
-            <option value="missing">失败或未评分的回答</option>
-            <option value="failed">评分失败的回答</option>
-            <option value="unscored">尚未评分的回答</option>
-            <option value="needs_review">待复核的回答</option>
-            <option value="all">全部已有回答</option>
-          </select>
-        </label>
-      </div>
       <div className="scoring-summary">
         {count ? <div className="scoring-counts" aria-label="本次评分数量">
           <span><strong>{count.qa_count}</strong> 题</span>
@@ -126,25 +139,8 @@ export function RejudgeCard({
       {disabledReason ? <p className="recovery-note">{disabledReason}</p> : null}
       {count?.turn_count === 0 ? <p className="muted small">此范围内没有需要评分的回答。</p> : null}
       {scoringPreviewError && <p className="error">评分预览失败：{scoringPreviewError}</p>}
-      <p className="scoring-note">同配置只补未完成项目；修改评分配置会建立新批次，完整总分只使用该批次结果。</p>
+      <p className="scoring-note">同一轮按每套标准各计1个评分项目，总分按题目指定的评估轮计算。同配置只补未完成项目；修改配置会建立新批次。</p>
       {batchMode === 'resume' ? <p className="small muted">沿用所选批次冻结的Judge、提示词和GT配置。修改配置请使用另外两种批次处理方式。</p> : <ScoringPromptEditor {...{judgePromptKinds,activePromptKind,onSwitchPromptKind,rejudgePrompt,onRejudgePromptChange,judgeModel,onSavePrompt,onResetPrompt,running}} />}
-      {activeRejudge ? (
-        <div className="rejudge-progress">
-          {"judge_use_gt_images" in activeRejudge ? <p className="muted small">最近任务的GT方式：{activeRejudge.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}</p> : null}
-          <div className="rejudge-progress-meta">
-            <span>
-              {activeRejudge.completed || 0}/{activeRejudge.total || 0} 项
-            </span>
-            <span>
-              失败 {Number(activeRejudge.failed || 0)} · {rejudgePercent}%
-            </span>
-          </div>
-          <div className="phase-bar">
-            <div className="phase-bar-fill" style={{ width: `${rejudgePercent}%` }} />
-          </div>
-          {activeRejudge.error ? <p className="error">{String(activeRejudge.error)}</p> : null}
-        </div>
-      ) : null}
     </section>
   );
 }

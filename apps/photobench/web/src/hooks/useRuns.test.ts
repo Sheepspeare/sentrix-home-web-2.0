@@ -279,7 +279,7 @@ it.each([
 
 it("详情读取成功同时同步列表答题和评分进度，并清除先前读取错误", async () => {
   let ready = false;
-  const snapshot = { run_id: "a", status: "cancelled", qa_count: 12, summary: { judge_valid_count: 3 },
+  const snapshot = { run_id: "a", status: "cancelled", qa_count: 12, summary: { judge_valid_count: 3 }, rejudge: {status:"running",completed:25,total:1104},
     phases: { qa_eval: { progress: { completed: 9, total: 12, judge_completed: 9 } } } };
   apiMock.mockImplementation(async (path) => {
     if (path.startsWith("/runs?")) return pagePayload(0, "cancelled");

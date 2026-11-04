@@ -93,6 +93,12 @@ describe("评分面板的操作语义", () => {
     const prompt = screen.getByText("评分提示词").closest("details") as HTMLDetailsElement;
     expect(prompt.open).toBe(false);
   });
+  it('运行进度区分题数、对话轮数和双标准评分项目数', () => {
+    render(<RejudgeCard {...base} activeRejudge={{status:'running',completed:25,total:1104,failed:0,qa_count:487,turn_count:552,subscore_count:1104}} rejudgePercent={2}/>);
+    expect(screen.getByLabelText('最近评分任务进度').textContent).toContain('评分项目 25/1104 项');
+    expect(screen.getByText(/487题 · 552轮对话 · 1104个评分项目/)).toBeTruthy();
+    expect(screen.getByText(/同一轮按每套标准各计1个评分项目/)).toBeTruthy();
+  });
 });
 
 it("续跑提交尚未结束时阻止重复点击", async () => {

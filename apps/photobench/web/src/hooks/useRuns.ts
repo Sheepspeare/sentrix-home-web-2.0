@@ -133,7 +133,7 @@ export function useRuns(options: UseRunsOptions = {}) {
   const updateRunSummary = useCallback((runId: string, summary: RunSummary, snapshot?: Run) => {
     setDetailError(previous => previous?.runId === runId ? null : previous);
     const next = runsRef.current.map((run) =>
-      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
+      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count, rejudge: snapshot.rejudge } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
     );
     runsRef.current = next;
     setRuns(next);

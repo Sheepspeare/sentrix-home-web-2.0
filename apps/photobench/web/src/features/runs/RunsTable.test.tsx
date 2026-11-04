@@ -52,6 +52,13 @@ function renderTable(runs: Run[], page: Partial<RunPageState> = {}, handlers?: P
 }
 
 describe("状态列（1.0 :3023-3025）", () => {
+  it('原测评结束后仍显示补评运行状态和独立评分项目数量', () => {
+    renderTable([run({status:'completed_with_errors',qa_count:487,summary:{completed:487,judge_valid_count:487},phases:{qa_eval:{progress:{completed:487,total:487}}},rejudge:{status:'running',completed:25,total:1104}})]);
+    expect(screen.getByText('补评运行中')).toBeTruthy();
+    expect(screen.getByText('原测评：完成但有错误')).toBeTruthy();
+    expect(screen.getByText('25/1104').parentElement?.textContent).toBe('补评 25/1104 项');
+    expect(screen.getAllByText('487/487')).toHaveLength(2);
+  });
   it("按完成有效评分的样本数计算，不使用Agent完成数或Judge尝试结束数", () => {
     renderTable([run({ qa_count: 487, summary: { completed: 69, judge_valid_count: 68 }, phases: { qa_eval: {
       agent_completed: 71, judge_completed: 70, judge_total: 487,
