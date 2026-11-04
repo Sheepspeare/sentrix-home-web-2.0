@@ -35,14 +35,30 @@ export function EvaluationResult({value, definition}: {value: unknown; definitio
   if (!r.scorer) return null;
   const comparisons = Array.isArray(r.comparisons) ? r.comparisons.map(obj) : [];
   const options = Array.isArray(d.options) ? d.options.map(obj) : [];
+  const choiceOptions: Dict[] = [...options, ...comparisons.filter(c => !options.some(o => o.id === c.option_id)).map(c => ({id: c.option_id}))];
   return <section aria-label="题型评分" className="evaluation-panel">
     <h4>{evaluationTypeLabel(r) || String(r.scorer)}</h4>
     <p className="muted small">{scoringExplanation(r)}</p>
     <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
     <p>{evaluationReason(r.reason)}</p>
-    {options.length > 0 && <div className="evaluation-choice-definition"><p className="muted small">评测选项 · 正确项 {String(d.correct_option || "未记录")}</p><ul className="evaluation-options">{options.map(o => <li className={o.id === d.correct_option ? "is-correct" : ""} key={String(o.id)}>{String(o.id)}：{String(o.text)}{o.id === d.correct_option ? "（正确项）" : ""}</li>)}</ul></div>}
-    {r.matched_option != null && <p>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</p>}
-    {comparisons.length > 0 && <ul className="evaluation-options">{comparisons.map(c => <li className={c.matches ? "is-match" : ""} key={String(c.option_id)}>{String(c.option_id)}：{String(options.find(o => o.id === c.option_id)?.text || "")} · {c.matches ? "匹配" : "不匹配"} · {String(c.reason)}</li>)}</ul>}
+    {choiceOptions.length > 0 && <div className="evaluation-choice-definition">
+      <p className="muted small">{r.matched_option != null ? <>匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</> : <>评测选项 · 正确项 {String(d.correct_option || "未记录")}</>}</p>
+      <ul className="evaluation-options">{choiceOptions.map(o => {
+        const comparison = comparisons.find(c => c.option_id === o.id);
+        const matches = comparison?.matches;
+        return <li className={[o.id === d.correct_option ? "is-correct" : "", matches === true ? "is-match" : ""].filter(Boolean).join(" ")} key={String(o.id)}>
+          <span className="evaluation-option-id">{String(o.id)}</span>
+          <div className="evaluation-option-content">
+            <div className="evaluation-option-heading">
+              <span className="evaluation-option-text">{String(o.text || "选项原文未记录")}</span>
+              {o.id === d.correct_option && <span className="evaluation-badge">正确项</span>}
+              <span className={"evaluation-badge" + (matches === true ? "" : " neutral")}>{matches === true ? "匹配" : matches === false ? "不匹配" : "未记录匹配结果"}</span>
+            </div>
+            {comparison?.reason != null && <p className="evaluation-option-reason">{String(comparison.reason)}</p>}
+          </div>
+        </li>;
+      })}</ul>
+    </div>}
     {Object.keys(metrics).length > 0 && <div className="evaluation-table-wrap"><table><thead><tr><th>集合</th><th>Recall</th><th>Jaccard</th><th>Precision</th><th>F1</th></tr></thead><tbody>{["delivery", "tools"].map(k => {const m = obj(metrics[k]); return <tr key={k}><td>{k === "delivery" ? "模型交付" : "工具累计召回"}</td>{["recall", "jaccard", "precision", "f1"].map(v => <td key={v}>{pct(m[v])}</td>)}</tr>;})}</tbody></table></div>}
     {Object.keys(metrics).length > 0 && <details className="evaluation-disclosure"><summary>GT、预测、交集与差集</summary><pre>{JSON.stringify(metrics, null, 2)}</pre></details>}
     {r.number_aux != null && <p>LLM 数值辅分 {pct(obj(r.number_aux).score)} · 与官方分{r.number_aux_disagrees === true ? "不一致" : r.number_aux_disagrees === false ? "一致" : "尚不可比较"}</p>}

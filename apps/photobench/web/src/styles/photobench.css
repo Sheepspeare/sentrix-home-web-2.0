@@ -1271,6 +1271,9 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .evaluation-options .is-correct, .evaluation-options .is-match { border-color:#b9dfd2; background:#f0faf6; }
 .evaluation-option-id { display:inline-grid; flex:none; place-items:center; min-width:23px; height:23px; border-radius:5px; color:#51607c; background:#edf0f6; font-weight:700; }
 .evaluation-option-text { flex:1; min-width:0; }
+.evaluation-option-content { flex:1; min-width:0; }
+.evaluation-option-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:7px; }
+.evaluation-panel .evaluation-option-reason { margin:5px 0 0; color:var(--muted); }
 .evaluation-badge { flex:none; padding:2px 7px; border-radius:4px; color:#197458; background:#def3e9; font-size:10px; font-weight:600; white-space:nowrap; }
 .evaluation-badge.neutral { color:#71809b; background:#edf0f6; font-weight:400; }
 .evaluation-table-wrap { max-width:100%; margin:12px 0; overflow-x:auto; border:1px solid #e2e6ef; border-radius:6px; }

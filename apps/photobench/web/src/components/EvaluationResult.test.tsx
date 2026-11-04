@@ -8,7 +8,8 @@ it("二分制满分与筛选类别一致", () => {
   render(<EvaluationResult value={{scorer: "choice_judge", score: 1, max_score: 1, normalized_score: 1, matched_option: "B", comparisons: [{option_id: "B", matches: true, reason: "语义一致"}]}} definition={{correct_option: "B", options: [{id: "B", text: "无法确认"}]}} />);
   expect(screen.getByText(/主分 1\/1 · 归一化 100.0%/)).toBeTruthy();
   expect(screen.getByText(/匹配：B · 正确选项：B/)).toBeTruthy();
-  expect(screen.getByText(/无法确认 · 匹配 · 语义一致/)).toBeTruthy();
+  expect(screen.getByText("无法确认")).toBeTruthy();
+  expect(screen.getByText("语义一致")).toBeTruthy();
 });
 it("集合保留连续分，未知工具轨迹保留未评分", () => {
   expect(scoreChoices({evaluation_summary: {count: 1, scales: ["1"], by_type: {media_list: {}}}}).find(s => s.value === "1")?.label).toContain("集合未满分");
@@ -39,7 +40,38 @@ it("ATM 数值、列表和开放题独立标注，列表说明交付集合", () 
 
 it("评分失败时仍显示完整选项和正确项", () => {
   render(<EvaluationResult value={{scorer: "choice_judge", answer_format: "choice", score: null, judge_status: "failed"}} definition={{correct_option: "A", options: [{id: "A", text: "紫纱幔和红床单"}, {id: "B", text: "其他布置"}]}} />);
-  expect(screen.getByText("A：紫纱幔和红床单（正确项）")).toBeTruthy();
-  expect(screen.getByText("B：其他布置")).toBeTruthy();
+  const correct = screen.getByText("紫纱幔和红床单").closest("li")!;
+  expect(within(correct).getByText("正确项")).toBeTruthy();
+  expect(within(correct).getByText("未记录匹配结果")).toBeTruthy();
+  expect(screen.getByText("其他布置")).toBeTruthy();
   expect(screen.getByText(/选项仅供评测端使用/)).toBeTruthy();
+});
+
+it("选项只显示一组，逐项合并正确项、匹配状态和理由", () => {
+  const options = [{id: "A", text: "无法确认日期"}, {id: "B", text: "2017年10月4日"}, {id: "C", text: "2017年10月2日"}, {id: "D", text: "2017年10月3日"}];
+  render(<EvaluationResult definition={{options, correct_option: "B"}} value={{scorer: "choice_judge", matched_option: "A", comparisons: options.map(o => ({option_id: o.id, matches: o.id === "A", reason: o.id + "的比较理由"}))}} />);
+  const list = screen.getByRole("list");
+  expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+  for (const o of options) {
+    const row = within(list).getByText(o.text).closest("li")!;
+    expect(screen.getAllByText(o.text)).toHaveLength(1);
+    expect(within(row).getByText(o.id + "的比较理由")).toBeTruthy();
+    expect(within(row).getByText(o.id === "A" ? "匹配" : "不匹配")).toBeTruthy();
+    expect(within(row).queryByText("正确项") !== null).toBe(o.id === "B");
+  }
+});
+
+it("未记录的比较不冒充不匹配，已有选项仍完整展示", () => {
+  render(<EvaluationResult definition={{options: [{id: "A", text: "日期甲"}, {id: "B", text: "日期乙"}]}} value={{scorer: "choice_judge", comparisons: [{option_id: "A", matches: false, reason: "日期不同"}]}} />);
+  const row = screen.getByText("日期乙").closest("li")!;
+  expect(within(row).getByText("未记录匹配结果")).toBeTruthy();
+  expect(within(row).queryByText("不匹配")).toBeNull();
+});
+
+it("历史缺少选项定义时保留已存的匹配理由", () => {
+  render(<EvaluationResult value={{scorer: "choice_judge", comparisons: [{option_id: "D", matches: true, reason: "日期一致"}]}} />);
+  expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  expect(screen.getByText("D")).toBeTruthy();
+  expect(screen.getByText("选项原文未记录")).toBeTruthy();
+  expect(screen.getByText("日期一致")).toBeTruthy();
 });
