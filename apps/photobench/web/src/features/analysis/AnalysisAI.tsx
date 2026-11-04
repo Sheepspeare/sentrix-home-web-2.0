@@ -1,5 +1,6 @@
 import { CaseJourney } from "./CaseJourney.tsx";
 import { AIComparison } from "./AIComparison.tsx";
+import { AnalysisScheduling } from "./AnalysisScheduling.tsx";
 import { useState } from "react";
 import { BASE, post } from "../../api/client.ts";
 import {
@@ -99,6 +100,8 @@ export function AnalysisAI({
   const states: Record<string, string> = {
     queued: "等待运行",
     running: "分析中",
+    paused: "等待测评结束",
+    cancelling: "正在取消",
     completed: completion,
     failed: "分析失败",
     cancelled: "已取消",
@@ -168,6 +171,9 @@ export function AnalysisAI({
             {report?.stage === "overview" ? " · 正在汇总" : ""}
           </p>
           {ai.stale && <p>此分析的来源或提示词已更新，请重新生成分析。</p>}
+          {activeAnalysis(ai) && (
+            <AnalysisScheduling jobId={ai.job_id} status={ai.status} />
+          )}
           {activeAnalysis(ai) && (
             <button
               className="btn compact"

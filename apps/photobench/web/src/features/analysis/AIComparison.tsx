@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, post } from "../../api/client.ts";
 import { activeAnalysis, type AnalysisFilters, type AnalysisJob } from "../../api/analysis.ts";
 import { ComparisonPicker } from "./ComparisonPicker.tsx";
+import { AnalysisScheduling } from "./AnalysisScheduling.tsx";
 
 import { ComparisonJourney, ComparisonIdentity } from "./ComparisonJourney.tsx";
 import { ComparisonFindings } from "./ComparisonFindings.tsx";
@@ -88,6 +89,7 @@ function ComparisonPanel({runId,jobId,scope,filters,modelRole,disabled}:Props){
     </div>
     {(error || job?.error) && <p role="alert">{error || job?.error}</p>}
     {job && <p role="status">{states[job.status] || job.status} · 已处理 {job.processed}/{report?.requested ?? "…"} 题{job.stale ? " · 来源或提示词已更新" : ""}</p>}
+    {activeAnalysis(job) && <AnalysisScheduling jobId={job?.job_id} status={job!.status} />}
     {report && <>
       <p>固定范围 {report.scope?.scope_count ?? report.requested} 题 · {report.scope?.comparison_filter === "score_changed" ? "仅得分不同" : "对比全部"} · 纳入 {report.requested} 题</p>
       <p>引用合格 {report.coverage.valid} · 失败或引用无效 {report.coverage.failed} · 未匹配 {report.coverage.unmatched} · 未处理 {report.coverage.unprocessed}</p>

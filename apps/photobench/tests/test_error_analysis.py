@@ -283,8 +283,9 @@ def test_spawn_priority_cancellation_restart_staleness_and_raw_preservation(tmp_
         assert backend.work()[0]["status"] == "queued"
         backend.cancel(j["job_id"])
         assert backend.get(j["job_id"])["status"] == "cancelled"
-        busy.clear()
         j = backend.submit("r", "rules", {})
+        assert backend.result(j["job_id"])["status"] == "queued"
+        busy.clear()
         done = await_job(backend, j["job_id"])
         assert done["status"] == "completed", done
         assert done["worker_pid"] != __import__("os").getpid()
