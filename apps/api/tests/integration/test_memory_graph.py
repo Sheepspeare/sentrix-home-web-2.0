@@ -559,3 +559,20 @@ def test_temporal_edges_keep_unknown_offsets_separate_from_absolute_times():
     }
     assert actual == expected
     assert reference_edges_from_sources(nodes) == expected
+
+
+def test_temporal_graph_edges_across_repeated_dst_hour_use_elapsed_seconds():
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo("America/New_York")
+    events = [
+        SimpleNamespace(id="a", time_start=datetime(2024, 11, 3, 1, 45, tzinfo=zone, fold=0)),
+        SimpleNamespace(id="b", time_start=datetime(2024, 11, 3, 1, 15, tzinfo=zone, fold=1)),
+    ]
+    actual = []
+    BuildMemoryGraph._add_temporal_edges(
+        reversed(events),
+        SCOPE,
+        lambda left, right, relation, **kw: actual.append((left, right, kw["attributes"]["gap_seconds"])),
+    )
+    assert actual == [("event:a", "event:b", 1800)]
