@@ -192,6 +192,7 @@ def _build_importer(
         observations=container.observation_repository,
         storage=container.media_storage,
         metadata=container.metadata_reader,
+        resolve_capture_time=container.capture_time_resolver,
         visual_indexer=IndexAssetVisual(
             embedder=container.visual_embedder,
             vectors=container.vector_repository,

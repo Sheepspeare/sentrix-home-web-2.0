@@ -11,6 +11,7 @@ import sqlite3
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from sentrix.domain.media.capture_time import time_sort_key
 from sentrix.domain.memories.events import EventRecord
 from sentrix.infrastructure.persistence.database import Database
 
@@ -137,7 +138,7 @@ class SqliteEventRepository:
         with self._database.connect() as connection:
             rows = connection.execute(
                 f"SELECT {_COLUMNS} FROM events WHERE status = 'active' AND scope_id = ?"
-                " ORDER BY time_start DESC LIMIT ?",
+                " ORDER BY capture_sort_key(time_start) DESC, id ASC LIMIT ?",
                 (scope_id, limit),
             ).fetchall()
         return [_row_to_event(row) for row in rows]
@@ -149,7 +150,7 @@ class SqliteEventRepository:
         with self._database.connect() as connection:
             rows = connection.execute(
                 f"SELECT {_COLUMNS} FROM events{clause}"
-                " ORDER BY COALESCE(time_start, created_at) DESC, id DESC LIMIT ? OFFSET ?",
+                " ORDER BY capture_sort_key(COALESCE(time_start, created_at)) DESC, id DESC LIMIT ? OFFSET ?",
                 (*params, limit, offset),
             ).fetchall()
         return [_row_to_event(row) for row in rows]
@@ -256,6 +257,7 @@ class SqliteEventRepository:
         current = self.get(event_id)
         if current is None:
             raise KeyError(event_id)
+        _require_compatible_times(current.time_start, current.time_end, time_start, time_end)
         merged_activity = current.activity or activity
         merged_summary = current.summary
         if summary and summary not in merged_summary:
@@ -269,8 +271,8 @@ class SqliteEventRepository:
                 " aggregation_score = ?, aggregation_breakdown_json = ?,"
                 " revision = revision + 1, updated_at = ? WHERE id = ?",
                 (
-                    min(starts).isoformat() if starts else None,
-                    max(ends).isoformat() if ends else None,
+                    min(starts, key=time_sort_key).isoformat() if starts else None,
+                    max(ends, key=time_sort_key).isoformat() if ends else None,
                     place or current.place,
                     admin_district or current.admin_district,
                     merged_activity,
@@ -301,6 +303,7 @@ class SqliteEventRepository:
         target = self.get(target_event_id)
         if source is None or target is None:
             raise KeyError(source_event_id if source is None else target_event_id)
+        _require_compatible_times(source.time_start, source.time_end, target.time_start, target.time_end)
         with self._database.connect() as connection, connection:
             connection.execute(
                 "UPDATE OR IGNORE event_observations SET event_id = ? WHERE event_id = ?",
@@ -316,8 +319,8 @@ class SqliteEventRepository:
                 " confidence = MAX(confidence, ?), revision = revision + 1, updated_at = ?"
                 " WHERE id = ?",
                 (
-                    min(starts).isoformat() if starts else None,
-                    max(ends).isoformat() if ends else None,
+                    min(starts, key=time_sort_key).isoformat() if starts else None,
+                    max(ends, key=time_sort_key).isoformat() if ends else None,
                     source.confidence,
                     datetime.now(UTC).isoformat(),
                     target_event_id,
@@ -404,3 +407,9 @@ class SqliteEventRepository:
                 (source_asset_id,),
             ).fetchall()
         return [_row_to_event(row) for row in rows]
+
+
+def _require_compatible_times(*values: datetime | None) -> None:
+    kinds = {v.utcoffset() is not None for v in values if v is not None}
+    if len(kinds) > 1:
+        raise ValueError("不能归并已知时区与未知时区的事件")

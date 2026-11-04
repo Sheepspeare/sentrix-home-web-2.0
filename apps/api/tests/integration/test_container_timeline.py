@@ -138,7 +138,7 @@ def test_place_display_is_the_contract_for_the_web_card():
         source=PlaceSource.PYGEOCN,
     )
 
-    assert place.display() == "浙江省杭州市萧山区 · 赵州镇大石桥村附近"
+    assert place.display() == "浙江省杭州市萧山区 · 赵州镇 / 大石桥村附近"
 
 
 def _nearest():

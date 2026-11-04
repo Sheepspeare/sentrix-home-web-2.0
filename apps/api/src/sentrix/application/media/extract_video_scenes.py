@@ -29,11 +29,12 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sentrix.application.media.stage_spans import StageSpans
 from sentrix.application.media.stage_timing import stage_span
+from sentrix.domain.media.capture_time import offset_capture
 from sentrix.domain.media.models import Asset, AssetStatus, MediaType
 from sentrix.domain.media.ports import (
     AssetRepository,
@@ -254,6 +255,7 @@ class ExtractVideoScenes:
             content_sha256=_sha256(frame),
             captured_at=_offset(source.captured_at, window.keyframe_timestamp_sec),
             captured_location=source.captured_location,
+            capture_time=source.capture_time,
             created_at=now,
             updated_at=now,
         )
@@ -263,4 +265,4 @@ def _offset(captured_at: datetime | None, seconds: float) -> datetime | None:
     """拍摄时间加原片内偏移。源片没有拍摄时间时返回 ``None``——不拿导入时刻冒充。"""
     if captured_at is None:
         return None
-    return captured_at + timedelta(seconds=float(seconds))
+    return offset_capture(captured_at, float(seconds))

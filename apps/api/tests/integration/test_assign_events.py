@@ -152,7 +152,7 @@ def test_first_observation_creates_an_event(repository_set):
     assert result.score is None
     assert result.event.time_start == BASE
     assert result.event.admin_district == "萧山区"
-    assert result.event.place == "浙江省杭州市萧山区 · 赵州镇大石桥村附近"
+    assert result.event.place == "浙江省杭州市萧山区 · 赵州镇 / 大石桥村附近"
     assert repository_set["events"].observation_ids(result.event.id) == ["obs_1"]
 
 

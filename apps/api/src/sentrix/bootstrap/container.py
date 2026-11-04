@@ -44,6 +44,7 @@ from sentrix.domain.media.ports import (
     AssetRepository,
     AudioMetadataReader,
     AudioRepository,
+    CaptureTimeResolver,
     MediaStorage,
     MetadataReader,
     ObservationRepository,
@@ -83,6 +84,7 @@ from sentrix.infrastructure.assistant.events import InProcessTurnEventBroker
 from sentrix.infrastructure.assistant.model_endpoint import ServedModel, probe_context_tokens
 from sentrix.infrastructure.build import read_build_revision
 from sentrix.infrastructure.media.audio_metadata import FfprobeAudioMetadataReader
+from sentrix.infrastructure.media.capture_time import ResolveCaptureTime
 from sentrix.infrastructure.media.image_io import PillowPreviewEncoder
 from sentrix.infrastructure.media.import_progress import InProcessImportProgressStore
 from sentrix.infrastructure.media.metadata import PillowMetadataReader
@@ -174,6 +176,7 @@ class Container:
     observation_repository: ObservationRepository
     media_storage: MediaStorage
     metadata_reader: MetadataReader
+    capture_time_resolver: CaptureTimeResolver
     preview_encoder: PreviewEncoder
     # 视频三件（S8a）：ffprobe 探测、浏览器预览转码、血缘仓储。三者都是端口声明——
     # 具体实现（子进程 / 子进程 / SQL）全在 infrastructure，见 pyproject 的两条 purity 契约。
@@ -352,6 +355,7 @@ class Container:
             observation_repository=observations,
             media_storage=FileSystemMediaStorage(settings.media_dir),
             metadata_reader=PillowMetadataReader(),
+            capture_time_resolver=ResolveCaptureTime(),
             preview_encoder=PillowPreviewEncoder(),
             video_metadata_reader=FfprobeVideoMetadataReader(),
             # 预览转码件落在 ``media_dir/derived/video`` 下：与其余媒体文件同一个根，

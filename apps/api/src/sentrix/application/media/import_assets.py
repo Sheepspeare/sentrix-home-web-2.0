@@ -90,6 +90,7 @@ from pathlib import Path
 from sentrix.application.media.extract_video_scenes import VideoSceneExtraction
 from sentrix.application.media.stage_timing import stage_span
 from sentrix.domain.identity.ports import FaceEnroller, PreparedFaces
+from sentrix.domain.media.capture_time import CaptureTime
 from sentrix.domain.media.models import Asset, AssetStatus, MediaType, Observation
 from sentrix.domain.media.ports import (
     AssetObserver,
@@ -97,6 +98,7 @@ from sentrix.domain.media.ports import (
     AudioMetadataReader,
     AudioProbe,
     AudioRepository,
+    CaptureTimeResolver,
     MediaStorage,
     MetadataReader,
     ObservationRepository,
@@ -238,6 +240,7 @@ class ImportAssets:
         observations: ObservationRepository,
         storage: MediaStorage,
         metadata: MetadataReader,
+        resolve_capture_time: CaptureTimeResolver | None = None,
         visual_indexer: AssetVisualIndexer | None = None,
         place_indexer: AssetPlaceIndex | None = None,
         observer: AssetObserver | None = None,
@@ -274,6 +277,7 @@ class ImportAssets:
         self._observations = observations
         self._storage = storage
         self._metadata = metadata
+        self._resolve_capture_time = resolve_capture_time
         self._video_metadata = video_metadata
         self._video_transcoder = video_transcoder
         self._video_repository = video_repository
@@ -384,6 +388,20 @@ class ImportAssets:
             else request.content_type
         )
 
+        source = "exif" if media_type is MediaType.IMAGE else "unknown"
+        if video_probe is not None and video_probe.metadata is not None:
+            source = video_probe.metadata.creation_source or "video_metadata"
+        if audio_probe is not None and audio_probe.metadata is not None:
+            source = audio_probe.metadata.creation_source or "audio_metadata"
+        provenance = CaptureTime(
+            captured_at.isoformat() if captured_at else "",
+            source if captured_at else "unknown",
+            status=("offset_only" if captured_at.utcoffset() is not None else "timezone_unknown")
+            if captured_at
+            else "unknown",
+        )
+        if self._resolve_capture_time is not None:
+            captured_at, provenance = self._resolve_capture_time(captured_at, gps, source)
         now = self._clock()
         asset = Asset(
             id=asset_id,
@@ -395,7 +413,8 @@ class ImportAssets:
             size_bytes=len(request.content),
             status=AssetStatus.QUEUED if request.defer_processing else AssetStatus.PROCESSED,
             content_sha256=content_sha256,
-            captured_at=captured_at or now,
+            captured_at=captured_at,
+            capture_time=provenance,
             captured_location=gps,
             created_at=now,
             updated_at=now,

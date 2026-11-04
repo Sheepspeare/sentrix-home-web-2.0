@@ -11,7 +11,10 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
+from datetime import datetime
 from pathlib import Path
+
+from sentrix.domain.media.capture_time import time_sort_key, within_time_bounds
 
 BUSY_TIMEOUT_MS = 30_000
 
@@ -40,6 +43,13 @@ class Database:
     def connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
+        connection.create_function(
+            "capture_sort_key",
+            1,
+            lambda value: time_sort_key(datetime.fromisoformat(value) if value else None),
+            deterministic=True,
+        )
+        connection.create_function("capture_in_bounds", 3, _capture_in_bounds, deterministic=True)
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
         try:
@@ -111,3 +121,19 @@ class Database:
             raise
         finally:
             connection.isolation_level = previous
+
+
+def _capture_in_bounds(value: str | None, start: str | None, end: str | None) -> bool:
+    if not value:
+        return False
+    moment = datetime.fromisoformat(value)
+    bound = datetime.fromisoformat(start or end or "0001-01-01")
+    if start and end:
+        return (
+            within_time_bounds((datetime.fromisoformat(start), datetime.fromisoformat(end)), moment) is True
+        )
+    if bound.utcoffset() is None:
+        moment = moment.replace(tzinfo=None)
+    elif moment.utcoffset() is None:
+        return False
+    return moment >= bound if start else moment < bound

@@ -77,6 +77,7 @@ class GeoNamesPoint:
     feature_code: str
     country: str
     population: int
+    admin_codes: tuple[str, ...] = ()
 
 
 def _to_unit(latitude: float, longitude: float) -> tuple[float, float, float]:
@@ -197,6 +198,7 @@ def parse_dump(text: str) -> list[GeoNamesPoint]:
                 feature_code=feature_code,
                 country=(columns[8] or "").strip().upper(),
                 population=population,
+                admin_codes=tuple(columns[10:14]),
             )
         )
     return points
@@ -357,4 +359,13 @@ class GeoNamesNearestResolver:
         distance = locality_hit[1] if locality_hit else (township_hit[1] if township_hit else None)
         if township and locality and township == locality:
             locality = ""
-        return NearestPlace(township=township, locality=locality, distance_m=distance)
+        return NearestPlace(
+            township=township,
+            locality=locality,
+            distance_m=distance,
+            township_distance_m=township_hit[1] if township_hit else None,
+            township_country=township_hit[0].country if township_hit else "",
+            locality_country=locality_hit[0].country if locality_hit else "",
+            township_admin_codes=township_hit[0].admin_codes if township_hit else (),
+            locality_admin_codes=locality_hit[0].admin_codes if locality_hit else (),
+        )
