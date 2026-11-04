@@ -98,18 +98,15 @@ function ResourceGraph({ graph, history, snapshots, sampledDown, revision }: {
   const chart = useRef<EChartsType | null>(null);
   const previous = useRef("");
   const [phaseColors, setPhaseColors] = useState(false);
+  const canDraw = history.length >= 2;
   const latest = history.at(-1);
   const temperatureReason = latest?.resource_metrics?.gpu_temperature?.reason ?? latest?.resource_missing_reasons?.temperature_c;
   useEffect(() => {
-    if (!canvas.current || history.length < 2) return;
-    chart.current ??= echarts.init(canvas.current);
-    const drawingRevision = `${revision}:${phaseColors}`;
-    if (previous.current !== drawingRevision) {
-      chart.current.setOption(option(graph, history, snapshots, sampledDown, phaseColors), { replaceMerge: ["series", "visualMap"] });
-      previous.current = drawingRevision;
-    }
-    chart.current.resize();
-    const resize = () => chart.current?.resize();
+    if (!canDraw || !canvas.current) return;
+    const instance = echarts.init(canvas.current);
+    chart.current = instance;
+    previous.current = "";
+    const resize = () => instance.resize();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     observer?.observe(canvas.current);
     // A parent details element may be collapsed while the chart is mounted.
@@ -119,9 +116,23 @@ function ResourceGraph({ graph, history, snapshots, sampledDown, revision }: {
       if (element instanceof HTMLDetailsElement) { parents.push(element); element.addEventListener("toggle", resize); }
       element = element.parentElement;
     }
-    return () => { observer?.disconnect(); parents.forEach(parent => parent.removeEventListener("toggle", resize)); };
-  }, [graph, history, snapshots, sampledDown, revision, phaseColors]);
-  useEffect(() => () => { chart.current?.dispose(); chart.current = null; previous.current = ""; }, []);
+    return () => {
+      observer?.disconnect();
+      parents.forEach(parent => parent.removeEventListener("toggle", resize));
+      instance.dispose();
+      chart.current = null;
+      previous.current = "";
+    };
+  }, [canDraw]);
+  useEffect(() => {
+    if (!chart.current) return;
+    const drawingRevision = `${revision}:${phaseColors}`;
+    if (previous.current !== drawingRevision) {
+      chart.current.setOption(option(graph, history, snapshots, sampledDown, phaseColors), { replaceMerge: ["series", "visualMap"] });
+      previous.current = drawingRevision;
+    }
+    chart.current.resize();
+  }, [canDraw, graph, history, snapshots, sampledDown, revision, phaseColors]);
   return <div className="telemetry-chart"><div className="telemetry-chart-header"><b>{graph.title}</b>
     {!snapshots && history.some(point => point.phase) ? <label>
       <input type="checkbox" checked={phaseColors} onChange={event => setPhaseColors(event.target.checked)} />曲线按阶段着色
