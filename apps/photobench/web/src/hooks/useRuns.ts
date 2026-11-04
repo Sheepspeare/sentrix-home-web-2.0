@@ -94,6 +94,7 @@ export function useRuns(options: UseRunsOptions = {}) {
   // 所以 async 里的「是否已切换 run」判断（1.0 `:2314` / `:2267`）读 ref。
   const activeRunIdRef = useRef<string | null>(null);
   const runsRef = useRef<Run[]>([]);
+  const liveScoringRef = useRef<{runId: string; rejudge: NonNullable<Run['rejudge']>; scoring: unknown} | null>(null);
   const runPageRef = useRef<RunPageState>(INITIAL_RUN_PAGE);
   /** 1.0 `#runs-region`（`:2989`）的落点，由视图挂到 `<section>` 上。 */
   const runsRegionRef = useRef<HTMLElement | null>(null);
@@ -101,6 +102,7 @@ export function useRuns(options: UseRunsOptions = {}) {
   const runDetailRef = useRef<HTMLElement | null>(null);
 
   const setActiveRunId = useCallback((id: string | null) => {
+    if (id !== activeRunIdRef.current) liveScoringRef.current = null;
     activeRunIdRef.current = id;
     setActiveRunIdState(id);
   }, []);
@@ -112,7 +114,18 @@ export function useRuns(options: UseRunsOptions = {}) {
       `/runs?page=${target}&page_size=${runPageRef.current.page_size}`,
       { timeoutMs: 8000, retries: 2 },
     );
-    const list = payload.runs || [];
+    // 列表索引可能仍是补评开始时的快照；同一任务使用详情已读取的实时评分。
+    const live = liveScoringRef.current;
+    const list = (payload.runs || []).map(run => {
+      if (!live || run.run_id !== activeRunIdRef.current || run.run_id !== live.runId) return run;
+      const newTask = run.rejudge?.rejudge_id !== live.rejudge.rejudge_id;
+      const newlyTerminal = live.rejudge.status === 'running' && run.rejudge?.status !== 'running';
+      if (newTask || newlyTerminal) {
+        liveScoringRef.current = null;
+        return run;
+      }
+      return {...run, rejudge: live.rejudge, summary: {...run.summary, scoring: live.scoring}};
+    });
     runsRef.current = list;
     setRuns(list);
     const next: RunPageState = {
@@ -132,8 +145,11 @@ export function useRuns(options: UseRunsOptions = {}) {
   /** 1.0 `:2317-2319`：把 `effectiveRunSummary` 合回对应行。 */
   const updateRunSummary = useCallback((runId: string, summary: RunSummary, snapshot?: Run) => {
     setDetailError(previous => previous?.runId === runId ? null : previous);
+    if (snapshot?.rejudge?.rejudge_id) {
+      liveScoringRef.current = {runId, rejudge: snapshot.rejudge, scoring: summary.scoring};
+    }
     const next = runsRef.current.map((run) =>
-      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
+      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count, rejudge: snapshot.rejudge } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
     );
     runsRef.current = next;
     setRuns(next);

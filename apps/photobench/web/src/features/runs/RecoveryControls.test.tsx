@@ -54,7 +54,7 @@ describe("恢复与评分范围",()=>{
     fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"all"}});
     expect(scope).toHaveBeenCalledWith("all");
     fireEvent.click(screen.getByRole("checkbox", {name:/开放式回答.*GT图片辅助/}));
-    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}})}));
+    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}})}));
     rerender(<RejudgeCard {...base} scope="all"/>);
     expect(screen.getByRole("button",{name:"补齐全部回答的未完成评分"})).toBeTruthy();
   });
@@ -80,7 +80,7 @@ describe("评分面板的操作语义", () => {
     const toggle = screen.getByRole("checkbox", { name: /开放式回答.*GT图片辅助/ });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     fireEvent.click(toggle);
-    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}});
+    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}}});
     expect(request).not.toHaveBeenCalled();
     rerender(<RejudgeCard {...base} onRequestRejudge={request} scoring={{...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}}} />);
     expect((toggle as HTMLInputElement).checked).toBe(true);
@@ -92,6 +92,12 @@ describe("评分面板的操作语义", () => {
     expect((screen.getByRole("button", { name: "评分进行中…" }) as HTMLButtonElement).disabled).toBe(true);
     const prompt = screen.getByText("评分提示词").closest("details") as HTMLDetailsElement;
     expect(prompt.open).toBe(false);
+  });
+  it('运行进度区分题数、对话轮数和双标准评分项目数', () => {
+    render(<RejudgeCard {...base} activeRejudge={{status:'running',completed:25,total:1104,failed:0,qa_count:487,turn_count:552,subscore_count:1104}} rejudgePercent={2}/>);
+    expect(screen.getByLabelText('最近评分任务进度').textContent).toContain('评分项目 25/1104 项');
+    expect(screen.getByText(/487题 · 552轮对话 · 1104个评分项目/)).toBeTruthy();
+    expect(screen.getByText(/同一轮按每套标准各计1个评分项目/)).toBeTruthy();
   });
 });
 

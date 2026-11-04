@@ -4,12 +4,12 @@ export function newBatchNonce(): string {
   return Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, '0')).join('');
 }
 export const PROFILE_LABELS: Record<string, string> = {
-  [OPEN_PROFILE]: '开放式回答（0/1/2，历史口径）', [ATM_PROFILE]: 'ATM-Bench式QS',
+  [OPEN_PROFILE]: '开放式回答（0/1/2 LLM as Judge评分）', [ATM_PROFILE]: 'ATM-Bench式QS',
 };
 export interface ScoringConfig { use_gt_images: boolean; use_gt_metadata: boolean; prompts?: Record<string, string> }
 export interface ScoringSelection { profiles: string[]; configs: Record<string, ScoringConfig> }
 export function defaultScoring(): ScoringSelection {
-  return {profiles: [OPEN_PROFILE], configs: Object.fromEntries(Object.keys(PROFILE_LABELS).map(p => [p, {use_gt_images:false, use_gt_metadata:false}]))};
+  return {profiles: [OPEN_PROFILE], configs: Object.fromEntries(Object.keys(PROFILE_LABELS).map(p => [p, {use_gt_images:false, use_gt_metadata:true}]))};
 }
 export function scoringPayload(selection: ScoringSelection, drafts: Record<string, string> = {}) {
   return {scoring_profiles: selection.profiles, scoring_configs: Object.fromEntries(selection.profiles.map(profile => [profile, {

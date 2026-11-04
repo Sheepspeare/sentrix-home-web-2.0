@@ -14,11 +14,16 @@ describe('独立评分标准', () => {
     const open = screen.getByRole('checkbox', {name: PROFILE_LABELS[OPEN_PROFILE]}) as HTMLInputElement;
     const atm = screen.getByRole('checkbox', {name: PROFILE_LABELS[ATM_PROFILE]}) as HTMLInputElement;
     expect(open.checked).toBe(true); expect(atm.checked).toBe(false);
+    expect(screen.getByText(/可只选一套，也可同时选择两套/)).toBeTruthy();
     expect(container.querySelector('details')?.open).toBe(false);
     fireEvent.click(open); expect(open.checked).toBe(true);
     fireEvent.click(atm); fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
     expect((screen.getByLabelText(PROFILE_LABELS[ATM_PROFILE]+' · GT图片辅助') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(open);
+    expect(open.checked).toBe(false); expect(atm.checked).toBe(true);
+    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(atm); expect(atm.checked).toBe(true);
   });
   it('提交保留不同标准的草稿，主动清空也交给后端校验', () => {
     const selection=defaultScoring(); selection.profiles.push(ATM_PROFILE);
@@ -26,18 +31,72 @@ describe('独立评分标准', () => {
     expect(body.scoring_configs[OPEN_PROFILE].prompts).toEqual({answer_quality:'open'});
     expect(body.scoring_configs[ATM_PROFILE].prompts).toEqual({choice:'', number:'number'});
   });
+  it('新任务两标准默认附加元数据，图片独立且提交明确保存开关', () => {
+    const selection=defaultScoring(); selection.profiles.push(ATM_PROFILE);
+    const body=scoringPayload(selection);
+    for (const profile of [OPEN_PROFILE,ATM_PROFILE]) {
+      expect(body.scoring_configs[profile]).toEqual({use_gt_images:false,use_gt_metadata:true,prompts:{}});
+    }
+    selection.configs[OPEN_PROFILE].use_gt_metadata=false;
+    expect(scoringPayload(selection).scoring_configs[OPEN_PROFILE].use_gt_metadata).toBe(false);
+    expect(scoringPayload(selection).scoring_configs[ATM_PROFILE].use_gt_metadata).toBe(true);
+    expect(defaultScoring().configs[OPEN_PROFILE].use_gt_metadata).toBe(true);
+  });
+  it('元数据可独立关闭，手动关闭不会被图片或标准切换覆盖', () => {
+    function Settings() {const [value,setValue]=useState(defaultScoring()); return <ScoringSettings value={value} onChange={setValue}/>;}
+    render(<Settings/>);
+    const metadata=screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement;
+    fireEvent.click(metadata); expect(metadata.checked).toBe(false);
+    fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
+    expect(metadata.checked).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox',{name:PROFILE_LABELS[ATM_PROFILE]}));
+    expect((screen.getByLabelText(PROFILE_LABELS[ATM_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(true);
+    expect(metadata.checked).toBe(false);
+    expect(screen.getByText(/元数据取自GT媒体的产品库记录/)).toBeTruthy();
+  });
   it('未执行标准固定显示未采集，部分评分只展示均值和覆盖率', () => {
     render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'incomplete',scored:1,total:2,coverage:.5,scored_mean:1,normalized_mean:.5,total_score:null,diagnostic_pending:1}}}}} />);
     expect(screen.getByText('未采集')).toBeTruthy();
     expect(screen.getByText('未完成')).toBeTruthy();
-    expect(screen.getByText('已评分均值 1.000/2 · 50.0%')).toBeTruthy();
+    expect(screen.getByText('已评分回答质量均分')).toBeTruthy();
+    expect(screen.getByText('1.00 / 2.00 分')).toBeTruthy();
+    expect(screen.queryByText('50.0%')).toBeNull();
     expect(screen.getByText('覆盖率 1/2 · 50.0%')).toBeTruthy();
     expect(screen.getByText(/公共诊断待完成 1 项/)).toBeTruthy();
   });
   it('完整合法0分显示0%，不显示未采集', () => {
     render(<ScoringResults summary={{scoring:{profiles:Object.fromEntries([OPEN_PROFILE,ATM_PROFILE].map(p=>[p,{status:'completed',scored:2,total:2,coverage:1,scored_mean:0,normalized_mean:0,total_score:0}]))}}} />);
     expect(screen.queryByText('未采集')).toBeNull();
-    expect(screen.getAllByText('0.0%')).toHaveLength(2);
+    expect(screen.getByText('0.00 / 2.00 分')).toBeTruthy();
+    expect(screen.getByText('0.0%')).toBeTruthy();
+    expect(screen.getByText('回答质量均分')).toBeTruthy();
+    expect(screen.getByText('QS总分')).toBeTruthy();
+  });
+  it('开放式以2分制显示原始均分，QS独立显示百分比和待评分状态', () => {
+    render(<ScoringResults summary={{scoring:{profiles:{
+      [OPEN_PROFILE]:{status:'incomplete',scored:163,total:487,coverage:163/487,scored_mean:1.288,normalized_mean:.644,total_score:null},
+      [ATM_PROFILE]:{status:'incomplete',scored:0,total:487,coverage:0,scored_mean:null,normalized_mean:null,total_score:null},
+    }}}}/>);
+    const open=screen.getByRole('article',{name:'开放式回答（0/1/2 LLM as Judge评分）'});
+    expect(within(open).getByText('1.29 / 2.00 分')).toBeTruthy();
+    expect(within(open).queryByText('64.4%')).toBeNull();
+    const atm=screen.getByRole('article',{name:PROFILE_LABELS[ATM_PROFILE]});
+    expect(within(atm).getByText('—')).toBeTruthy();
+    expect(within(atm).getByText('已评分QS均值')).toBeTruthy();
+  });
+  it('部分QS得分仍展示已评分均值百分比', () => {
+    render(<ScoringResults summary={{scoring:{profiles:{[ATM_PROFILE]:{status:'incomplete',scored:2,total:3,coverage:2/3,scored_mean:.75,normalized_mean:.75,total_score:null}}}}}/>);
+    expect(screen.getByText('75.0%')).toBeTruthy();
+    expect(screen.getByText('已评分QS均值')).toBeTruthy();
+  });
+  it('两套结果使用独立卡片，配置默认收起并保留完整快照标识', () => {
+    const hash='df903991fe7f2c2581d3d2d9e4841b56770996396737af032b39acfc42f06876';
+    const {container}=render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'completed',scored:487,total:487,coverage:1,scored_mean:1,normalized_mean:.5,total_score:.5,qa_definition_sha256:hash,batch_id:'score-c40f42e6280967d9c50c79e7'}}}}}/>);
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+    expect(container.querySelector('.key-metric-list')).toBeNull();
+    expect(container.querySelector('details')?.open).toBe(false);
+    expect(screen.getByText(hash).tagName).toBe('CODE');
+    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+'评分覆盖率') as HTMLProgressElement).value).toBe(1);
   });
   it('提示词按标准切换用途，列表只读，恢复仅触发当前项', () => {
     const change=vi.fn(), reset=vi.fn();

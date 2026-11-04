@@ -283,7 +283,7 @@ describe("canRejudge / rejudgePercent（1.0 :365-374）", () => {
     expect(result.current.rejudgeConfirmation?.message).toContain("7 题、8 轮、8 项");
     expect(postMock).not.toHaveBeenCalled();
     await act(async () => {await result.current.confirmRejudge();});
-    expect(postMock).toHaveBeenCalledWith("/runs/r1/rejudge",expect.objectContaining({judge_url:"u",judge_model:"m",scoring_configs:{photobench_open_v1:{use_gt_images:false,use_gt_metadata:false,prompts:{answer_quality:"p"}}}}));
+    expect(postMock).toHaveBeenCalledWith("/runs/r1/rejudge",expect.objectContaining({judge_url:"u",judge_model:"m",scoring_configs:{photobench_open_v1:{use_gt_images:false,use_gt_metadata:true,prompts:{answer_quality:"p"}}}}));
   });
 });
 
