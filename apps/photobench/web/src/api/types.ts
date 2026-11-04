@@ -383,6 +383,7 @@ export interface TaskJudge {
 
 /** 一行逐题摘要（`/api/v1/runs/{id}/items` 的 `items[]`）。 */
 export interface RunItemSummary {
+  profile_scores?: Record<string, Judge>;
   display_question?: string;
   conversation_turn_count?: number;
   conversation_context_mode?: string;

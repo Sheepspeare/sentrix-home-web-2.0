@@ -123,3 +123,15 @@ it('已召回但未交付的GT不误标为检索未召回', () => {
   expect(screen.getByText('· 未交付')).toBeTruthy();
   expect(screen.queryByText('· 未召回')).toBeNull();
 });
+
+
+it('shows both standards together, including valid zero and a separate failed score', () => {
+  const props={summary:{index:0,question:'双评分',profile_scores:{photobench_open_v1:{score:2,status:'completed'},atm_qs_v1:{score:0,status:'completed'}}},detail:undefined,loading:false,open:false,albumId:'a',modelLabel:'m',activeRejudge:null,onToggle:()=>{},onOpenImage:()=>{},onOpenJudgeInput:()=>{}};
+  const {rerender}=render(<QaItemCard {...props}/>);
+  expect(screen.getByText('开放式 2/2 分')).toBeTruthy();
+  expect(screen.getByText('QS 0.0%')).toBeTruthy();
+  expect(screen.queryByText('未评分')).toBeNull();
+  rerender(<QaItemCard {...props} summary={{...props.summary,profile_scores:{photobench_open_v1:{status:'failed'},atm_qs_v1:{score:1,status:'completed'}}}}/>);
+  expect(screen.getByText('开放式 评分失败')).toBeTruthy();
+  expect(screen.getByText('QS 100.0%')).toBeTruthy();
+});

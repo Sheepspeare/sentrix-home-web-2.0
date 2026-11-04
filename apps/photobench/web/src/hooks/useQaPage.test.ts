@@ -406,3 +406,17 @@ describe("useQaPage · visibleQaItems（1.0 :355-364）", () => {
     expect(result.current.visibleQaItems.map((item) => item.index)).toEqual([1, 2, 3]);
   });
 });
+
+
+it('loads both standards by source index even when a score filter changes page membership', async () => {
+  mockApi.mockImplementation(async (url: string) => {
+    if (url.includes('/items/7?')) return {index:7,item:{index:7,judge:{score:0,status:'completed'}}};
+    if (url.includes('scoring_profile=atm_qs_v1')) return pageOf([{index:0,judge:{score:1}}]);
+    return pageOf([{index:7,judge:{score:2,status:'completed'}}]);
+  });
+  const {result}=renderHook(() => useQaPage({activeRunId:'r',scoringQuery:'scoring_profile=photobench_open_v1',scoringProfiles:['photobench_open_v1','atm_qs_v1']}));
+  await act(async () => {result.current.setQaFilter('score','2');});
+  await act(async () => {await result.current.loadQaPage();});
+  expect(result.current.qaPage.items[0].profile_scores).toEqual({photobench_open_v1:{score:2,status:'completed'},atm_qs_v1:{score:0,status:'completed'}});
+  expect(mockApi.mock.calls.find(([url])=>url.includes('scoring_profile=atm_qs_v1'))?.[0]).not.toContain('score=2');
+});

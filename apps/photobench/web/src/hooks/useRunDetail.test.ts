@@ -436,3 +436,14 @@ it("切换任务后不能把旧确认提交给新任务", async()=>{
   await act(async()=>{await result.current.confirmRejudge();});
   expect(postMock).not.toHaveBeenCalled();
 });
+
+
+it('defaults a new profile run to its first collected standard and preserves manual selection', async () => {
+  apiMock.mockImplementation(async (url:string) => url.includes('?include_history=') ? runDetail({scoring_batches:[{batch_id:'o',profile_id:'photobench_open_v1'},{batch_id:'a',profile_id:'atm_qs_v1'}]}) : {});
+  const {result}=mount();
+  await act(async () => {await result.current.loadActiveRun();});
+  await waitFor(() => expect(result.current.readProfile).toBe('photobench_open_v1'));
+  act(()=>result.current.setReadProfile('atm_qs_v1'));
+  await act(async () => {await result.current.loadActiveRun();});
+  expect(result.current.readProfile).toBe('atm_qs_v1');
+});

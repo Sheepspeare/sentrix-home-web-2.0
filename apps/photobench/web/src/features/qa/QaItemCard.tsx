@@ -1,3 +1,4 @@
+import { OPEN_PROFILE, ATM_PROFILE } from '../../lib/scoring.ts';
 import { EvaluationResult, EvaluationTypeBadge, evaluationReason } from "../../components/EvaluationResult.tsx";
 import { ItemScoringResults } from '../../components/ScoringResults.tsx';
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
@@ -122,9 +123,15 @@ export function QaItemCard({
         <strong>{s.display_question || conversationTurns(detail)[0]?.message || s.question}</strong>
         {Number(s.conversation_turn_count || conversationTurns(detail).length) > 1 ? <span className="qa-dialogue-badge">{s.conversation_turn_count || conversationTurns(detail).length} 轮对话</span> : null}
         <EvaluationTypeBadge value={summary.evaluation || summary.evaluation_result || summary.judge} />
-        <span className={`score ${judgeScoreClass(s)} judge-round-${judgeRoundState(s, activeRejudge)}`}>
+        {summary.profile_scores && Object.keys(summary.profile_scores).length ? Object.entries(summary.profile_scores).map(([profile, judge]) => {
+          const value = typeof judge.score === 'number' && Number.isFinite(judge.score) ? judge.score : null;
+          const label = profile === OPEN_PROFILE ? '开放式' : profile === ATM_PROFILE ? 'QS' : profile;
+          const status = value !== null ? profile === OPEN_PROFILE ? value + '/2 分' : (value * 100).toFixed(1) + '%'
+            : judge.status === 'failed' ? '评分失败' : judge.status === 'running' ? '评分中' : '待评分';
+          return <span key={profile} className="score" title={String(judge.reason || '')}>{label} {status}</span>;
+        }) : <span className={'score ' + judgeScoreClass(s) + ' judge-round-' + judgeRoundState(s, activeRejudge)}>
           {judgeScoreLabel(s, activeRejudge)}
-        </span>
+        </span>}
         {Number(s.ground_truth_count) > 0 && summary.retrieval_metrics_applicable !== false && (
           <span className="muted small">
             精确率 {fmtPct(s.retrieval_precision)} · 召回率 {fmtPct(s.retrieval_recall)} · F1{" "}

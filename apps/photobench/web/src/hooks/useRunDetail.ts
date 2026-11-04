@@ -172,6 +172,14 @@ export function useRunDetail(options: RunDetailOptions) {
   const [batchNonce, setBatchNonce] = useState(newBatchNonce);
   const [readProfile, setReadProfile] = useState('');
   const [readBatch, setReadBatch] = useState('');
+  const initializedReadRun = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeRunId || activeRun?.run_id !== activeRunId || initializedReadRun.current === activeRunId) return;
+    initializedReadRun.current = activeRunId;
+    const batches = Array.isArray(activeRun.scoring_batches) ? activeRun.scoring_batches as Array<{profile_id:string}> : [];
+    setReadProfile(batches[0]?.profile_id || '');
+    setReadBatch('');
+  }, [activeRunId, activeRun]);
   const readQuery = readProfile ? new URLSearchParams({scoring_profile:readProfile, scoring_batch:readBatch}).toString() : '';
   const readQueryRef = useRef(readQuery);
   readQueryRef.current = readQuery;
@@ -202,6 +210,7 @@ export function useRunDetail(options: RunDetailOptions) {
     setRecoveryPlanError("");
     setJudgeUseGtImages(false);
     setRejudgeScope("missing");
+    initializedReadRun.current = null;
     setReadProfile('');
     setReadBatch('');
     setResumeBatches({});

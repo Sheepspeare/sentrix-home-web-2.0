@@ -74,7 +74,7 @@ export function RunsView({ runs, judgeModel, saveJudgePrompt, memory }: RunsView
         {runs.readProfile && <label>评分批次 <select aria-label="查看评分批次" value={runs.readBatch} onChange={e => runs.setReadBatch(e.target.value)}>
           <option value="">最新批次</option>{runs.scoringBatches.filter(b => b.profile_id === runs.readProfile).map(b => <option key={b.batch_id} value={b.batch_id}>{b.created_at} · {b.batch_id}</option>)}
         </select></label>}
-        <p className="small muted">逐题列表、筛选、导出和分析使用此处所选标准与批次。</p>
+        <p className="small muted">逐题同时显示已采集的两套评分。此处选择用于分数筛选、导出和分析的标准与批次；另一套显示最新批次。</p>
       </div>}
       <RunDetail
         key={runs.activeRunId || "empty"}
