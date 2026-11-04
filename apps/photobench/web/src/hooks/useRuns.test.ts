@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../api/client.ts", () => ({ api: vi.fn(), post: vi.fn() }));
 
 import { api } from "../api/client.ts";
-import type { RunPage } from "../api/types.ts";
+import type { Run, RunPage } from "../api/types.ts";
 import { useRuns } from "./useRuns.ts";
 
 // 1.0 参考：`services/photobench/frontend/src/App.vue`（只读权威）。
@@ -36,6 +36,46 @@ afterEach(() => {
 });
 
 describe("loadRuns / changeRunPage（1.0 :2233 / :2249）", () => {
+  it("列表旧快照不能覆盖同一补评任务的实时进度和评分汇总", async () => {
+    const page = pagePayload(0, "completed_with_errors");
+    page.runs[0] = { ...page.runs[0]!, rejudge: {rejudge_id: "score-a", status: "running", completed: 0, total: 1104},
+      summary: {scoring: {profiles: {photobench_open_v1: {scored: 0, total: 487}}}} };
+    let snapshot: Run = {...page.runs[0]!, rejudge: {...page.runs[0]!.rejudge, completed: 128},
+      summary: {scoring: {profiles: {photobench_open_v1: {scored: 115, total: 487}}}}};
+    apiMock.mockImplementation(async path => path.startsWith("/runs?") ? page : path.startsWith("/runs/a?") ? snapshot : {});
+    const {result} = renderHook(() => useRuns());
+    await act(async () => { await result.current.loadRuns(); result.current.selectRun(page.runs[0]!); await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.runs[0]?.rejudge?.completed).toBe(128);
+    for (let i = 0; i < 3; i++) {
+      await act(async () => { await result.current.loadRuns(); });
+      expect(result.current.runs[0]?.rejudge?.completed).toBe(128);
+      expect(result.current.runs[0]?.summary?.scoring).toEqual(snapshot.summary?.scoring);
+    }
+    snapshot = {...snapshot, rejudge: {...snapshot.rejudge, completed: 129}};
+    await act(async () => { await result.current.loadActiveRun(); });
+    expect(result.current.runs[0]?.rejudge?.completed).toBe(129);
+  });
+
+  it("保留同任务终态，新补评ID和切换记录后重新接受列表快照", async () => {
+    const page = pagePayload(0, "completed_with_errors");
+    page.runs[0] = {...page.runs[0]!, rejudge: {rejudge_id: "score-a", status: "running", completed: 0, total: 1104}};
+    const snapshot: Run = {...page.runs[0]!, rejudge: {...page.runs[0]!.rejudge, status: "completed", completed: 1104}, summary: {scoring: {finished: true}}};
+    apiMock.mockImplementation(async path => path.startsWith("/runs?") ? page : path.startsWith("/runs/a?") ? snapshot : {});
+    const {result} = renderHook(() => useRuns());
+    await act(async () => { await result.current.loadRuns(); result.current.selectRun(page.runs[0]!); await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await result.current.loadRuns(); });
+    expect(result.current.runs[0]?.rejudge?.status).toBe("completed");
+    expect(result.current.hasRunning).toBe(false);
+    page.runs[0] = {...page.runs[0]!, rejudge: {rejudge_id: "score-b", status: "running", completed: 0, total: 487}, summary: {scoring: {finished: false}}};
+    await act(async () => { await result.current.loadRuns(); });
+    expect(result.current.runs[0]).toEqual(page.runs[0]);
+    expect(result.current.hasRunning).toBe(true);
+    await act(async () => { result.current.selectRun({run_id: "b"}); await vi.advanceTimersByTimeAsync(0); });
+    page.runs[0] = snapshot;
+    await act(async () => { await result.current.loadRuns(); });
+    expect(result.current.runs[0]).toEqual(snapshot);
+  });
+
   it("loadRuns 照搬 timeout 8s / retries 2", async () => {
     apiMock.mockResolvedValue(pagePayload(0));
     const { result } = renderHook(() => useRuns());
