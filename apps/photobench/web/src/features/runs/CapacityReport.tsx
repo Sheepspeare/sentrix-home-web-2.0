@@ -118,9 +118,9 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
     {report.interrupted_rounds?.map((round) => <p key={round.label}>{round.label} · 按用户要求取消 · 已完成 QA {round.qa_completed}、评分 {round.judge_completed}；结果保留，排除性能比较。</p>)}
     {report.speed_gate ? <p role="status">优化速度验收：{report.speed_gate.passed ? "通过" : "未通过"}；原 C16 {number(report.speed_gate.baseline_qpm, 3)} → 优化 C16 {number(report.speed_gate.candidate_qpm, 3)} 题/分钟，提升 {number((report.speed_gate.weighted_speedup - 1) * 100)}%。要求两轮合计提升至少 15%，每轮提升至少 10%。</p> : null}
     {report.prior_optimization_rounds?.length ? <section aria-label="先前优化结果">
-      <h3>先前优化 · 执行通过，速度门槛未通过</h3>
-      <p>保留原始结果，不计入当前候选的两轮验收。</p>
-      {report.prior_optimization_rounds.map((r) => <p key={r.run_id}><button onClick={() => setSelection(r.run_id)}>{r.label}</button> · QA {r.completed}/{r.questions} · Judge {r.judge_completed}/{r.questions} · {number(r.qa_per_min, 3)} 题/分钟</p>)}
+      <h3>先前优化 · 各轮原始验收结果</h3>
+      <p>保留原始结果，不计入当前候选的两轮验收。执行验收与整组速度门槛分别判断；旧版 Judge 终态计数不代表有效评分数。</p>
+      {report.prior_optimization_rounds.map((r) => <p key={r.run_id}><button onClick={() => setSelection(r.run_id)}>{r.label}</button> · {r.passed ? "执行验收通过" : "执行验收未通过"} · QA {r.completed}/{r.questions} · Judge 记录终态 {r.judge_completed}/{r.questions} · {number(r.qa_per_min, 3)} 题/分钟</p>)}
     </section> : null}
     {report.diagnostic_rounds?.length ? <section aria-label="独立诊断结果">
       <h3>独立诊断 · 不计入正式速度门槛</h3>

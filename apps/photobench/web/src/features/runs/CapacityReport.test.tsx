@@ -18,7 +18,8 @@ it("keeps prior failed-speed rounds and diagnostics out of current acceptance", 
     schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "prefix",
     model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
     context_tokens: 32768, conditions: [],
-    prior_optimization_rounds: [round("C16-R1-v9", 16, true), round("C16-R2-v9", 16, true)],
+    prior_optimization_rounds: [round("C16-R1-v9", 16, true), round("C16-R2-v9", 16, true),
+      { ...round("C16-FULL487-v10", 16, false), questions: 487, completed: 474, judge_completed: 487 }],
     diagnostic_rounds: [{ ...round("profile16", 16, true), questions: 16, completed: 16 }],
     rounds: [{ ...round("C16-R1-prefix", 16, true), prefix_cache_evidence: {
       verified: true, observed_requests: 260, expected_requests: 260, requests_with_reuse: 200,
@@ -26,10 +27,13 @@ it("keeps prior failed-speed rounds and diagnostics out of current acceptance", 
     } }],
   }} />);
   expect(screen.queryByText("C16")).toBeNull();
-  expect(screen.getByRole("region", { name: "先前优化结果" }).textContent).toContain("速度门槛未通过");
+  const prior = screen.getByRole("region", { name: "先前优化结果" });
+  expect(prior.textContent).toContain("旧版 Judge 终态计数不代表有效评分数");
+  expect(screen.getByRole("button", { name: "C16-FULL487-v10" }).parentElement?.textContent).toContain("执行验收未通过");
+  expect(screen.getByRole("button", { name: "C16-R1-v9" }).parentElement?.textContent).toContain("执行验收通过");
   expect(screen.getByRole("region", { name: "独立诊断结果" }).textContent).toContain("不计入正式速度门槛");
   expect(screen.getByText(/实际前缀复用：200\/260 次调用/).textContent).toContain("40.0%");
-  expect(screen.getByRole("combobox", { name: "选择资源曲线轮次" }).querySelectorAll("option")).toHaveLength(4);
+  expect(screen.getByRole("combobox", { name: "选择资源曲线轮次" }).querySelectorAll("option")).toHaveLength(5);
 });
 
 describe("capacity evidence", () => {
