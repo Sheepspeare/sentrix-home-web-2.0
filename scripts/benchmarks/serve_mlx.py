@@ -98,6 +98,49 @@ def install_prefill_admission_fix() -> None:
     generator._process_prompts = process
 
 
+def canonical_generation_step(instance: Any, canonical: Callable[[], Any]) -> Any:
+    """Bound ordinary admission, including text joining an existing decode batch.
+
+    In 0.6.0, both ordinary selectors use completion_batch_size as the number
+    of NEW requests, without subtracting the active batch. This attribute is
+    only used by those selectors on this path. Restore it before returning to
+    chunked scheduling; existing decoders and waiting requests remain intact.
+    """
+    capacity = instance.completion_batch_size
+    active = len(instance.active_batch) if instance.active_batch is not None else 0
+    instance.completion_batch_size = min(instance.prefill_batch_size, max(0, capacity - active))
+    try:
+        return canonical()
+    finally:
+        instance.completion_batch_size = capacity
+
+
+def install_canonical_admission_fix() -> None:
+    generator: Any = importlib.import_module("vllm_mlx.mllm_batch_generator").MLLMBatchGenerator
+    canonical = generator._next
+
+    def next_batch(instance: Any) -> Any:
+        return canonical_generation_step(instance, lambda: canonical(instance))
+
+    # Install before engine construction: its chunked fallback captures _next.
+    generator._next = next_batch
+
+
+def install_nonthinking_json_fix(server: Any) -> None:
+    """Align JSON instructions with this adapter's enforced nonthinking mode.
+
+    Upstream uses the presence of a reasoning *parser* to allow reasoning in
+    its JSON instructions, even with enable_thinking=False. Keep the parser,
+    schema and original messages; select the existing strict instruction.
+    """
+    original = server.build_json_system_prompt
+
+    def build(response_format: Any, *, thinking_model: bool = False) -> Any:
+        return original(response_format, thinking_model=False)
+
+    server.build_json_system_prompt = build
+
+
 def fair_generation_step(instance: Any, chunked: Callable[[], Any], canonical: Callable[[], Any]) -> Any:
     """Drain the current batch when media waits; do not admit newer text forever.
 
@@ -370,9 +413,11 @@ def install_adapter() -> None:
         install_batched_decode()
     install_chunked_context_fix()
     install_prefill_admission_fix()
+    install_canonical_admission_fix()
     install_media_fairness_fix()
     install_telemetry()
     server = importlib.import_module("vllm_mlx.server")
+    install_nonthinking_json_fix(server)
     app: FastAPI = server.app
 
     @app.post("/tokenize")

@@ -168,3 +168,68 @@ def test_prefill_exception_keeps_original_caller_error_handling():
     with pytest.raises(RuntimeError, match="prefill failed"):
         adapter.process_queued_prompts(generator, [request], fail_batch)
     assert generator.unprocessed_requests == [request]
+
+
+def test_canonical_text_extension_bounds_new_admissions_without_reducing_decode_batch(monkeypatch):
+    """Reproduce ordinary-path selection: 13 waiters joining two active requests."""
+
+    class Generator:
+        def _next(self):
+            selected = self.unprocessed_requests[: self.completion_batch_size]
+            self.active_batch.extend(selected)
+            self.unprocessed_requests = self.unprocessed_requests[len(selected) :]
+            return selected, list(self.active_batch)
+
+    monkeypatch.setattr(
+        adapter.importlib, "import_module", lambda _: SimpleNamespace(MLLMBatchGenerator=Generator)
+    )
+    adapter.install_canonical_admission_fix()
+    generator = Generator()
+    generator.active_batch = ["long", "short"]
+    generator.unprocessed_requests = list(range(13))
+    generator.completion_batch_size = 16
+    generator.prefill_batch_size = 4
+    selected, decoded = generator._next()
+    assert selected == [0, 1, 2, 3]
+    assert decoded == ["long", "short", 0, 1, 2, 3]
+    assert generator.unprocessed_requests == list(range(4, 13))
+    assert generator.completion_batch_size == 16
+    while generator.unprocessed_requests:
+        selected, decoded = generator._next()
+        assert len(selected) <= 4
+    assert decoded == ["long", "short", *range(13)]
+    generator.unprocessed_requests = ["last", "waiting"]
+    selected, decoded = generator._next()
+    assert selected == ["last"] and len(decoded) == 16
+    selected, decoded = generator._next()
+    assert selected == [] and len(decoded) == 16
+    assert generator.unprocessed_requests == ["waiting"]
+
+
+def test_canonical_idle_admission_restores_capacity_even_on_exception():
+    import pytest
+
+    generator = SimpleNamespace(active_batch=None, completion_batch_size=16, prefill_batch_size=4)
+
+    def canonical():
+        assert generator.completion_batch_size == 4
+        raise RuntimeError("admission failed")
+
+    with pytest.raises(RuntimeError, match="admission failed"):
+        adapter.canonical_generation_step(generator, canonical)
+    assert generator.completion_batch_size == 16
+
+
+def test_json_instruction_matches_enforced_nonthinking_mode_even_with_reasoning_parser():
+    calls = []
+    schema = object()
+
+    def builder(response_format, *, thinking_model=False):
+        calls.append((response_format, thinking_model))
+        return "strict JSON" if not thinking_model else "may reason first"
+
+    server = SimpleNamespace(build_json_system_prompt=builder)
+    adapter.install_nonthinking_json_fix(server)
+    assert server.build_json_system_prompt(schema, thinking_model=True) == "strict JSON"
+    assert server.build_json_system_prompt(schema) == "strict JSON"
+    assert calls == [(schema, False), (schema, False)]
