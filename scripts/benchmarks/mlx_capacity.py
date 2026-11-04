@@ -287,12 +287,30 @@ def macos_swap_counters(text: str) -> dict[str, int]:
     return result
 
 
+def validate_user_cancelled_baseline(receipt: Mapping[str, Any], run_id: str) -> None:
+    """Permit a single reference only after the explicitly cancelled run has quiesced."""
+    work = receipt.get("work") or {}
+    if (
+        receipt.get("status") != "stopped"
+        or receipt.get("label") != "C16-R2-v7"
+        or receipt.get("run_id") != run_id
+        or receipt.get("user_requested") is not True
+        or receipt.get("raw_status") != "cancelled"
+        or work.get("cleanup_status") != "stopped"
+        or work.get("work") != []
+    ):
+        raise ValueError("single baseline requires confirmed user cancellation and stopped workers")
+
+
 def optimization_speed_gate(
-    baseline: list[dict[str, Any]], candidate: list[dict[str, Any]]
+    baseline: list[dict[str, Any]], candidate: list[dict[str, Any]], *, allow_single_baseline: bool = False
 ) -> dict[str, Any]:
     """Predeclared operational gate, not a statistical significance claim."""
-    for group in [baseline, candidate]:
-        if len(group) != 2 or {x.get("trial") for x in group} != {1, 2}:
+    for index, group in enumerate([baseline, candidate]):
+        single_reference = (
+            index == 0 and allow_single_baseline and len(group) == 1 and group[0].get("trial") == 1
+        )
+        if not single_reference and (len(group) != 2 or {x.get("trial") for x in group} != {1, 2}):
             raise ValueError("two distinct C16 trials are required")
         for row in group:
             if (
@@ -309,12 +327,14 @@ def optimization_speed_gate(
                 or row["qa_seconds"] <= 0
             ):
                 raise ValueError("speed comparison requires fully accepted C16 rounds")
-    baseline_qpm = 128 * 60 / sum(row["qa_seconds"] for row in baseline)
+    baseline_qpm = sum(row["completed"] for row in baseline) * 60 / sum(row["qa_seconds"] for row in baseline)
     candidate_qpm = 128 * 60 / sum(row["qa_seconds"] for row in candidate)
     ratios = [64 * 60 / row["qa_seconds"] / baseline_qpm for row in candidate]
     return {
         "passed": candidate_qpm >= baseline_qpm * 1.15 and min(ratios) >= 1.10,
         "baseline_qpm": baseline_qpm,
+        "baseline_trials": len(baseline),
+        "baseline_reference_mode": "single_completed_trial_user_cancel" if len(baseline) == 1 else "paired",
         "candidate_qpm": candidate_qpm,
         "weighted_speedup": candidate_qpm / baseline_qpm,
         "round_speedups": ratios,

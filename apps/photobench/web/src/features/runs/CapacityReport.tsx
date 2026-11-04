@@ -40,6 +40,8 @@ export interface CapacityEvidence {
   conditions: string[];
   rounds: CapacityRound[];
   baseline_rounds?: CapacityRound[];
+  baseline_reference_mode?: string;
+  interrupted_rounds?: { label: string; qa_completed: number; judge_completed: number; reason: string }[];
   speed_gate?: { passed: boolean; baseline_qpm: number; candidate_qpm: number; weighted_speedup: number } | null;
 }
 
@@ -109,9 +111,11 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
       <article><span>{report.baseline_rounds?.length ? "优化配置吞吐 · 两轮合计" : "吞吐最佳档 · 两轮合计"}</span><strong>{best ? `C${best.concurrency} · ${number(best.throughput)} 题/分钟` : "待验收"}</strong></article>
       <article><span>487 题独立测试</span><strong>{full ? `${full.completed} / 487` : "尚未开始"}</strong><small>{full ? `评分完成 ${full.judge_completed}，评分失败 ${full.judge_failed}` : "在最高通过档运行"}</small></article>
     </div>
+    {report.baseline_reference_mode === "single_completed_trial_user_cancel" ? <p>速度对照仅采用原配置 C16 第一轮；第二轮按用户要求取消，不计入吞吐或通过档位。</p> : null}
+    {report.interrupted_rounds?.map((round) => <p key={round.label}>{round.label} · 按用户要求取消 · 已完成 QA {round.qa_completed}、评分 {round.judge_completed}；结果保留，排除性能比较。</p>)}
     {report.speed_gate ? <p role="status">优化速度验收：{report.speed_gate.passed ? "通过" : "未通过"}；原 C16 {number(report.speed_gate.baseline_qpm, 3)} → 优化 C16 {number(report.speed_gate.candidate_qpm, 3)} 题/分钟，提升 {number((report.speed_gate.weighted_speedup - 1) * 100)}%。要求两轮合计提升至少 15%，每轮提升至少 10%。</p> : null}
     {(report.baseline_rounds?.length ? [
-      { title: "原配置基线 · 四档并发 · 同一组 64 题 · 各两轮", rows: report.baseline_rounds },
+      { title: report.baseline_reference_mode === "single_completed_trial_user_cancel" ? "原配置基线 · 已完成轮次" : "原配置基线 · 四档并发 · 同一组 64 题 · 各两轮", rows: report.baseline_rounds },
       { title: "优化配置 · 16 并发 · 同一组 64 题 · 两轮", rows: formal },
     ] : [{ title: "四档并发 · 同一组 64 题 · 各两轮", rows: formal }]).map((section) => <div key={section.title}>
     <h3>{section.title}</h3>

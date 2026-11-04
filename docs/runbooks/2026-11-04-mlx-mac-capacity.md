@@ -120,3 +120,15 @@ macOS psutil 7.2.2 的 `sin/sout` 是一般 `pageins/pageouts`，历史
 新采样另用 `vm_stat` 的 `Swapins/Swapouts` 记录
 `actual_swap_in_bytes/actual_swap_out_bytes`。交换空间存量及其增量仍单独报告；
 缺失数据保持未知，不能从交换存量推算交换流量。
+
+
+### 用户要求立即切换时的基线处理
+
+用户于 2026-11-04 明确取消原配置 C16 第二轮，改为直接测试优化版。
+先停止两个调度控制器，再取消该 PhotoBench run；仅在活动工作清空并保留
+取消凭据后切换。取消轮次单列，部分题目不计入吞吐基线，不重发未知请求。
+默认速度门槛仍要求两轮基线；只有记录了本次用户取消凭据及其 SHA256，
+并显式设置 `baseline_reference_mode=single_completed_trial_user_cancel` 时，
+允许采用已通过的 C16 第一轮。优化候选仍必须完整通过两轮，提升门槛仍为
+合计15%、每轮10%。单轮对照不宣称统计显著性。若取消前第二轮已经完成，
+则保留真实结果并继续使用两轮基线。

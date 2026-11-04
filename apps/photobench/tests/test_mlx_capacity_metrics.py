@@ -259,3 +259,62 @@ def test_speed_gate_requires_both_trials_and_rejects_one_fast_one_slow():
         capacity.optimization_speed_gate(baseline, [round(1, 1400), round(1, 1400)])
     with pytest.raises(ValueError, match="fully accepted"):
         capacity.optimization_speed_gate(baseline, [round(1, 1400), {**round(2, 1400), "passed": False}])
+
+
+def test_single_reference_requires_explicit_opt_in_and_never_waives_candidate_trial():
+    import pytest
+
+    def row(trial, seconds):
+        return {
+            "label": f"C16-R{trial}",
+            "trial": trial,
+            "concurrency": 16,
+            "actual_batch_peak": 16,
+            "questions": 64,
+            "completed": 64,
+            "judge_completed": 64,
+            "passed": True,
+            "failures": {},
+            "model_call_evidence": {"verified": True},
+            "qa_seconds": seconds,
+        }
+
+    baseline = [row(1, 1701.0975)]
+    candidate = [row(1, 1450), row(2, 1450)]
+    with pytest.raises(ValueError, match="two distinct"):
+        capacity.optimization_speed_gate(baseline, candidate)
+    gate = capacity.optimization_speed_gate(baseline, candidate, allow_single_baseline=True)
+    assert gate["passed"] and gate["baseline_trials"] == 1
+    assert gate["baseline_qpm"] == pytest.approx(2.257366200350068)
+    with pytest.raises(ValueError, match="two distinct"):
+        capacity.optimization_speed_gate(baseline, candidate[:1], allow_single_baseline=True)
+    with pytest.raises(ValueError, match="fully accepted"):
+        capacity.optimization_speed_gate(
+            [{**baseline[0], "passed": False}], candidate, allow_single_baseline=True
+        )
+    assert not capacity.optimization_speed_gate(
+        baseline, [row(1, 1500), row(2, 1500)], allow_single_baseline=True
+    )["passed"]
+
+
+def test_cancel_ack_alone_cannot_release_baseline_switch_gate():
+    import pytest
+
+    receipt = {
+        "status": "stopped",
+        "label": "C16-R2-v7",
+        "run_id": "cancelled-run",
+        "user_requested": True,
+        "raw_status": "cancelled",
+        "work": {"cleanup_status": "stopped", "work": []},
+    }
+    capacity.validate_user_cancelled_baseline(receipt, "cancelled-run")
+    for change in [
+        {"user_requested": False},
+        {"raw_status": "running"},
+        {"work": {"cleanup_status": "pending", "work": []}},
+        {"work": {"cleanup_status": "stopped", "work": [{"worker_alive": True}]}},
+        {"run_id": "different-run"},
+    ]:
+        with pytest.raises(ValueError, match="confirmed user cancellation"):
+            capacity.validate_user_cancelled_baseline({**receipt, **change}, "cancelled-run")

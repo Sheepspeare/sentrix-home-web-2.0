@@ -96,3 +96,17 @@ it("keeps baseline rows separate and does not count them toward optimized accept
   expect(screen.getByRole("status").textContent).toContain("优化速度验收：未通过");
   expect(screen.getByRole("combobox", { name: "选择资源曲线轮次" }).querySelectorAll("option")).toHaveLength(3);
 });
+
+it("discloses a user-cancelled baseline without counting its partial work as throughput", () => {
+  render(<CapacityReport evidence={{
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "optimized",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [], baseline_rounds: [round("C16-R1-v7", 16, true)],
+    rounds: [], baseline_reference_mode: "single_completed_trial_user_cancel",
+    interrupted_rounds: [{ label: "C16-R2-v7", qa_completed: 22, judge_completed: 21, reason: "user_cancelled" }],
+  }} />);
+  expect(screen.getByText(/速度对照仅采用原配置 C16 第一轮/)).toBeTruthy();
+  expect(screen.getByText(/C16-R2-v7 · 按用户要求取消/)).toBeTruthy();
+  expect(screen.queryByRole("row", { name: /C16-R2-v7/ })).toBeNull();
+  expect(screen.queryByText("C16")).toBeNull();
+});

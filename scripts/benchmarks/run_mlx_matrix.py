@@ -29,6 +29,7 @@ from scripts.benchmarks.mlx_capacity import (
     save,
     submit_run_once,
     summarize_resources,
+    validate_user_cancelled_baseline,
 )
 
 r = Path(os.environ["SENTRIX_MLX_EXPERIMENT_ROOT"]).resolve()
@@ -253,6 +254,8 @@ def publish() -> None:
             for x in state.get("baseline_labels", [])
         ],
         "speed_gate": state.get("speed_gate"),
+        "interrupted_rounds": state.get("interrupted_rounds", []),
+        "baseline_reference_mode": state.get("baseline_reference_mode", "paired"),
         "model": "ModelScope Qwen3.5-4B-MLX-4bit",
         "model_sha256": "52dc943eaf6093a2313271a7a0abc36d127b2a16609a0a7c54ee1b4e4ed06cb8",
         "dataset_sha256": "73fa4512dde072fb0df9cf45ff3ebd192192db606f9764054bde002dcbf0be47",
@@ -384,7 +387,15 @@ try:
             json.loads((r / "rounds" / f"C16-R{trial}-{series}" / "public-summary.json").read_text())
             for trial in [1, 2]
         ]
-        gate = optimization_speed_gate(baseline, candidate)
+        single_reference = state.get("baseline_reference_mode") == "single_completed_trial_user_cancel"
+        if single_reference:
+            receipt_path = r / "evidence/baseline-user-cancellation.json"
+            if hashlib.sha256(receipt_path.read_bytes()).hexdigest() != state["baseline_interruption_sha256"]:
+                raise RuntimeError("baseline interruption evidence changed")
+            receipt = json.loads(receipt_path.read_text())
+            interrupted = next(x for x in state["interrupted_rounds"] if x["label"] == "C16-R2-v7")
+            validate_user_cancelled_baseline(receipt, interrupted["run_id"])
+        gate = optimization_speed_gate(baseline, candidate, allow_single_baseline=single_reference)
         checkpoint(speed_gate=gate, highest_passing=16)
         publish()
         if not gate["passed"]:
