@@ -35,15 +35,36 @@ describe('独立评分标准', () => {
     render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'incomplete',scored:1,total:2,coverage:.5,scored_mean:1,normalized_mean:.5,total_score:null,diagnostic_pending:1}}}}} />);
     expect(screen.getByText('未采集')).toBeTruthy();
     expect(screen.getByText('未完成')).toBeTruthy();
-    expect(screen.getByText('已评分均值 · 1.000/2')).toBeTruthy();
-    expect(screen.getByText('50.0%')).toBeTruthy();
+    expect(screen.getByText('已评分回答质量均分')).toBeTruthy();
+    expect(screen.getByText('1.00 / 2.00 分')).toBeTruthy();
+    expect(screen.queryByText('50.0%')).toBeNull();
     expect(screen.getByText('覆盖率 1/2 · 50.0%')).toBeTruthy();
     expect(screen.getByText(/公共诊断待完成 1 项/)).toBeTruthy();
   });
   it('完整合法0分显示0%，不显示未采集', () => {
     render(<ScoringResults summary={{scoring:{profiles:Object.fromEntries([OPEN_PROFILE,ATM_PROFILE].map(p=>[p,{status:'completed',scored:2,total:2,coverage:1,scored_mean:0,normalized_mean:0,total_score:0}]))}}} />);
     expect(screen.queryByText('未采集')).toBeNull();
-    expect(screen.getAllByText('0.0%')).toHaveLength(2);
+    expect(screen.getByText('0.00 / 2.00 分')).toBeTruthy();
+    expect(screen.getByText('0.0%')).toBeTruthy();
+    expect(screen.getByText('回答质量均分')).toBeTruthy();
+    expect(screen.getByText('QS总分')).toBeTruthy();
+  });
+  it('开放式以2分制显示原始均分，QS独立显示百分比和待评分状态', () => {
+    render(<ScoringResults summary={{scoring:{profiles:{
+      [OPEN_PROFILE]:{status:'incomplete',scored:163,total:487,coverage:163/487,scored_mean:1.288,normalized_mean:.644,total_score:null},
+      [ATM_PROFILE]:{status:'incomplete',scored:0,total:487,coverage:0,scored_mean:null,normalized_mean:null,total_score:null},
+    }}}}/>);
+    const open=screen.getByRole('article',{name:'开放式回答（0/1/2 LLM as Judge评分）'});
+    expect(within(open).getByText('1.29 / 2.00 分')).toBeTruthy();
+    expect(within(open).queryByText('64.4%')).toBeNull();
+    const atm=screen.getByRole('article',{name:PROFILE_LABELS[ATM_PROFILE]});
+    expect(within(atm).getByText('—')).toBeTruthy();
+    expect(within(atm).getByText('已评分QS均值')).toBeTruthy();
+  });
+  it('部分QS得分仍展示已评分均值百分比', () => {
+    render(<ScoringResults summary={{scoring:{profiles:{[ATM_PROFILE]:{status:'incomplete',scored:2,total:3,coverage:2/3,scored_mean:.75,normalized_mean:.75,total_score:null}}}}}/>);
+    expect(screen.getByText('75.0%')).toBeTruthy();
+    expect(screen.getByText('已评分QS均值')).toBeTruthy();
   });
   it('两套结果使用独立卡片，配置默认收起并保留完整快照标识', () => {
     const hash='df903991fe7f2c2581d3d2d9e4841b56770996396737af032b39acfc42f06876';

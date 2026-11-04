@@ -10,10 +10,17 @@ export function ScoringResults({summary}: {summary:unknown}) {
       const collected = Boolean(result.status && result.status !== 'not_collected');
       const complete = typeof result.total_score === 'number';
       const value = complete ? result.total_score : result.normalized_mean;
+      const isOpen = id === OPEN_PROFILE;
+      const displayValue = isOpen
+        ? typeof result.scored_mean === 'number' ? result.scored_mean.toFixed(2) + ' / 2.00 分' : '—'
+        : typeof value === 'number' ? percent(value) : '—';
+      const valueLabel = isOpen
+        ? complete ? '回答质量均分' : '已评分回答质量均分'
+        : complete ? 'QS总分' : '已评分QS均值';
       return <article className='scoring-metric-card' key={id} aria-label={label}>
         <header className='scoring-result-head'><b>{label}</b><span className={'phase-status ' + (complete ? 'completed' : collected ? 'partial' : '')}>{!collected ? '未采集' : complete ? '已完成' : '未完成'}</span></header>
         {!collected ? <div className='scoring-result-empty'>选择该标准并补评后，将显示得分与覆盖率。</div> : <>
-          <div className='scoring-value-row'><strong>{typeof value === 'number' ? percent(value) : '—'}</strong><span>{complete ? '总分' : '已评分均值'}{id === OPEN_PROFILE && typeof result.scored_mean === 'number' ? ' · '+result.scored_mean.toFixed(3)+'/2' : ''}</span></div>
+          <div className='scoring-value-row'><strong>{displayValue}</strong><span>{valueLabel}</span></div>
           <div className='scoring-coverage'><span>覆盖率 {String(result.scored)}/{String(result.total)} · {percent(result.coverage)}</span><progress aria-label={label+'评分覆盖率'} max={1} value={typeof result.coverage === 'number' ? result.coverage : 0} /></div>
           {Number(result.diagnostic_pending) > 0 && <p className='scoring-pending'>公共诊断待完成 {String(result.diagnostic_pending)} 项，评分覆盖率单独计算。</p>}
           <details className='scoring-result-details'><summary>评分版本与配置</summary><dl>
@@ -28,7 +35,7 @@ export function ScoringResults({summary}: {summary:unknown}) {
         </>}
       </article>;
     })}
-  </div><p className='scoring-result-note'>未完成时展示已评分均值，完整总分需覆盖全部题目。ATM-Bench式QS按题等权平均；选择与数值题使用Judge匹配。跨测评比较需核对题集、规则版本、Judge和GT配置。</p></section>;
+  </div><p className='scoring-result-note'>开放式回答由Judge按0/1/2评分，展示原始均分，满分2.00分。ATM-Bench式QS按题等权平均，以百分比展示；选择与数值题使用Judge匹配。未评齐时均值仅包含已评分题目，覆盖率表示评分完成比例，完整总分需覆盖全部题目。媒体召回率在公共诊断指标中单独展示。跨测评比较需核对题集、规则版本、Judge和GT配置。</p></section>;
 }
 export function ItemScoringResults({results, diagnostics}: {results:unknown; diagnostics?:unknown}) {
   const rows = Array.isArray(results) ? results.map(obj) : [];
