@@ -7,11 +7,12 @@ import time
 from pathlib import Path
 
 root = Path(os.environ["SENTRIX_MLX_EXPERIMENT_ROOT"]).resolve()
-context = str(
-    json.loads((root / "private/photobench-config/runtime_connection.json").read_text())["product_settings"][
-        "vlm_context_tokens"
-    ]
-)
+settings = json.loads((root / "private/photobench-config/runtime_connection.json").read_text())[
+    "product_settings"
+]
+context = str(settings["vlm_context_tokens"])
+# Match the shorter caller deadline instead of aborting active generation early.
+request_timeout = str(min(settings["chat_timeout_s"], settings["vlm_timeout_s"]))
 args = [
     str(root / os.environ.get("SENTRIX_MLX_ENGINE_ENV", "envs/vllm-mlx") / "bin/python"),
     str(root / "repo/scripts/benchmarks/serve_mlx.py"),
@@ -49,7 +50,7 @@ args = [
     "--default-chat-template-kwargs",
     '{"enable_thinking":false}',
     "--timeout",
-    "900",
+    request_timeout,
 ]
 if "shared_prefix" in os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", "").split(","):
     from scripts.benchmarks.mlx_prefix_cache import CACHE_MEMORY_MB
