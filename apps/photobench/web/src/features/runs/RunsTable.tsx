@@ -9,7 +9,7 @@
  *
  */
 import { qaProgress } from "../../lib/qaProgress.ts";
-import { PROFILE_LABELS } from '../../lib/scoring.ts';
+import { OPEN_PROFILE, PROFILE_LABELS } from '../../lib/scoring.ts';
 import type { RefObject } from "react";
 
 import type { Run } from "../../api/types.ts";
@@ -128,9 +128,12 @@ export function RunsTable({
                 </td>
                 <td className='run-scoring-cell'>
                   {Object.entries(PROFILE_LABELS).map(([profile,label]) => {
-                    const scoring=run.summary?.scoring as {profiles?:Record<string,{total_score?:number|null;normalized_mean?:number|null;scored?:number;total?:number;status?:string}>}|undefined;
+                    const scoring=run.summary?.scoring as {profiles?:Record<string,{total_score?:number|null;scored_mean?:number|null;normalized_mean?:number|null;scored?:number;total?:number;status?:string}>}|undefined;
                     const result=scoring?.profiles?.[profile];
-                    return <div className="run-score-line" key={profile}><span title={label}>{profile === 'photobench_open_v1' ? '开放式0/1/2' : label}</span><span>{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '均值 '+fmtPct(result.normalized_mean)+'（未完成）' : fmtPct(result.total_score)}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</span></div>;
+                    const score=profile === OPEN_PROFILE
+                      ? typeof result?.scored_mean === 'number' ? result.scored_mean.toFixed(2)+' / 2.00 分' : '—'
+                      : fmtPct(result?.total_score ?? result?.normalized_mean);
+                    return <div className="run-score-line" key={profile}><span title={label}>{profile === OPEN_PROFILE ? '开放式0/1/2' : label}</span><span>{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '均值 '+score+'（未完成）' : score}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</span></div>;
                   })}
                   {(!(Array.isArray(run.scoring_profiles) && run.scoring_profiles.length) || Boolean(run.summary?.legacy_scoring_label)) && <div className="small muted">历史混合评分 <span>{answerScore(run)}</span></div>}
                 </td>

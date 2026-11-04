@@ -188,11 +188,28 @@ it("评分缺失以完成但有错误显示，保留实际评分数", () => {
   expect(screen.queryByRole("progressbar")).toBeNull();
 });
 
-it("新版均分显示归一化百分比，历史分明确满分2", () => {
+it("历史混合评分保留原显示口径，旧开放式分明确满分2", () => {
   renderTable([run({summary: {answer_quality_mean: 0.533, evaluation_summary: {count: 10, mean: 0.2666666667}}}),
     run({run_id: "old", summary: {answer_quality_mean: 1.5}})]);
   expect(screen.getByRole("columnheader", {name: "答案得分"})).toBeTruthy();
   expect(screen.getByText("26.7%")).toBeTruthy();
   expect(screen.getByText("1.5 / 2")).toBeTruthy();
   expect(screen.queryByText("0.533")).toBeNull();
+});
+
+it('双标准列表与详情一致：开放式2分制，QS百分比', () => {
+  renderTable([run({scoring_profiles:['photobench_open_v1','atm_qs_v1'],summary:{scoring:{profiles:{
+    photobench_open_v1:{status:'incomplete',scored:163,total:487,scored_mean:1.288,normalized_mean:.644,total_score:null},
+    atm_qs_v1:{status:'completed',scored:487,total:487,scored_mean:.75,normalized_mean:.75,total_score:.75},
+  }}}})]);
+  expect(screen.getByText('均值 1.29 / 2.00 分（未完成） · 163/487')).toBeTruthy();
+  expect(screen.getByText('75.0% · 487/487')).toBeTruthy();
+  expect(screen.queryByText(/64.4%/)).toBeNull();
+});
+
+it('列表开放式合法零分保留两位小数', () => {
+  renderTable([run({scoring_profiles:['photobench_open_v1'],summary:{scoring:{profiles:{
+    photobench_open_v1:{status:'completed',scored:2,total:2,scored_mean:0,normalized_mean:0,total_score:0},
+  }}}})]);
+  expect(screen.getByText('0.00 / 2.00 分 · 2/2')).toBeTruthy();
 });
