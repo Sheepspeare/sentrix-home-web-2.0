@@ -9,6 +9,7 @@ Only the fixed benchmark seed is accepted; other seeds fail visibly.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import os
@@ -183,9 +184,12 @@ def install_telemetry() -> None:
             stream.write(json.dumps({"at": time.time(), **event}) + "\n")
 
     def terminal(request: Any, reason: str, outputs: list[Any] | None = None) -> None:
+        from scripts.benchmarks.mlx_batch_decode import COUNTERS
+
         emit(
             {
                 "event": "request_terminal",
+                "decode_optimization_totals": dict(COUNTERS),
                 "request_id": request.request_id,
                 "finish_reason": reason,
                 "arrival_at": request.arrival_time,
@@ -331,6 +335,24 @@ def install_adapter() -> None:
             raise RuntimeError(f"{package} must be {expected}")
     sampling: Any = importlib.import_module("mlx_lm.sample_utils")
     sampling.make_sampler = seeded_sampler
+    optimizations = set(filter(None, os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", "").split(",")))
+    if optimizations - {"strided_kv", "batch_grammar"}:
+        raise RuntimeError("unknown MLX optimization profile")
+    if "strided_kv" in optimizations:
+        from scripts.benchmarks.apply_mlx_kv_patch import AFTER
+        from scripts.benchmarks.mlx_batch_decode import install_kv_observer
+
+        language = importlib.import_module("mlx_vlm.models.qwen3_5.language")
+        if (
+            language.__file__ is None
+            or hashlib.sha256(Path(language.__file__).read_bytes()).hexdigest() != AFTER
+        ):
+            raise RuntimeError("upstream strided KV patch was not qualified/installed")
+        install_kv_observer(language)
+    if "batch_grammar" in optimizations:
+        from scripts.benchmarks.mlx_batch_decode import install_batched_decode
+
+        install_batched_decode()
     install_chunked_context_fix()
     install_prefill_admission_fix()
     install_media_fairness_fix()

@@ -80,3 +80,19 @@ it("labels completed QA as failed acceptance when model evidence disagrees", () 
   expect(screen.queryByText("C4")).toBeNull();
   expect(screen.getByText(/尚未核对通过/)).toBeTruthy();
 });
+
+it("keeps baseline rows separate and does not count them toward optimized acceptance", () => {
+  render(<CapacityReport evidence={{
+    schema_version: 1, updated_at: "2026-11-04", hardware: "M4", engine: "optimized",
+    model: "Qwen", model_sha256: "model-hash", dataset_sha256: "dataset-hash",
+    context_tokens: 32768, conditions: [],
+    baseline_rounds: [round("C16-R1-baseline", 16, true), round("C16-R2-baseline", 16, true)],
+    rounds: [round("C16-R1-optimized", 16, true)],
+    speed_gate: { passed: false, baseline_qpm: 2.2, candidate_qpm: 2.3, weighted_speedup: 2.3 / 2.2 },
+  }} />);
+  expect(screen.getByRole("heading", { name: "原配置基线 · 四档并发 · 同一组 64 题 · 各两轮" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "优化配置 · 16 并发 · 同一组 64 题 · 两轮" })).toBeTruthy();
+  expect(screen.queryByText("C16")).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("优化速度验收：未通过");
+  expect(screen.getByRole("combobox", { name: "选择资源曲线轮次" }).querySelectorAll("option")).toHaveLength(3);
+});

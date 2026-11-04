@@ -274,6 +274,57 @@ def gpu_utilization(value: Any) -> float | None:
     return None
 
 
+def macos_swap_counters(text: str) -> dict[str, int]:
+    page = re.search(r"page size of (\d+) bytes", text)
+    if page is None:
+        raise ValueError("vm_stat page size missing")
+    result = {}
+    for label, field in [("Swapins", "actual_swap_in_bytes"), ("Swapouts", "actual_swap_out_bytes")]:
+        match = re.search(rf"^{label}:\s+(\d+)\.", text, re.MULTILINE)
+        if match is None:
+            raise ValueError(f"vm_stat {label} missing")
+        result[field] = int(match.group(1)) * int(page.group(1))
+    return result
+
+
+def optimization_speed_gate(
+    baseline: list[dict[str, Any]], candidate: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Predeclared operational gate, not a statistical significance claim."""
+    for group in [baseline, candidate]:
+        if len(group) != 2 or {x.get("trial") for x in group} != {1, 2}:
+            raise ValueError("two distinct C16 trials are required")
+        for row in group:
+            if (
+                row.get("concurrency") != 16
+                or row.get("actual_batch_peak", 0) < 16
+                or row.get("questions") != 64
+                or row.get("completed") != 64
+                or row.get("judge_completed") != 64
+                or row.get("passed") is not True
+                or row.get("failures")
+                or not row.get("model_call_evidence", {}).get("verified")
+                or not isinstance(row.get("qa_seconds"), (int, float))
+                or not math.isfinite(row["qa_seconds"])
+                or row["qa_seconds"] <= 0
+            ):
+                raise ValueError("speed comparison requires fully accepted C16 rounds")
+    baseline_qpm = 128 * 60 / sum(row["qa_seconds"] for row in baseline)
+    candidate_qpm = 128 * 60 / sum(row["qa_seconds"] for row in candidate)
+    ratios = [64 * 60 / row["qa_seconds"] / baseline_qpm for row in candidate]
+    return {
+        "passed": candidate_qpm >= baseline_qpm * 1.15 and min(ratios) >= 1.10,
+        "baseline_qpm": baseline_qpm,
+        "candidate_qpm": candidate_qpm,
+        "weighted_speedup": candidate_qpm / baseline_qpm,
+        "round_speedups": ratios,
+        "required_weighted_speedup": 1.15,
+        "required_each_round_speedup": 1.10,
+        "baseline_labels": [x["label"] for x in baseline],
+        "candidate_labels": [x["label"] for x in candidate],
+    }
+
+
 def resource_sample(model_url: str) -> dict[str, Any]:
     memory, swap = psutil.virtual_memory(), psutil.swap_memory()
     sample: dict[str, Any] = {
@@ -287,6 +338,12 @@ def resource_sample(model_url: str) -> dict[str, Any]:
         "swap_out_bytes": swap.sout,
         "engine_probe_timeout_s": 30,
     }
+    try:
+        sample.update(
+            macos_swap_counters(subprocess.check_output(["/usr/bin/vm_stat"], text=True, timeout=5))
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        sample["actual_swap_unavailable"] = type(error).__name__
     try:
         raw = subprocess.check_output(["/usr/sbin/ioreg", "-r", "-c", "AGXAccelerator", "-a"], timeout=5)
         sample["gpu_percent"] = gpu_utilization(plistlib.loads(raw))
@@ -328,7 +385,13 @@ def summarize_resources(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "p95": percentile(values, 0.95),
             "max": max(values) if values else None,
         }
-    for field in ("swap_used_bytes", "swap_in_bytes", "swap_out_bytes"):
+    for field in (
+        "swap_used_bytes",
+        "swap_in_bytes",
+        "swap_out_bytes",
+        "actual_swap_in_bytes",
+        "actual_swap_out_bytes",
+    ):
         values = [float(s[field]) for s in samples if isinstance(s.get(field), (int, float))]
         result[field + "_delta"] = values[-1] - values[0] if values else None
     for metric, aliases in (

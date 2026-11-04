@@ -22,6 +22,7 @@ from PIL import Image
 from scripts.benchmarks.mlx_capacity import (
     diagnostic_failure_categories,
     observe_run,
+    optimization_speed_gate,
     percentile,
     read_completed_round,
     reconcile_model_calls,
@@ -246,7 +247,12 @@ def publish() -> None:
         "reporting_revision": state["revision"],
         "updated_at": datetime.now(UTC).isoformat(),
         "hardware": "Apple M4 · 16 GB · macOS 26.6",
-        "engine": "vllm-mlx 0.6.0 / mlx-vlm 0.7.6",
+        "engine": state.get("engine_label", "vllm-mlx 0.6.0 / mlx-vlm 0.7.6"),
+        "baseline_rounds": [
+            json.loads((r / "rounds" / x / "public-summary.json").read_text())
+            for x in state.get("baseline_labels", [])
+        ],
+        "speed_gate": state.get("speed_gate"),
         "model": "ModelScope Qwen3.5-4B-MLX-4bit",
         "model_sha256": "52dc943eaf6093a2313271a7a0abc36d127b2a16609a0a7c54ee1b4e4ed06cb8",
         "dataset_sha256": "73fa4512dde072fb0df9cf45ff3ebd192192db606f9764054bde002dcbf0be47",
@@ -263,6 +269,8 @@ def publish() -> None:
             "等待队列包含已进入调度器、仍在等待预填充的请求；不把这些请求算作实际生成批次。",
             "指标查询缺口单独展示，不替换为零；实际模型调用必须与引擎终态及 token 记录完整对应。",
             "资源曲线与汇总限定 QA 阶段；原始记录保留完整运行及评分阶段。",
+            "macOS 历史 swap_in/out 字段实际为一般页面换入/出；交换存量增量不代表交换流量。"
+            "优化轮次另采集 vm_stat Swapins/Swapouts。",
             "内存曲线采用 macOS 活跃及有线内存；PhotoBench 原始遥测另保留含缓存的整机占用。",
             "最高通过档要求两轮均完成、没有执行或评分错误，且监测证据完整。",
         ],
@@ -351,12 +359,13 @@ try:
     assert pre["status"] == "completed" and pre["run_valid"] is True
     assert json.loads((r / "evidence/window-seed-qualification.json").read_text())["window_passed"]
     assert json.loads((r / "evidence/engine-qualification.json").read_text())["all_passed"]
-    for c in [4, 8, 12, 16]:
+    tiers = [16] if state.get("protocol") == "optimized_c16" else [4, 8, 12, 16]
+    for c in tiers:
         for trial in [1, 2]:
             execute(f"C{c}-R{trial}-{series}", c, 64)
     passing = [
         c
-        for c in [4, 8, 12, 16]
+        for c in tiers
         if all(
             next(x for x in state["rounds"] if x["label"] == f"C{c}-R{trial}-{series}").get("passed")
             for trial in [1, 2]
@@ -364,6 +373,22 @@ try:
     ]
     if not passing:
         raise RuntimeError("no accepted concurrency tier")
+    if state.get("protocol") == "optimized_c16":
+        baseline = []
+        for label, expected in state["baseline_summary_sha256"].items():
+            path = r / "rounds" / label / "public-summary.json"
+            if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise RuntimeError("baseline changed since speed gate was declared")
+            baseline.append(json.loads(path.read_text()))
+        candidate = [
+            json.loads((r / "rounds" / f"C16-R{trial}-{series}" / "public-summary.json").read_text())
+            for trial in [1, 2]
+        ]
+        gate = optimization_speed_gate(baseline, candidate)
+        checkpoint(speed_gate=gate, highest_passing=16)
+        publish()
+        if not gate["passed"]:
+            raise RuntimeError("C16 speed gate not met; preserve both trials and optimize before487")
     execute(f"C{max(passing)}-FULL487-{series}", max(passing), 487)
     checkpoint(status="evaluation_complete", highest_passing=max(passing))
     publish()

@@ -220,3 +220,42 @@ def test_scheduler_output_disagreement_fails_even_when_application_pairs_match()
     assert evidence["token_multiset_matches"] is True
     assert evidence["output_counters_consistent"] is False
     assert evidence["verified"] is False
+
+
+def test_macos_swap_uses_swapins_not_general_pageins():
+    text = (
+        "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+        "Pageins: 99999.\nPageouts: 8888.\nSwapins: 7.\nSwapouts: 11.\n"
+    )
+    assert capacity.macos_swap_counters(text) == {
+        "actual_swap_in_bytes": 7 * 16384,
+        "actual_swap_out_bytes": 11 * 16384,
+    }
+
+
+def test_speed_gate_requires_both_trials_and_rejects_one_fast_one_slow():
+    import pytest
+
+    def round(trial, seconds):
+        return {
+            "label": f"C16-R{trial}",
+            "actual_batch_peak": 16,
+            "trial": trial,
+            "concurrency": 16,
+            "questions": 64,
+            "completed": 64,
+            "judge_completed": 64,
+            "passed": True,
+            "failures": {},
+            "model_call_evidence": {"verified": True},
+            "qa_seconds": seconds,
+        }
+
+    baseline = [round(1, 1800), round(2, 1800)]
+    assert capacity.optimization_speed_gate(baseline, [round(1, 1500), round(2, 1500)])["passed"]
+    assert not capacity.optimization_speed_gate(baseline, [round(1, 1200), round(2, 1750)])["passed"]
+    assert not capacity.optimization_speed_gate(baseline, [round(1, 1700), round(2, 1700)])["passed"]
+    with pytest.raises(ValueError, match="two distinct"):
+        capacity.optimization_speed_gate(baseline, [round(1, 1400), round(1, 1400)])
+    with pytest.raises(ValueError, match="fully accepted"):
+        capacity.optimization_speed_gate(baseline, [round(1, 1400), {**round(2, 1400), "passed": False}])

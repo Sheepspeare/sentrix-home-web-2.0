@@ -13,7 +13,7 @@ context = str(
     ]
 )
 args = [
-    str(root / "envs/vllm-mlx/bin/python"),
+    str(root / os.environ.get("SENTRIX_MLX_ENGINE_ENV", "envs/vllm-mlx") / "bin/python"),
     str(root / "repo/scripts/benchmarks/serve_mlx.py"),
     "serve",
     str(root / "models/Qwen3.5-4B-MLX-4bit-hf"),
@@ -54,6 +54,8 @@ args = [
 log = (root / "evidence/vllm-mlx-server.log").open("ab")
 env = {
     **os.environ,
+    "PYTHONPATH": str(root / "repo"),
+    "SENTRIX_MLX_OPTIMIZATIONS": os.environ.get("SENTRIX_MLX_OPTIMIZATIONS", ""),
     "NO_PROXY": "127.0.0.1,localhost",
     "no_proxy": "127.0.0.1,localhost",
     "TOKENIZERS_PARALLELISM": "false",
@@ -69,8 +71,10 @@ p = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, start_new_sessi
             "argv": args,
             "started_at": time.time(),
             "environment": {
-                k: env[k]
+                k: env.get(k, "envs/vllm-mlx" if k == "SENTRIX_MLX_ENGINE_ENV" else "")
                 for k in [
+                    "SENTRIX_MLX_OPTIMIZATIONS",
+                    "SENTRIX_MLX_ENGINE_ENV",
                     "MLX_BUFFER_CACHE_LIMIT",
                     "SENTRIX_MLX_EVENTS",
                     "TOKENIZERS_PARALLELISM",

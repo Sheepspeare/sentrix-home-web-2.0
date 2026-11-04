@@ -39,6 +39,8 @@ export interface CapacityEvidence {
   context_tokens: number;
   conditions: string[];
   rounds: CapacityRound[];
+  baseline_rounds?: CapacityRound[];
+  speed_gate?: { passed: boolean; baseline_qpm: number; candidate_qpm: number; weighted_speedup: number } | null;
 }
 
 const number = (value: number | null | undefined, digits = 1) =>
@@ -96,26 +98,32 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
     const seconds = rounds.reduce((sum, r) => sum + (r.qa_seconds ?? 0), 0);
     return { concurrency: c, throughput: seconds > 0 ? rounds.reduce((sum, r) => sum + r.completed, 0) / seconds * 60 : null };
   }).filter((tier) => tier.throughput !== null).sort((a, b) => (b.throughput ?? 0) - (a.throughput ?? 0))[0];
-  const selected = report.rounds.find((r) => r.run_id === selection) ?? full ?? report.rounds.at(-1);
+  const allRounds = [...(report.baseline_rounds ?? []), ...report.rounds];
+  const selected = allRounds.find((r) => r.run_id === selection) ?? full ?? report.rounds.at(-1);
   return <section className="capacity-report">
     <div className="capacity-heading"><div><p className="capacity-eyebrow">PHOTOBENCH · APPLE SILICON</p><h2>MLX 并发实验</h2></div><span>更新于 {report.updated_at}</span></div>
     {error ? <p role="alert">{error} 当前显示上次成功读取的记录。</p> : null}
     <p className="capacity-identity">{report.hardware} · {report.model} · {report.engine} · 上下文 {report.context_tokens.toLocaleString()} tokens</p>
     <div className="capacity-cards">
-      <article><span>最高通过并发 · 两轮均通过</span><strong>{tiers.length ? `C${Math.max(...tiers)}` : "待验收"}</strong></article>
-      <article><span>吞吐最佳档 · 两轮合计</span><strong>{best ? `C${best.concurrency} · ${number(best.throughput)} 题/分钟` : "待验收"}</strong></article>
+      <article><span>{report.baseline_rounds?.length ? "优化配置通过并发 · 两轮均通过" : "最高通过并发 · 两轮均通过"}</span><strong>{tiers.length ? `C${Math.max(...tiers)}` : "待验收"}</strong></article>
+      <article><span>{report.baseline_rounds?.length ? "优化配置吞吐 · 两轮合计" : "吞吐最佳档 · 两轮合计"}</span><strong>{best ? `C${best.concurrency} · ${number(best.throughput)} 题/分钟` : "待验收"}</strong></article>
       <article><span>487 题独立测试</span><strong>{full ? `${full.completed} / 487` : "尚未开始"}</strong><small>{full ? `评分完成 ${full.judge_completed}，评分失败 ${full.judge_failed}` : "在最高通过档运行"}</small></article>
     </div>
-    <h3>四档并发 · 同一组 64 题 · 各两轮</h3>
+    {report.speed_gate ? <p role="status">优化速度验收：{report.speed_gate.passed ? "通过" : "未通过"}；原 C16 {number(report.speed_gate.baseline_qpm, 3)} → 优化 C16 {number(report.speed_gate.candidate_qpm, 3)} 题/分钟，提升 {number((report.speed_gate.weighted_speedup - 1) * 100)}%。要求两轮合计提升至少 15%，每轮提升至少 10%。</p> : null}
+    {(report.baseline_rounds?.length ? [
+      { title: "原配置基线 · 四档并发 · 同一组 64 题 · 各两轮", rows: report.baseline_rounds },
+      { title: "优化配置 · 16 并发 · 同一组 64 题 · 两轮", rows: formal },
+    ] : [{ title: "四档并发 · 同一组 64 题 · 各两轮", rows: formal }]).map((section) => <div key={section.title}>
+    <h3>{section.title}</h3>
     <p>客户端并发是同时执行的 QA 数；实际模型批次来自推理调度器。QA 与云端评分分别计时。</p>
     <div className="capacity-table-wrap"><table><thead><tr>
       {["轮次", "QA 完成", "评分完成 / 失败", "QA 题/分钟", "QA P50 / P95 秒", "首 token P95 秒", "实际批次峰值", "队列峰值", "活跃/有线峰值 GiB", "交换增量 GiB", "验收"].map((h) => <th key={h}>{h}</th>)}
-    </tr></thead><tbody>{formal.map((r) => <tr key={r.run_id}>
+    </tr></thead><tbody>{section.rows.map((r) => <tr key={r.run_id}>
       <td><button onClick={() => setSelection(r.run_id)}>{r.label}</button></td><td>{r.completed}/{r.questions}</td><td>{r.judge_completed} / {r.judge_failed}</td>
       <td>{number(r.qa_per_min)}</td><td>{number(r.latency_p50_s)} / {number(r.latency_p95_s)}</td><td>{number(r.ttft_p95_s)}</td>
       <td>{number(r.actual_batch_peak, 0)}</td><td>{number(r.queue_peak, 0)}</td><td>{number(r.memory_peak_gib)}</td><td>{number(r.swap_delta_gib, 2)}</td>
       <td className={r.passed ? "capacity-pass" : "capacity-pending"}>{r.passed ? "通过" : "未通过"}{r.resource_summary?.engine_metrics_missing_samples ? <small> · 指标缺失 {r.resource_summary.engine_metrics_missing_samples} 次</small> : null}</td>
-    </tr>)}</tbody></table></div>
+    </tr>)}</tbody></table></div></div>)}
     {full ? <section aria-label="487 题独立测试总览">
       <h3>487 题独立测试 · C{full.concurrency}</h3>
       <p>{full.label} · {full.passed ? "验收通过" : "验收未通过"} · 独立恢复记忆库与会话</p>
@@ -128,7 +136,7 @@ export function CapacityReport({ evidence }: { evidence?: CapacityEvidence }) {
       <p>活跃及有线内存峰值 {number(full.memory_peak_gib)} GiB；交换空间增量 {number(full.swap_delta_gib, 2)} GiB。</p>
     </section> : null}
     {selected ? <>
-      <div className="capacity-heading"><h3>{selected.label} · 资源与耗时</h3><select aria-label="选择资源曲线轮次" value={selected.run_id} onChange={(e) => setSelection(e.target.value)}>{report.rounds.map((r) => <option key={r.run_id} value={r.run_id}>{r.label}</option>)}</select></div>
+      <div className="capacity-heading"><h3>{selected.label} · 资源与耗时</h3><select aria-label="选择资源曲线轮次" value={selected.run_id} onChange={(e) => setSelection(e.target.value)}>{allRounds.map((r) => <option key={r.run_id} value={r.run_id}>{r.label}</option>)}</select></div>
       <p>QA {number(selected.qa_seconds)} 秒 · Judge {number(selected.judge_seconds)} 秒 · 状态 {selected.status} · {selected.completed}/{selected.questions} 题完成</p>
       {selected.resource_summary ? <p>模型指标采样 {selected.resource_summary.samples - selected.resource_summary.engine_metrics_missing_samples}/{selected.resource_summary.samples} 次成功；缺失 {selected.resource_summary.engine_metrics_missing_samples} 次，未补值。队列峰值是已观测到的采样峰值。</p> : null}
       {selected.model_call_evidence ? <p>实际模型调用记录 {selected.model_call_evidence.recorded_calls}/{selected.model_call_evidence.expected_calls} 次；与应用调用及 token 数{selected.model_call_evidence.verified ? "完整对应" : "尚未核对通过"}。</p> : null}
