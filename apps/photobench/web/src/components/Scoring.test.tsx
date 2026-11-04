@@ -19,7 +19,7 @@ describe('独立评分标准', () => {
     fireEvent.click(open); expect(open.checked).toBe(true);
     fireEvent.click(atm); fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
     expect((screen.getByLabelText(PROFILE_LABELS[ATM_PROFILE]+' · GT图片辅助') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(true);
     fireEvent.click(open);
     expect(open.checked).toBe(false); expect(atm.checked).toBe(true);
     expect((screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助') as HTMLInputElement).disabled).toBe(true);
@@ -30,6 +30,29 @@ describe('独立评分标准', () => {
     const body=scoringPayload(selection, {[OPEN_PROFILE+':answer_quality']:'open', [ATM_PROFILE+':choice']:'', [ATM_PROFILE+':number']:'number', task_decision:'diagnostic'});
     expect(body.scoring_configs[OPEN_PROFILE].prompts).toEqual({answer_quality:'open'});
     expect(body.scoring_configs[ATM_PROFILE].prompts).toEqual({choice:'', number:'number'});
+  });
+  it('新任务两标准默认附加元数据，图片独立且提交明确保存开关', () => {
+    const selection=defaultScoring(); selection.profiles.push(ATM_PROFILE);
+    const body=scoringPayload(selection);
+    for (const profile of [OPEN_PROFILE,ATM_PROFILE]) {
+      expect(body.scoring_configs[profile]).toEqual({use_gt_images:false,use_gt_metadata:true,prompts:{}});
+    }
+    selection.configs[OPEN_PROFILE].use_gt_metadata=false;
+    expect(scoringPayload(selection).scoring_configs[OPEN_PROFILE].use_gt_metadata).toBe(false);
+    expect(scoringPayload(selection).scoring_configs[ATM_PROFILE].use_gt_metadata).toBe(true);
+    expect(defaultScoring().configs[OPEN_PROFILE].use_gt_metadata).toBe(true);
+  });
+  it('元数据可独立关闭，手动关闭不会被图片或标准切换覆盖', () => {
+    function Settings() {const [value,setValue]=useState(defaultScoring()); return <ScoringSettings value={value} onChange={setValue}/>;}
+    render(<Settings/>);
+    const metadata=screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT元数据辅助') as HTMLInputElement;
+    fireEvent.click(metadata); expect(metadata.checked).toBe(false);
+    fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
+    expect(metadata.checked).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox',{name:PROFILE_LABELS[ATM_PROFILE]}));
+    expect((screen.getByLabelText(PROFILE_LABELS[ATM_PROFILE]+' · GT元数据辅助') as HTMLInputElement).checked).toBe(true);
+    expect(metadata.checked).toBe(false);
+    expect(screen.getByText(/元数据取自GT媒体的产品库记录/)).toBeTruthy();
   });
   it('未执行标准固定显示未采集，部分评分只展示均值和覆盖率', () => {
     render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'incomplete',scored:1,total:2,coverage:.5,scored_mean:1,normalized_mean:.5,total_score:null,diagnostic_pending:1}}}}} />);

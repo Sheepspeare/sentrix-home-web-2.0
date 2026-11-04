@@ -54,7 +54,7 @@ describe("恢复与评分范围",()=>{
     fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"all"}});
     expect(scope).toHaveBeenCalledWith("all");
     fireEvent.click(screen.getByRole("checkbox", {name:/开放式回答.*GT图片辅助/}));
-    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}})}));
+    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}})}));
     rerender(<RejudgeCard {...base} scope="all"/>);
     expect(screen.getByRole("button",{name:"补齐全部回答的未完成评分"})).toBeTruthy();
   });
@@ -80,7 +80,7 @@ describe("评分面板的操作语义", () => {
     const toggle = screen.getByRole("checkbox", { name: /开放式回答.*GT图片辅助/ });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     fireEvent.click(toggle);
-    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}});
+    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}}});
     expect(request).not.toHaveBeenCalled();
     rerender(<RejudgeCard {...base} onRequestRejudge={request} scoring={{...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}}} />);
     expect((toggle as HTMLInputElement).checked).toBe(true);
