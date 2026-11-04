@@ -15,6 +15,7 @@ const RUN: Run = {
   status: "done",
   summary: {
     answer_quality_mean: 1.5,
+    legacy_scoring_label: "历史混合评分",
     total: 4,
     judge_distribution: { "0": 0, "1": 2, "2": 2 },
     image_ranking: {
@@ -44,14 +45,14 @@ describe("KeyMetrics（1.0 :3130-3146）", () => {
   it("渲染关键指标卡的标题/值/note，以及折叠的召回指标", () => {
     const { container } = render(<KeyMetrics run={RUN} />);
 
-    expect(screen.getByText("关键指标")).not.toBeNull();
+    expect(screen.getByText("运行与公共诊断指标")).not.toBeNull();
     expect(container.querySelector(".key-metric-list")).not.toBeNull();
-    expect(screen.getByText("回答质量均分")).not.toBeNull();
+    expect(screen.getByText("历史混合评分")).not.toBeNull();
     expect(screen.getByText("1.5 / 2")).not.toBeNull();
     // 召回指标是**折叠**的（<details>），不是平铺。
     const recall = container.querySelector("details.recall-metric-card");
     expect(recall).not.toBeNull();
-    expect(recall?.querySelector("summary")?.textContent).toBe("召回指标");
+    expect(recall?.querySelector("summary")?.textContent).toContain("历史图片召回指标");
     expect(screen.getByText("R@1")).not.toBeNull();
   });
 

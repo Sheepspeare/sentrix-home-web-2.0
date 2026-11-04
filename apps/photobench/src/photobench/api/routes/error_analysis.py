@@ -13,6 +13,8 @@ router = APIRouter(tags=["error-analysis"])
 
 
 class AnalysisRequest(BaseModel):
+    scoring_profile: Literal["", "photobench_open_v1", "atm_qs_v1"] = ""
+    scoring_batch: str = ""
     kind: Literal["rules", "compare", "ai", "ai_compare"] = "rules"
     comparison_filter: Literal["all", "score_changed"] = "all"
     parent_job: str | None = None
@@ -288,8 +290,19 @@ def create(request: Request, run_id: str, payload: AnalysisRequest) -> dict[str,
 
 
 @router.get("/runs/{run_id}/analysis", response_model=AnalysisJob, response_model_exclude_none=True)
-def latest(request: Request, run_id: str) -> dict[str, Any]:
-    return get_container(request).analysis_backend.latest(run_id)
+def latest(
+    request: Request, run_id: str, scoring_profile: str = "", scoring_batch: str = ""
+) -> dict[str, Any]:
+    backend = get_container(request).analysis_backend
+    for job in backend.history(run_id):
+        options = job.get("options") or {}
+        if (
+            job.get("kind") == "rules"
+            and options.get("scoring_profile", "") == scoring_profile
+            and options.get("scoring_batch", "") == scoring_batch
+        ):
+            return backend.result(job["job_id"])
+    return {"status": "not_generated"}
 
 
 @router.get("/runs/{run_id}/analyses", response_model=list[AnalysisJob], response_model_exclude_none=True)

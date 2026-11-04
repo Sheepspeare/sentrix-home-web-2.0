@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { defaultScoring, OPEN_PROFILE } from '../../lib/scoring.ts';
 import { ResumeCard } from "./ResumeCard.tsx";
 import { RejudgeCard, type RejudgeCardProps } from "./RejudgeCard.tsx";
 import type { RecoveryPlan } from "../../hooks/useRunDetail.ts";
@@ -48,22 +49,22 @@ describe("恢复与评分范围",()=>{
   });
   it("补评显示准确题/轮/项计数，并可切全量",()=>{
     const scope=vi.fn(), images=vi.fn();
-    const {rerender}=render(<RejudgeCard {...base} recoveryPlan={plan} scope="missing" onScopeChange={scope} onJudgeUseGtImagesChange={images}/>);
+    const {rerender}=render(<RejudgeCard {...base} scoringPreview={{...plan.scoring.missing,profiles:{}}} scope="missing" onScopeChange={scope} onScoringChange={images}/>);
     expect(screen.getByLabelText("本次评分数量").textContent).toBe("197 题229 轮对话456 项评分");
     fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"all"}});
     expect(scope).toHaveBeenCalledWith("all");
-    fireEvent.click(screen.getByRole("checkbox", {name:"GT 图片辅助评分"}));
-    expect(images).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("checkbox", {name:/开放式回答.*GT图片辅助/}));
+    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}})}));
     rerender(<RejudgeCard {...base} scope="all"/>);
-    expect(screen.getByRole("button",{name:"重新评分全部回答"})).toBeTruthy();
+    expect(screen.getByRole("button",{name:"补齐全部回答的未完成评分"})).toBeTruthy();
   });
   it("无目标时不允许补评",()=>{
-    render(<RejudgeCard {...base} recoveryPlan={{...plan,scoring:{...plan.scoring,missing:{qa_count:0,turn_count:0,subscore_count:0}}}}/>);
+    render(<RejudgeCard {...base} scoringPreview={{qa_count:0,turn_count:0,subscore_count:0,profiles:{}}}/>);
     expect((screen.getByRole("button",{name:"补齐缺失评分"}) as HTMLButtonElement).disabled).toBe(true);
   });
   it("待复核可以单独选择并显示数量",()=>{
     const scope=vi.fn();
-    render(<RejudgeCard {...base} recoveryPlan={plan} scope="needs_review" onScopeChange={scope}/>);
+    render(<RejudgeCard {...base} scoringPreview={{...plan.scoring.needs_review,profiles:{}}} scope="needs_review" onScopeChange={scope}/>);
     expect(screen.getByLabelText("本次评分数量").textContent).toBe("3 题3 轮对话3 项评分");
     expect(screen.getByRole("button",{name:"重新评估待复核回答"})).toBeTruthy();
     fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"missing"}});
@@ -75,19 +76,19 @@ describe("评分面板的操作语义", () => {
   it("切换图片选项只变更本次选择，不触发评分", () => {
     const images = vi.fn(), request = vi.fn(() => true);
     const { rerender } = render(<RejudgeCard {...base} onRequestRejudge={request}
-      onJudgeUseGtImagesChange={images} judgeUseGtImages={false} />);
-    const toggle = screen.getByRole("checkbox", { name: "GT 图片辅助评分" });
+      onScoringChange={images} scoring={defaultScoring()} />);
+    const toggle = screen.getByRole("checkbox", { name: /开放式回答.*GT图片辅助/ });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     fireEvent.click(toggle);
-    expect(images).toHaveBeenCalledExactlyOnceWith(true);
+    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}});
     expect(request).not.toHaveBeenCalled();
-    rerender(<RejudgeCard {...base} onRequestRejudge={request} judgeUseGtImages={true} />);
+    rerender(<RejudgeCard {...base} onRequestRejudge={request} scoring={{...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}}} />);
     expect((toggle as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByText("向评分模型提供标注图片；需支持图片输入")).toBeTruthy();
+    expect(screen.getByText(/已启用且已标注的材料读取失败会明确记录/)).toBeTruthy();
   });
   it("评分运行时不能切图片或再次提交，提示词默认折叠", () => {
     render(<RejudgeCard {...base} activeRejudge={{status:"running"}} />);
-    expect((screen.getByRole("checkbox", { name: "GT 图片辅助评分" }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("checkbox", { name: /开放式回答.*GT图片辅助/ }) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "评分进行中…" }) as HTMLButtonElement).disabled).toBe(true);
     const prompt = screen.getByText("评分提示词").closest("details") as HTMLDetailsElement;
     expect(prompt.open).toBe(false);
@@ -105,4 +106,13 @@ it("续跑提交尚未结束时阻止重复点击", async () => {
   expect(resume).toHaveBeenCalledTimes(1);
   expect((screen.getByRole("button", {name:"正在提交…"}) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => { finish(); await pending; });
+});
+
+it("新协议续跑冻结评分配置，只提交答题恢复", async () => {
+  const resume=vi.fn();vi.spyOn(window,"confirm").mockReturnValue(true);
+  render(<ResumeCard plan={{...plan,product_version_changed:false,frozen_scoring_profiles:[OPEN_PROFILE]}} busy={false} onResume={resume}/>);
+  expect(screen.queryByRole("checkbox",{name:/GT/})).toBeNull();
+  expect(screen.getByText(/评分沿用原任务冻结/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"继续剩余 QA 答题"}));
+  expect(resume).toHaveBeenCalledWith({});
 });

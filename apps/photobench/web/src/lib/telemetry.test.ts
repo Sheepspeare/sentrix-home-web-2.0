@@ -417,9 +417,9 @@ describe("aggregateMetricRows (:1212-1253) / keyMetricRows (:1254-1304)", () => 
 
   it("keyMetricRows 未落盘候选顺序时不补零", () => {
     const rows = keyMetricRows({}, {});
-    const recall = rows.find((row) => row.label === "工具图片召回率");
-    expect(recall?.value).toBe("未计算");
-    expect(recall?.note).toContain("不补零");
+    const recall = rows.find((row) => row.label === "工具媒体召回率R@5");
+    expect(recall?.value).toBe("未采集");
+    expect(recall?.note).toContain("顺序或映射未采集");
     const gpuRow = rows.find((row) => row.label === "主模型显存占用");
     expect(gpuRow?.value).toBe("未记录");
   });
@@ -434,7 +434,7 @@ describe("recallMetricRows (:1305-1320)", () => {
     const rows = recallMetricRows({ image_ranking: { question_count: 12, r_at_5: 0.5 } });
     expect(rows).toHaveLength(9);
     const byLabel = new Map(rows.map((row) => [row[0], row]));
-    expect(byLabel.get("R@5")).toEqual(["R@5", "50.0%", "0 题（GT ≤ 5 张）· 关键指标卡里的主值"]);
+    expect(byLabel.get("R@5")).toEqual(["R@5", "50.0%", "0 题（GT ≤ 5 张）· 历史图片口径"]);
     expect(byLabel.get("mAP")?.[1]).toBe("未计算");
     expect(byLabel.get("计分题数")?.[1]).toBe("12 题");
   });

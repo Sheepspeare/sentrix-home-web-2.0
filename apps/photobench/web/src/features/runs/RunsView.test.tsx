@@ -126,7 +126,7 @@ describe("导出 URL 的分数参数", () => {
 describe("保存提示词用的是用户编辑的那份（P1）", () => {
   const PROMPT_KINDS = {
     kinds: [
-      { kind: "answer_quality", default: "AQ-DEFAULT", custom: "" },
+      { kind: "photobench_open_v1:answer_quality", default: "AQ-DEFAULT", custom: "" },
       { kind: "evidence", default: "EV-DEFAULT", custom: "" },
     ],
   };
@@ -162,7 +162,7 @@ describe("保存提示词用的是用户编辑的那份（P1）", () => {
     fireEvent.change(textarea, { target: { value: "我编辑过的回答质量提示词" } });
     fireEvent.click(screen.getByRole("button", { name: "保存提示词" }));
 
-    expect(onSave).toHaveBeenCalledWith("answer_quality", "我编辑过的回答质量提示词");
+    expect(onSave).toHaveBeenCalledWith("photobench_open_v1:answer_quality", "我编辑过的回答质量提示词");
   });
 
   it("切到证据核验后再保存：kind 与草稿都跟着切", async () => {
@@ -170,7 +170,8 @@ describe("保存提示词用的是用户编辑的那份（P1）", () => {
     render(<PromptHarness onSave={onSave} />);
     await screen.findByDisplayValue("AQ-DEFAULT");
 
-    fireEvent.click(screen.getByRole("button", { name: /证据核验/ }));
+    fireEvent.change(screen.getByLabelText("提示词所属标准"), {target:{value:"shared"}});
+    fireEvent.change(screen.getByLabelText("提示词用途"), {target:{value:"evidence"}});
     const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
     expect(textarea.value).toBe("EV-DEFAULT");
     fireEvent.change(textarea, { target: { value: "证据核验改过" } });

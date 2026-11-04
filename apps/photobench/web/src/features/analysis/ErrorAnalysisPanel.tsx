@@ -21,6 +21,7 @@ import {
   AnalysisFiltersBar,
   type AnalysisTab,
 } from "./AnalysisWorkspace.tsx";
+import { ScoringResults } from "../../components/ScoringResults.tsx";
 import { AnalysisAI } from "./AnalysisAI.tsx";
 import { DebugTracePanel } from "../qa/DebugTracePanel.tsx";
 import type { RunItemDetail } from "../../api/types.ts";
@@ -282,9 +283,11 @@ function HtmlExport({ job }: { job: AnalysisJob<unknown> }) {
 export function ErrorAnalysisPanel({
   runId,
   terminal,
+  scoringProfile = '', scoringBatch = '',
 }: {
   runId: string;
   terminal: boolean;
+  scoringProfile?:string; scoringBatch?:string;
 }) {
   const [open, setOpen] = useState(false),
     [job, setJob] = useState<AnalysisJob | null>(null),
@@ -344,7 +347,7 @@ export function ErrorAnalysisPanel({
     const load = async () => {
       try {
         const x = await api<AnalysisJob>(
-          runPath(runId),
+          runPath(runId)+(scoringProfile ? '?' + new URLSearchParams({scoring_profile:scoringProfile,scoring_batch:scoringBatch}) : ''),
           {
             signal: abort.signal,
           },
@@ -365,7 +368,7 @@ export function ErrorAnalysisPanel({
       abort.abort();
       window.clearTimeout(timer);
     };
-  }, [open, runId, tick]);
+  }, [open, runId, tick, scoringProfile, scoringBatch]);
   useEffect(() => {
     if (!open || job?.status !== "completed" || !job.job_id) return;
     let alive = true;
@@ -503,7 +506,7 @@ export function ErrorAnalysisPanel({
   }
   const generate = () =>
     act(async () => {
-      setJob(await post(runPath(runId), { kind: "rules" }));
+      setJob(await post(runPath(runId), { kind: "rules", ...(scoringProfile ? {scoring_profile:scoringProfile,scoring_batch:scoringBatch} : {}) }));
         setPage(1);
       setTick((x) => x + 1);
     });
@@ -567,6 +570,7 @@ export function ErrorAnalysisPanel({
                     当前范围 {data.total}/{job?.report?.item_count} 题 ·
                     页面统计沿用当前筛选；导出 HTML 包含全部题目，可在文件内筛选
                   </p>
+                  {r.source.scoring_summary != null && <ScoringResults summary={{scoring:{profiles:{[String(r.source.scoring_profile)]:r.source.scoring_summary}}}} />}
                   <AnalysisWorkspace
                     data={data}
                     tab={tab}
@@ -576,6 +580,7 @@ export function ErrorAnalysisPanel({
                   />
                   {savedAiError && <p role="alert">{savedAiError}</p>}
                   <AnalysisAI
+                    scoringProfile={scoringProfile}
                     runId={runId}
                     jobId={job!.job_id!}
                     stale={!!job?.stale}

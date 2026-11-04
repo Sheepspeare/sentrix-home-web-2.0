@@ -28,6 +28,7 @@ from urllib.parse import quote
 from photobench.application.runs.index import RunIndex
 from photobench.domain.datasets.ports import QaMetadataSource
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
+from photobench.domain.evaluation.profile_view import item_scores, profile_state
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunReadViews, RunRevisions, RunStore
 from photobench.domain.runs import analysis
@@ -101,7 +102,7 @@ class ReadRuns:
         self._lock = threading.RLock()
         self._states: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._item_locks = tuple(threading.RLock() for _ in range(64))
-        self._run_reads: dict[tuple[str, bool], Future[dict[str, Any]]] = {}
+        self._run_reads: dict[tuple[str, bool, str, str], Future[dict[str, Any]]] = {}
         self._qa_metadata: dict[str, dict[str, Any]] | None = None
 
     # -- 内部 ---------------------------------------------------------------
@@ -259,12 +260,14 @@ class ReadRuns:
         response["scan"] = self._index.status()
         return response
 
-    def get_run(self, run_id: str, *, include_history: bool = True) -> dict[str, Any]:
+    def get_run(
+        self, run_id: str, *, include_history: bool = True, scoring_profile: str = "", scoring_batch: str = ""
+    ) -> dict[str, Any]:
         """``GET /api/runs/{id}``（1.0 ``get_run`` ``:5354``）。"""
         # 多个浏览器/轮询请求共享正在生成的同一份投影；不保留活跃 run 的
         # 完成态缓存。否则每个 HTTP worker 都解析整份 JSONL，读侧内存可随
         # 并发倍增并挤压实际执行及采样。不同 run 不互相等待。
-        key = (run_id, include_history)
+        key = (run_id, include_history, scoring_profile, scoring_batch)
         with self._lock:
             pending = self._run_reads.get(key)
             leader = pending is None
@@ -275,6 +278,12 @@ class ReadRuns:
             return pending.result()
         try:
             result = self._project_run(run_id, include_history=include_history)
+            if scoring_profile or scoring_batch:
+                selected = profile_state(self._state(run_id), scoring_profile, scoring_batch)
+                result["summary"] = analysis.effective_summary(selected)
+                result["summary"]["scoring"] = selected["summary"]["scoring"]
+                result["selected_scoring_profile"] = scoring_profile
+                result["selected_scoring_batch"] = selected["selected_scoring_batch"]
             entry = self._index.entry(run_id) or {}
             persistence = entry.get("persistence") or {}
             if persistence.get("status") in {"failed", "stop_pending"}:
@@ -319,7 +328,15 @@ class ReadRuns:
             result = self._views.load_overview(run_id)
         else:
             state = self._state(run_id)
-            result = {key: value for key, value in state.items() if key != "items"}
+            result = {
+                key: value
+                for key, value in state.items()
+                if key not in {"items", "scoring_results", "diagnostic_results", "scoring_batches"}
+            }
+            result["scoring_batches"] = [
+                {k: v for k, v in b.items() if k not in {"materials", "targets"}}
+                for b in state.get("scoring_batches") or []
+            ]
             if isinstance(result.get("qa_snapshot"), dict):
                 result["qa_snapshot"] = snapshot_metadata(result["qa_snapshot"])
             result["item_count"] = len(state.get("items") or [])
@@ -372,10 +389,12 @@ class ReadRuns:
         primary: str = "",
         question_type: str = "",
         evaluation_type: str = "",
+        scoring_profile: str = "",
+        scoring_batch: str = "",
     ) -> dict[str, Any]:
         """``GET /api/runs/{id}/items``（1.0 ``get_run_items`` ``:6441``）。"""
         with self._item_locks[hash(run_id) % len(self._item_locks)]:
-            cached = self._state(run_id)
+            cached = profile_state(self._state(run_id), scoring_profile, scoring_batch)
             state = {**cached, "items": [dict(item) for item in cached.get("items") or []]}
             self._hydrate_legacy_gt_images(state)
             qa_metadata = self._qa_index(state)
@@ -442,9 +461,10 @@ class ReadRuns:
                 ):
                     continue
                 evaluation = item.get("evaluation") or {}
-                if evaluation_type and (
-                    evaluation.get("source_qtype") or evaluation.get("answer_format")
-                ) != evaluation_type:
+                if (
+                    evaluation_type
+                    and (evaluation.get("source_qtype") or evaluation.get("answer_format")) != evaluation_type
+                ):
                     continue
                 if question_type and item.get("question_type") != question_type:
                     continue
@@ -503,10 +523,12 @@ class ReadRuns:
                 "facets": facets,
             }
 
-    def get_run_item(self, run_id: str, item_index: int) -> dict[str, Any]:
+    def get_run_item(
+        self, run_id: str, item_index: int, scoring_profile: str = "", scoring_batch: str = ""
+    ) -> dict[str, Any]:
         """``GET /api/runs/{id}/items/{index}``（1.0 ``get_run_item`` ``:6528``）。"""
         with self._item_locks[hash(run_id) % len(self._item_locks)]:
-            cached = self._state(run_id)
+            cached = profile_state(self._state(run_id), scoring_profile, scoring_batch)
             state = {**cached, "items": [dict(item) for item in cached.get("items") or []]}
             self._hydrate_legacy_gt_images(state)
             items = state.get("items") or []
@@ -517,4 +539,10 @@ class ReadRuns:
                 item["scope_id"] = state["scope_id"]
                 item["scope_source"] = "saved_run_scope_v1"
             item["review"] = (self.get_reviews(run_id).get("reviews") or {}).get(str(item.get("qa_id")))
+            item["scoring_results"] = item_scores(cached, str(item.get("qa_id")))
+            item["diagnostic_results"] = [
+                v
+                for v in (cached.get("diagnostic_results") or {}).values()
+                if v.get("qa_id") == item.get("qa_id")
+            ]
             return {"index": item_index, "item": item}

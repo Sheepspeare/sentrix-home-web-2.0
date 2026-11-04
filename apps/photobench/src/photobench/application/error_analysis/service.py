@@ -39,6 +39,8 @@ class ErrorAnalysis:
                 "summary_only",
                 "model_role",
                 "comparison_filter",
+                "scoring_profile",
+                "scoring_batch",
             )
             if k in payload
         }

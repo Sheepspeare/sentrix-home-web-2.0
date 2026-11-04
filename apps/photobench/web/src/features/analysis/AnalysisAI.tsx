@@ -14,6 +14,7 @@ import {
 export function AnalysisAI({
   runId,
   jobId,
+  scoringProfile = '',
   stale,
   filters,
   total,
@@ -23,6 +24,7 @@ export function AnalysisAI({
 }: {
   runId: string;
   jobId: string;
+  scoringProfile?: string;
   stale: boolean;
   filters: AnalysisFilters;
   total: number;
@@ -271,7 +273,7 @@ export function AnalysisAI({
           </div>
         </>
       )}
-      <AIComparison key={jobId} runId={runId} jobId={jobId} scope={scope} filters={filters} modelRole={provider} disabled={disabled} />
+      <AIComparison scoringProfile={scoringProfile} key={jobId} runId={runId} jobId={jobId} scope={scope} filters={filters} modelRole={provider} disabled={disabled} />
     </details>
   );
 }

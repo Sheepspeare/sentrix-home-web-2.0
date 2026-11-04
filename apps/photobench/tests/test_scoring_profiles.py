@@ -1,0 +1,421 @@
+"""Independent standards reuse frozen answers, with resumable per-item receipts."""
+
+import copy
+import json
+import threading
+
+import pytest
+
+from photobench.application.run_execution.judge import JudgeRunner
+from photobench.application.run_execution.profile_scoring import ProfileScoring, prepare_batches
+from photobench.application.runs.scoring import preview, run_scoring
+from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
+from photobench.domain.evaluation.profile_view import profile_state
+from photobench.domain.evaluation.profiles import (
+    ATM,
+    OPEN,
+    list_score,
+    media_ranking,
+    media_ranking_summary,
+    profile_configs,
+    scoring_targets,
+    summarize_batches,
+    valid_result,
+)
+from photobench.domain.runs.exports import export_sft, export_traces
+
+
+def media(name, kind="image", **extra):
+    return {"media_type": kind, "media_id": name, **extra}
+
+
+def state(scorer="open_judge", turns=1, **definition):
+    row = {
+        "qa_id": "q",
+        "question": "多少？",
+        "answer": "2千米",
+        "expected_action": "answer",
+        "evaluation": {
+            "scorer": scorer,
+            "answer_format": "choice"
+            if scorer == "choice_judge"
+            else "media_list"
+            if scorer in {"media_set", "atm_list"}
+            else "open",
+            "max_score": 1,
+            "applies_to_turn": turns - 1,
+            **definition,
+        },
+    }
+    if turns > 1:
+        row["conversation"] = [
+            {"message": "多少？", "reference_answer": "2千米", "expected_action": "answer"}
+            for _ in range(turns)
+        ]
+    record = {
+        "message": "多少？",
+        "answer": "2000米",
+        "expected_action": "answer",
+        "agent_status": "complete",
+        "predicted_media": [],
+        "media_mapping_complete": True,
+        "turn_id": "t",
+    }
+    return {
+        "run_id": "r",
+        "status": "completed",
+        "qa_count": 1,
+        "qa_set": "frozen",
+        "qa_snapshot": {"rows": [row], "definition_sha256": qa_fingerprint([row])},
+        "items": [
+            {
+                "qa_id": "q",
+                "question": "多少？",
+                "reference_answer": "2千米",
+                "evaluation": row["evaluation"],
+                "execution_status": "completed",
+                "judge": {"score": 2},
+                **record,
+                "runtime_turns": [copy.deepcopy(record) for _ in range(turns)],
+            }
+        ],
+        "rejudge": {"completed": 0, "failed": 0},
+    }
+
+
+class Http:
+    def __init__(self, replies):
+        self.replies = iter(replies)
+        self.calls = []
+
+    def request_json(self, url, payload=None, *args, **kwargs):
+        self.calls.append(copy.deepcopy(payload))
+        value = next(self.replies)
+        if isinstance(value, BaseException):
+            raise value
+        return {
+            "choices": [{"message": {"content": json.dumps(value, ensure_ascii=False)}}],
+            "usage": {"total_tokens": 11},
+        }
+
+
+@pytest.fixture(autouse=True)
+def no_wait(monkeypatch):
+    monkeypatch.setattr("photobench.application.run_execution.judge.JUDGE_REQUEST_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr("photobench.application.run_execution.judge.JUDGE_RETRY_ATTEMPTS", 1)
+
+
+def setup(s, profiles, replies=(), configs=None):
+    batches = prepare_batches(s, profile_configs(profiles, configs), {"url": "http://judge/v1", "model": "j"})
+    http = Http(replies)
+    runner = JudgeRunner(http=http, judge_url="http://judge/v1", judge_model="j", cancel=threading.Event())
+    saved = []
+    service = ProfileScoring(runner, s, threading.RLock(), lambda: saved.append(copy.deepcopy(s)), {})
+    return service, batches, http, saved
+
+
+def task():
+    return {"actual_action": "answer", "reason": "实际作答"}
+
+
+@pytest.mark.parametrize("tag", ["choice_judge", "media_set", "atm_number", "open_judge"])
+def test_open_uses_legacy_scale_regardless_of_question_tag(tag):
+    s = state(tag)
+    service, batches, http, _ = setup(s, [OPEN], [task(), {"score": 1, "reason": "部分正确"}])
+    result = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert result["score"] == 1 and result["max_score"] == 2 and result["purpose"] == "answer_quality"
+    assert len(http.calls) == 2
+
+
+@pytest.mark.parametrize("option,expected", [("B", 1), ("A", 0), ("other", 0)])
+def test_choice_key_never_reaches_judge(option, expected):
+    s = state(
+        "choice_judge", options=[{"id": "A", "text": "甲"}, {"id": "B", "text": "乙"}], correct_option="B"
+    )
+    reply = {
+        "status": "matched",
+        "matched_option": option,
+        "reason": "语义结论",
+        "comparisons": [{"option_id": i, "matches": i == option, "reason": "对照"} for i in ("A", "B")],
+    }
+    service, batches, http, _ = setup(s, [ATM], [task(), reply])
+    result = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert result["score"] == expected and valid_result(result)
+    wire = json.dumps(http.calls[-1], ensure_ascii=False)
+    assert "correct_option" not in wire and "2千米" not in wire
+
+
+@pytest.mark.parametrize("answer,reference", [("2000米", "2千米"), ("2026年11月4日", "2026-11-04")])
+def test_numeric_uses_one_judge_match_with_original_units_dates(answer, reference):
+    s = state("atm_number")
+    s["qa_snapshot"]["rows"][0]["answer"] = reference
+    s["items"][0]["runtime_turns"][0]["answer"] = answer
+    service, batches, http, _ = setup(s, [ATM], [task(), {"score": 1, "reason": "等价"}])
+    r = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert r["score"] == 1 and len(http.calls) == 2
+    data = json.loads(http.calls[-1]["messages"][1]["content"])
+    assert data["answer"] == answer and data["reference"] == reference
+
+
+@pytest.mark.parametrize(
+    "prediction,expected",
+    [([], 0), (["a"], 0.5), (["a", "b"], 1), (["a", "b", "c"], 2 / 3), (["a", "a", "b"], 1)],
+)
+def test_jaccard_uses_union_and_deduplicates(prediction, expected):
+    gt = [media("a"), media("b")]
+    r = list_score(
+        gt, {"predicted_media": [media(v) for v in prediction], "media_mapping_complete": True}, gt
+    )
+    assert r["score"] == pytest.approx(expected)
+
+
+def test_jaccard_mixed_types_and_missing_delivery():
+    gt = [media("same"), media("same", "video")]
+    assert (
+        list_score(gt, {"predicted_media": [media("same")], "media_mapping_complete": True}, gt)["score"]
+        == 0.5
+    )
+    for record in ({}, {"predicted_media": []}, {"predicted_media": [], "media_mapping_complete": False}):
+        with pytest.raises(ValueError, match="Delivery"):
+            list_score(gt, record, gt)
+    with pytest.raises(ValueError, match="Ambiguous"):
+        list_score(
+            [media("a/x.jpg")],
+            {"predicted_media": [media("x.jpg")], "media_mapping_complete": True},
+            [media("a/x.jpg"), media("b/x.jpg")],
+        )
+
+
+def test_two_standards_share_diagnostics_and_legal_zero_survives_resume():
+    s = state("media_set", target_media_refs=[media("a")], retrieval_requirement="any")
+    service, batches, http, _ = setup(s, [OPEN, ATM], [task(), {"score": 0, "reason": "错误"}])
+    original = copy.deepcopy(s["items"])
+    for b in batches:
+        service.score(b, scoring_targets(s, b, "all")[0])
+    assert len(http.calls) == 2 and len(s["diagnostic_results"]) == 1
+    assert s["items"] == original
+    assert preview(s, batches, "all")["subscore_count"] == 0
+    assert all(r["score"] == 0 for r in s["scoring_results"].values())
+
+
+def test_missing_other_standard_is_not_borrowed_and_new_batch_never_blends():
+    s = state()
+    svc, batches, _, _ = setup(s, [OPEN], [task(), {"score": 2, "reason": "正确"}])
+    svc.score(batches[0], scoring_targets(s, batches[0], "missing")[0])
+    atm = prepare_batches(s, profile_configs([ATM]), {"url": "http://judge/v1", "model": "j"})[0]
+    assert len(scoring_targets(s, atm, "missing")) == 1
+    new = prepare_batches(s, profile_configs([OPEN]), {"url": "http://judge/v1", "model": "j"}, nonce="new")[
+        0
+    ]
+    summary = summarize_batches(s)
+    assert summary[new["batch_id"]]["scored"] == 0 and summary[new["batch_id"]]["total_score"] is None
+    assert summary[batches[0]["batch_id"]]["total_score"] == 1
+
+
+def test_failed_diagnostics_retry_without_repeating_valid_score():
+    s = state()
+    svc, batches, http, _ = setup(
+        s, [OPEN], [RuntimeError("diagnostic unavailable"), {"score": 0, "reason": "错误"}, task()]
+    )
+    b = batches[0]
+    first = svc.score(b, scoring_targets(s, b, "missing")[0])
+    assert valid_result(first)
+    targets = scoring_targets(s, b, "missing")
+    assert targets[0]["diagnostics_only"]
+    svc.score(b, targets[0])
+    assert len(http.calls) == 3 and not scoring_targets(s, b, "missing")
+
+
+def test_persisted_interruption_and_duplicate_submission_are_idempotent():
+    s = state()
+    svc, batches, http, saved = setup(s, [ATM], [task(), {"accuracy": False}])
+    b = batches[0]
+    svc.score(b, scoring_targets(s, b, "missing")[0])
+    interrupted = next(
+        v
+        for v in saved
+        if any(
+            q.get("status") == "running"
+            for r in v.get("scoring_results", {}).values()
+            for q in r.get("requests", [])
+        )
+    )
+    runner = JudgeRunner(
+        http=Http([{"accuracy": False}]),
+        judge_url="http://judge/v1",
+        judge_model="j",
+        cancel=threading.Event(),
+    )
+    run_scoring(
+        interrupted,
+        interrupted["scoring_batches"],
+        "missing",
+        runner,
+        {},
+        lambda: None,
+        runner.cancel,
+        concurrency=1,
+    )
+    result = next(iter(interrupted["scoring_results"].values()))
+    assert valid_result(result) and result["score"] == 0 and result["history"]
+    assert preview(interrupted, interrupted["scoring_batches"], "missing")["subscore_count"] == 0
+    assert len(http.calls) == 2
+
+
+def test_qa_mean_uses_frozen_evaluation_turn_and_keeps_partial_coverage():
+    s = state(turns=2)
+    svc, batches, _, _ = setup(
+        s, [OPEN], [task(), {"score": 0, "reason": "错误"}, task(), {"score": 2, "reason": "正确"}]
+    )
+    b = batches[0]
+    for target in scoring_targets(s, b, "all"):
+        svc.score(b, target)
+    assert summarize_batches(s)[b["batch_id"]]["total_score"] == 1
+    s["qa_snapshot"]["rows"].append({"qa_id": "unscored"})
+    summary = summarize_batches(s)[b["batch_id"]]
+    assert summary["scored_mean"] == 2 and summary["coverage"] == 0.5 and summary["total_score"] is None
+
+
+def test_projection_export_and_summary_select_the_same_batch():
+    s = state()
+    svc, batches, _, _ = setup(s, [OPEN], [task(), {"score": 0, "reason": "错误"}])
+    b = batches[0]
+    svc.score(b, scoring_targets(s, b, "all")[0])
+    view = profile_state(s, OPEN, b["batch_id"])
+    assert view["items"][0]["judge"]["score"] == 0
+    assert export_traces(view, scores=[0])[0]["judge"]["score"] == 0
+    assert export_sft(view, scores=[0])["scoring_summary"]["total_score"] == 0
+    assert s["items"][0]["judge"]["score"] == 2
+    empty = profile_state(s, ATM)
+    assert empty["items"][0]["judge"]["score"] is None
+
+
+def test_media_r5_keeps_video_in_joint_order_and_uses_parent_identity():
+    refs = [
+        media("v", "video", asset_id="video", source_keyframe_asset_id="frame"),
+        *[media(str(i), asset_id=str(i)) for i in range(1, 6)],
+        media("v", "video", asset_id="video"),
+    ]
+    item = {
+        "retrieval_media_refs": [media("v", "video"), media("5")],
+        "retrieved_candidate_media": refs,
+        "retrieved_candidate_asset_ids": ["frame", "1", "2", "3", "4", "5", "video"],
+    }
+    rank = media_ranking(item)
+    assert rank["recall_at_5"] == 0.5 and rank["ranked"][0] == "video:v" and len(rank["ranked"]) == 6
+    missing = {**item}
+    missing.pop("retrieved_candidate_asset_ids")
+    many = {**item, "retrieval_media_refs": [media(str(i)) for i in range(6)]}
+    summary = media_ranking_summary([item, missing, many])
+    assert summary["included"] == 1 and summary["excluded_gt_over_5"] == 1 and summary["unavailable"] == 1
+
+
+@pytest.mark.parametrize("flag", ["use_gt_images", "use_gt_metadata"])
+def test_required_gt_failure_is_not_silently_text_only(flag):
+    s = state()
+    s["qa_snapshot"]["rows"][0]["answer_evidence_media_refs"] = [media("missing.jpg")]
+    svc, batches, http, _ = setup(s, [OPEN], [task()], {OPEN: {flag: True}})
+    result = svc.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert result["status"] == "failed" and result["score"] is None and len(http.calls) == 1
+
+
+def test_prompt_defaults_are_copied_and_resume_uses_frozen_config(tmp_path):
+    from test_suites import FakeRunStore, _suites
+
+    s = state()
+    suites = _suites(tmp_path, store=FakeRunStore({"r": s}))
+    batches, _, _, _ = suites._profile_request(
+        s,
+        {
+            "scoring_profiles": [OPEN],
+            "scoring_configs": {OPEN: {"prompts": {"answer_quality": "original prompt"}}},
+        },
+    )
+    resumed, _, _, _ = suites._profile_request(
+        s,
+        {
+            "resume_batch_ids": [batches[0]["batch_id"]],
+            "scoring_configs": {OPEN: {"prompts": {"answer_quality": "changed prompt"}}},
+        },
+    )
+    assert resumed[0]["config"]["prompts"]["answer_quality"] == "original prompt"
+    changed, _, _, _ = suites._profile_request(s, {"scoring_profiles": [OPEN], "batch_nonce": "new"})
+    assert changed[0]["batch_id"] != resumed[0]["batch_id"]
+    assert preview(s, changed, "all")["qa_count"] == 1
+
+
+def test_invalid_profile_request_does_not_create_partial_suite(tmp_path):
+    from test_suites import _suites
+
+    from photobench.domain.errors import InvalidRequestError
+
+    suites = _suites(tmp_path)
+    with pytest.raises(InvalidRequestError, match="scoring_profiles"):
+        suites.start_suite(
+            {"album_id": "album-x", "qa_set": "qa-1", "models": ["model-a"], "scoring_profiles": ["wrong"]}
+        )
+    assert not suites.active_run_ids()
+
+
+def test_frozen_judge_address_change_requires_explicit_new_batch(tmp_path):
+    from test_suites import _suites
+
+    from photobench.domain.errors import InvalidRequestError
+
+    suites = _suites(tmp_path)
+    with pytest.raises(InvalidRequestError, match="Judge"):
+        suites._frozen_judge_settings({"url": "https://different.invalid/v1", "model": "j"})
+
+
+def test_new_protocol_resume_carries_frozen_scoring_and_never_repairs_agent_answers(tmp_path):
+    from test_suites import FakeExecution, FakeRunStore, _cancelled_state, _suites
+
+    saved = _cancelled_state()
+    configs = profile_configs([OPEN], {OPEN: {"prompts": {"answer_quality": "frozen prompt"}}})
+    batches = prepare_batches(
+        saved, configs, {"url": "http://judge:1/v1", "model": "judge-model", "provider_id": "cloud"}
+    )
+    saved.update(
+        scoring_profiles=[OPEN], scoring_configs=configs, primary_scoring_batch_ids=[batches[0]["batch_id"]]
+    )
+    saved["items"][0].update(answer="saved answer", judge_status="failed")
+    captured = []
+    gate = threading.Event()
+
+    def factory(request):
+        captured.append(request)
+        return FakeExecution(request, gate)
+
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}), new_execution=factory)
+    try:
+        suites.resume_run("run-1", {"repair_missing_judges": True, "scoring_profiles": [ATM]})
+        request = captured[0]
+        assert request.repair_missing_judges is False
+        assert request.prior_items[0]["answer"] == "saved answer"
+        assert request.scoring_configs == configs
+        assert request.prior_scoring["scoring_batches"] == batches
+        assert request.frozen_qa_snapshot == saved["qa_snapshot"]
+    finally:
+        gate.set()
+
+
+def test_analysis_pins_selected_standard_and_rejects_missing_snapshot(tmp_path):
+    from photobench.infrastructure.error_analysis.worker import source
+    from photobench.infrastructure.results.store import write_committed_snapshot
+
+    s = state()
+    service, batches, _, _ = setup(s, [OPEN], [task(), {"score": 0, "reason": "wrong"}])
+    service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    directory = tmp_path / "r"
+    write_committed_snapshot(directory, s)
+    pinned = tmp_path / "selected.jsonl"
+    view = source(tmp_path, "r", OPEN, batches[0]["batch_id"], pinned)
+    assert view["scoring_summary"]["total_score"] == 0
+    assert json.loads(pinned.read_text())["judge"]["score"] == 0
+    legacy = tmp_path / "legacy.jsonl"
+    source(tmp_path, "r", pinned=legacy)
+    assert json.loads(legacy.read_text())["judge"]["score"] == 2
+    pointer = json.loads((directory / "snapshot-commit.json").read_text())
+    (directory / ".snapshots" / pointer["generation"] / "run.json").unlink()
+    with pytest.raises(ValueError, match="complete run snapshot"):
+        source(tmp_path, "r", OPEN, pinned=pinned)

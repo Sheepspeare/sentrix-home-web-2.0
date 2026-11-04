@@ -8,9 +8,9 @@ import { ComparisonJourney, ComparisonIdentity } from "./ComparisonJourney.tsx";
 import { ComparisonFindings } from "./ComparisonFindings.tsx";
 import { comparisonRef, type AIComparisonReport } from "./comparison.ts";
 const states: Record<string, string> = { queued: "等待运行", running: "对比中", paused: "等待测评结束", completed: "对比完成", failed: "对比失败", cancelled: "已取消", interrupted: "已中断", cancelling: "正在取消" };
-type Props={runId:string;jobId:string;scope:string;filters:AnalysisFilters;modelRole:string;disabled:boolean};
+type Props={scoringProfile?:string;runId:string;jobId:string;scope:string;filters:AnalysisFilters;modelRole:string;disabled:boolean};
 export function AIComparison(props:Props){return <ComparisonPanel key={`${props.runId}:${props.jobId}`} {...props}/>;}
-function ComparisonPanel({runId,jobId,scope,filters,modelRole,disabled}:Props){
+function ComparisonPanel({scoringProfile='',runId,jobId,scope,filters,modelRole,disabled}:Props){
   const [comparisonFilter, setComparisonFilter] = useState("all");
   const [otherRun, setOtherRun] = useState("");
   const [job, setJob] = useState<AnalysisJob<AIComparisonReport> | null>(null);
@@ -53,8 +53,8 @@ function ComparisonPanel({runId,jobId,scope,filters,modelRole,disabled}:Props){
     const options = { kind: "ai_compare", left_job: jobId, comparison_filter: comparisonFilter, scope, filters: { ...filters }, model_role: modelRole };
     try {
       const path = `/runs/${encodeURIComponent(otherRun)}/analysis`;
-      let other = await api<AnalysisJob>(path, { signal });
-      if (!other.job_id || other.stale || (!activeAnalysis(other) && other.status !== "completed")) other = await post(path, { kind: "rules" });
+      let other = await api<AnalysisJob>(path + (scoringProfile ? '?' + new URLSearchParams({scoring_profile:scoringProfile}) : ''), { signal });
+      if (!other.job_id || other.stale || (!activeAnalysis(other) && other.status !== "completed")) other = await post(path, { kind: "rules", ...(scoringProfile ? {scoring_profile:scoringProfile} : {}) });
       while (activeAnalysis(other)) {
         await new Promise<void>(resolve => window.setTimeout(resolve, 1500));
         if (signal.aborted) return;

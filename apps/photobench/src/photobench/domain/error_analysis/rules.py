@@ -1028,6 +1028,7 @@ def compare_reports(
     differences = []
     for k in (
         "judge",
+        "scoring_definition",
         "judge_definition_fingerprints",
         "budgets",
         "agent_limits",
@@ -1042,7 +1043,14 @@ def compare_reports(
     comparable = (
         not any(
             k in differences
-            for k in ("judge", "judge_definition_fingerprints", "budgets", "agent_limits", "context_windows")
+            for k in (
+                "judge",
+                "scoring_definition",
+                "judge_definition_fingerprints",
+                "budgets",
+                "agent_limits",
+                "context_windows",
+            )
         )
         and bool(left["source"].get("judge"))
         and bool(right["source"].get("judge"))

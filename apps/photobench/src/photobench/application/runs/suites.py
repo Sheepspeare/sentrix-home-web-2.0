@@ -47,6 +47,7 @@ from photobench.application.config.service import (
 )
 from photobench.application.run_execution.gpu_sampler import GpuSampler
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
+from photobench.application.run_execution.profile_scoring import prepare_batches
 from photobench.application.run_execution.service import (
     JudgeSettings,
     RunExecution,
@@ -54,17 +55,21 @@ from photobench.application.run_execution.service import (
     freeze_runtime_request,
 )
 from photobench.application.runs.index import RunIndex
+from photobench.application.runs.scoring import preview as scoring_preview
+from photobench.application.runs.scoring import run_scoring
 from photobench.config import default_import_timeout
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import InvalidRequestError
 from photobench.domain.evaluation.contract import scoring_options
+from photobench.domain.evaluation.profiles import LABELS, profile_configs, scoring_targets, summarize_batches
 from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter, RunStore
 from photobench.domain.runs import analysis
 from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name, safe_slug
+from photobench.domain.runs.judge import judge_chat_url
 from photobench.domain.runs.judge_recovery import RECOVERY_SCOPES, recovery_fields
 from photobench.domain.runtime.ports import LifecycleProvider, RunRuntimeSnapshot, TelemetryProvider
 from photobench.domain.sentrix.ports import CancellableOperations, SentrixClient
@@ -236,13 +241,26 @@ class RunSuites:
         provider_id = str(payload.get("judge_provider_id") or self._config.judge_provider_id)
         _, provider_url, provider_model, provider_key = self._config.resolve_judge_provider(provider_id)
         return JudgeSettings(
+            judge_provider_id=provider_id,
             judge_url=str(payload.get("judge_url") or provider_url).rstrip("/"),
             judge_model=str(payload.get("judge_model") or provider_model),
             judge_api_key=str(payload.get("judge_api_key") or provider_key),
             answer_quality_prompt=custom.get("answer_quality"),
-            task_judge_prompt=custom.get("task_decision"),
-            evidence_judge_prompt=custom.get("evidence"),
+            task_judge_prompt=payload.get("task_system_prompt") or custom.get("task_decision"),
+            evidence_judge_prompt=payload.get("evidence_system_prompt") or custom.get("evidence"),
             judge_use_gt_images=self._gt_image_option(payload),
+        )
+
+    def _frozen_judge_settings(self, frozen: Mapping[str, Any]) -> JudgeSettings:
+        provider_id, url, _, _ = self._config.resolve_judge_provider(frozen.get("provider_id"))
+        if frozen.get("url") and judge_chat_url(str(frozen["url"])) != judge_chat_url(url):
+            raise InvalidRequestError("原Judge地址与当前供应商配置不同，请恢复原供应商地址，或新建评分批次")
+        return self._judge_settings(
+            {
+                "judge_provider_id": provider_id,
+                "judge_url": frozen.get("url"),
+                "judge_model": frozen.get("model"),
+            }
         )
 
     # ---- start_suite --------------------------------------------------------
@@ -287,6 +305,18 @@ class RunSuites:
             model_base_url = self._config.model_base_url
         sentrix_url = str(payload.get("sentrix_url") or self._config.sentrix_url)
         judge = JudgeSettings() if mode == "build" else self._judge_settings(payload)
+        try:
+            configs = (
+                profile_configs(
+                    payload.get("scoring_profiles"),
+                    payload.get("scoring_configs"),
+                    self._config.load_custom_judge_prompts(),
+                )
+                if mode != "build"
+                else {}
+            )
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
         self._require_inactive()
         deps = _SuiteDeps(
             sentrix_url=sentrix_url,
@@ -349,9 +379,11 @@ class RunSuites:
                     # reuse 才传；full 留空让 ``execute`` 走 ``_default_scope_id``。
                     scope_id=existing_scope_id,
                     runtime_framework=deps.runtime_framework,
+                    judge_provider_id=deps.judge.judge_provider_id,
                     judge_url=deps.judge.judge_url,
                     judge_model=deps.judge.judge_model,
                     judge_api_key=deps.judge.judge_api_key,
+                    scoring_configs=configs,
                     evaluation_options=scoring_options(payload.get("evaluation_options")),
                     judge_prompts={
                         "answer_quality": deps.judge.answer_quality_prompt,
@@ -478,6 +510,21 @@ class RunSuites:
             f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe_slug(album_id)}-"
             f"{safe_slug(model_profile)}-resume-{uuid.uuid4().hex[:6]}"
         )
+        frozen_batches = saved.get("scoring_batches") or []
+        primary = next(
+            (b for b in frozen_batches if b["batch_id"] in (saved.get("primary_scoring_batch_ids") or [])),
+            None,
+        )
+        frozen_judge = (
+            primary["judge"]
+            if primary
+            else {
+                "provider_id": saved.get("judge_provider_id"),
+                "url": saved.get("judge_url"),
+                "model": saved.get("judge_model"),
+            }
+        )
+        resumed_judge = self._frozen_judge_settings(frozen_judge)
         request = RunRequest(
             album_id=album_id,
             qa_set=qa_set,
@@ -490,10 +537,25 @@ class RunSuites:
             mode="reuse",
             scope_id=scope_id,
             runtime_framework=str(saved.get("runtime_framework") or ""),
-            judge_url=str(saved.get("judge_url") or ""),
-            judge_model=str(saved.get("judge_model") or ""),
+            judge_url=resumed_judge.judge_url,
+            judge_model=resumed_judge.judge_model,
+            judge_provider_id=resumed_judge.judge_provider_id,
+            judge_api_key=resumed_judge.judge_api_key,
+            judge_prompts=copy.deepcopy(saved.get("judge_prompts") or {}),
             prior_items=prior_items,
-            repair_missing_judges=repair_missing,
+            scoring_configs=saved.get("scoring_configs") or {},
+            prior_scoring={
+                k: copy.deepcopy(saved[k])
+                for k in (
+                    "scoring_batches",
+                    "scoring_results",
+                    "scoring_summaries",
+                    "diagnostic_results",
+                    "primary_scoring_batch_ids",
+                )
+                if k in saved
+            },
+            repair_missing_judges=repair_missing and not bool(saved.get("scoring_profiles")),
             evaluation_options=scoring_options(saved.get("evaluation_options")),
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
@@ -872,10 +934,212 @@ class RunSuites:
             ),
             "scope_id": state.get("scope_id"),
             "scoring": counts,
+            "frozen_scoring_profiles": state.get("scoring_profiles") or [],
+            "scoring_profiles": {
+                profile: {
+                    "batch_id": batch.get("batch_id") if batch else None,
+                    "pending": len(scoring_targets(state, batch, "missing")) if batch else None,
+                    "status": "available" if batch else "not_collected",
+                }
+                for profile in LABELS
+                for batch in [
+                    next(
+                        (
+                            b
+                            for b in reversed(state.get("scoring_batches") or [])
+                            if b["profile_id"] == profile
+                        ),
+                        None,
+                    )
+                ]
+            },
             "source_product_build_revision": old_revision,
             "current_product_build_revision": current_revision,
             "product_version_changed": old_revision != current_revision,
             "judge_use_gt_images": bool(state.get("judge_use_gt_images")),
+        }
+
+    def _profile_request(
+        self, state: dict[str, Any], payload: Mapping[str, Any]
+    ) -> tuple[list[dict[str, Any]], JudgeSettings, str, list[str] | None]:
+        snapshot = state.get("qa_snapshot") or {}
+        if not snapshot or snapshot.get("definition_sha256") != qa_fingerprint(snapshot.get("rows")):
+            raise InvalidRequestError("原测评冻结QA快照校验失败，不能评分")
+        scope = str(payload.get("scope") or "missing")
+        if scope not in RECOVERY_SCOPES:
+            raise InvalidRequestError("Unknown scoring scope")
+        custom = self._config.load_custom_judge_prompts()
+        resume_ids = payload.get("resume_batch_ids")
+        if resume_ids is not None:
+            if (
+                not isinstance(resume_ids, list)
+                or not resume_ids
+                or any(not isinstance(v, str) for v in resume_ids)
+                or len(set(resume_ids)) != len(resume_ids)
+            ):
+                raise InvalidRequestError("请选择要续评的批次")
+            batches = [b for b in state.get("scoring_batches") or [] if b["batch_id"] in resume_ids]
+            if len(batches) != len(resume_ids) or len({b["profile_id"] for b in batches}) != len(batches):
+                raise InvalidRequestError("每套标准只能续评一个已有批次")
+            if (
+                len(
+                    {(b["judge"]["url"], b["judge"]["model"], b["judge"].get("provider_id")) for b in batches}
+                )
+                != 1
+            ):
+                raise InvalidRequestError("Judge配置不同的批次请分别续评")
+            if any(b["qa_definition_sha256"] != snapshot["definition_sha256"] for b in batches):
+                raise InvalidRequestError("评分批次与原题库快照不一致")
+            frozen = batches[0]["judge"]
+            judge = self._frozen_judge_settings(frozen)
+            configs = {b["profile_id"]: b["config"] for b in batches}
+        else:
+            batches = []
+            judge = self._judge_settings(payload)
+        try:
+            if resume_ids is None:
+                configs = profile_configs(
+                    payload.get("scoring_profiles"), payload.get("scoring_configs"), custom
+                )
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
+        if any(c["use_gt_images"] or c["use_gt_metadata"] for c in configs.values()) and str(
+            state.get("sentrix_url") or ""
+        ).rstrip("/") != self._config.sentrix_url.rstrip("/"):
+            raise InvalidRequestError("GT辅助评分需先将产品连接指向原测评服务")
+        if not judge.judge_url or not judge.judge_model:
+            raise InvalidRequestError("请选择有效的Judge配置")
+        diagnostics = {
+            "task_decision": payload.get("task_system_prompt") or judge.task_judge_prompt,
+            "evidence": payload.get("evidence_system_prompt") or judge.evidence_judge_prompt,
+            "evidence_enabled": bool(state.get("evidence_judge_enabled")),
+        }
+        batches = batches or prepare_batches(
+            state,
+            configs,
+            {
+                "url": judge.judge_url,
+                "model": judge.judge_model,
+                "provider_id": judge.judge_provider_id,
+                "diagnostics": diagnostics,
+            },
+            scope,
+            str(payload.get("batch_nonce") or ""),
+        )
+        qa_ids = payload.get("qa_ids")
+        if qa_ids is not None:
+            valid = {str(row["qa_id"]) for row in snapshot["rows"]}
+            if not isinstance(qa_ids, list) or not qa_ids or any(q not in valid for q in qa_ids):
+                raise InvalidRequestError("qa_ids必须包含冻结题库中的题目ID")
+        return batches, judge, scope, qa_ids
+
+    def preview_profile_scoring(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        saved = self._state_if_exists(run_id)
+        if saved is None:
+            raise KeyError(run_id)
+        state = copy.deepcopy(saved)
+        batches, _, scope, qa_ids = self._profile_request(state, payload)
+        return {
+            **scoring_preview(state, batches, scope, qa_ids),
+            "batch_ids": [b["batch_id"] for b in batches],
+        }
+
+    def start_profile_scoring(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            self._require_inactive()
+            state = self._state_if_exists(run_id)
+            if state is None:
+                raise KeyError(run_id)
+            if state.get("status") in DIRTY_STATUSES:
+                raise InvalidRequestError("测评仍在运行，暂不能补评")
+            batches, settings, scope, qa_ids = self._profile_request(state, payload)
+            selected = scoring_preview(state, batches, scope, qa_ids)
+            if not selected["subscore_count"]:
+                state["scoring_summaries"] = summarize_batches(state)
+                self._writer.write_snapshot(run_id, state)
+                self._index.upsert(analysis.run_list_entry(state))
+                return {"run_id": run_id, "status": "completed", "total": 0, **selected}
+            rejudge_id = "scoring-" + uuid.uuid4().hex
+            if state.get("rejudge"):
+                state.setdefault("rejudge_history", []).append(copy.deepcopy(state["rejudge"]))
+            state["rejudge"] = {
+                "rejudge_id": rejudge_id,
+                "status": "running",
+                "started_at": now_iso(),
+                "scope": scope,
+                "completed": 0,
+                "failed": 0,
+                "total": selected["subscore_count"],
+                "batch_ids": [b["batch_id"] for b in batches],
+                "unit": "scoring_item",
+                **selected,
+            }
+            self._writer.write_snapshot(run_id, state)
+            self._index.upsert(analysis.run_list_entry(state))
+            cancel = threading.Event()
+            self._reservations[rejudge_id] = cancel
+        lock = threading.RLock()
+
+        def checkpoint() -> None:
+            with lock:
+                self._writer.write_snapshot(run_id, state)
+
+        def worker() -> None:
+            try:
+                runner = JudgeRunner(
+                    http=self._http,
+                    cancel=cancel,
+                    judge_url=settings.judge_url,
+                    judge_model=settings.judge_model,
+                    judge_api_key=settings.judge_api_key,
+                    sentrix_url=str(state.get("sentrix_url") or self._config.sentrix_url),
+                    inline_images=self._inline_images,
+                )
+                assets = {}
+                if any(
+                    b["config"]["use_gt_images"]
+                    or b["config"]["use_gt_metadata"]
+                    or b["diagnostics"].get("evidence_enabled")
+                    for b in batches
+                ):
+                    assets = index_assets_by_name(
+                        self._sentrix.list_assets(scope_id=str(state.get("scope_id") or ""), limit=1000)
+                    )
+                run_scoring(
+                    state, batches, scope, runner, assets, checkpoint, cancel, lock=lock, qa_ids=qa_ids
+                )
+            except Exception as exc:
+                with lock:
+                    state["rejudge"].update(status="failed", error=str(exc), finished_at=now_iso())
+                checkpoint()
+            finally:
+                with lock:
+                    state["summary"] = analysis.effective_summary(state)
+                    checkpoint()
+                    self._index.upsert(analysis.run_list_entry(state))
+                with self._lock:
+                    self._auxiliary.pop(rejudge_id, None)
+                if self._on_finished is not None:
+                    self._on_finished(run_id)
+
+        thread = threading.Thread(target=worker, name=rejudge_id, daemon=True)
+        with self._lock:
+            self._auxiliary[rejudge_id] = (thread, cancel)
+            try:
+                thread.start()
+            except Exception as exc:
+                self._auxiliary.pop(rejudge_id, None)
+                state["rejudge"].update(status="failed", error=str(exc), finished_at=now_iso())
+                checkpoint()
+                raise
+            finally:
+                self._reservations.pop(rejudge_id, None)
+        return {
+            "run_id": run_id,
+            "rejudge_id": rejudge_id,
+            "status": "running",
+            "total": selected["subscore_count"],
+            **selected,
         }
 
     @staticmethod
@@ -895,6 +1159,8 @@ class RunSuites:
         换一个 judge 模型/提示词重新打分。这也意味着它必须**归档旧分数**
         （``judge_history``），否则「改一个字看看分数怎么变」就变成不可逆的。
         """
+        if "scoring_profiles" in payload or "resume_batch_ids" in payload:
+            return self.start_profile_scoring(run_id, payload)
         scope = str(payload.get("scope") or "all")
         if scope not in RECOVERY_SCOPES:
             raise InvalidRequestError("scope must be missing, failed, unscored, needs_review or all")

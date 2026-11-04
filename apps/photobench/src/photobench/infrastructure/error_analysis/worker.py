@@ -21,13 +21,16 @@ from photobench.domain.error_analysis.rules import (
     fingerprint,
     snapshot_annotations,
 )
+from photobench.domain.evaluation.profile_view import profile_state, select_batch
 from photobench.domain.runs.judge import judge_chat_url
 from photobench.infrastructure.error_analysis.ai_comparison_worker import run_ai_comparison
 from photobench.infrastructure.error_analysis.ai_worker import run_ai
 from photobench.infrastructure.results.store import committed_path, run_lock
 
 
-def source(root: Path, run_id: str) -> dict[str, Any]:
+def source(
+    root: Path, run_id: str, scoring_profile: str = "", scoring_batch: str = "", pinned: Path | None = None
+) -> dict[str, Any]:
     directory = root / run_id
     with run_lock(directory):
         rows = committed_path(directory, "results.jsonl")
@@ -43,8 +46,44 @@ def source(root: Path, run_id: str) -> dict[str, Any]:
             state = json.loads((selected / "run.json").read_text())
             state.pop("items", None)
         identity = _selected_identity(selected)
+        selection = {}
+        if scoring_profile and not (selected / "run.json").is_file():
+            raise ValueError("Selected scoring standard requires a complete run snapshot")
+        if (selected / "run.json").is_file():
+            full = json.loads((selected / "run.json").read_text())
+            state["qa_snapshot"] = full.get("qa_snapshot") or {}
+            if scoring_profile:
+                projected = profile_state(full, scoring_profile, scoring_batch)
+                batch = select_batch(full, scoring_profile, scoring_batch)
+                selection = {
+                    "scoring_profile": scoring_profile,
+                    "scoring_batch": batch["batch_id"] if batch else None,
+                    "scoring_definition": {
+                        k: batch[k]
+                        for k in (
+                            "profile_id",
+                            "rule_version",
+                            "config",
+                            "judge",
+                            "diagnostics",
+                            "qa_definition_sha256",
+                        )
+                    }
+                    if batch
+                    else None,
+                    "scoring_summary": projected["summary"]["selected_scoring"],
+                }
+                if batch:
+                    state["judge_url"], state["judge_model"] = batch["judge"]["url"], batch["judge"]["model"]
+            if pinned is not None and scoring_profile:
+                with pinned.open("w", encoding="utf-8") as out:
+                    for item in projected.get("items") or []:
+                        out.write(json.dumps(item, ensure_ascii=False) + chr(10))
+        if pinned is not None and not scoring_profile and rows.is_file():
+            shutil.copyfile(rows, pinned)
         runtime = state.get("runtime_snapshot") or {}
         return {
+            **selection,
             "run_id": run_id,
             "qa_snapshot": snapshot_metadata(state.get("qa_snapshot") or {}),
             "_qa_rows": (state.get("qa_snapshot") or {}).get("rows") or [],
@@ -147,7 +186,14 @@ def run_worker(
     try:
         progress(status="running", worker_pid=__import__("os").getpid())
         if job["kind"] == "rules":
-            src = source(Path(root), job["run_id"])
+            pinned = target / "input.jsonl"
+            src = source(
+                Path(root),
+                job["run_id"],
+                job.get("options", {}).get("scoring_profile", ""),
+                job.get("options", {}).get("scoring_batch", ""),
+                pinned,
+            )
             if (src.get("cleanup") or {}).get("status") == "stop_pending":
                 raise ValueError("run cleanup has not finished")
             if src["status"] not in {
@@ -160,9 +206,9 @@ def run_worker(
                 raise ValueError("run is not terminal")
             # Pin a private input copy: source snapshot generations may be retired by rejudge.
             pinned = target / "input.jsonl"
-            if src["format"] == "jsonl":
+            if not pinned.exists() and src["format"] == "jsonl":
                 shutil.copyfile(src["path"], pinned)
-            else:
+            elif not pinned.exists():
                 old = json.loads(Path(src["path"]).read_text())
                 with pinned.open("w", encoding="utf-8") as out:
                     for item in old.get("items") or []:

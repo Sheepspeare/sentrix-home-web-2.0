@@ -159,6 +159,10 @@ class FileAnalysisBackend:
                         pending["run_id"] == run_id
                         and pending["analysis_kind"] == kind
                         and pending["status"] in ACTIVE
+                        and all(
+                            self.get(pending["id"]).get("options", {}).get(k, "") == values.get(k, "")
+                            for k in ("scoring_profile", "scoring_batch")
+                        )
                     ):
                         return self.get(pending["id"])
             elif kind in {"ai", "compare", "ai_compare"}:
@@ -231,7 +235,12 @@ class FileAnalysisBackend:
                 else:
                     parent = Path(values["parent_path"])
                     report = json.loads((parent / "report.json").read_text())
-                    src = source(self.root, run_id)
+                    src = source(
+                        self.root,
+                        run_id,
+                        report["source"].get("scoring_profile", ""),
+                        report["source"].get("scoring_batch") or "",
+                    )
                     if src["revision"] != report["source"]["revision"]:
                         raise ValueError("source changed while preparing GT images")
                     freeze_side(
@@ -274,7 +283,12 @@ class FileAnalysisBackend:
                 for side in ("left", "right"):
                     parent = Path(values[side + "_path"])
                     report = json.loads((parent / "report.json").read_text())
-                    src = source(self.root, report["source"]["run_id"])
+                    src = source(
+                        self.root,
+                        report["source"]["run_id"],
+                        report["source"].get("scoring_profile", ""),
+                        report["source"].get("scoring_batch") or "",
+                    )
                     if src["revision"] != report["source"]["revision"]:
                         raise ValueError("source changed while preparing comparison")
                     selected = (

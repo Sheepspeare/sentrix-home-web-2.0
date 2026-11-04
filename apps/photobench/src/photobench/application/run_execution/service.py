@@ -59,6 +59,7 @@ from photobench.application.deploy.service import SentrixModelSwitch
 from photobench.application.run_execution.gpu_sampler import PHASE_LABELS, GpuSampler
 from photobench.application.run_execution.import_progress import import_with_progress
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
+from photobench.application.run_execution.profile_scoring import ProfileScoring, prepare_batches
 from photobench.application.run_execution.state import RunState
 from photobench.config import default_qa_concurrency
 from photobench.domain.datasets.ports import AlbumSource
@@ -250,6 +251,9 @@ class RunRequest:
     judge_url: str = ""
     judge_model: str = ""
     judge_api_key: str = ""
+    judge_provider_id: str = ""
+    scoring_configs: Mapping[str, Any] = field(default_factory=dict)
+    prior_scoring: Mapping[str, Any] = field(default_factory=dict)
     evaluation_options: Mapping[str, Any] = field(default_factory=dict)
     evaluation_prompts: Mapping[str, str] = field(default_factory=evaluation_prompts)
     judge_prompts: Mapping[str, str | None] = field(default_factory=dict)
@@ -309,6 +313,7 @@ class JudgeSettings:
     judge_url: str = ""
     judge_model: str = ""
     judge_api_key: str = ""
+    judge_provider_id: str = ""
     answer_quality_prompt: str | None = None
     task_judge_prompt: str | None = None
     evidence_judge_prompt: str | None = None
@@ -708,7 +713,13 @@ class RunExecution:
             "judge_model": request.judge_model
             or (self.judge_settings.judge_model if self.judge_settings else "")
             or None,
+            "judge_provider_id": request.judge_provider_id
+            or (self.judge_settings.judge_provider_id if self.judge_settings else ""),
+            "judge_prompts": dict(request.judge_prompts),
             "judge_use_gt_images": request.judge_use_gt_images,
+            "scoring_configs": copy.deepcopy(dict(request.scoring_configs)),
+            "scoring_profiles": list(request.scoring_configs),
+            **copy.deepcopy(dict(request.prior_scoring)),
             "evaluation_options": dict(request.evaluation_options),
             "evaluation_prompts": dict(request.evaluation_prompts),
             "evidence_judge_enabled": request.evidence_judge_enabled,
@@ -2165,10 +2176,42 @@ class RunExecution:
         judge_bounds: list[tuple[float, float, str, str]] = []
         judge_bounds_lock = threading.Lock()
 
+        profile_service = None
+        scoring_batches: list[dict[str, Any]] = []
+        if request.scoring_configs and judge is not None:
+            with state.lock:
+                inherited_ids = state.data.get("primary_scoring_batch_ids") or []
+                scoring_batches = [
+                    b for b in state.data.get("scoring_batches") or [] if b["batch_id"] in inherited_ids
+                ]
+                scoring_batches = scoring_batches or prepare_batches(
+                    state.data,
+                    request.scoring_configs,
+                    {
+                        "url": judge.judge_url,
+                        "model": judge.judge_model,
+                        "provider_id": state.data.get("judge_provider_id"),
+                        "diagnostics": {
+                            "task_decision": judge.task_judge_prompt,
+                            "evidence": judge.evidence_judge_prompt,
+                            "evidence_enabled": judge.evidence_enabled,
+                        },
+                    },
+                )
+                state.data["primary_scoring_batch_ids"] = [b["batch_id"] for b in scoring_batches]
+                if inherited_ids:
+                    judge.judge_url = scoring_batches[0]["judge"]["url"]
+                    judge.judge_model = scoring_batches[0]["judge"]["model"]
+            profile_service = ProfileScoring(
+                judge, state.data, state.lock, lambda: state.persist(wait=True), assets_by_name
+            )
+
         def run_judge(item: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
             begin, begin_iso = time.perf_counter(), now_iso()
             try:
                 assert judge is not None
+                if profile_service is not None:
+                    return profile_service.score_item(scoring_batches, copy.deepcopy(item), row)
                 if request.repair_missing_judges and str(item.get("qa_id")) in prior_by_qa:
                     return judge.judge_item(copy.deepcopy(item), row, assets_by_name, only_missing=True)
                 return judge.judge_item(copy.deepcopy(item), row, assets_by_name)
@@ -2297,6 +2340,11 @@ class RunExecution:
                                 if judge_phase_started is None:
                                     judge_phase_started = time.perf_counter()
                                     state.record_phase("qa_eval", "judge_phase_started_at", now_iso())
+                                if profile_service is not None:
+                                    with state.lock:
+                                        items[index] = item
+                                        state.data["items"] = [items[i] for i in sorted(items)]
+                                    state.persist(wait=True)
                                 judge_futures[judge_pool.submit(run_judge, item, rows[index])] = index
                         items[index] = item
                         fill_agent_slots()
@@ -2334,6 +2382,16 @@ class RunExecution:
             for item in ordered:
                 item.pop("_index", None)
             state.data["items"] = ordered
+            if scoring_batches:
+                from photobench.domain.evaluation.profiles import summarize_batches
+
+                state.data["scoring_summaries"] = summarize_batches(state.data)
+                for batch in scoring_batches:
+                    batch["status"] = (
+                        "interrupted"
+                        if state.cancelled
+                        else state.data["scoring_summaries"][batch["batch_id"]]["status"]
+                    )
             executed = sum(1 for item in ordered if item.get("execution_status") == "completed")
             state.data["run_valid"] = False
             record_progress()

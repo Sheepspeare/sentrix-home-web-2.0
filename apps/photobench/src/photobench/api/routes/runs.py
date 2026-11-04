@@ -37,8 +37,21 @@ def list_runs(request: Request, page: str = "1", page_size: str = "20") -> dict[
 
 
 @router.get("/runs/{run_id}", response_model=RunMetricsResponse, response_model_exclude_unset=True)
-def get_run(request: Request, run_id: str, include_history: bool = True) -> dict[str, Any]:
+def get_run(
+    request: Request,
+    run_id: str,
+    include_history: bool = True,
+    scoring_profile: str = "",
+    scoring_batch: str = "",
+) -> dict[str, Any]:
     """1.0 ``:7739``。run 不存在时 ``KeyError`` → 404（handler 在 ``api/errors.py``）。"""
+    if scoring_profile or scoring_batch:
+        return get_container(request).runs.get_run(
+            run_id,
+            include_history=include_history,
+            scoring_profile=scoring_profile,
+            scoring_batch=scoring_batch,
+        )
     if include_history:
         return get_container(request).runs.get_run(run_id)
     return get_container(request).runs.get_run(run_id, include_history=False)
@@ -61,6 +74,8 @@ def get_run_items(
     difficulty: str = "",
     answerability: str = "",
     primary: str = "",
+    scoring_profile: str = "",
+    scoring_batch: str = "",
 ) -> dict[str, Any]:
     """1.0 ``:7655``。筛选项逐个透传，规则在 ``ReadRuns.get_run_items``。"""
     try:
@@ -82,6 +97,8 @@ def get_run_items(
         difficulty=difficulty,
         answerability=answerability,
         primary=primary,
+        scoring_profile=scoring_profile,
+        scoring_batch=scoring_batch,
     )
 
 
@@ -90,13 +107,17 @@ def get_run_items(
     response_model=RunItemResponse,
     response_model_exclude_unset=True,
 )
-def get_run_item(request: Request, run_id: str, item_index: str) -> dict[str, Any]:
+def get_run_item(
+    request: Request, run_id: str, item_index: str, scoring_profile: str = "", scoring_batch: str = ""
+) -> dict[str, Any]:
     """1.0 ``:7735``。"""
     try:
         index = int(item_index)
     except ValueError as exc:
         raise InvalidRequestError(f"invalid item index: {item_index}") from exc
-    return get_container(request).runs.get_run_item(run_id, index)
+    return get_container(request).runs.get_run_item(
+        run_id, index, scoring_profile=scoring_profile, scoring_batch=scoring_batch
+    )
 
 
 @router.get("/runs/{run_id}/reviews")

@@ -56,9 +56,17 @@ def _sync_directory(path: Path) -> None:
 
 
 def _overview(state: dict[str, Any]) -> dict[str, Any]:
-    result = {key: value for key, value in state.items() if key != "items"}
+    result = {
+        key: value
+        for key, value in state.items()
+        if key not in {"items", "scoring_results", "diagnostic_results"}
+    }
     if isinstance(result.get("qa_snapshot"), dict):
         result["qa_snapshot"] = snapshot_metadata(result["qa_snapshot"])
+    result["scoring_batches"] = [
+        {k: v for k, v in b.items() if k not in {"materials", "targets"}}
+        for b in state.get("scoring_batches") or []
+    ]
     result["item_count"] = len(state.get("items") or [])
     result["summary"] = effective_summary(state)
     return result

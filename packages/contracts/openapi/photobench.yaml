@@ -281,6 +281,20 @@ paths:
           type: boolean
           default: true
           title: Include History
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -393,6 +407,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkStatusResponse'
+  /api/v1/runs/{run_id}/scoring-preview:
+    post:
+      tags:
+      - suites
+      summary: Preview Scoring
+      operationId: preview_scoring_api_v1_runs__run_id__scoring_preview_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Preview Scoring Api V1 Runs  Run Id  Scoring Preview
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/runs/{run_id}/items:
     get:
       tags:
@@ -498,6 +541,20 @@ paths:
           type: string
           default: ''
           title: Primary
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -531,6 +588,20 @@ paths:
         schema:
           type: string
           title: Item Index
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -661,6 +732,20 @@ paths:
           type: string
           default: ''
           title: Min Score
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -701,6 +786,20 @@ paths:
           type: string
           default: ''
           title: Min Score
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -757,6 +856,20 @@ paths:
         schema:
           type: string
           title: Run Id
+      - name: scoring_profile
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Profile
+      - name: scoring_batch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Batch
       responses:
         '200':
           description: Successful Response
@@ -2458,6 +2571,18 @@ components:
       title: AnalysisReport
     AnalysisRequest:
       properties:
+        scoring_profile:
+          type: string
+          enum:
+          - ''
+          - photobench_open_v1
+          - atm_qs_v1
+          title: Scoring Profile
+          default: ''
+        scoring_batch:
+          type: string
+          title: Scoring Batch
+          default: ''
         kind:
           type: string
           enum:

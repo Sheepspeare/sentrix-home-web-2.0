@@ -103,6 +103,9 @@ class JudgeRunner:
         sleep: Callable[[float], None] = time.sleep,
         rand: Callable[[float, float], float] = random.uniform,
     ) -> None:
+        self.gt_image_materials: tuple[list[dict[str, Any]], dict[str, Any]] | None = None
+        self.request_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+        self.request_observer: Callable[[dict[str, Any]], None] | None = None
         self.evaluation_options = scoring_options(dict(evaluation_options) if evaluation_options else None)
         self.evaluation_prompts = (
             dict(evaluation_prompts) if evaluation_prompts is not None else default_evaluation_prompts()
@@ -125,7 +128,7 @@ class JudgeRunner:
         self.rand = rand
         #: 限流锁与下一次可发时刻。惰性创建（1.0 也是第一次用到才建）。
         self._rate_lock: threading.Lock | None = None
-        self._next_request_at = 0.0
+        self._request_clock = [0.0]
 
     # ---- HTTP ---------------------------------------------------------------
 
@@ -146,8 +149,8 @@ class JudgeRunner:
             self._rate_lock = lock
         with lock:
             current = time.monotonic()
-            wait_seconds = max(0.0, self._next_request_at - current)
-            self._next_request_at = max(current, self._next_request_at) + JUDGE_REQUEST_INTERVAL_SECONDS
+            wait_seconds = max(0.0, self._request_clock[0] - current)
+            self._request_clock[0] = max(current, self._request_clock[0]) + JUDGE_REQUEST_INTERVAL_SECONDS
         if wait_seconds and self._wait(wait_seconds):
             raise RunCancelledError("cancelled while waiting for Judge rate limit")
 
@@ -209,6 +212,8 @@ class JudgeRunner:
         observations: list[dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any], int]:
         """1.0 ``_judge_request``（``:4433``）：带退避的重试；4xx 立刻抛。"""
+        if self.request_transform is not None:
+            payload = self.request_transform(payload)
         last_error: Exception | None = None
         for attempt in range(1, JUDGE_RETRY_ATTEMPTS + 1):
             record: dict[str, Any] = {
@@ -221,6 +226,20 @@ class JudgeRunner:
             started = time.perf_counter()
             try:
                 self._wait_for_request_slot()
+                if self.cancel is not None and self.cancel.is_set():
+                    raise RunCancelledError("cancelled before Judge request")
+                record.update(dispatch_started=True)
+                if self.request_observer is not None:
+                    record.update(
+                        input=payload,
+                        status="running",
+                        retry_reason=str(last_error)
+                        if last_error
+                        else "consistency_retry"
+                        if len(payload.get("messages", [])) > 2
+                        else None,
+                    )
+                    self.request_observer(record)
                 response = self.http.request_json(
                     judge_chat_url(self.judge_url), payload, "POST", timeout, self._headers()
                 )
@@ -234,15 +253,21 @@ class JudgeRunner:
                     valid = False
                 record["json_output"] = {"required": True, "attempted": True, "json_object_valid": valid}
                 record.update(status="complete", diagnostics={"request_sent": True})
+                if self.request_observer is not None:
+                    record["raw_response"] = response
                 if observations is not None:
                     for previous in observations:
                         if previous.get("status") == "error" and not previous.get("recovered_by_call_id"):
                             previous["recovered_by_call_id"] = record["call_id"]
                 return response, attempt
+            except RunCancelledError:
+                record.update(status="interrupted", diagnostics={"request_sent": False})
+                raise
             except Exception as exc:  # noqa: BLE001 —— 1.0 在这里把一切收成「重试或放弃」
                 last_error = exc
                 client_code = self._client_error_code(exc)
                 record.update(
+                    status="error",
                     error_type=type(exc).__name__,
                     error=str(exc),
                     diagnostics={
@@ -263,6 +288,8 @@ class JudgeRunner:
                     raise RunCancelledError("cancelled while retrying Judge request") from exc
             finally:
                 record["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+                if self.request_observer is not None:
+                    self.request_observer(record)
                 if observations is not None:
                     observations.append(record)
         raise RuntimeError(
@@ -290,6 +317,8 @@ class JudgeRunner:
         turn: Mapping[str, Any],
         assets_by_name: Mapping[str, list[dict[str, Any]]],
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if self.gt_image_materials is not None:
+            return copy.deepcopy(self.gt_image_materials)
         refs, source = gt_image_refs(row, turn)
         images = [ref for ref in refs if ref["media_type"] == "image"]
         resolved = resolve_gt_media(images, dict(assets_by_name), [])

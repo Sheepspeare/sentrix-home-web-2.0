@@ -678,7 +678,7 @@ export function keyMetricRows(run: unknown, summary: unknown): KeyMetric[] {
   const evaluation = dict(s.evaluation_summary);
   const dist = dict(s.judge_distribution);
   const gpu = dict(gpuMetricsView(run));
-  const ranking = dict(s.image_ranking);
+  const ranking = dict(s.media_ranking);
   const pct = (value: unknown) => value == null ? "未计算" : fmtPct(value);
   const platform = telemetryPlatform(gpu);
   const isUnified = platform === "apple_unified";
@@ -716,7 +716,7 @@ export function keyMetricRows(run: unknown, summary: unknown): KeyMetric[] {
     : "历史记录按时间线回退估算，不是实测值";
   return [
     {
-      label: evaluation.count ? "答案正确性均分" : "回答质量均分",
+      label: String(dict(s.selected_scoring).label || s.legacy_scoring_label || "评分汇总"),
       value: evaluation.count ? fmtPct(evaluation.mean) : s.answer_quality_mean == null ? "未计算" : `${s.answer_quality_mean} / 2`,
       note: evaluation.count ? `逐题归一化 · 有效 ${evaluation.scored}/${evaluation.count} 题 · 满分 ${dist["2"] || 0} · 部分正确或集合未满分 ${dist["1"] || 0} · 零分 ${dist["0"] || 0}` : `Judge 有效 ${s.judge_valid_count ?? 0}/${s.total ?? 0} 题 · 0 分 ${dist["0"] || 0} · 1 分 ${dist["1"] || 0} · 2 分 ${dist["2"] || 0}`,
     },
@@ -726,11 +726,9 @@ export function keyMetricRows(run: unknown, summary: unknown): KeyMetric[] {
       note: throughputNote,
     },
     {
-      label: "工具图片召回率",
-      value: ranking.r_at_5 == null ? "未计算" : `R@5 ${pct(ranking.r_at_5)}`,
-      note: ranking.question_count == null
-        ? "该 run 未落盘候选顺序，无法补算；不补零、不用别的口径顶替"
-        : `工具召回的前 5 张里覆盖了该题 GT 的比例 · 统计 ${ranking.r_at_5_question_count ?? 0} 题（正样本 ≤ 5 张）· 明细见下方「召回指标」`,
+      label: "工具媒体召回率R@5",
+      value: ranking.recall_at_5 == null ? "未采集" : pct(ranking.recall_at_5),
+      note: '图视频联合候选去重后严格取前5份 · 纳入 ' + (ranking.included ?? 0) + ' 题 · GT超过5排除 ' + (ranking.excluded_gt_over_5 ?? 0) + ' 题 · 顺序或映射未采集 ' + (ranking.unavailable ?? 0) + ' 题',
     },
     {
       label: "模型申明图片准确率",
@@ -759,7 +757,7 @@ export function recallMetricRows(summary: unknown): MetricRow[] {
   const pct = (value: unknown) => value == null ? "未计算" : fmtPct(value);
   return [
     ["R@1", pct(ranking.r_at_1), `${ranking.r_at_1_question_count ?? 0} 题（GT 恰 1 张）· 单正样本口径，此时 R@1 与 Hit@1 必然相等`],
-    ["R@5", pct(ranking.r_at_5), `${ranking.r_at_5_question_count ?? 0} 题（GT ≤ 5 张）· 关键指标卡里的主值`],
+    ["R@5", pct(ranking.r_at_5), `${ranking.r_at_5_question_count ?? 0} 题（GT ≤ 5 张）· 历史图片口径`],
     ["R@10", pct(ranking.r_at_10), `${ranking.r_at_10_question_count ?? 0} 题（GT ≤ 10 张）`],
     ["Hit@1 / 5 / 10", `${pct(ranking.hit_at_1)} / ${pct(ranking.hit_at_5)} / ${pct(ranking.hit_at_10)}`, "与各自 R@K 同一批题，只问「有没有命中」；多正样本题下与 R@K 不是一回事，两个都要看"],
     ["mAP", pct(ranking.average_precision), `全部 ${ranking.question_count} 题 · 正样本张数不设限，多正样本场景的主指标`],

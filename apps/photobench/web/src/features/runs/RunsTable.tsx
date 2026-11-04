@@ -9,6 +9,7 @@
  *
  */
 import { qaProgress } from "../../lib/qaProgress.ts";
+import { PROFILE_LABELS } from '../../lib/scoring.ts';
 import type { RefObject } from "react";
 
 import type { Run } from "../../api/types.ts";
@@ -122,7 +123,14 @@ export function RunsTable({
                       run.summary?.retrieval_recall_mean,
                   )}
                 </td>
-                <td>{answerScore(run)}</td>
+                <td>
+                  {Object.entries(PROFILE_LABELS).map(([profile,label]) => {
+                    const scoring=run.summary?.scoring as {profiles?:Record<string,{total_score?:number|null;normalized_mean?:number|null;scored?:number;total?:number;status?:string}>}|undefined;
+                    const result=scoring?.profiles?.[profile];
+                    return <div className="small" key={profile}>{label}：{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '未完成；已评分均值 '+fmtPct(result.normalized_mean) : fmtPct(result.total_score)}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</div>;
+                  })}
+                  {(!(Array.isArray(run.scoring_profiles) && run.scoring_profiles.length) || Boolean(run.summary?.legacy_scoring_label)) && <div className="small muted">历史混合评分 <span>{answerScore(run)}</span></div>}
+                </td>
                 <td>
                   <button
                     className="btn danger compact"

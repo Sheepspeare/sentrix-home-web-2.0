@@ -1139,9 +1139,7 @@ def test_without_a_manager_the_model_is_never_started_or_stopped():
 
 def test_explicit_current_model_reuse_never_calls_manager_start_or_stop():
     execution, _client, _writer, lifecycle, _albums = _execution()
-    state = execution.execute(
-        _request(model_profile="__current__", manager_url="http://manager:8500")
-    )
+    state = execution.execute(_request(model_profile="__current__", manager_url="http://manager:8500"))
     assert "start" not in lifecycle.call_names()
     assert "stop" not in lifecycle.call_names()
     assert state["phases"]["model_deploy"]["manager_status"] == "not_applicable"

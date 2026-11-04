@@ -12,6 +12,7 @@
  * 所以这里返回 fragment，不加多余 DOM。
  */
 import { ResumeCard } from "./ResumeCard.tsx";
+import { PROFILE_LABELS } from '../../lib/scoring.ts';
 import type { RejudgeJudgeConfig } from "../../hooks/useRunDetail.ts";
 import type { UseRunsApi } from "../../hooks/useRuns.ts";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
@@ -42,7 +43,7 @@ export interface RunsViewProps {
   memory?: MemoryLayerPanelProps;
 }
 
-export function RunsView({ runs, judgeModel, judgeConfig, saveJudgePrompt, memory }: RunsViewProps) {
+export function RunsView({ runs, judgeModel, saveJudgePrompt, memory }: RunsViewProps) {
   const selectedRun = runs.activeRun?.run_id === runs.activeRunId ? runs.activeRun : null;
   const recoveryPlan = runs.recoveryPlan?.run_id === selectedRun?.run_id ? runs.recoveryPlan : null;
   const canResume = !!selectedRun &&
@@ -66,6 +67,15 @@ export function RunsView({ runs, judgeModel, judgeConfig, saveJudgePrompt, memor
         onChangeRunPage={runs.changeRunPage}
         regionRef={runs.runsRegionRef}
       />
+      {selectedRun && <div className="scoring-options" aria-label="结果评分口径">
+        <label>查看评分标准 <select aria-label="查看评分标准" value={runs.readProfile} onChange={e => {runs.setReadBatch('');runs.setReadProfile(e.target.value);}}>
+          <option value="">历史混合评分</option>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
+        </select></label>
+        {runs.readProfile && <label>评分批次 <select aria-label="查看评分批次" value={runs.readBatch} onChange={e => runs.setReadBatch(e.target.value)}>
+          <option value="">最新批次</option>{runs.scoringBatches.filter(b => b.profile_id === runs.readProfile).map(b => <option key={b.batch_id} value={b.batch_id}>{b.created_at} · {b.batch_id}</option>)}
+        </select></label>}
+        <p className="small muted">逐题列表、筛选、导出和分析使用此处所选标准与批次。</p>
+      </div>}
       <RunDetail
         key={runs.activeRunId || "empty"}
         activeRun={runs.activeRun}
@@ -90,9 +100,10 @@ export function RunsView({ runs, judgeModel, judgeConfig, saveJudgePrompt, memor
         graphQuality={runs.graphQuality}
         rejudge={{
           activeRejudge: runs.activeRejudge,
+          batchMode:runs.batchMode, onBatchModeChange:runs.setBatchMode, batches:runs.scoringBatches,
+          resumeBatches:runs.resumeBatches, onResumeBatchChange:(profile,batch)=> runs.setResumeBatches(previous => ({...previous,[profile]:batch})),
           scope: runs.rejudgeScope, onScopeChange: runs.setRejudgeScope,
-          judgeUseGtImages: runs.judgeUseGtImages, onJudgeUseGtImagesChange: runs.setJudgeUseGtImages,
-          recoveryPlan: runs.recoveryPlan?.run_id === runs.activeRun?.run_id ? runs.recoveryPlan : null,
+          scoring: runs.scoring, onScoringChange: runs.setScoring, scoringPreview: runs.scoringPreview, scoringPreviewError: runs.scoringPreviewError,
           judgePromptKinds: runs.judgePromptKinds,
           activePromptKind: runs.activePromptKind,
           onSwitchPromptKind: runs.switchPromptKind,
@@ -107,9 +118,9 @@ export function RunsView({ runs, judgeModel, judgeConfig, saveJudgePrompt, memor
             !runs.canRejudge ? "请确认任务已结束、存在已有回答，且评分提示词已配置。" : undefined,
           rejudgeSubmitting: runs.rejudgeSubmitting,
           rejudgeConfirmation: runs.rejudgeConfirmation,
-          onRequestRejudge: () => runs.requestRejudge(judgeConfig),
+          onRequestRejudge: () => runs.requestRejudge(),
           onConfirmRejudge: () => {
-            void runs.confirmRejudge(judgeConfig);
+            void runs.confirmRejudge();
           },
           onCancelRejudge: runs.cancelRejudge,
           rejudgePercent: runs.rejudgePercent,

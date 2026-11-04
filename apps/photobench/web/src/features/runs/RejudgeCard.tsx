@@ -1,29 +1,31 @@
+import { ScoringPromptEditor } from '../../components/ScoringPromptEditor.tsx';
 /** Score existing answers without running the answering model. */
 import { useEffect, useRef } from "react";
 
-import { GtImageToggle } from "../../components/GtImageToggle.tsx";
+import { ScoringSettings } from '../../components/ScoringSettings.tsx';
+import { defaultScoring, PROFILE_LABELS, type ScoringSelection } from '../../lib/scoring.ts';
 import type { RejudgeTask } from "../../api/types.ts";
-import type { PromptKindMeta, RejudgeScope, RecoveryPlan } from "../../hooks/useRunDetail.ts";
+import type { PromptKindMeta, RejudgeScope } from "../../hooks/useRunDetail.ts";
 import { statusLabel } from "../../lib/format.ts";
 
 /**
  * 1.0 `App.vue:2465` 的三类提示词中文名。2.0 在 `hooks/useConfig.ts:69` 是私有的
  * （未 export），本切片不能改 hooks，照搬一份只读副本。
  */
-const PROMPT_KIND_LABELS: Record<string, string> = {
-  answer_quality: "回答质量",
-  task_decision: "任务判断",
-  evidence: "证据核验",
-};
-
 export interface RejudgeCardProps {
+  batchMode?: 'auto' | 'resume' | 'new';
+  onBatchModeChange?: (mode:'auto' | 'resume' | 'new')=>void;
+  batches?: Array<{batch_id:string;profile_id:string;created_at:string}>;
+  resumeBatches?: Record<string,string>;
+  onResumeBatchChange?: (profile:string,batch:string)=>void;
+  scoring?: ScoringSelection;
+  onScoringChange?: (v: ScoringSelection) => void;
+  scoringPreview?: {qa_count:number;turn_count:number;subscore_count:number;profiles:Record<string,number>} | null;
+  scoringPreviewError?: string;
   embedded?: boolean;
   disabledReason?: string;
   scope?: RejudgeScope;
   onScopeChange?: (scope: RejudgeScope) => void;
-  judgeUseGtImages?: boolean;
-  onJudgeUseGtImagesChange?: (value: boolean) => void;
-  recoveryPlan?: RecoveryPlan | null;
   activeRejudge: RejudgeTask | null;
   judgePromptKinds: PromptKindMeta[];
   activePromptKind: string;
@@ -45,8 +47,9 @@ export interface RejudgeCardProps {
 }
 
 export function RejudgeCard({
-  embedded = false, disabledReason,
-  activeRejudge, scope = "missing", onScopeChange, judgeUseGtImages = false, onJudgeUseGtImagesChange, recoveryPlan,
+  batchMode='auto', onBatchModeChange, batches=[], resumeBatches={}, onResumeBatchChange,
+  embedded = false, disabledReason, scoring = defaultScoring(), onScoringChange, scoringPreview, scoringPreviewError,
+  activeRejudge, scope = "missing", onScopeChange,
   judgePromptKinds,
   activePromptKind,
   onSwitchPromptKind,
@@ -65,11 +68,10 @@ export function RejudgeCard({
 }: RejudgeCardProps) {
   const running = activeRejudge?.status === "running";
   const actionLabel: Record<RejudgeScope, string> = {
-    missing: "补齐缺失评分", failed: "重试失败评分", unscored: "为未评分回答打分", all: "重新评分全部回答",
+    missing: "补齐缺失评分", failed: "重试失败评分", unscored: "为未评分回答打分", all: batchMode === 'new' ? "新建批次重算所选回答" : "补齐全部回答的未完成评分",
     needs_review: "重新评估待复核回答",
   };
-  const count = recoveryPlan?.scoring?.[scope];
-
+  const count = scoringPreview;
   // requestRejudge 只置位 rejudgeConfirmation，真正弹窗与执行在这里。用 ref 保证同一
   // 待确认对象只弹一次（回调 identity 变化也不会重复弹，StrictMode 双调也安全）。
   const handledConfirmation = useRef<{ message: string } | null>(null);
@@ -91,6 +93,16 @@ export function RejudgeCard({
           <span className={"phase-status " + (activeRejudge.status || "")}>{statusLabel(activeRejudge.status)}</span>
         ) : null}
       </div>
+      <label>批次处理<select aria-label="批次处理" value={batchMode} disabled={running || rejudgeSubmitting} onChange={e => onBatchModeChange?.(e.target.value as 'auto'|'resume'|'new')}>
+        <option value="auto">按当前配置补评（相同配置续写原批次）</option>
+        <option value="resume">续评已有批次（沿用冻结配置）</option>
+        <option value="new">新建批次重新评分</option>
+      </select></label>
+      <ScoringSettings value={scoring} onChange={v => onScoringChange?.(v)} disabled={running || rejudgeSubmitting} hideGt={batchMode === 'resume'} />
+      {batchMode === 'resume' && scoring.profiles.map(profile => <label key={profile}>{PROFILE_LABELS[profile]}续评批次
+        <select value={resumeBatches[profile] || batches.filter(b => b.profile_id === profile).at(-1)?.batch_id || ''} onChange={e => onResumeBatchChange?.(profile,e.target.value)} disabled={running || rejudgeSubmitting}>
+          <option value="">请选择已有批次</option>{batches.filter(b => b.profile_id === profile).map(b => <option key={b.batch_id} value={b.batch_id}>{b.created_at} · {b.batch_id}</option>)}
+        </select></label>)}
       <div className="scoring-options">
         <label className="scoring-scope">评分范围
           <select aria-label="评分范围" value={scope} disabled={running || rejudgeSubmitting} onChange={event => onScopeChange?.(event.target.value as RejudgeScope)}>
@@ -101,8 +113,6 @@ export function RejudgeCard({
             <option value="all">全部已有回答</option>
           </select>
         </label>
-        <GtImageToggle checked={judgeUseGtImages} disabled={running || rejudgeSubmitting}
-          onChange={value => onJudgeUseGtImagesChange?.(value)} />
       </div>
       <div className="scoring-summary">
         {count ? <div className="scoring-counts" aria-label="本次评分数量">
@@ -110,67 +120,20 @@ export function RejudgeCard({
           <span><strong>{count.turn_count}</strong> 轮对话</span>
           <span><strong>{count.subscore_count}</strong> 项评分</span>
         </div> : <span className="muted small">按所选范围处理已有回答</span>}
-        <button type="button" className="btn" disabled={!canRejudge || rejudgeSubmitting || running || count?.turn_count === 0}
+        <button type="button" className="btn" disabled={!canRejudge || rejudgeSubmitting || running || !count || !!scoringPreviewError || count.turn_count === 0}
           onClick={() => onRequestRejudge()}>{running ? "评分进行中…" : rejudgeSubmitting ? "正在提交…" : actionLabel[scope]}</button>
       </div>
       {disabledReason ? <p className="recovery-note">{disabledReason}</p> : null}
       {count?.turn_count === 0 ? <p className="muted small">此范围内没有需要评分的回答。</p> : null}
-      <p className="scoring-note">{scope === "all" ? "本次将替换全部已有评分，旧评分保留在历史中。" : "保留已有有效评分，包括 0 分。"}</p>
-      <details className="scoring-details">
-        <summary>评分说明</summary>
-        <p>GT 指标准答案与证据。图片辅助只适用于 PhotoBench 0/1/2 开放题，需评分模型支持图片输入；0/1 开放题、选择题和 ATM 专用评分不附图。图片只交给质量评分模型，不附视频，也不传给答题模型。没有图片标注时使用文字评分；已标注的图片读取失败会记为评分失败，并保留错误原因。</p>
-        <p>每轮可包含回答质量、任务判断等多项评分；补评只处理所选范围内缺失或失败的项目，保留其他有效分数。已有评分保留当时的评分模式。</p>
-        <p>选择题的选项只供评分端匹配。回答过于笼统或缺少区分选项的事实时归“其他”，主分为 0；选项自身重叠才记为待复核。Judge 返回格式错误或前后矛盾时会纠正重问一次，仍失败则保留未评分状态。可选择“待复核的回答”单独重评，历史评分和每次 Judge 输入、返回均保留。</p>
-      </details>
-      <details className="scoring-details scoring-prompt-editor">
-        <summary>评分提示词 <span>{judgeModel || "未配置评分模型"}</span></summary>
-        <div className="prompt-kind-tabs">
-          {judgePromptKinds.map((meta) => {
-            const kind = meta.kind || "";
-            return (
-              <button
-                key={kind}
-                type="button"
-                className={"btn ghost compact prompt-kind-tab" + (activePromptKind === kind ? " active" : "")}
-                onClick={() => onSwitchPromptKind(kind)}
-              >
-                {PROMPT_KIND_LABELS[kind] || kind}
-                {meta.custom ? <span className="custom-badge">已自定义</span> : null}
-              </button>
-            );
-          })}
-        </div>
-        <label className="rejudge-prompt">
-          系统提示词（{PROMPT_KIND_LABELS[activePromptKind] || activePromptKind}）
-          <textarea
-            value={rejudgePrompt}
-            disabled={running}
-            rows={8}
-            spellCheck={false}
-            onChange={(event) => onRejudgePromptChange(event.target.value)}
-          />
-        </label>
-        <div className="rejudge-toolbar">
-          <span className="muted small">
-            {rejudgePrompt.length} 字符 · Judge {judgeModel || "-"}
-          </span>
-          <div className="rejudge-actions">
-            <button className="btn ghost compact" disabled={running} onClick={() => onSavePrompt?.()}>
-              保存提示词
-            </button>
-            <button className="btn ghost compact" disabled={running} onClick={onResetPrompt}>
-              恢复默认
-            </button>
-
-          </div>
-        </div>
-      </details>
+      {scoringPreviewError && <p className="error">评分预览失败：{scoringPreviewError}</p>}
+      <p className="scoring-note">同配置只补未完成项目；修改评分配置会建立新批次，完整总分只使用该批次结果。</p>
+      {batchMode === 'resume' ? <p className="small muted">沿用所选批次冻结的Judge、提示词和GT配置。修改配置请使用另外两种批次处理方式。</p> : <ScoringPromptEditor {...{judgePromptKinds,activePromptKind,onSwitchPromptKind,rejudgePrompt,onRejudgePromptChange,judgeModel,onSavePrompt,onResetPrompt,running}} />}
       {activeRejudge ? (
         <div className="rejudge-progress">
           {"judge_use_gt_images" in activeRejudge ? <p className="muted small">本次评分方式：{activeRejudge.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}</p> : null}
           <div className="rejudge-progress-meta">
             <span>
-              {activeRejudge.completed || 0}/{activeRejudge.total || 0} 轮
+              {activeRejudge.completed || 0}/{activeRejudge.total || 0} 项
             </span>
             <span>
               失败 {Number(activeRejudge.failed || 0)} · {rejudgePercent}%

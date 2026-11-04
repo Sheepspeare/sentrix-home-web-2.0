@@ -227,12 +227,28 @@ def test_a_cancelled_runner_stops_the_retry_wait():
     import threading
 
     cancel = threading.Event()
-    cancel.set()
-    http = FakeHttpClient([RuntimeError("connection refused"), RuntimeError("connection refused")])
+
+    class CancellingClient(FakeHttpClient):
+        def request_json(self, *args, **kwargs):
+            cancel.set()
+            return super().request_json(*args, **kwargs)
+
+    http = CancellingClient([RuntimeError("connection refused")])
     runner = _runner(http, cancel=cancel)
     with pytest.raises(RunCancelledError):
         runner._request({"model": "m"})
     assert len(http.calls) == 1
+
+
+def test_already_cancelled_runner_does_not_dispatch():
+    import threading
+
+    cancel = threading.Event()
+    cancel.set()
+    http = FakeHttpClient([])
+    with pytest.raises(RunCancelledError):
+        _runner(http, cancel=cancel)._request({"model": "m"})
+    assert http.calls == []
 
 
 # ---- 任务行为与证据判分 ---------------------------------------------------

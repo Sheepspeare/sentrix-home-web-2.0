@@ -8,6 +8,7 @@ import json
 import shutil
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 SELECTION = [
     ("4028b70f-061e-4627-839e-9252ac387157", "多张票据 OCR、年度金额汇总"),
@@ -28,7 +29,7 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
-def build(source: Path, output: Path) -> dict:
+def build(source: Path, output: Path) -> dict[str, Any]:
     manifest = json.loads((source / "manifest.json").read_text())
     rows = {}
     for split, relative in manifest["qa_sets"].items():

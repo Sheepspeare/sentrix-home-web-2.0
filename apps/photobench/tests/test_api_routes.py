@@ -186,7 +186,15 @@ def test_get_config_exposes_the_effective_values(client: TestClient):
     assert body["custom_judge_prompt"] is None
     assert body["evidence_judge_enabled"] is False
     kinds = {entry["kind"] for entry in client.get("/api/v1/judge-prompts").json()["kinds"]}
-    assert kinds == {"answer_quality", "task_decision", "evidence"}
+    assert kinds == {
+        "answer_quality",
+        "task_decision",
+        "evidence",
+        "photobench_open_v1:answer_quality",
+        "atm_qs_v1:choice",
+        "atm_qs_v1:number",
+        "atm_qs_v1:open",
+    }
 
 
 def test_post_config_persists_and_answers_in_the_1_0_shape(client: TestClient):

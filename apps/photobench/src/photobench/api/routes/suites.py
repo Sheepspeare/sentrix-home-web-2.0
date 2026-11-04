@@ -125,3 +125,9 @@ def refresh_cleanup(request: Request) -> dict[str, Any]:
     if extra:
         result["cleanup_status"] = "pending"
     return result
+
+
+@router.post("/runs/{run_id}/scoring-preview")
+async def preview_scoring(request: Request, run_id: str) -> dict[str, Any]:
+    payload = await json_body(request)
+    return await run_in_threadpool(get_container(request).run_suites.preview_profile_scoring, run_id, payload)

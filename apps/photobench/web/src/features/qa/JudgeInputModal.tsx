@@ -10,6 +10,8 @@ import { createPortal } from "react-dom";
 
 import type { RunItemDetail } from "../../api/types.ts";
 
+import { ItemScoringResults } from "../../components/ScoringResults.tsx";
+
 type Dict = Record<string, unknown>;
 
 const obj = (value: unknown): Dict => value && typeof value === "object" ? value as Dict : {};
@@ -62,6 +64,7 @@ export function JudgeInputModal({ item, onClose }: JudgeInputModalProps) {
           </button>
         </header>
         <div className="judge-requests">
+        {(item.scoring_results as unknown[] | undefined)?.length ? <ItemScoringResults results={item.scoring_results} diagnostics={item.diagnostic_results} /> : null}
         {inputs.length ? inputs.map((entry, index) => (
           <section className="judge-request" key={index}>
             <h4>{entry.title}</h4>
@@ -69,7 +72,7 @@ export function JudgeInputModal({ item, onClose }: JudgeInputModalProps) {
             {entry.response != null && <details><summary>Judge 原始返回</summary><pre>{JSON.stringify(entry.response, null, 2)}</pre></details>}
             {entry.error != null && <p className="judge-input-note">请求失败：{String(entry.error)}</p>}
           </section>
-        )) : (
+        )) : (item.scoring_results as unknown[] | undefined)?.length ? null : (
           <p className="judge-input-note">{deterministic ? "本题主分由程序按确定性规则计算；当前记录中没有 Judge 模型请求。" : "该历史结果在运行时未保存 Judge 原始请求 JSON，无法恢复。"}</p>
         )}
         </div>

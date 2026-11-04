@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, post, type RequestError } from "../api/client.ts";
 import type { Run, RunPage, RunSummary } from "../api/types.ts";
 import { useRunDetail } from "./useRunDetail.ts";
-import type { RunDetailApi } from "./useRunDetail.ts";
+import type { RunDetailApi, RejudgeJudgeConfig } from "./useRunDetail.ts";
 
 /** 由其它切片（逐题 hook）提供的桥接；接上后 `loadActiveRun` 的并发集与 1.0 完全一致。 */
 export interface UseRunsOptions {
@@ -37,6 +37,7 @@ export interface UseRunsOptions {
    * 用户会看到一个永远灰着的「重新 Judge」按钮，且「恢复默认」点下去是清空。
    */
   judgePromptFallback?: string;
+  judgeConfig?: RejudgeJudgeConfig;
 }
 
 /**
@@ -154,6 +155,7 @@ export function useRuns(options: UseRunsOptions = {}) {
     onRunsReloaded,
     onRejudgeStarted,
     judgePromptFallback,
+    judgeConfig: options.judgeConfig,
   });
   const { loadActiveRun, setActiveRun } = detail;
   // App 的 QA 桥接函数可在每次渲染时重建；它们只更新下一次轮询用的

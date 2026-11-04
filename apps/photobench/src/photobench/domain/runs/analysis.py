@@ -33,6 +33,7 @@ from typing import Any
 
 from photobench.domain.datasets.ability_taxonomy import ABILITY_FIELDS
 from photobench.domain.evaluation.contract import evaluation_summary
+from photobench.domain.evaluation.profiles import media_ranking_summary, scoring_summary
 from photobench.domain.runs.graph_quality import aggregate_graph_qa_by_type
 from photobench.domain.runs.judge import normalize_judge_score, parse_judge_json
 from photobench.domain.runtime.metrics import (
@@ -1568,8 +1569,18 @@ def benchmark_e2e_latency_excluding_judge_ms(
 
 def list_summary(state: dict[str, Any]) -> dict[str, Any]:
     """1.0 ``:6825`` 的 ``OrchestratorRepository._list_summary``。"""
+    from photobench.domain.evaluation.profile_view import primary_profile_state
+
+    state = primary_profile_state(state)
     saved = dict(state.get("summary") or {})
     items = state.get("items") or []
+    saved["scoring"] = scoring_summary(state)
+    saved["media_ranking"] = media_ranking_summary(items)
+    saved["legacy_scoring_label"] = (
+        "历史混合评分"
+        if not state.get("selected_scoring_profile") and any(i.get("judge") for i in items)
+        else None
+    )
     if any(item.get("evaluation") or (item.get("evaluation_result") or {}).get("scorer") for item in items):
         saved["evaluation_summary"] = evaluation_summary(items)
     recalls = [
@@ -1647,8 +1658,18 @@ def effective_summary(state: dict[str, Any]) -> dict[str, Any]:
     **会就地改写 ``items``**（给每个 item 补 ``agent_stability``）——1.0 如此，
     而之后的 ``get_run_items`` 又要用这份补过的数据，所以照搬。
     """
+    from photobench.domain.evaluation.profile_view import primary_profile_state
+
+    state = primary_profile_state(state)
     saved = dict(state.get("summary") or {})
     items = state.get("items") or []
+    saved["scoring"] = scoring_summary(state)
+    saved["media_ranking"] = media_ranking_summary(items)
+    saved["legacy_scoring_label"] = (
+        "历史混合评分"
+        if not state.get("selected_scoring_profile") and any(i.get("judge") for i in items)
+        else None
+    )
     if any(item.get("evaluation") or (item.get("evaluation_result") or {}).get("scorer") for item in items):
         saved["evaluation_summary"] = evaluation_summary(items)
     if not saved.get("image_ranking") or any(not retrieval_metric_eligible(item) for item in items):
@@ -1840,6 +1861,9 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
     """1.0 ``:5309`` 的 ``OrchestratorRepository._run_list_entry``。"""
     summary = list_summary(state)
     summary_keys = {
+        "scoring",
+        "media_ranking",
+        "legacy_scoring_label",
         "total",
         "completed",
         "judge_valid_count",
