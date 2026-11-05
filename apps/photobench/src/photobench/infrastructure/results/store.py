@@ -216,10 +216,13 @@ class FileRunStore:
             path = committed_path(run_dir, "run.json")
             if not path.is_file():
                 raise KeyError(run_id)
-            value = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(value, dict):
-                raise KeyError(run_id)
-            return value
+            # Detach the immutable generation bytes before releasing the lock.
+            # Parsing a large trace must not block the next durable commit.
+            text = path.read_text(encoding="utf-8")
+        value = json.loads(text)
+        if not isinstance(value, dict):
+            raise KeyError(run_id)
+        return value
 
     def load_overview(self, run_id: str) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)

@@ -168,7 +168,8 @@ class ProfileScoring:
             runner.evidence_judge_prompt = config.get("evidence") or runner.evidence_judge_prompt
             runner.request_observer = observe
             runner.request_transform = None
-            save()
+            # The request observer commits the running state with its exact input
+            # before HTTP starts; the final save also covers pre-request failures.
             try:
                 if runner.cancel and runner.cancel.is_set():
                     raise RunCancelledError("scoring cancelled")
@@ -274,7 +275,6 @@ class ProfileScoring:
             else saved_media_metrics(row, item, index)
         )
         result["diagnostic_key"] = self.diagnostics(batch, target, item)
-        self.save(key, result)
         runner = copy.copy(self.runner)
         runner.request_transform = None
         runner.judge_use_gt_images = bool(config["use_gt_images"])
@@ -354,7 +354,8 @@ class ProfileScoring:
                         cached["images"] = [images, audit]
                 with self.lock:
                     materials[material_key] = copy.deepcopy(cached)
-                self.checkpoint()
+                # Commit cached materials together with the first request boundary
+                # (or the final result for scores that do not call a Judge).
             attachments: list[dict[str, Any]] = copy.deepcopy(cached["attachments"])
             if cached["images"] is not None:
                 runner.gt_image_materials = (cached["images"][0], cached["images"][1])

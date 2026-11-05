@@ -119,6 +119,29 @@ def task():
     return {"actual_action": "answer", "reason": "实际作答"}
 
 
+def test_request_boundaries_commit_materials_without_extra_preparation_snapshots():
+    s = state()
+    svc, batches, http, saved = setup(s, [OPEN], [task(), {"score": 2, "reason": "正确"}])
+    request = http.request_json
+
+    def checked_request(url, payload=None, *args, **kwargs):
+        latest = saved[-1]
+        if len(http.calls) == 0:
+            result = next(iter(latest["diagnostic_results"].values()))
+        else:
+            result = next(iter(latest["scoring_results"].values()))
+            assert "q:0" in latest["scoring_batches"][0]["materials"]
+        assert result["requests"][-1]["status"] == "running"
+        assert result["requests"][-1]["input"] == payload
+        return request(url, payload, *args, **kwargs)
+
+    http.request_json = checked_request
+    result = svc.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert valid_result(result)
+    assert len(saved) == 6
+    assert saved[-1]["scoring_results"][result["key"]]["status"] == "completed"
+
+
 @pytest.mark.parametrize("tag", ["choice_judge", "media_set", "atm_number", "open_judge"])
 def test_open_uses_legacy_scale_regardless_of_question_tag(tag):
     s = state(tag)
