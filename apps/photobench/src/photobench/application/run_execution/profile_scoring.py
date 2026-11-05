@@ -420,6 +420,17 @@ class ProfileScoring:
                         .replace("{{answer}}", reference)
                         .replace("{{prediction}}", answer)
                     )
+                    evaluation = row.get("evaluation") or {}
+                    if (
+                        evaluation.get("scorer") == "open_judge"
+                        and evaluation.get("applies_to_turn", 0) == index
+                        and evaluation.get("answer_quality_rubric")
+                    ):
+                        prompt += (
+                            "\n\n本题专用评分说明（评测端提供）：\n"
+                            + evaluation["answer_quality_rubric"]
+                            + "\n本次采用二元评分：上述量表2分对应accuracy=true，0分或1分对应accuracy=false。"
+                        )
                 payload = {
                     "model": runner.judge_model,
                     "temperature": 0,

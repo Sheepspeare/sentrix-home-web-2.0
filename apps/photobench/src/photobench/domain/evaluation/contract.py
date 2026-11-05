@@ -60,6 +60,15 @@ def validate_evaluation(row: Mapping[str, Any]) -> None:
         raise ValueError("Evaluation format/scorer mismatch")
     if definition.get("content_sha256") != content_fingerprint(row):
         raise ValueError("Evaluation content fingerprint mismatch")
+    if "answer_quality_rubric" in definition:
+        rubric = definition["answer_quality_rubric"]
+        if scorer != "open_judge" or not isinstance(rubric, str) or not rubric.strip():
+            raise ValueError("Answer quality rubric requires nonempty text on open_judge")
+    policy = definition.get("media_metrics_policy", "include")
+    if policy not in ("include", "exclude") or (
+        policy == "exclude" and scorer in {"media_set", "atm_list"}
+    ):
+        raise ValueError("Invalid media metrics policy")
     index = definition.get("applies_to_turn")
     if type(index) is not int or not 0 <= index < max(1, len(row.get("conversation") or [])):
         raise ValueError("Invalid evaluation turn")

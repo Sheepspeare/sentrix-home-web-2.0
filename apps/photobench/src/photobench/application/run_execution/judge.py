@@ -429,6 +429,17 @@ class JudgeRunner:
         """
         prompt = system_prompt or self.answer_quality_prompt
         rubric = ANSWER_QUALITY_RUBRICS.get(str(expected_action), ANSWER_QUALITY_RUBRICS["answer"])
+        definition = (gt_row or {}).get("evaluation") or {}
+        turn_index = max(0, len(conversation or []) - 1)
+        if (
+            definition.get("scorer") == "open_judge"
+            and definition.get("applies_to_turn", 0) == turn_index
+            and definition.get("answer_quality_rubric")
+        ):
+            prompt += (
+                "\n\n本题专用评分说明（评测端提供，仅约束本题评分）：\n"
+                + definition["answer_quality_rubric"]
+            )
         context = self._conversation_context(conversation)
         judge_text = (
             f"{context}**当前问题**：{question}\n**模型回答**：【{answer}】\n"

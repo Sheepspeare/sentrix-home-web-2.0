@@ -408,6 +408,8 @@ def ranking_from_item(item: dict[str, Any]) -> dict[str, Any]:
 
 def retrieval_metric_eligible(item: Mapping[str, Any]) -> bool:
     """1.0 ``:1360``。不可回答的题目不进检索指标的分母。"""
+    if (item.get("evaluation") or {}).get("media_metrics_policy") == "exclude":
+        return False
     return str(item.get("answerability") or "").strip().lower() not in {
         "unanswerable",
         "insufficient_evidence",
@@ -420,7 +422,9 @@ def retrieval_metric_projection(item: Mapping[str, Any]) -> dict[str, Any]:
         return {"retrieval_metrics_applicable": True}
     return {
         "retrieval_metrics_applicable": False,
-        "retrieval_metrics_reason": "unanswerable",
+        "retrieval_metrics_reason": "excluded_by_evaluation_policy"
+        if (item.get("evaluation") or {}).get("media_metrics_policy") == "exclude"
+        else "unanswerable",
         **{
             f"{prefix}_{metric}": None
             for prefix in (

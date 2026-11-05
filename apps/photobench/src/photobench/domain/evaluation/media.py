@@ -16,6 +16,15 @@ def media_metrics_for_sets(
     *,
     retrieval_available: bool,
 ) -> dict[str, Any]:
+    if definition.get("media_metrics_policy") == "exclude":
+        return {
+            name: {
+                **media_set_metrics([], [], available=False),
+                "status": "not_applicable",
+                "reason": "excluded_by_evaluation_policy",
+            }
+            for name in ("delivery", "tools")
+        }
     evidence = record.get("retrieval_media_refs", row.get("retrieval_media_refs")) or []
     target = definition.get("target_media_refs", evidence)
     prediction = record.get("predicted_media")

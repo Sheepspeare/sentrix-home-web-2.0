@@ -8,6 +8,8 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from photobench.domain.evaluation.profiles import ATM, OPEN
+
 COLORS = ("#248278", "#cc942f", "#c25e70", "#96a2b4", "#5576b4")
 UNLABELED = {"unknown", "pending_review", "not_applicable", ""}
 
@@ -122,7 +124,111 @@ def score_labels(cases: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     return {key: value for key, value in labels.items() if key != "1" or partial}
 
 
-def retrieval(cases: Sequence[dict[str, Any]]) -> str:
+def retrieval_quality_counts(cases: Sequence[dict[str, Any]], channel: str) -> dict[str, Any]:
+    """Pair saved QA-level media counts with that QA's primary quality bucket."""
+    cells: Counter[tuple[bool, int]] = Counter()
+    excluded: Counter[str] = Counter()
+    for case in cases:
+        evaluation = case.get("evaluation") or {}
+        turns = case.get("turns") or []
+        primary_turn = evaluation.get("applies_to_turn", len(turns) - 1)
+        if case.get("matched_turns") is not None and primary_turn not in case["matched_turns"]:
+            excluded["主评分轮不在筛选范围"] += 1
+            continue
+        row = case.get("retrieval_counts", {}).get(channel, {})
+        if (
+            evaluation.get("media_metrics_policy") == "exclude"
+            or row.get("status") == "not_applicable"
+            or set(case.get("dimension_labels", {}).get("answerability", []))
+            & {"unanswerable", "insufficient_evidence"}
+        ):
+            excluded["媒体指标不适用"] += 1
+            continue
+        values = [row.get(key) for key in ("matched", "predicted", "gt")]
+        if (
+            not all(type(v) in (int, float) and math.isfinite(v) and v >= 0 for v in values)
+            or row["gt"] <= 0
+            or row["matched"] > min(row["gt"], row["predicted"])
+            or row.get("available") is False
+        ):
+            excluded["缺少有效媒体计数或GT"] += 1
+            continue
+        score = case.get("score")
+        if type(score) is not int or score not in (0, 1, 2):
+            excluded["缺少有效主评分"] += 1
+            continue
+        cells[row["matched"] > 0, score] += 1
+    return {"cells": cells, "valid": sum(cells.values()), "excluded": excluded}
+
+
+def retrieval_quality_card(counts: Mapping[str, Any], channel: str, *, partial: bool) -> str:
+    title = ("候选检索" if channel == "candidate" else "最终交付") + " × " + (
+        "含部分正确率" if partial else "满分率"
+    )
+    total = counts["valid"]
+    excluded = "；".join(f"{name}{n}题" for name, n in counts["excluded"].items()) or "无"
+    note = f"按题级主评分统计 · 有效{total}题；排除：{excluded}。"
+    if not total:
+        return card(title, '<p class="empty">没有可配对的有效媒体计数和主评分。</p>', note)
+    cells = counts["cells"]
+    correct = {
+        hit: sum(cells[hit, score] for score in ((1, 2) if partial else (2,))) for hit in (True, False)
+    }
+    groups = {hit: sum(cells[hit, score] for score in (0, 1, 2)) for hit in (True, False)}
+    body = '<div class="retrieval-matrix" role="table" aria-label="' + esc(title) + '">'
+    body += '<div role="row" class="matrix-row"><span role="columnheader">主评分 ↓ / 媒体 →</span>'
+    body += '<b role="columnheader">命中GT</b><b role="columnheader">未命中GT</b></div>'
+    for passed, label in ((False, "未达标"), (True, "正确" if partial else "满分")):
+        body += '<div role="row" class="matrix-row"><b role="rowheader">' + label + "</b>"
+        for hit in (True, False):
+            n = correct[hit] if passed else groups[hit] - correct[hit]
+            name = ("命中" if hit else "未命中") + " · " + label
+            body += (
+                f'<div role="cell" class="matrix-cell {"hit" if hit else "miss"}'
+                f' {"correct" if passed else "wrong"}" data-count="{n}" '
+                f'aria-label="{name}：{n}题，占有效样本{rate(n, total)}">'
+                f'<span>{name}</span><strong>{rate(n, total)}</strong><small>{n} / {total}题</small></div>'
+            )
+        body += "</div>"
+    body += '</div><div class="matrix-conditions">'
+    for hit in (True, False):
+        body += (
+            '<div><span>' + ("命中组" if hit else "未命中组")
+            + ("正确率" if partial else "满分率") + "</span><b>"
+            + rate(correct[hit], groups[hit])
+            + f"</b><small>{correct[hit]} / {groups[hit]}题</small></div>"
+        )
+    body += '</div><p class="note">命中指至少1个GT媒体被'
+    body += "工具候选集合检索到" if channel == "candidate" else "最终交付"
+    body += "；未命中指GT命中数为0。"
+    body += "正确指主评分大于0，包含部分正确。" if partial else "满分指主评分达到该量表满分。"
+    body += "四格百分比均以有效题数为分母；下方按各组题数计算。"
+    body += "按轮筛选时，仅纳入主评分轮在范围内的题。</p>"
+    return card(title, body, note)
+
+
+def retrieval_quality(
+    cases: Sequence[dict[str, Any]], source: Mapping[str, Any]
+) -> str:
+    profile = source.get("scoring_profile") or (source.get("scoring_definition") or {}).get("profile_id")
+    results = [case.get("evaluation_result") or {} for case in cases]
+    if not profile:
+        profiles = {r.get("profile_id") for r in results if r.get("profile_id")}
+        if len(profiles) == 1:
+            profile = next(iter(profiles))
+    native_atm = bool(cases) and all(
+        str((case.get("evaluation") or {}).get("scorer", "")).startswith("atm_") for case in cases
+    )
+    atm = profile == ATM or (profile != OPEN and native_atm)
+    counts = {channel: retrieval_quality_counts(cases, channel) for channel in ("candidate", "delivery")}
+    return "".join(
+        retrieval_quality_card(counts[channel], channel, partial=partial)
+        for partial in ((False,) if atm else (False, True))
+        for channel in ("candidate", "delivery")
+    )
+
+
+def retrieval(cases: Sequence[dict[str, Any]], source: Mapping[str, Any] | None = None) -> str:
     body = ""
     for channel, title in (("candidate", "候选检索"), ("delivery", "最终交付媒体")):
         rows = []
@@ -148,6 +254,7 @@ def retrieval(cases: Sequence[dict[str, Any]]) -> str:
             bars if rows else '<p class="empty">没有同时记录有效GT与检索计数的题目。</p>',
             f"按题微平均 · 覆盖{len(rows)} / {len(cases)}题；仅纳入已保存且GT大于0的计数。",
         )
+    body += retrieval_quality(cases, source or {})
     signals = Counter(signal for case in cases for signal in case.get("signals", []))
     names = {
         "candidate_miss": "候选未命中GT",
@@ -384,4 +491,4 @@ def render_charts(
         scenarios or '<p class="empty">未记录特殊场景标签。</p>',
         "逐轮行为Judge原判定；同一轮可属于多个场景。",
     )
-    return overview, dimensions, retrieval(cases), behavior
+    return overview, dimensions, retrieval(cases, report.get("source", {})), behavior

@@ -369,6 +369,8 @@ def media_ranking(
     *,
     index: MediaIndex | None = None,
 ) -> dict[str, Any]:
+    if (item.get("evaluation") or {}).get("media_metrics_policy") == "exclude":
+        return {"status": "not_applicable", "gt_count": 0, "reason": "excluded_by_evaluation_policy"}
     targets = item.get("retrieval_media_refs") or []
     candidates = item.get("retrieved_candidate_media")
     if not targets:

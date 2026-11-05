@@ -231,8 +231,15 @@ def score_typed(
                 reason=str(parsed.get("explanation") or ""),
             )
         else:
+            prompt = frozen_prompts["binary"]
+            if effective.get("answer_quality_rubric"):
+                prompt += (
+                    "\n\n本题专用评分说明（评测端提供）：\n"
+                    + str(effective["answer_quality_rubric"])
+                    + "\n本次采用二元评分：上述量表2分映射为1，0分或1分映射为0；只输出0或1。"
+                )
             parsed = ask(
-                frozen_prompts["binary"],
+                prompt,
                 {
                     "question": question,
                     "answer": answer,
