@@ -273,6 +273,9 @@ def chat_json(
             "messages": [{"role": "user", "content": content}],
             "max_tokens": MAX_ANSWER_TOKENS,
         }
+        if model.generation_profile == "qwen35_nonthinking":
+            # Count the same structured-output request that will be generated.
+            body["response_format"] = {"type": "json_object"}
         fact["diagnostics"].update(model.apply_output_budget(body, timeout_s=timeout_s))
         fact["diagnostics"]["request_sent"] = None
         response = httpx.post(endpoint, json=body, timeout=timeout_s)
