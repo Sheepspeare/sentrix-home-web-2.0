@@ -669,7 +669,13 @@ class RunExecution:
                 "definition_sha256": qa_fingerprint(rows),
                 "rows": copy.deepcopy(rows),
             }
+        metadata = {}
+        if request.frozen_qa_snapshot is None and any(
+            c.get("gt_metadata_mode") == "readable_v1" for c in request.scoring_configs.values()
+        ):
+            metadata["gt_metadata_snapshot"] = self.albums.gt_metadata_snapshot(album_id)
         return {
+            **metadata,
             "qa_snapshot": snapshot,
             "resume_context": copy.deepcopy(request.resume_context),
             "metrics_contract_version": 2,

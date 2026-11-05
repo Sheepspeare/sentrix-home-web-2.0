@@ -54,7 +54,7 @@ describe("恢复与评分范围",()=>{
     fireEvent.change(screen.getByLabelText("评分范围"),{target:{value:"all"}});
     expect(scope).toHaveBeenCalledWith("all");
     fireEvent.click(screen.getByRole("checkbox", {name:/开放式回答.*GT图片辅助/}));
-    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}})}));
+    expect(images).toHaveBeenCalledWith(expect.objectContaining({configs:expect.objectContaining({[OPEN_PROFILE]:{use_gt_images:true,gt_metadata_mode:'readable_v1'}})}));
     rerender(<RejudgeCard {...base} scope="all"/>);
     expect(screen.getByRole("button",{name:"补齐全部回答的未完成评分"})).toBeTruthy();
   });
@@ -80,11 +80,11 @@ describe("评分面板的操作语义", () => {
     const toggle = screen.getByRole("checkbox", { name: /开放式回答.*GT图片辅助/ });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     fireEvent.click(toggle);
-    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:true}}});
+    expect(images).toHaveBeenCalledExactlyOnceWith({...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,gt_metadata_mode:'readable_v1'}}});
     expect(request).not.toHaveBeenCalled();
     rerender(<RejudgeCard {...base} onRequestRejudge={request} scoring={{...defaultScoring(),configs:{...defaultScoring().configs,[OPEN_PROFILE]:{use_gt_images:true,use_gt_metadata:false}}}} />);
     expect((toggle as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByText(/已启用且已标注的材料读取失败会明确记录/)).toBeTruthy();
+    expect(screen.getByText(/读取已配置映射或图片失败会明确记录/)).toBeTruthy();
   });
   it("评分运行时不能切图片或再次提交，提示词默认折叠", () => {
     render(<RejudgeCard {...base} activeRejudge={{status:"running"}} />);

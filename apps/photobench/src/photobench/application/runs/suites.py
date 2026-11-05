@@ -547,6 +547,7 @@ class RunSuites:
             prior_scoring={
                 k: copy.deepcopy(saved[k])
                 for k in (
+                    "gt_metadata_snapshot",
                     "scoring_batches",
                     "scoring_results",
                     "scoring_summaries",
@@ -1003,9 +1004,10 @@ class RunSuites:
                 )
         except ValueError as exc:
             raise InvalidRequestError(str(exc)) from exc
-        if any(c["use_gt_images"] or c["use_gt_metadata"] for c in configs.values()) and str(
-            state.get("sentrix_url") or ""
-        ).rstrip("/") != self._config.sentrix_url.rstrip("/"):
+        if any(
+            c["use_gt_images"] or (c["use_gt_metadata"] and c.get("gt_metadata_mode") != "readable_v1")
+            for c in configs.values()
+        ) and str(state.get("sentrix_url") or "").rstrip("/") != self._config.sentrix_url.rstrip("/"):
             raise InvalidRequestError("GT辅助评分需先将产品连接指向原测评服务")
         if not judge.judge_url or not judge.judge_model:
             raise InvalidRequestError("请选择有效的Judge配置")
@@ -1014,6 +1016,12 @@ class RunSuites:
             "evidence": payload.get("evidence_system_prompt") or judge.evidence_judge_prompt,
             "evidence_enabled": bool(state.get("evidence_judge_enabled")),
         }
+        metadata_snapshot = None
+        if resume_ids is None and any(c.get("gt_metadata_mode") == "readable_v1" for c in configs.values()):
+            try:
+                metadata_snapshot = self._albums.gt_metadata_snapshot(str(state["album_id"]))
+            except ValueError as exc:
+                raise InvalidRequestError(str(exc)) from exc
         batches = batches or prepare_batches(
             state,
             configs,
@@ -1025,6 +1033,7 @@ class RunSuites:
             },
             scope,
             str(payload.get("batch_nonce") or ""),
+            metadata_snapshot=metadata_snapshot,
         )
         qa_ids = payload.get("qa_ids")
         if qa_ids is not None:
@@ -1102,7 +1111,10 @@ class RunSuites:
                 assets = {}
                 if any(
                     b["config"]["use_gt_images"]
-                    or b["config"]["use_gt_metadata"]
+                    or (
+                        b["config"]["use_gt_metadata"]
+                        and b["config"].get("gt_metadata_mode") != "readable_v1"
+                    )
                     or b["diagnostics"].get("evidence_enabled")
                     for b in batches
                 ):

@@ -62,7 +62,12 @@ def profile_configs(
     result = {}
     for profile in selected:
         raw = (configs or {}).get(profile, {})
-        if not isinstance(raw, dict) or set(raw) - {"prompts", "use_gt_images", "use_gt_metadata"}:
+        if not isinstance(raw, dict) or set(raw) - {
+            "prompts",
+            "use_gt_images",
+            "use_gt_metadata",
+            "gt_metadata_mode",
+        }:
             raise ValueError("Invalid scoring profile configuration")
         prompts = dict(PROMPTS[profile])
         for purpose in prompts:
@@ -81,6 +86,11 @@ def profile_configs(
         if any(type(v) is not bool for v in flags.values()):
             raise ValueError("GT flags must be booleans")
         result[profile] = {"prompts": prompts, **flags}
+        # Explicit old-client flags retain their protocol. Frozen batches never pass here.
+        if "gt_metadata_mode" in raw or "use_gt_metadata" not in raw:
+            if raw.get("gt_metadata_mode", "readable_v1") != "readable_v1":
+                raise ValueError("Unknown GT metadata mode")
+            result[profile].update(use_gt_metadata=True, gt_metadata_mode="readable_v1")
     return result
 
 
@@ -157,6 +167,7 @@ def make_batch(
     scope: str,
     created_at: str,
     nonce: str = "",
+    metadata_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     frozen = {
         "profile_id": profile,
@@ -167,6 +178,10 @@ def make_batch(
         "qa_definition_sha256": snapshot.get("definition_sha256"),
         "qa_snapshot_sha256": digest(snapshot.get("rows") or []),
     }
+    if config.get("gt_metadata_mode") == "readable_v1":
+        from photobench.domain.evaluation.gt_context import empty_context
+
+        frozen["gt_metadata_snapshot"] = copy.deepcopy(metadata_snapshot or empty_context())
     return {
         **frozen,
         "batch_id": "score-" + digest([frozen, nonce])[:24],
@@ -268,7 +283,12 @@ def summarize_batches(state: Mapping[str, Any]) -> dict[str, Any]:
             "label": LABELS[batch["profile_id"]],
             "rule_version": batch["rule_version"],
             "judge": batch["judge"],
-            "gt_config": {k: batch["config"][k] for k in ("use_gt_images", "use_gt_metadata")},
+            "gt_config": {
+                **{k: batch["config"][k] for k in ("use_gt_images", "use_gt_metadata")},
+                "gt_metadata_mode": batch["config"].get("gt_metadata_mode"),
+                "annotation_version": (batch.get("gt_metadata_snapshot") or {}).get("annotation_version"),
+                "mapping_sha256": (batch.get("gt_metadata_snapshot") or {}).get("sha256"),
+            },
             "qa_definition_sha256": batch["qa_definition_sha256"],
             "qa_set": state.get("qa_set"),
             "total": total,

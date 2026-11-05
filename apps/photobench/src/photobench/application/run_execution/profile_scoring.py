@@ -10,6 +10,7 @@ from typing import Any
 
 from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
+from photobench.domain.evaluation.gt_context import READABLE_CONTEXT, capture_context
 from photobench.domain.evaluation.media import saved_media_metrics
 from photobench.domain.evaluation.profiles import (
     ATM,
@@ -43,6 +44,8 @@ def prepare_batches(
     judge: Mapping[str, Any],
     scope: str = "missing",
     nonce: str = "",
+    *,
+    metadata_snapshot: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     batches = state.setdefault("scoring_batches", [])
     state.setdefault("scoring_results", {})
@@ -61,6 +64,9 @@ def prepare_batches(
             scope=scope,
             created_at=now_iso(),
             nonce=nonce,
+            metadata_snapshot=metadata_snapshot
+            if metadata_snapshot is not None
+            else state.get("gt_metadata_snapshot"),
         )
         batch = next((b for b in batches if b["batch_id"] == candidate["batch_id"]), None)
         if batch is None:
@@ -104,6 +110,27 @@ class ProfileScoring:
         self._diagnostic_lock = threading.Lock()
         self._diagnostic_keys: dict[str, Any] = {}
         self.runner._rate_lock = self.runner._rate_lock or threading.Lock()
+
+    def _legacy_metadata(self, refs: Any, source: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        resolved = resolve_gt_media(refs, dict(self.assets), [])
+        metadata = []
+        by_id = {str(a.get("id")): a for group in self.assets.values() for a in group}
+        for ref in resolved:
+            asset = by_id.get(str(ref.get("asset_id")))
+            if ref.get("mapping_status") != "ok" or asset is None:
+                raise ValueError("GT metadata unavailable: " + str(ref.get("media_id")))
+            fields = {
+                k: asset[k]
+                for k in ("captured_at", "gps", "source_timestamp_sec")
+                if asset.get(k) is not None
+            }
+            if not fields:
+                raise ValueError("GT metadata not recorded: " + str(ref.get("media_id")))
+            metadata.append({"reference": ref, "metadata": fields, "source": "product.assets"})
+        return (
+            {"source": source, "materials": metadata, "sha256": digest(metadata)},
+            {"type": "text", "text": "GT元数据：" + json.dumps(metadata, ensure_ascii=False)},
+        )
 
     def save(self, key: str, result: dict[str, Any]) -> None:
         with self.lock:
@@ -319,31 +346,15 @@ class ProfileScoring:
                 if purpose not in {"choice", "list"}:
                     if config["use_gt_metadata"]:
                         refs, source = gt_image_refs(row, turn)
-                        resolved = resolve_gt_media(refs, dict(self.assets), [])
-                        metadata = []
-                        by_id = {str(a.get("id")): a for group in self.assets.values() for a in group}
-                        for ref in resolved:
-                            asset = by_id.get(str(ref.get("asset_id")))
-                            if ref.get("mapping_status") != "ok" or asset is None:
-                                raise ValueError("GT metadata unavailable: " + str(ref.get("media_id")))
-                            fields = {
-                                k: asset[k]
-                                for k in ("captured_at", "gps", "source_timestamp_sec")
-                                if asset.get(k) is not None
-                            }
-                            if not fields:
-                                raise ValueError("GT metadata not recorded: " + str(ref.get("media_id")))
-                            metadata.append(
-                                {"reference": ref, "metadata": fields, "source": "product.assets"}
+                        if config.get("gt_metadata_mode") == READABLE_CONTEXT:
+                            cached["metadata"], attachment = capture_context(
+                                refs, batch["gt_metadata_snapshot"], source
                             )
-                        cached["metadata"] = {
-                            "source": source,
-                            "materials": metadata,
-                            "sha256": digest(metadata),
-                        }
-                        cached["attachments"].append(
-                            {"type": "text", "text": "GT元数据：" + json.dumps(metadata, ensure_ascii=False)}
-                        )
+                            if refs:
+                                cached["attachments"].append(attachment)
+                        else:
+                            cached["metadata"], attachment = self._legacy_metadata(refs, source)
+                            cached["attachments"].append(attachment)
                     if config["use_gt_images"]:
                         images, audit = runner._gt_images(row, turn, self.assets)
                         result["gt_images"] = audit
@@ -354,8 +365,7 @@ class ProfileScoring:
                         cached["images"] = [images, audit]
                 with self.lock:
                     materials[material_key] = copy.deepcopy(cached)
-                # Commit cached materials together with the first request boundary
-                # (or the final result for scores that do not call a Judge).
+                # Commit materials at the first request boundary or the final no-Judge result.
             attachments: list[dict[str, Any]] = copy.deepcopy(cached["attachments"])
             if cached["images"] is not None:
                 runner.gt_image_materials = (cached["images"][0], cached["images"][1])

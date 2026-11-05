@@ -9,18 +9,18 @@ export function ScoringSettings({value, onChange, disabled = false, hideGt = fal
         if (profiles.length) onChange({...value,profiles});
       }} /><span>{label}</span><span className='scoring-choice-state' aria-hidden='true'>{value.profiles.includes(id) ? '已选择' : '未选择'}</span></label>
       <p className='scoring-choice-description'>{id === OPEN_PROFILE ? '所有题由Judge对照参考答案评0、1、2分。' : '选择与数值题匹配计0/1；列表Jaccard；开放题计0/1。'}</p>
-      {!hideGt && <div className='scoring-gt-options'>{(['use_gt_images','use_gt_metadata'] as const).map(flag => <label key={flag} title={flag === 'use_gt_metadata' ? '附加GT媒体已记录的拍摄时间、GPS经纬度及视频帧秒数；可独立于图片开启。' : '向Judge附加GT图片，独立于元数据开关。'}>
-        <input aria-label={label + ' · ' + (flag === 'use_gt_images' ? 'GT图片辅助' : 'GT元数据辅助')} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.[flag] ?? false}
-          onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], [flag]:e.target.checked}}})} />
-        {flag === 'use_gt_images' ? 'GT图片辅助' : 'GT元数据辅助'}
-      </label>)}</div>}
+      {!hideGt && <div className='scoring-gt-options'><label title='向Judge附加GT图片；拍摄时间和可读地点默认以文字提供。'>
+        <input aria-label={label + ' · GT图片辅助'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.use_gt_images ?? false}
+          onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], use_gt_images:e.target.checked}}})} />
+        GT图片辅助
+      </label><small>默认附加拍摄时间和可读地点；图片按需开启。</small></div>}
     </div>)}
     </div>
     <details className='scoring-details'><summary>评分方式与补评说明</summary>
       <p>{PROFILE_LABELS[OPEN_PROFILE]}：所有题统一对照文字参考答案，由Judge评0/1/2；0为错误或未有效回答，1为部分正确，2为完整正确，保留历史行为规则。</p>
       <p>{PROFILE_LABELS[ATM_PROFILE]}：选择题由Judge逐项匹配，再核对答案键；不匹配任何选项归“其他”，得0分。数值题由Judge对照参考答案匹配，计0/1；开放题按ATM规则计0/1。列表题由程序计算Jaccard＝返回与GT的交集数量÷并集数量，真实空返回为0，缺记录或映射不完整则不可评分。</p>
       <p>两套标准复用同一份开放式答卷。QS按每道题指定的评估轮等权平均，中间轮仅作诊断。未评齐时只显示已评分均值与覆盖率；Judge失败不计0。模型媒体P/R/F1和工具媒体R@5单独保留，不进入QS。</p>
-      <p>GT指标准答案及其材料。图片和元数据只辅助直接对照参考答案的Judge；选项映射不接收正确项标记，列表题固定按集合计算。元数据取自GT媒体的产品库记录，包含已记录的拍摄时间、GPS经纬度（拍摄位置）及视频帧秒数，不含地址名称。新任务默认附加元数据，可手动关闭；图片独立按需开启。已启动批次沿用冻结配置。已启用且已标注的材料读取失败会明确记录，图片开关不发送视频。</p>
+      <p>GT指标准答案及其材料。图片和元数据只辅助直接对照参考答案的Judge；选项映射不接收正确项标记，列表题固定按集合计算。新评分默认附加GT媒体的拍摄时间和可读地点，图片独立按需开启。地点按冻结的媒体标注映射读取，不在评分时联网查询；缺失字段标为未记录。视频来源照片的时间和地点会单独注明，GPS锚点只说明锚点所在范围。已启动批次沿用原配置和材料；读取已配置映射或图片失败会明确记录，图片开关不发送视频。</p>
       <p>补评只处理勾选标准中的指定范围，合法0分算已完成。同配置续写原批次；改提示词、Judge或GT配置会建立新批次，未覆盖题显示未采集，不拼接旧批次分数。比较时请同时核对题集、规则版本、Judge和GT配置；ATM-Bench式QS使用Judge匹配选择与数值题。</p>
     </details>
   </fieldset>;

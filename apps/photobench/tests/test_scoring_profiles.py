@@ -64,6 +64,7 @@ def state(scorer="open_judge", turns=1, **definition):
     }
     return {
         "run_id": "r",
+        "album_id": "album-x",
         "status": "completed",
         "qa_count": 1,
         "qa_set": "frozen",

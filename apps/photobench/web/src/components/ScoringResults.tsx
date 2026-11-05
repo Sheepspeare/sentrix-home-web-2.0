@@ -28,7 +28,8 @@ export function ScoringResults({summary}: {summary:unknown}) {
             <div><dt>题集</dt><dd>{String(result.qa_set || '-')}</dd></div>
             <div><dt>规则版本</dt><dd>{String(result.rule_version || '-')}</dd></div>
             <div><dt>Judge</dt><dd>{String(judge.model || '-')}</dd></div>
-            <div><dt>GT辅助</dt><dd>图片{gt.use_gt_images ? '开启' : '关闭'} · 元数据{gt.use_gt_metadata ? '开启' : '关闭'}</dd></div>
+            <div><dt>GT辅助</dt><dd>图片{gt.use_gt_images ? '开启' : '关闭'} · {gt.gt_metadata_mode === 'readable_v1' ? '拍摄时间与可读地点（默认文字）' : '历史元数据' + (gt.use_gt_metadata ? '开启' : '关闭')}</dd></div>
+            {gt.gt_metadata_mode === 'readable_v1' && <div className='scoring-config-wide'><dt>地点标注</dt><dd>{String(gt.annotation_version || '未记录')} · <code>{String(gt.mapping_sha256 || '无映射记录')}</code></dd></div>}
             <div><dt>实际Judge请求</dt><dd>{String(result.judge_calls || 0)} 次</dd></div>
             <div className='scoring-config-wide'><dt>批次</dt><dd><code>{String(result.batch_id)}</code></dd></div>
             <div className='scoring-config-wide'><dt>QA快照</dt><dd><code>{String(result.qa_definition_sha256 || '-')}</code></dd></div>

@@ -415,6 +415,12 @@ class FakeAlbums:
         self.calls.append(("qa_rows", qa_set))
         return [dict(row) for row in self.rows]
 
+    def gt_metadata_snapshot(self, album_id: str) -> dict[str, Any]:
+        from photobench.domain.evaluation.gt_context import empty_context
+
+        self.calls.append(("gt_metadata_snapshot", album_id))
+        return empty_context(album_id)
+
     def read_file(self, album_id: str, relative: str) -> bytes:
         self.calls.append(("read_file", relative))
         if relative not in self.files:

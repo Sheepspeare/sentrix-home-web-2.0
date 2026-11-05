@@ -159,6 +159,11 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
                     .get(value.get("purpose")),
                     "use_gt_images": ((batch or {}).get("config") or {}).get("use_gt_images"),
                     "use_gt_metadata": ((batch or {}).get("config") or {}).get("use_gt_metadata"),
+                    "gt_metadata_mode": ((batch or {}).get("config") or {}).get("gt_metadata_mode"),
+                    "annotation_version": ((batch or {}).get("gt_metadata_snapshot") or {}).get(
+                        "annotation_version"
+                    ),
+                    "mapping_sha256": ((batch or {}).get("gt_metadata_snapshot") or {}).get("sha256"),
                 },
                 "score": value.get("score") if valid_result(value) else None,
                 "max_score": 2 if profile == OPEN else 1,
