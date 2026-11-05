@@ -55,9 +55,16 @@ describe("状态列（1.0 :3023-3025）", () => {
   it('原测评结束后仍显示补评运行状态和独立评分项目数量', () => {
     renderTable([run({status:'completed_with_errors',qa_count:487,summary:{completed:487,judge_valid_count:487},phases:{qa_eval:{progress:{completed:487,total:487}}},rejudge:{status:'running',completed:25,total:1104}})]);
     expect(screen.getByText('补评运行中')).toBeTruthy();
-    expect(screen.getByText('原测评：完成但有错误')).toBeTruthy();
+    expect(screen.getByText('独立评分任务')).toBeTruthy();
     expect(screen.getByText('25/1104').parentElement?.textContent).toBe('补评 25/1104 项');
     expect(screen.getAllByText('487/487')).toHaveLength(2);
+  });
+  it('本轮补评成功和原测评错误分别显示在独立记录行', () => {
+    renderTable([run({status:'completed_with_errors',rejudge:{rejudge_id:'new',status:'completed',completed:10,total:10,failed:0}})]);
+    expect(screen.getByText('补评完成')).toBeTruthy();
+    const taskRow=screen.getByRole('row',{name:'补评任务 new'});
+    expect(taskRow.textContent).not.toContain('完成但有错误');
+    expect(screen.getByText('完成但有错误').closest('tr')).not.toBe(taskRow);
   });
   it("按完成有效评分的样本数计算，不使用Agent完成数或Judge尝试结束数", () => {
     renderTable([run({ qa_count: 487, summary: { completed: 69, judge_valid_count: 68 }, phases: { qa_eval: {

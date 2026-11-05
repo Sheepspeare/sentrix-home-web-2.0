@@ -1060,15 +1060,19 @@ class RunSuites:
                 self._index.upsert(analysis.run_list_entry(state))
                 return {"run_id": run_id, "status": "completed", "total": 0, **selected}
             rejudge_id = "scoring-" + uuid.uuid4().hex
-            if state.get("rejudge"):
+            if (state.get("rejudge") or {}).get("rejudge_id"):
                 state.setdefault("rejudge_history", []).append(copy.deepcopy(state["rejudge"]))
             state["rejudge"] = {
                 "rejudge_id": rejudge_id,
+                "task_type": "scoring",
+                "source_run_id": run_id,
                 "status": "running",
                 "started_at": now_iso(),
                 "scope": scope,
                 "completed": 0,
                 "failed": 0,
+                "results": [],
+                "error_details": [],
                 "total": selected["subscore_count"],
                 "batch_ids": [b["batch_id"] for b in batches],
                 "unit": "scoring_item",

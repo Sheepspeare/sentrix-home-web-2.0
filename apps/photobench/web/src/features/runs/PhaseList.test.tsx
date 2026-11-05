@@ -14,16 +14,33 @@ function activeRun(phases: Run["phases"]): Run {
 }
 
 describe("阶段卡（1.0 :3099-3129）", () => {
-  it("补评分完成后区分当前分数与首次执行错误", () => {
+  it("补评分单独显示本轮日志，首次执行错误默认折叠", () => {
     const run: Run = {
       ...activeRun({qa_eval:{status:"partial",error_details:[{sample_id:"q1",reason:"旧错误"}]}}),
-      qa_count:1, summary:{judge_valid_count:1}, rejudge:{status:"completed"},
+      qa_count:1, summary:{judge_valid_count:1}, rejudge:{rejudge_id:"new-task",status:"completed",completed:1,total:1,failed:0,results:[]},
     };
     const {container}=render(<PhaseList activeRun={run}/>);
-    expect(container.textContent).toContain("有效评分 1/1");
-    expect(container.textContent).toContain("最新补评分已完成");
-    expect(container.querySelector(".phase-errors summary")?.textContent).toBe("首次执行：1 条错误记录");
+    expect(container.querySelector('.scoring-task-log')?.textContent).toContain("本轮评分 1/1 项 · 失败 0 项");
+    expect(container.querySelector('.scoring-task-log')?.textContent).not.toContain("旧错误");
+    expect(container.querySelector('.scoring-task-log .phase-status')?.textContent).toBe("完成");
+    expect(container.querySelector('.initial-execution-log')?.hasAttribute('open')).toBe(false);
+    expect(container.querySelector('.initial-execution-log')?.textContent).toContain("旧错误");
+    expect(container.textContent).not.toContain("有效评分 1/1");
     expect(run.phases?.qa_eval?.status).toBe("partial");
+  });
+
+  it("每次补评都有独立记录，后续成功不覆盖上次错误", () => {
+    const {container}=render(<PhaseList activeRun={{run_id:'r',status:'completed_with_errors',
+      rejudge_history:[{rejudge_id:'old',status:'failed',failed:1,error_details:[{sample_id:'q1',reason:'上次错误'}]}],
+      rejudge:{rejudge_id:'new',status:'completed',completed:2,total:2,failed:0,results:[{sample_id:'q1',status:'completed',score:0,max_score:1}]}}}/>);
+    const logs=container.querySelectorAll('.scoring-task-log');
+    expect(logs).toHaveLength(2);
+    expect(logs[0]?.textContent).toContain('new');
+    expect(logs[0]?.textContent).toContain('0/1');
+    expect(logs[0]?.textContent).not.toContain('上次错误');
+    expect(logs[0]?.hasAttribute('open')).toBe(true);
+    expect(logs[1]?.textContent).toContain('上次错误');
+    expect(logs[1]?.hasAttribute('open')).toBe(false);
   });
   it("历史外层已有70个Judge终态时，阶段卡不能显示0/487", () => {
     const { container } = render(<PhaseList activeRun={activeRun({ qa_eval: {

@@ -6,6 +6,7 @@ import copy
 from collections.abc import Mapping
 from typing import Any, cast
 
+from photobench.domain.evaluation.media import saved_media_metrics
 from photobench.domain.evaluation.profiles import (
     LABELS,
     OPEN,
@@ -63,7 +64,7 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
         qa_id = str(item.get("qa_id"))
         turn_index = evaluation_turn(rows.get(qa_id, {}))
 
-        def score(index: int, qa_id: str = qa_id) -> dict[str, Any]:
+        def score(index: int, qa_id: str = qa_id, original: Mapping[str, Any] = original) -> dict[str, Any]:
             value = results.get(result_key(batch_id, qa_id, index)) or {}
             return {
                 **{
@@ -87,6 +88,9 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
                 "normalized_score": value["score"] / value["max_score"] if valid_result(value) else None,
                 "scorer": value.get("purpose") or profile,
                 "judge_status": value.get("status", "not_collected"),
+                "media_metrics": copy.deepcopy(value["media_metrics"])
+                if "media_metrics" in value
+                else saved_media_metrics(rows.get(qa_id, {}), original, index),
             }
 
         def apply(record: dict[str, Any], index: int, qa_id: str = qa_id) -> None:
@@ -116,5 +120,9 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
     scoring = scoring_summary(state)
     selected_summary = scoring["batches"].get(batch_id, scoring["profiles"][profile])
     scoring["profiles"][profile] = selected_summary
-    projected["summary"] = {"scoring": scoring, "selected_scoring": selected_summary}
+    projected["summary"] = {
+        "scoring": scoring,
+        "selected_scoring": selected_summary,
+        "profile_media_version": 1,
+    }
     return projected

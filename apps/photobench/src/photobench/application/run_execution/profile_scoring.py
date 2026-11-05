@@ -9,7 +9,8 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from photobench.application.run_execution.judge import JudgeRunner
-from photobench.application.run_execution.typed_scoring import score_typed
+from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
+from photobench.domain.evaluation.media import saved_media_metrics
 from photobench.domain.evaluation.profiles import (
     ATM,
     OPEN,
@@ -267,6 +268,11 @@ class ProfileScoring:
                 *([{k: v for k, v in previous.items() if k != "history"}] if previous else []),
             ],
         }
+        result["media_metrics"] = (
+            media_metrics_for_turn(row.get("evaluation") or {}, row, record, turns[: index + 1], self.assets)
+            if self.assets
+            else saved_media_metrics(row, item, index)
+        )
         result["diagnostic_key"] = self.diagnostics(batch, target, item)
         self.save(key, result)
         runner = copy.copy(self.runner)

@@ -1928,6 +1928,8 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
                 "total",
                 "failed",
                 "rejudge_id",
+                "started_at",
+                "finished_at",
             )
             if rejudge.get(key) is not None
         }

@@ -8,7 +8,8 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from photobench.domain.evaluation.atm.scoring import deterministic_accuracy, list_jaccard_score
-from photobench.domain.evaluation.contract import choice_result, media_set_metrics, result_record
+from photobench.domain.evaluation.contract import choice_result, result_record
+from photobench.domain.evaluation.media import media_metrics_for_sets
 from photobench.domain.evaluation.prompts import evaluation_prompts
 from photobench.domain.runs.execution import RunCancelledError, resolve_predicted_media
 from photobench.domain.runs.judge import parse_judge_json, thinking_kwargs
@@ -24,14 +25,6 @@ def media_metrics_for_turn(
     assets: Mapping[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     """Answer targets and retrieval evidence have separate denominators."""
-    evidence = record.get("retrieval_media_refs", row.get("retrieval_media_refs")) or []
-    target = definition.get("target_media_refs", evidence)
-    prediction = record.get("predicted_media")
-    delivered = media_set_metrics(
-        target,
-        prediction or [],
-        available=isinstance(prediction, list) and record.get("media_mapping_complete") is True,
-    )
     ids = list(
         dict.fromkeys(
             str(identifier)
@@ -46,8 +39,7 @@ def media_metrics_for_turn(
         and all((turn.get("retrieval_observations") or {}).get("complete") is True for turn in turns)
         and all(identifier in known_ids for identifier in ids)
     )
-    tools = media_set_metrics(evidence, retrieved, available=available)
-    return {"delivery": delivered, "tools": tools}
+    return media_metrics_for_sets(definition, row, record, retrieved, retrieval_available=available)
 
 
 def score_typed(

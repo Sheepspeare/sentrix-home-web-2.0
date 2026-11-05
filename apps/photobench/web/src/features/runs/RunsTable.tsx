@@ -10,12 +10,13 @@
  */
 import { qaProgress } from "../../lib/qaProgress.ts";
 import { OPEN_PROFILE, PROFILE_LABELS } from '../../lib/scoring.ts';
-import type { RefObject } from "react";
+import { Fragment, type RefObject } from "react";
 
 import type { Run } from "../../api/types.ts";
 import type { RunPageState } from "../../hooks/useRuns.ts";
 import { albumName, duration, fmtDate, fmtPct, modelName, statusLabel } from "../../lib/format.ts";
 import { modeBadgeClass, modeLabel } from "../../lib/qaBrowser.ts";
+import { RunTaskStatus } from "./RunTaskStatus.tsx";
 
 function answerScore(run: Run): string {
   const evaluation = run.summary?.evaluation_summary as Record<string, unknown> | undefined;
@@ -25,11 +26,9 @@ function answerScore(run: Run): string {
 
 function RunProgress({ run }: { run: Run }) {
   const progress = qaProgress(run);
-  const scoring = run.rejudge?.status === 'running';
   const showOriginal = progress.applicable && progress.judgeEnabled;
-  if (!scoring && !showOriginal) return <span className="muted">—</span>;
+  if (!showOriginal) return <span className="muted">—</span>;
   return <div className="run-progress-count">
-    {scoring && <div className='run-scoring-progress'>补评 <span>{run.rejudge?.completed ?? 0}/{run.rejudge?.total ?? '—'}</span> 项</div>}
     {showOriginal && progress.agent !== null ? <div>答题 <span>{progress.agentRatio}</span></div> : null}
     {showOriginal && <div aria-label={`有效评分 ${progress.validRatio}`}>评分 <span>{progress.validRatio}</span></div>}
   </div>;
@@ -103,20 +102,21 @@ export function RunsTable({
           </thead>
           <tbody>
             {runs.map((run) => (
+              <Fragment key={run.run_id}>
               <tr
-                key={run.run_id}
                 className={"run-row" + (activeRunId === run.run_id ? " selected" : "")}
                 onClick={() => onSelectRun(run)}
               >
                 <td>
                   <b>{modelName(run)}</b>
                   <span className={"mode-badge " + modeBadgeClass(run.mode)}>{modeLabel(run.mode)}</span>
+                  {run.rejudge && <small className="muted">首次测评</small>}
                 </td>
                 <td className="muted small">{albumName(run)}</td>
                 <td className="muted small">{fmtDate(run.started_at)}</td>
                 <td className="muted small">{duration(run)}</td>
                 <td>
-                  {run.rejudge?.status === 'running' ? <div className='run-status-stack'><span className='phase-status running'>补评运行中</span><small>原测评：{statusLabel(run.status)}</small></div> : <span className={"phase-status " + (run.status || "")}>{statusLabel(run.status)}</span>}
+                  <span className={`phase-status ${run.status || ""}`}>{statusLabel(run.status)}</span>
                 </td>
                 <td><RunProgress run={run} /></td>
                 <td>
@@ -149,6 +149,18 @@ export function RunsTable({
                   </button>
                 </td>
               </tr>
+              {run.rejudge && <tr className="run-row scoring-task-row" onClick={() => onSelectRun(run)}
+                aria-label={`补评任务 ${run.rejudge.rejudge_id || run.run_id}`}>
+                <td><b>补评任务</b><small className="muted">{modelName(run)}</small></td>
+                <td className="small muted">{albumName(run)}<small>关联测评：{run.run_id}</small></td>
+                <td className="small muted">{fmtDate(run.rejudge.started_at)}</td>
+                <td className="small muted">{run.rejudge.finished_at ? duration({run_id:run.run_id,started_at:run.rejudge.started_at,finished_at:run.rejudge.finished_at}) : '—'}</td>
+                <td><RunTaskStatus run={run} /></td>
+                <td><div className="run-scoring-progress">补评 <span>{run.rejudge.completed ?? 0}/{run.rejudge.total ?? '—'}</span> 项</div></td>
+                <td colSpan={2} className="small muted">本轮失败 {run.rejudge.failed ?? '未记录'} 项 · 逐项记录见任务日志</td>
+                <td><button className="btn compact" onClick={event => {event.stopPropagation(); onSelectRun(run);}}>查看日志</button></td>
+              </tr>}
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -72,17 +72,38 @@ def run_scoring(
         while futures:
             done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
             for future in done:
-                futures.pop(future)
+                target = futures.pop(future)
                 result = future.result()
                 with lock:
+                    diagnostic = state.get("diagnostic_results", {}).get(result.get("diagnostic_key"), {})
+                    failed = result["status"] != "completed" or diagnostic.get("status") != "completed"
+                    receipt = {
+                        "sample_id": target["qa_id"],
+                        "turn_index": target["turn_index"],
+                        "profile_id": result["profile_id"],
+                        "batch_id": result["batch_id"],
+                        "result_key": target["key"],
+                        "status": "failed" if failed else "completed",
+                        "score": result.get("score"),
+                        "max_score": result.get("max_score"),
+                        "reason": result.get("reason"),
+                        "started_at": result.get("started_at"),
+                        "finished_at": result.get("finished_at"),
+                        "diagnostics_only": bool(target.get("diagnostics_only")),
+                    }
+                    state["rejudge"].setdefault("results", []).append(receipt)
+                    if failed:
+                        state["rejudge"].setdefault("error_details", []).append(
+                            {
+                                **receipt,
+                                "error_type": "judge_error",
+                                "reason": result.get("reason")
+                                if result["status"] != "completed"
+                                else diagnostic.get("reason") or "shared diagnostics incomplete",
+                            }
+                        )
                     state["rejudge"]["completed"] += 1
-                    state["rejudge"]["failed"] += int(
-                        result["status"] != "completed"
-                        or state.get("diagnostic_results", {})
-                        .get(result.get("diagnostic_key"), {})
-                        .get("status")
-                        != "completed"
-                    )
+                    state["rejudge"]["failed"] += int(failed)
                 checkpoint()
             fill()
     with lock:

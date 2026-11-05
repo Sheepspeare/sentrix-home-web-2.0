@@ -284,6 +284,12 @@ export interface RejudgeTask {
   rejudge_id?: string;
   total?: number;
   completed?: number;
+  failed?: number;
+  started_at?: string;
+  finished_at?: string;
+  error?: string;
+  error_details?: {sample_id?: string; reason?: string; profile_id?: string; turn_index?: number}[];
+  results?: {sample_id?: string; status?: string; profile_id?: string; turn_index?: number; score?: number | null; max_score?: number}[];
   [key: string]: unknown;
 }
 
@@ -326,6 +332,7 @@ export interface Run {
   summary?: RunSummary;
   phases?: RunPhases;
   rejudge?: RejudgeTask | null;
+  rejudge_history?: RejudgeTask[];
   /** 详情响应的可选内嵌条目；`effectiveRunSummary` 会读它（`App.vue:430`）。 */
   items?: RunItemSummary[];
   [key: string]: unknown;

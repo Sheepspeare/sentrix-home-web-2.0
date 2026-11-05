@@ -29,12 +29,13 @@ import type { ReactNode } from "react";
 
 import type { GraphQuality, Run } from "../../api/types.ts";
 import { EXECUTION_PHASES } from "../../lib/constants.ts";
-import { albumName, duration, fmtDate, modelName, qaName, statusLabel } from "../../lib/format.ts";
+import { albumName, duration, fmtDate, modelName, qaName } from "../../lib/format.ts";
 import { MemoryLayerPanel } from "../memory/MemoryLayerPanel.tsx";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
 import { ErrorAnalysisPanel } from "../analysis/ErrorAnalysisPanel.tsx";
 import { KeyMetrics } from "./KeyMetrics.tsx";
 import { PhaseList } from "./PhaseList.tsx";
+import { RunTaskStatus } from "./RunTaskStatus.tsx";
 import { RejudgeCard } from "./RejudgeCard.tsx";
 import type { RejudgeCardProps } from "./RejudgeCard.tsx";
 import { ResultMetrics } from "./ResultMetrics.tsx";
@@ -111,7 +112,7 @@ export function RunDetail({
               {modelName(activeRun)} · {albumName(activeRun)} · {qaName(activeRun)}
             </h2>
             <div className="detail-head-tools">
-              <span className={"phase-status " + (activeRun.status || "")}>{statusLabel(activeRun.status)}</span>
+              <RunTaskStatus run={activeRun} />
               <div className="export-control">
                 <span className="field-label">导出轨迹</span>
                 <span className="export-score-filter">

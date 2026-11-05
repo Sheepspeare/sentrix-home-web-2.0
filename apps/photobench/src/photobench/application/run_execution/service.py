@@ -2397,7 +2397,12 @@ class RunExecution:
             record_progress()
         if state.cancelled:
             raise RunCancelledError("cancelled during qa_eval")
-        errors = qa_completion_errors(rows, ordered, judge_required=judge is not None)
+        errors = qa_completion_errors(
+            rows,
+            ordered,
+            judge_required=judge is not None,
+            scoring_state=state.data if scoring_batches else None,
+        )
         state.set("run_valid", bool(not errors and len(ordered) == len(rows) and executed == len(rows)))
         phase_result = {
             "total_seconds": round(time.perf_counter() - started, 1),

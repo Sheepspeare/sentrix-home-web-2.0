@@ -1393,3 +1393,12 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .item-score-empty { margin:0; padding:12px 15px 17px; color:var(--muted); font-size:12px; }
 .item-scoring-diagnostics { margin-top:10px; padding:10px 13px; border:1px solid #e1e5ef; border-radius:8px; background:#f8f9fc; }
 @media (max-width:700px) { .item-scoring-grid { grid-template-columns:minmax(0,1fr); } }
+
+/* Independent scoring attempts and original execution history. */
+.scoring-task-log { margin:10px 0; min-width:0; }
+.scoring-task-log > summary,.initial-execution-log > summary { cursor:pointer; gap:12px; }
+.scoring-task-log > summary b { min-width:0; overflow-wrap:anywhere; }
+.scoring-task-log p { overflow-wrap:anywhere; }
+.scoring-task-log table { min-width:480px; }
+.initial-execution-log { margin:14px 0; border-top:1px solid var(--border); padding-top:12px; }
+.initial-execution-log > summary { color:var(--muted); font-size:12px; }

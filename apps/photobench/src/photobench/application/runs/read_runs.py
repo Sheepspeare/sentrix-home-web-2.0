@@ -341,6 +341,12 @@ class ReadRuns:
                 result["qa_snapshot"] = snapshot_metadata(result["qa_snapshot"])
             result["item_count"] = len(state.get("items") or [])
             result["summary"] = analysis.effective_summary(state)
+        if (
+            result.get("primary_scoring_batch_ids")
+            and result.get("status") not in {"pending", "running", "cancelling"}
+            and result["summary"].get("profile_media_version") != 1
+        ):
+            result["summary"] = analysis.effective_summary(self._state(run_id))
         result["run_valid"] = result["summary"]["run_valid"]
         result.setdefault("read_revision", revision or None)
         result["history_mode"] = "full" if include_history else "checkpoint"

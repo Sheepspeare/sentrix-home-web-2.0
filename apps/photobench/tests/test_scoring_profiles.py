@@ -22,6 +22,7 @@ from photobench.domain.evaluation.profiles import (
     summarize_batches,
     valid_result,
 )
+from photobench.domain.runs.execution import qa_completion_errors
 from photobench.domain.runs.exports import export_sft, export_traces
 
 
@@ -288,6 +289,172 @@ def test_projection_export_and_summary_select_the_same_batch():
     assert s["items"][0]["judge"]["score"] == 2
     empty = profile_state(s, ATM)
     assert empty["items"][0]["judge"]["score"] is None
+
+
+@pytest.mark.parametrize("failure", [None, "missing", "failed", "wrong_answer", "diagnostic"])
+def test_completion_validates_both_primary_profiles_and_every_turn(failure):
+    s = state(turns=2)
+    svc, batches, _, _ = setup(
+        s,
+        [OPEN, ATM],
+        [task(), {"score": 0}, task(), {"score": 0}, {"accuracy": False}, {"accuracy": False}],
+    )
+    item = s["items"][0]
+    item.update(judge={"score": None, "reason": "pending_judge"}, judge_status="completed")
+    svc.score_item(batches, item, s["qa_snapshot"]["rows"][0])
+    s["primary_scoring_batch_ids"] = [b["batch_id"] for b in batches]
+    # A later successful batch cannot hide an error in an original required batch.
+    prepare_batches(s, profile_configs([ATM]), {"url": "http://judge/v1", "model": "j"}, nonce="later")
+    first_atm = next(
+        r for r in s["scoring_results"].values() if r["profile_id"] == ATM and r["turn_index"] == 0
+    )
+    if failure == "missing":
+        del s["scoring_results"][first_atm["key"]]
+    elif failure == "failed":
+        first_atm.update(status="failed", score=None, reason="real failure")
+    elif failure == "wrong_answer":
+        first_atm["answer_fingerprint"] = "another answer"
+    elif failure == "diagnostic":
+        s["diagnostic_results"][first_atm["diagnostic_key"]]["status"] = "failed"
+    errors = qa_completion_errors(s["qa_snapshot"]["rows"], s["items"], judge_required=True, scoring_state=s)
+    assert len(errors) == (1 if failure else 0)
+    if errors:
+        assert errors[0]["error_type"] == "judge_error"
+    assert item["judge"]["reason"] == "pending_judge"
+
+
+@pytest.mark.parametrize("profile,reply", [(OPEN, {"score": 0}), (ATM, {"accuracy": False})])
+def test_profile_media_survives_storage_projection_and_summary(profile, reply):
+    from photobench.domain.runs.analysis import effective_summary
+
+    s = state(target_media_refs=[media("a.jpg")])
+    row, item = s["qa_snapshot"]["rows"][0], s["items"][0]
+    row["retrieval_media_refs"] = [media("a.jpg"), media("b.jpg")]
+    record = item["runtime_turns"][0]
+    record.update(
+        predicted_media=[media("a.jpg", asset_id="a")],
+        retrieval_observations={"complete": True, "asset_ids": ["a", "b"]},
+    )
+    svc, batches, _, _ = setup(s, [profile], [task(), reply])
+    svc.assets = {
+        "a.jpg": [{"id": "a", "media_type": "image"}],
+        "b.jpg": [{"id": "b", "media_type": "image"}],
+    }
+    result = svc.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert result["media_metrics"]["delivery"]["recall"] == 1
+    assert result["media_metrics"]["tools"]["recall"] == 1
+    before = copy.deepcopy(s)
+    view = profile_state(s, profile)
+    metrics = effective_summary(view)["evaluation_summary"]["media_metrics"]
+    assert metrics["delivery"]["jaccard"] == metrics["tools"]["jaccard"] == 1
+    assert s == before
+
+
+@pytest.mark.parametrize(
+    "observations,expected",
+    [
+        ({"complete": True, "asset_ids": ["frame"]}, 1),
+        ({"complete": True, "asset_ids": []}, 0),
+        ({"complete": False, "asset_ids": []}, None),
+        ({"complete": True, "asset_ids": ["unknown"]}, None),
+    ],
+)
+def test_old_profile_media_is_derived_from_saved_facts_without_rejudging(observations, expected):
+    s = state(target_media_refs=[media("v", "video")])
+    s["qa_snapshot"]["rows"][0]["retrieval_media_refs"] = [media("v", "video")]
+    item = s["items"][0]
+    item["retrieved_candidate_media"] = [
+        media("v", "video", asset_id="video", source_keyframe_asset_id="frame")
+    ]
+    item["runtime_turns"][0].update(
+        predicted_media=[],
+        retrieval_observations=observations,
+    )
+    svc, batches, http, _ = setup(s, [OPEN], [task(), {"score": 0}])
+    result = svc.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    del result["media_metrics"]
+    s["scoring_results"][result["key"]] = result
+    before, calls = copy.deepcopy(s), len(http.calls)
+    metrics = profile_state(s, OPEN)["items"][0]["evaluation_result"]["media_metrics"]
+    assert metrics["delivery"]["recall"] == 0
+    assert metrics["tools"]["recall"] == expected
+    assert len(http.calls) == calls and s == before
+
+
+def test_real_run_completion_uses_profile_receipts_instead_of_legacy_placeholders(monkeypatch):
+    from fakes_execution import FakeAlbums
+    from test_run_execution import _execution, _manifest, _request
+
+    s = state()
+    albums = FakeAlbums(
+        manifest=_manifest(),
+        qa_rows=s["qa_snapshot"]["rows"],
+        files={"faces/1.jpg": b"J"},
+        directory_entries={"photos": 2},
+    )
+    execution, _, writer, _, _ = _execution(albums=albums)
+    item = copy.deepcopy(s["items"][0])
+    item.update(judge={"score": None, "reason": "pending_judge"}, judge_status="pending")
+    http = Http([task(), {"score": 0}, {"accuracy": False}])
+    runner = JudgeRunner(http=http, judge_url="http://judge/v1", judge_model="j", cancel=threading.Event())
+    monkeypatch.setattr(execution, "_evaluate_one", lambda *_: copy.deepcopy(item))
+    monkeypatch.setattr(execution, "_build_judge", lambda *_: runner)
+    result = execution.execute(_request(scoring_configs=profile_configs([OPEN, ATM])))
+    assert result["status"] == writer.last_state()["status"] == "completed"
+    assert result["run_valid"] is True
+    assert result["phases"]["qa_eval"]["failed_count"] == 0
+    assert len(http.calls) == 3
+
+
+def test_each_scoring_submission_gets_an_independent_task_log(tmp_path):
+    from test_suites import FakeRunStore, _suites, _wait_until
+
+    s = state()
+    s["status"] = "completed_with_errors"
+    s["phases"] = {"qa_eval": {"status": "partial", "error_details": [{"reason": "original error"}]}}
+    original = copy.deepcopy(s["phases"])
+    http = Http([task(), RuntimeError("first scoring failure"), {"score": 0}])
+    suites = _suites(tmp_path, store=FakeRunStore({"r": s}), http=http)
+    request = {"scoring_profiles": [OPEN], "scope": "missing"}
+    first = suites.start_profile_scoring("r", request)
+    assert _wait_until(lambda: not suites._auxiliary)
+    assert s["rejudge"]["rejudge_id"] == first["rejudge_id"]
+    assert s["rejudge"]["status"] == "completed_with_errors"
+    assert s["rejudge"]["source_run_id"] == "r"
+    assert len(s["rejudge"]["error_details"]) == 1
+    saved_log = copy.deepcopy(s["rejudge"])
+    second = suites.start_profile_scoring("r", request)
+    assert _wait_until(lambda: not suites._auxiliary)
+    assert second["rejudge_id"] != first["rejudge_id"]
+    assert s["rejudge"]["status"] == "completed" and s["rejudge"]["failed"] == 0
+    assert s["rejudge"]["error_details"] == []
+    assert s["rejudge"]["results"][0]["score"] == 0
+    assert s["rejudge_history"] == [saved_log]
+    assert s["phases"] == original and s["status"] == "completed_with_errors"
+
+
+def test_old_committed_overview_recovers_media_without_rewriting_history(tmp_path):
+    from test_run_read import _read_runs
+
+    from photobench.infrastructure.results.store import FileResultWriter, committed_path
+
+    s = state(target_media_refs=[media("a.jpg")])
+    s["scoring_profiles"] = [OPEN]
+    svc, batches, _, _ = setup(s, [OPEN], [task(), {"score": 0}])
+    s["primary_scoring_batch_ids"] = [batches[0]["batch_id"]]
+    result = svc.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    del s["scoring_results"][result["key"]]["media_metrics"]
+    FileResultWriter(tmp_path).write_snapshot("r", s)
+    metadata_path = committed_path(tmp_path / "r", "metadata.json")
+    metadata = json.loads(metadata_path.read_text())
+    summary = metadata["overview"]["summary"]
+    summary.pop("profile_media_version")
+    summary["evaluation_summary"]["media_metrics"]["delivery"]["recall"] = None
+    metadata_path.write_text(json.dumps(metadata))
+    before = metadata_path.read_bytes()
+    view = _read_runs(tmp_path).get_run("r", include_history=False)
+    assert view["summary"]["evaluation_summary"]["media_metrics"]["delivery"]["recall"] == 0
+    assert metadata_path.read_bytes() == before
 
 
 def test_media_r5_keeps_video_in_joint_order_and_uses_parent_identity():

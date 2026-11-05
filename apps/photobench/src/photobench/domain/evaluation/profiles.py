@@ -129,6 +129,25 @@ def diagnostic_key(batch: Mapping[str, Any], target: Mapping[str, Any]) -> str:
     )
 
 
+def item_scoring_error(state: Mapping[str, Any], item: Mapping[str, Any]) -> str | None:
+    """Validate every original scoring batch/turn, independent of legacy Judge placeholders."""
+    batches = {b["batch_id"]: b for b in state.get("scoring_batches") or []}
+    results = state.get("scoring_results") or {}
+    for batch_id in state.get("primary_scoring_batch_ids") or []:
+        if batch_id not in batches:
+            return f"Missing primary scoring batch: {batch_id}"
+        batch = batches[batch_id]
+        for index, record in enumerate(item.get("runtime_turns") or [item]):
+            result = results.get(result_key(batch_id, str(item["qa_id"]), index)) or {}
+            prefix = f"{batch['profile_id']} turn {index + 1}"
+            if not valid_result(result) or result.get("answer_fingerprint") != answer_fingerprint(record):
+                return f"{prefix}: {result.get('reason') or 'missing valid scoring result'}"
+            diagnostic = (state.get("diagnostic_results") or {}).get(result.get("diagnostic_key")) or {}
+            if diagnostic.get("status") != "completed":
+                return f"{prefix}: {diagnostic.get('reason') or 'shared diagnostics incomplete'}"
+    return None
+
+
 def make_batch(
     profile: str,
     config: Mapping[str, Any],
