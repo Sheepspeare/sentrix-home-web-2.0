@@ -133,6 +133,9 @@ def _run_turn(container: Container) -> RunTurn:
         profile=replace(
             DEFAULT_PROFILE,
             wall_time_s=container.settings.agent_wall_time_s,
+            max_steps=container.settings.agent_max_steps,
+            max_tool_calls=container.settings.agent_max_tool_calls,
+            strict_model_step_budget=container.settings.vlm_exact_output_budget,
         ),
     )
 

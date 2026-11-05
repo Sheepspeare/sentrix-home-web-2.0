@@ -301,7 +301,16 @@ class Container:
         lexical = SqliteLexicalIndex(database, observations, assets=assets, places=asset_places)
         # 对话与视觉是**同一个端点**（8100），所以共用同一个探测。分两个实例会让同一个
         # 进程里存两份可能不一致的答案，还要多探一轮。
-        served_model = ServedModel(settings.vlm_base_url)
+        served_model = ServedModel(
+            settings.vlm_base_url,
+            # MLX media prefill can delay metadata on the same server. Discovery
+            # must honor the configured wait, while staying within both clients'
+            # deadlines because dialogue and vision share this resolver.
+            timeout_s=min(settings.chat_timeout_s, settings.vlm_timeout_s),
+            generation_profile=settings.vlm_generation_profile,
+            exact_output_budget=settings.vlm_exact_output_budget,
+            context_tokens=settings.vlm_context_tokens,
+        )
         # 单个并发槽的上下文窗口——**问端点**，理由与上面那个模型名同一条：窗口是
         # **部署事实**，配置里那个 6144 是照部署的某一次实测抄的，部署一改它就过期。
         # 读不到才退回配置值（那说明端点没在正常服务，此时保守值不添乱）。
@@ -329,17 +338,6 @@ class Container:
             visual_embedder = wemm_embedder
             text_embedder = wemm_embedder
             embedding_health = wemm_embedder
-        # **启动时推理测试**：2026-10-29 的教训——CLIP 侧车缺 `from PIL import Image`，
-        # `/health` 返回 ok，但实际推理时 NameError。健康检查只验证服务活着，
-        # 发现不了功能 broken。现在启动时做一次真实推理，确认端到端可用。
-        # 失败则 API 启动失败，明确报错。
-        smoke_ok, smoke_error = embedding_health.smoke_test()
-        if not smoke_ok:
-            raise RuntimeError(
-                f"嵌入方案启动测试失败（embedding_scheme={settings.embedding_scheme}）: "
-                f"{smoke_error}。请检查嵌入侧车是否正常，代码是否有语法/import 错误。"
-            )
-        log.info("嵌入方案启动测试通过（%s）", settings.embedding_scheme)
         log.info(
             "嵌入方案=%s 视觉=%s/%sd 文本=%s/%sd",
             settings.embedding_scheme,

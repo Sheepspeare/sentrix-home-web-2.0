@@ -102,7 +102,7 @@ from sentrix.domain.assistant.ports import (
 )
 from sentrix.domain.assistant.profile import DEFAULT_PROFILE, TurnProfile
 from sentrix.domain.assistant.task_state import ACTING, FINALIZING, TaskState, ToolCallRecord
-from sentrix.domain.assistant.tool_policy import ToolAction, ToolPolicy
+from sentrix.domain.assistant.tool_policy import MAX_CONSECUTIVE_FAILURES, ToolAction, ToolPolicy
 from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, TOOLS_BY_NAME, ToolSpec
 from sentrix.domain.errors import DomainError
 from sentrix.domain.media.ports import OperationControl
@@ -360,6 +360,7 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
             "page_calls": state.page_calls,
             "inspection_calls": state.inspection_calls,
             "max_steps": state.profile.max_steps,
+            "strict_model_step_budget": state.profile.strict_model_step_budget,
             "max_tool_calls": state.profile.max_tool_calls,
         },
         "delivered": [item.asset_id for item in session.delivered.items],
@@ -991,9 +992,17 @@ class RunTurn:
                 tools_exhausted=not state.can_call_tool(),
                 page_available=_page_available(state),
             )
+            # Match the existing execution policy: advertising a tool which
+            # already hit repeated_failure makes small models spend every
+            # remaining step requesting an action we will always deny.
+            specs = tuple(
+                spec for spec in specs if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
+            )
             try:
                 reply = self._complete_recorded(session, messages, specs)
             except PromptTooLongError as error:
+                if state.profile.strict_model_step_budget:
+                    return self._model_error_stop(session, error)
                 # 提示词撑爆了窗口。**先压历史再试一次**——这是它区别于别的模型服务
                 # 故障的地方：真因在调用方这一侧，压缩就解决得了。
                 #
@@ -1926,6 +1935,10 @@ class RunTurn:
         """
         if not session.state.has_final_reserve():
             return ""
+        if session.state.profile.strict_model_step_budget:
+            if not session.state.can_step():
+                return ""
+            session.state.model_steps += 1
         # **不带任何工具**：这一问的目的就是让模型把话说出来，不是让它再查一轮
         # （``specs`` 传空元组，模型没有可调的东西）。也不重放历史——走到这里说明
         # 前面已经塌了，把塌掉的过程再喂一遍只会让它重蹈覆辙。

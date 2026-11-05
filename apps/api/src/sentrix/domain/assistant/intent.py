@@ -189,7 +189,7 @@ def planner_response_format() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "id": string,
-            "evidence_type": string,
+            "evidence_type": {"type": "string", "enum": list(planner_evidence_types())},
             "description": string,
             "predicate": string,
             "value_type": {"type": "string", "enum": [item.value for item in RequirementValueType]},

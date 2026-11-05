@@ -1905,6 +1905,32 @@ def test_refusal_execution_keeps_media_facts_and_marks_metrics_inapplicable(
     assert item["image_ranking"] == {}
 
 
+@pytest.mark.parametrize("stage", ["start_conversation", "start_turn"])
+def test_unknown_qa_submission_preserves_stage_and_known_conversation_without_replay(monkeypatch, stage):
+    from photobench.domain.errors import RequestOutcomeUnknownError
+
+    execution, *_ = _execution()
+    attempts = []
+
+    def fail(**kwargs):
+        attempts.append(kwargs)
+        raise RequestOutcomeUnknownError(method="POST", cause_type="ReadError", attempts=1)
+
+    monkeypatch.setattr(execution.client, stage, fail)
+    item = execution._evaluate_one(_rows()[0], "s", {}, _request())
+    assert len(attempts) == 1
+    assert item["execution_status"] == "failed"
+    assert item["error_type"] == "RequestOutcomeUnknownError"
+    assert item["diagnostics"]["error_category"] == "request_outcome_unknown"
+    assert item["diagnostics"]["request_stage"] == stage
+    assert item["diagnostics"]["request_sent"] is None
+    assert item["diagnostics"]["automatic_replay"] is False
+    if stage == "start_turn":
+        assert item["conversation_id"] == attempts[0]["conversation_id"]
+    else:
+        assert "conversation_id" not in item
+
+
 def test_explicit_pipeline_reports_finalization_and_retains_request_on_cancel(monkeypatch):
     """Asset completion must not finish the pipeline or hide its outstanding HTTP request."""
     from photobench.application.run_execution.state import RunState

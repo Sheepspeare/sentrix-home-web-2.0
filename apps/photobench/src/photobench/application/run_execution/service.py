@@ -240,6 +240,7 @@ class RunRequest:
     import_timeout: int = 7200
     turn_timeout: int = 900
     qa_concurrency: int = 0
+    judge_backpressure: bool = True
     runtime_framework: str = ""
     judge_url: str = ""
     judge_model: str = ""
@@ -281,6 +282,7 @@ def freeze_runtime_request(
             "import_timeout": request.import_timeout,
             "turn_timeout": request.turn_timeout,
             "qa_concurrency": request.qa_concurrency,
+            "judge_backpressure": request.judge_backpressure,
         },
         required_build_revision=revision if revision != "development" else None,
     )
@@ -2078,6 +2080,7 @@ class RunExecution:
         state.set("qa_concurrency_runtime_limit", resolved.runtime_limit)
         state.set("qa_assets", len(assets))
         state.set("judge_concurrency", judge_concurrency if judge is not None else 0)
+        state.set("judge_backpressure", request.judge_backpressure)
         state.record_phase("qa_eval", "agent_total", len(rows))
         state.record_phase("qa_eval", "agent_phase_started_at", now_iso())
         agent_phase_started = time.perf_counter()
@@ -2167,7 +2170,10 @@ class RunExecution:
                     nonlocal queue_exhausted
                     while (
                         len(futures) < concurrency
-                        and len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
+                        and (
+                            not request.judge_backpressure
+                            or len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
+                        )
                         and not state.cancelled
                     ):
                         next_row = next(queue, None)
@@ -2345,6 +2351,7 @@ class RunExecution:
         for name in PASSTHROUGH_FIELDS:
             if row.get(name) is not None:
                 item[name] = row[name]
+        request_stage = "start_conversation"
         try:
             self._cancel_wait(0)
             item["execution_status"] = "started"
@@ -2356,6 +2363,7 @@ class RunExecution:
             )
             if not conversation_id:
                 raise RuntimeError("2.0 建会话没有返回 id")
+            item["conversation_id"] = conversation_id
             turn_records: list[dict[str, Any]] = []
             last_result: dict[str, Any] = {}
             last_progress: list[Any] = []
@@ -2372,6 +2380,7 @@ class RunExecution:
                 # **评测必须打开完整轨迹。** 8772 的「模型这一步看到什么/回答什么」
                 # 只能由主 API 在回合终态载荷里带出来；不开这个开关，run.json 里
                 # 永远只有工具入参与摘要，和 1.0 的 debug_trace 对不上。
+                request_stage = "start_turn"
                 started_turn = self.client.start_turn(
                     conversation_id=conversation_id,
                     message=message,
@@ -2381,6 +2390,7 @@ class RunExecution:
                 turn_id = str(started_turn.get("turn_id") or "")
                 if not turn_id:
                     raise RuntimeError(f"2.0 发起回合没有返回 turn_id：{started_turn}")
+                request_stage = "await_turn"
                 polled = self._await_turn(turn_id, request)
                 last_result = polled.get("result") or {}
                 last_progress = polled.get("public_progress") or []
@@ -2557,6 +2567,7 @@ class RunExecution:
             item.update(
                 {
                     "error": str(exc),
+                    "error_type": type(exc).__name__,
                     "retrieval_recall": 0,
                     "retrieval_precision": None,
                     "retrieval_f1": None,
@@ -2568,6 +2579,13 @@ class RunExecution:
                     "wall_clock_ms": round((time.perf_counter() - started) * 1000, 1),
                 }
             )
+            if isinstance(exc, RequestOutcomeUnknownError):
+                item["diagnostics"] = {
+                    **exc.facts,
+                    "error_category": "request_outcome_unknown",
+                    "request_sent": None,
+                    "request_stage": request_stage,
+                }
         item.update(retrieval_metric_projection(item))
         if item["execution_status"] == "completed":
             item["attribution"] = derive_attribution(item)
