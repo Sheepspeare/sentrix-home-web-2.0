@@ -19,6 +19,7 @@ from typing import Any
 
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.runs.analysis import effective_summary, run_list_entry
+from photobench.domain.runs.task_history import execution_metadata
 from photobench.infrastructure.results.file_copy import copy_export
 
 log = logging.getLogger(__name__)
@@ -85,10 +86,11 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
             evaluation = (payload.get("overview", {}).get("summary") or {}).get("evaluation_summary")
             if evaluation is not None:
                 entry.setdefault("summary", {})["evaluation_summary"] = evaluation
+            entry.update(execution_metadata(payload.get("overview") or {}))
             return entry
         path = run_dir / "run.json"
         stat = path.stat()
-        signature = [stat.st_ino, stat.st_size, stat.st_mtime_ns]
+        signature = [2, stat.st_ino, stat.st_size, stat.st_mtime_ns]
         index = run_dir / ".photobench-read-index.json"
         try:
             cached = json.loads(index.read_text(encoding="utf-8"))

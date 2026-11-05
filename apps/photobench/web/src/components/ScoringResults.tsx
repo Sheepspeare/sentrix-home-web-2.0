@@ -1,4 +1,5 @@
 import { PROFILE_LABELS, OPEN_PROFILE } from '../lib/scoring.ts';
+import { EvaluationResult } from './EvaluationResult.tsx';
 import { ScoringRequestLog } from './ScoringRequestLog.tsx';
 type Dict = Record<string, unknown>;
 const obj = (v: unknown): Dict => v && typeof v === 'object' ? v as Dict : {};
@@ -18,7 +19,7 @@ export function ScoringResults({summary}: {summary:unknown}) {
         ? complete ? '回答质量均分' : '已评分回答质量均分'
         : complete ? 'QS总分' : '已评分QS均值';
       return <article className='scoring-metric-card' key={id} aria-label={label}>
-        <header className='scoring-result-head'><b>{label}</b><span className={'phase-status ' + (complete ? 'completed' : collected ? 'partial' : '')}>{!collected ? '未采集' : complete ? '已完成' : '未完成'}</span></header>
+        <header className='scoring-result-head'><b>{label}</b><span className={'phase-status ' + (complete ? 'completed' : collected ? 'partial' : '')}>{!collected ? '未运行采集' : complete ? '已完成' : '未完成'}</span></header>
         {!collected ? <div className='scoring-result-empty'>选择该标准并补评后，将显示得分与覆盖率。</div> : <>
           <div className='scoring-value-row'><strong>{displayValue}</strong><span>{valueLabel}</span></div>
           <div className='scoring-coverage'><span>覆盖率 {String(result.scored)}/{String(result.total)} · {percent(result.coverage)}</span><progress aria-label={label+'评分覆盖率'} max={1} value={typeof result.coverage === 'number' ? result.coverage : 0} /></div>
@@ -37,24 +38,26 @@ export function ScoringResults({summary}: {summary:unknown}) {
     })}
   </div><p className='scoring-result-note'>开放式回答由Judge按0/1/2评分，展示原始均分，满分2.00分。ATM-Bench式QS按题等权平均，以百分比展示；选择与数值题使用Judge匹配。未评齐时均值仅包含已评分题目，覆盖率表示评分完成比例，完整总分需覆盖全部题目。媒体召回率在公共诊断指标中单独展示。跨测评比较需核对题集、规则版本、Judge和GT配置。</p></section>;
 }
-export function ItemScoringResults({results, diagnostics}: {results:unknown; diagnostics?:unknown}) {
+export function ItemScoringResults({results, diagnostics, current, definition}: {results:unknown; diagnostics?:unknown; current?:unknown; definition?:unknown}) {
   const rows = Array.isArray(results) ? results.map(obj) : [];
   return <section className='item-scoring-results' aria-label='分标准评分记录'>
     <header className='item-scoring-heading'><h4>分标准评分记录</h4><span>同一回答 · 独立计分</span></header>
     <div className='item-scoring-grid'>
       {Object.entries(PROFILE_LABELS).map(([id,label]) => {
         const selected = rows.filter(r => r.profile_id === id);
+        const latest = obj(obj(current)[id]);
         const isOpen = id === OPEN_PROFILE;
         return <article className={'item-score-card ' + (isOpen ? 'is-open-score' : 'is-qs-score')} key={id} aria-label={label}>
           <header className='item-score-card-head'><span className='item-score-mark' aria-hidden='true'>{isOpen ? '01' : 'QS'}</span><div><h5>{isOpen ? '开放式回答' : 'ATM-Bench式QS'}</h5><p>{isOpen ? 'Judge · 0 / 1 / 2 分' : '按题型规则评分'}</p></div></header>
-          {!selected.length ? <p className='item-score-empty'>未采集</p> : selected.map(r => {
+          {Object.keys(latest).length ? latest.status === 'not_collected' ? <p className='item-score-empty'>未运行采集</p> : <EvaluationResult value={latest} definition={definition} /> : !selected.length ? <p className='item-score-empty'>未运行采集</p> : null}
+          {!!selected.length && <details className='score-history'><summary>评分调用与历史记录（{selected.length}条）</summary>{selected.map(r => {
             const scored = typeof r.score === 'number';
             const status = scored ? '已评分' : r.status === 'failed' || r.status === 'error' ? '评分失败' : r.status === 'running' ? '评分中' : '待评分';
             return <details className='item-score-record' key={String(r.key)}>
               <summary><span className='item-score-record-main'><strong>{scored ? String(r.score) : '—'}{scored && <small> / {String(r.max_score)} 分</small>}</strong><span className={'item-score-status ' + (scored ? 'is-scored' : 'is-pending')}>{status}</span></span><span className='item-score-record-meta'><span>第{Number(r.turn_index)+1}轮 · {r.is_evaluation_turn ? '计入总分' : '诊断轮'}</span><span className='item-score-expand'>评分详情 <i aria-hidden='true'>⌄</i></span></span></summary>
               <div className='item-score-record-body'><div className='item-score-batch'>评分批次 <code>{String(r.batch_id)}</code></div>{r.reason != null && <p className='item-score-reason'>{String(r.reason)}</p>}{r.formula != null && <p className='item-score-formula'>{String(r.formula)} · GT {JSON.stringify(r.target)} · 返回 {JSON.stringify(r.predicted)}</p>}<ScoringRequestLog requests={[...(Array.isArray(r.history) ? r.history : []).flatMap(h => Array.isArray(obj(h).requests) ? obj(h).requests as unknown[] : []),...(Array.isArray(r.requests) ? r.requests : [])]} /></div>
             </details>;
-          })}
+          })}</details>}
         </article>;
       })}
     </div>

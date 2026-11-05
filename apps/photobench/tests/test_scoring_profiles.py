@@ -699,3 +699,48 @@ def test_choice_matching_is_independent_of_main_profile_and_evaluation_turn():
     assert s == before
     assert choice_matching_result(state(), "q") is None
     assert choice_matching_result(state("choice_judge"), "q") is None
+
+
+def test_both_item_profiles_are_latest_and_keep_zero_and_missing_separate():
+    from photobench.domain.evaluation.profile_view import item_profile_results
+
+    s = state("choice_judge", turns=2, choices=[{"id": "A", "text": "2千米"}], answer_key="A")
+    s["scoring_batches"] = [
+        {"batch_id": "open", "profile_id": OPEN},
+        {"batch_id": "old", "profile_id": ATM},
+        {"batch_id": "new", "profile_id": ATM},
+    ]
+    s["scoring_results"] = {
+        "open:q:1": {
+            "profile_id": OPEN,
+            "score": 2,
+            "max_score": 2,
+            "status": "completed",
+            "purpose": "answer_quality",
+        },
+        "old:q:1": {
+            "score": 1,
+            "max_score": 1,
+            "status": "completed",
+            "purpose": "choice",
+            "matched_option": "A",
+        },
+        "new:q:1": {
+            "score": 0,
+            "max_score": 1,
+            "status": "completed",
+            "purpose": "choice",
+            "matched_option": "other",
+        },
+    }
+    # Use the production key function, not a guessed separator.
+    from photobench.domain.evaluation.profiles import result_key
+
+    s["scoring_results"] = {result_key(k.split(":")[0], "q", 1): v for k, v in s["scoring_results"].items()}
+    results = item_profile_results(s, "q")
+    assert results[OPEN]["score"] == 2
+    assert results[ATM]["score"] == 0 and results[ATM]["matched_option"] == "other"
+    s["scoring_batches"].append({"batch_id": "empty", "profile_id": ATM})
+    missing = item_profile_results(s, "q")[ATM]
+    assert missing["score"] is None and missing["status"] == "not_collected"
+    assert "matched_option" not in missing

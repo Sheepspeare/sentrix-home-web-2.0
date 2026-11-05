@@ -1403,3 +1403,23 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .scoring-task-log table { min-width:480px; }
 .initial-execution-log { margin:14px 0; border-top:1px solid var(--border); padding-top:12px; }
 .initial-execution-log > summary { color:var(--muted); font-size:12px; }
+
+/* One task keeps its cumulative results and selectable execution receipts. */
+.execution-history { margin: 20px 0; padding: 20px; border: 1px solid #dce4ed; border-radius: 16px; background: #f8fafc; }
+.execution-history-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.execution-history h3 { margin: 0 0 6px; font-size: 16px; }
+.execution-history-head p { margin: 0; color: #64748b; font-size: 12px; }
+.execution-history-head label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.execution-history select { max-width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; }
+.execution-provenance { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 16px 0; font-size: 13px; color: #526176; }
+.execution-provenance b { color: #24374b; }
+.execution-source, .execution-log { padding: 10px 0; border-top: 1px solid #e2e8f0; font-size: 13px; }
+.execution-source summary, .execution-log > summary, .score-history > summary { cursor: pointer; color: #526176; }
+.execution-source dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
+.execution-source dd { margin: 0; overflow-wrap: anywhere; }
+.export-control-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 12px; }
+.detail-head-tools .export-control { display: block; }
+.detail-head-tools .export-control > summary { cursor: pointer; font-size: 13px; color: #526176; }
+.item-score-card .evaluation-panel { border: 0; margin: 0; padding: 14px 0; box-shadow: none; background: transparent; }
+.score-history { margin-top: 10px; font-size: 12px; }
+@media (max-width: 700px) { .execution-history { padding: 14px; } .execution-history-head label { width: 100%; display: block; } .execution-history select { display: block; width: 100%; margin-top: 8px; } }

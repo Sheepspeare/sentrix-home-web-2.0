@@ -127,7 +127,7 @@ export function QaItemCard({
           const value = typeof judge.score === 'number' && Number.isFinite(judge.score) ? judge.score : null;
           const label = profile === OPEN_PROFILE ? '开放式' : profile === ATM_PROFILE ? 'QS' : profile;
           const status = value !== null ? profile === OPEN_PROFILE ? value + '/2 分' : (value * 100).toFixed(1) + '%'
-            : judge.status === 'failed' ? '评分失败' : judge.status === 'running' ? '评分中' : '待评分';
+            : judge.status === 'failed' ? '评分失败' : judge.status === 'running' ? '评分中' : judge.status === 'not_collected' ? '未运行采集' : '待评分';
           return <span key={profile} className="score" title={String(judge.reason || '')}>{label} {status}</span>;
         }) : <span className={'score ' + judgeScoreClass(s) + ' judge-round-' + judgeRoundState(s, activeRejudge)}>
           {judgeScoreLabel(s, activeRejudge)}
@@ -218,9 +218,8 @@ function QaItemDetail({
           </span>
         ))}
       </div>
-      <EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} showChoiceMatching={!detail.choice_matching_result} />
-      {detail.choice_matching_result != null && <ChoiceMatchingResult value={detail.choice_matching_result} definition={detail.evaluation} standalone />}
-      <ItemScoringResults results={detail.scoring_results} diagnostics={detail.diagnostic_results} />
+      <ItemScoringResults results={detail.scoring_results} diagnostics={detail.diagnostic_results} current={detail.profile_scores} definition={detail.evaluation} />
+      {!detail.profile_scores && <details><summary>历史评分</summary><EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} showChoiceMatching={!detail.choice_matching_result} />{detail.choice_matching_result != null && <ChoiceMatchingResult value={detail.choice_matching_result} definition={detail.evaluation} standalone />}</details>}
       <section className="qa-layer-chain">
         <div className="qa-layer-chain-head">
           <strong>本题证据链</strong>

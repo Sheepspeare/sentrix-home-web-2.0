@@ -36,6 +36,34 @@ def item_scores(state: Mapping[str, Any], qa_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def item_profile_results(state: Mapping[str, Any], qa_id: str) -> dict[str, Any]:
+    """Both latest standards for the evaluation turn, independent of score filters."""
+    row: Mapping[str, Any] = next(
+        (r for r in (state.get("qa_snapshot") or {}).get("rows") or [] if str(r["qa_id"]) == qa_id), {}
+    )
+    turn = evaluation_turn(row)
+    results = {}
+    for profile in LABELS:
+        batch = select_batch(state, profile)
+        batch_id = str(batch["batch_id"]) if batch else ""
+        value = (state.get("scoring_results") or {}).get(result_key(batch_id, qa_id, turn)) or {}
+        valid = valid_result(value)
+        results[profile] = {
+            **{k: copy.deepcopy(v) for k, v in value.items() if k not in {"requests", "history"}},
+            "profile_id": profile,
+            "batch_id": batch_id,
+            "turn_index": turn,
+            "status": value.get("status", "not_collected"),
+            "judge_status": value.get("status", "not_collected"),
+            "score": value.get("score") if valid else None,
+            "max_score": 2 if profile == OPEN else 1,
+            "normalized_score": value["score"] / value["max_score"] if valid else None,
+            "scorer": value.get("purpose") or ("answer_quality" if profile == OPEN else profile),
+            "judge_model": value.get("judge_model") or ((batch or {}).get("judge") or {}).get("model"),
+        }
+    return results
+
+
 def choice_matching_result(state: Mapping[str, Any], qa_id: str) -> dict[str, Any] | None:
     """Expose this standard's selected batch independently of the page's main score."""
     row: Mapping[str, Any] = next(

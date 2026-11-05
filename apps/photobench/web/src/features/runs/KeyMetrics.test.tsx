@@ -47,8 +47,8 @@ describe("KeyMetrics（1.0 :3130-3146）", () => {
 
     expect(screen.getByText("运行与公共诊断指标")).not.toBeNull();
     expect(container.querySelector(".key-metric-list")).not.toBeNull();
-    expect(screen.getByText("历史混合评分")).not.toBeNull();
-    expect(screen.getByText("1.5 / 2")).not.toBeNull();
+    expect(screen.queryByText("历史混合评分")).toBeNull();
+    expect(screen.getAllByText("未运行采集").length).toBeGreaterThanOrEqual(2);
     // 召回指标是**折叠**的（<details>），不是平铺。
     const recall = container.querySelector("details.recall-metric-card");
     expect(recall).not.toBeNull();
@@ -66,7 +66,7 @@ describe("KeyMetrics（1.0 :3130-3146）", () => {
 });
 
 describe("主模型内存与显存分别展示", () => {
-  it("新版采样以独立内存、显存峰值生成六张卡片", () => {
+  it("新版采样以独立内存、显存峰值生成五张运行卡片，评分单列", () => {
     const run = { ...RUN, phases: { gpu_metrics: {
       status: "done", protocol_version: "photobench-resource-telemetry-v1", memory_accounting: "nvidia_pss_and_vram",
       model_process_system_memory_used_mib: { peak: 3901.44 },
@@ -74,10 +74,10 @@ describe("主模型内存与显存分别展示", () => {
     } } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
     const cards = container.querySelectorAll(".key-metric-card");
-    expect(cards).toHaveLength(6);
-    expect(cards[4].textContent).toContain("主模型内存占用3.81 GiB");
-    expect(cards[5].textContent).toContain("主模型显存占用8.00 GiB");
-    expect(cards[5].textContent).not.toContain("16.00 GiB");
+    expect(cards).toHaveLength(5);
+    expect(cards[3].textContent).toContain("主模型内存占用3.81 GiB");
+    expect(cards[4].textContent).toContain("主模型显存占用8.00 GiB");
+    expect(cards[4].textContent).not.toContain("16.00 GiB");
   });
 
   it("Mac 缺主模型GPU归属时主值显示整机参考，并标明包含其他应用", () => {
@@ -87,7 +87,7 @@ describe("主模型内存与显存分别展示", () => {
       model_process_gpu_memory_mib: { peak: null }, device_gpu_memory_mib: { peak: 4096 },
     } } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
-    const gpu = container.querySelectorAll(".key-metric-card")[5];
+    const gpu = container.querySelectorAll(".key-metric-card")[4];
     expect(gpu.querySelector(".key-metric-value")?.textContent).toBe("4.00 GiB");
     expect(gpu.textContent).toContain("整机GPU占用（参考）");
     expect(gpu.textContent).toContain("包含其他应用");
@@ -97,16 +97,16 @@ describe("主模型内存与显存分别展示", () => {
   it.each([
     { source: "apple_unified", model: 1024, device: 4096, label: "主模型显存占用", value: "1.00 GiB" },
     { source: "apple_unified", model: 0, device: 4096, label: "主模型显存占用", value: "0.00 GiB" },
-    { source: "apple_unified", model: null, device: null, label: "主模型显存占用", value: "未记录" },
-    { source: "host_nvml", model: null, device: 4096, label: "主模型显存占用", value: "未记录" },
-    { source: "jetson_local_pss", model: null, device: 4096, label: "主模型显存占用", value: "未记录" },
+    { source: "apple_unified", model: null, device: null, label: "主模型显存占用", value: "未运行采集" },
+    { source: "host_nvml", model: null, device: 4096, label: "主模型显存占用", value: "未运行采集" },
+    { source: "jetson_local_pss", model: null, device: 4096, label: "主模型显存占用", value: "未运行采集" },
   ])("$source 模型=$model、整机=$device 时显示 $label $value", ({ source, model, device, label, value }) => {
     const run = { ...RUN, phases: { gpu_metrics: {
       status: "done", protocol_version: "photobench-resource-telemetry-v1", source,
       model_process_gpu_memory_mib: { peak: model }, device_gpu_memory_mib: { peak: device },
     } } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
-    const gpu = container.querySelectorAll(".key-metric-card")[5];
+    const gpu = container.querySelectorAll(".key-metric-card")[4];
     expect(gpu.querySelector(".key-metric-value")?.textContent).toBe(value);
     expect(gpu.textContent).toContain(label);
   });
@@ -118,9 +118,9 @@ describe("主模型内存与显存分别展示", () => {
     } } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
     const cards = container.querySelectorAll(".key-metric-card");
-    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("6.00 GiB");
-    expect(cards[5].querySelector(".key-metric-value")?.textContent).toBe("4.00 GiB");
-    expect(cards[5].textContent).toContain("不相加");
+    expect(cards[3].querySelector(".key-metric-value")?.textContent).toBe("6.00 GiB");
+    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("4.00 GiB");
+    expect(cards[4].textContent).toContain("不相加");
   });
 
   it("实时页面采用完整采样统计，不从截短曲线重算峰值", () => {
@@ -132,8 +132,8 @@ describe("主模型内存与显存分别展示", () => {
     } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
     const cards = container.querySelectorAll(".key-metric-card");
-    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("1.00 GiB");
-    expect(cards[5].querySelector(".key-metric-value")?.textContent).toBe("8.00 GiB");
+    expect(cards[3].querySelector(".key-metric-value")?.textContent).toBe("1.00 GiB");
+    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("8.00 GiB");
   });
 
   it("旧NVML记录只有显存时不复制成内存，两项均不把缺失改为零", () => {
@@ -142,7 +142,7 @@ describe("主模型内存与显存分别展示", () => {
     } } } as Run;
     const { container } = render(<KeyMetrics run={run} />);
     const cards = container.querySelectorAll(".key-metric-card");
-    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("未记录");
-    expect(cards[5].querySelector(".key-metric-value")?.textContent).toBe("3.00 GiB");
+    expect(cards[3].querySelector(".key-metric-value")?.textContent).toBe("未运行采集");
+    expect(cards[4].querySelector(".key-metric-value")?.textContent).toBe("3.00 GiB");
   });
 });

@@ -54,9 +54,9 @@ describe('独立评分标准', () => {
     expect(metadata.checked).toBe(false);
     expect(screen.getByText(/元数据取自GT媒体的产品库记录/)).toBeTruthy();
   });
-  it('未执行标准固定显示未采集，部分评分只展示均值和覆盖率', () => {
+  it('未执行标准固定显示未运行采集，部分评分只展示均值和覆盖率', () => {
     render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'incomplete',scored:1,total:2,coverage:.5,scored_mean:1,normalized_mean:.5,total_score:null,diagnostic_pending:1}}}}} />);
-    expect(screen.getByText('未采集')).toBeTruthy();
+    expect(screen.getByText('未运行采集')).toBeTruthy();
     expect(screen.getByText('未完成')).toBeTruthy();
     expect(screen.getByText('已评分回答质量均分')).toBeTruthy();
     expect(screen.getByText('1.00 / 2.00 分')).toBeTruthy();
@@ -64,9 +64,9 @@ describe('独立评分标准', () => {
     expect(screen.getByText('覆盖率 1/2 · 50.0%')).toBeTruthy();
     expect(screen.getByText(/公共诊断待完成 1 项/)).toBeTruthy();
   });
-  it('完整合法0分显示0%，不显示未采集', () => {
+  it('完整合法0分显示0%，不显示未运行采集', () => {
     render(<ScoringResults summary={{scoring:{profiles:Object.fromEntries([OPEN_PROFILE,ATM_PROFILE].map(p=>[p,{status:'completed',scored:2,total:2,coverage:1,scored_mean:0,normalized_mean:0,total_score:0}]))}}} />);
-    expect(screen.queryByText('未采集')).toBeNull();
+    expect(screen.queryByText('未运行采集')).toBeNull();
     expect(screen.getByText('0.00 / 2.00 分')).toBeTruthy();
     expect(screen.getByText('0.0%')).toBeTruthy();
     expect(screen.getByText('回答质量均分')).toBeTruthy();

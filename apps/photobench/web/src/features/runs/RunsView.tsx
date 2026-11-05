@@ -12,7 +12,6 @@
  * 所以这里返回 fragment，不加多余 DOM。
  */
 import { ResumeCard } from "./ResumeCard.tsx";
-import { PROFILE_LABELS } from '../../lib/scoring.ts';
 import type { RejudgeJudgeConfig } from "../../hooks/useRunDetail.ts";
 import type { UseRunsApi } from "../../hooks/useRuns.ts";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
@@ -67,18 +66,11 @@ export function RunsView({ runs, judgeModel, saveJudgePrompt, memory }: RunsView
         onChangeRunPage={runs.changeRunPage}
         regionRef={runs.runsRegionRef}
       />
-      {selectedRun && <div className="scoring-options" aria-label="结果评分口径">
-        <label>查看评分标准 <select aria-label="查看评分标准" value={runs.readProfile} onChange={e => {runs.setReadBatch('');runs.setReadProfile(e.target.value);}}>
-          <option value="">历史混合评分</option>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}
-        </select></label>
-        {runs.readProfile && <label>评分批次 <select aria-label="查看评分批次" value={runs.readBatch} onChange={e => runs.setReadBatch(e.target.value)}>
-          <option value="">最新批次</option>{runs.scoringBatches.filter(b => b.profile_id === runs.readProfile).map(b => <option key={b.batch_id} value={b.batch_id}>{b.created_at} · {b.batch_id}</option>)}
-        </select></label>}
-        <p className="small muted">逐题同时显示已采集的两套评分。此处选择用于分数筛选、导出和分析的标准与批次；另一套显示最新批次。</p>
-      </div>}
       <RunDetail
         key={runs.activeRunId || "empty"}
         activeRun={runs.activeRun}
+        readProfile={runs.readProfile}
+        onReadProfileChange={value => {runs.setReadProfile(value); runs.setReadBatch('');}}
         recovery={<ResumeCard
           key={`resume-${selectedRun?.run_id || "loading"}`}
           plan={recoveryPlan}

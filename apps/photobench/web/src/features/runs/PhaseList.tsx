@@ -76,7 +76,7 @@ export function PhaseList({ activeRun }: PhaseListProps) {
   </>;
 }
 
-function InitialExecutionPhases({ activeRun }: PhaseListProps) {
+export function InitialExecutionPhases({ activeRun }: PhaseListProps) {
   const qa = qaProgress(activeRun);
   const [now, setNow] = useState(() => Date.now());
   const terminal = ["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status ?? "");

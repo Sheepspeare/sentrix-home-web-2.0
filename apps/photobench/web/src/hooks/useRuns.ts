@@ -111,7 +111,7 @@ export function useRuns(options: UseRunsOptions = {}) {
   const loadRuns = useCallback(async (page?: number) => {
     const target = Math.max(1, Number(page ?? runPageRef.current.page) || 1);
     const payload = await api<RunPage>(
-      `/runs?page=${target}&page_size=${runPageRef.current.page_size}`,
+      `/runs?page=${target}&page_size=${runPageRef.current.page_size}&group_tasks=true`,
       { timeoutMs: 8000, retries: 2 },
     );
     // 列表索引可能仍是补评开始时的快照；同一任务使用详情已读取的实时评分。
@@ -149,7 +149,7 @@ export function useRuns(options: UseRunsOptions = {}) {
       liveScoringRef.current = {runId, rejudge: snapshot.rejudge, scoring: summary.scoring};
     }
     const next = runsRef.current.map((run) =>
-      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count, rejudge: snapshot.rejudge } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
+      run.run_id === runId ? { ...run, ...(snapshot ? { status: snapshot.status, phases: snapshot.phases, qa_count: snapshot.qa_count, item_count: snapshot.item_count, rejudge: snapshot.rejudge, execution_versions:snapshot.execution_versions, task_run_ids:snapshot.task_run_ids } : {}), summary: { ...(run.summary || {}), ...summary } } : run,
     );
     runsRef.current = next;
     setRuns(next);

@@ -36,6 +36,7 @@ from photobench.domain.evaluation.contract import evaluation_summary
 from photobench.domain.evaluation.profiles import media_ranking_summary, scoring_summary
 from photobench.domain.runs.graph_quality import aggregate_graph_qa_by_type
 from photobench.domain.runs.judge import normalize_judge_score, parse_judge_json
+from photobench.domain.runs.task_history import execution_metadata
 from photobench.domain.runtime.metrics import (
     RESOURCE_FIELDS,
     RESOURCE_TELEMETRY_VERSION,
@@ -1912,6 +1913,7 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
         )
         if state.get(key) is not None
     }
+    result.update(execution_metadata(state))
     result["item_count"] = len(state.get("items") or [])
     result["summary"] = {key: summary.get(key) for key in summary_keys if summary.get(key) is not None}
     result["summary"]["run_valid"] = summary.get("run_valid")

@@ -84,7 +84,7 @@ describe("loadRuns / changeRunPage（1.0 :2233 / :2249）", () => {
       await result.current.loadRuns(3);
     });
 
-    expect(apiMock).toHaveBeenCalledWith("/runs?page=3&page_size=20", {
+    expect(apiMock).toHaveBeenCalledWith("/runs?page=3&page_size=20&group_tasks=true", {
       timeoutMs: 8000,
       retries: 2,
     });

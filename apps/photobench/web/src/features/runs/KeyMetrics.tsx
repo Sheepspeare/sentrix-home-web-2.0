@@ -14,6 +14,7 @@
  *
  * 1.0 该区块排在 `PhaseList`（Pipeline 执行阶段）之后、记忆面板之前，由 `RunDetail` 摆放。
  */
+import { EvaluationSummary } from "../../components/EvaluationResult.tsx";
 import { ScoringResults } from "../../components/ScoringResults.tsx";
 import type { Run } from "../../api/types.ts";
 import { effectiveRunSummary } from "../../lib/runSummary.ts";
@@ -29,14 +30,15 @@ export function KeyMetrics({ run }: KeyMetricsProps) {
   return (
     <>
       <ScoringResults summary={summary} />
+      {summary?.legacy_scoring_label && <details className="historical-score"><summary>历史评分记录</summary><EvaluationSummary value={summary.evaluation_summary} /></details>}
       <h3 className="result-heading">运行与公共诊断指标</h3>
       <div className="phase-list key-metric-list">
-        {keyMetricRows(run, summary).map((row) => (
+        {keyMetricRows(run, summary).slice(1).map((row) => (
           <article className="phase-card key-metric-card" key={row.label}>
             <div className="phase-title">
               <b>{row.label}</b>
             </div>
-            <p className="key-metric-value">{row.value}</p>
+            <p className="key-metric-value">{["-", "—", "未记录", "未计算", "未采集"].includes(row.value) ? "未运行采集" : row.value}</p>
             <p className="metric-calc-time">{row.note}</p>
           </article>
         ))}

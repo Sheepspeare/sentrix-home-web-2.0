@@ -85,15 +85,16 @@ function renderDetail(
 }
 
 describe("fatal_error 横幅（1.0 :3058）", () => {
-  it("有 fatal_error 时渲染终止原因与失败阶段中文名", () => {
+  it("终止原因只出现在所选执行日志内", () => {
     renderDetail(
       run({ status: "failed", fatal_error: "磁盘写满", failed_phase: "pipeline_processing" }),
     );
 
-    expect(screen.getByText("任务终止原因")).not.toBeNull();
+    expect(screen.queryByText("任务终止原因")).toBeNull();
+    fireEvent.click(screen.getByText("查看本轮日志"));
     expect(screen.getByText("磁盘写满")).not.toBeNull();
     // 阶段标签里也有「流水线处理」，锚定横幅那句而不是阶段卡。
-    expect(screen.getByText(/^失败阶段：流水线处理$/)).not.toBeNull();
+    expect(screen.getByText("磁盘写满").closest("details")?.className).toBe("execution-log");
   });
 
   it("无 fatal_error 时没有横幅", () => {
@@ -114,6 +115,7 @@ describe("导出轨迹控制（1.0 :3046-3054）", () => {
     for (const [initial, index, expected] of combos) {
       cleanup();
       const { onExportScoresChange } = renderDetail(run(), initial);
+      fireEvent.click(screen.getByText("导出轨迹", {selector:"summary"}));
       const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
       fireEvent.click(boxes[index]!);
       const next = onExportScoresChange.mock.calls[0]?.[0] as string[];
@@ -124,6 +126,7 @@ describe("导出轨迹控制（1.0 :3046-3054）", () => {
   it("「导出轨迹 JSON」与「导出 SFT JSON」并排，各自只调自己的回调", () => {
     const { onExportTraces, onExportSftTraces } = renderDetail(run());
 
+    fireEvent.click(screen.getByText("导出轨迹", {selector:"summary"}));
     fireEvent.click(screen.getByRole("button", { name: "导出轨迹 JSON" }));
     expect(onExportTraces).toHaveBeenCalledTimes(1);
     expect(onExportSftTraces).not.toHaveBeenCalled();

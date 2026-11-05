@@ -82,12 +82,9 @@ export interface UseQaPageOptions {
   /** 1.0 `activeRejudge`（`:354`，取自 `activeRun.value?.rejudge`），`visibleQaItems` 用它。 */
   activeRejudge?: RejudgeTask | null;
   scoringQuery?: string;
-  scoringProfiles?: string[];
 }
 
-export function useQaPage({ activeRunId, activeRejudge = null, scoringQuery = '', scoringProfiles = [] }: UseQaPageOptions) {
-  const profilesRef = useRef(scoringProfiles);
-  profilesRef.current = scoringProfiles;
+export function useQaPage({ activeRunId, activeRejudge = null, scoringQuery = '' }: UseQaPageOptions) {
   const queryRef = useRef(scoringQuery);
   queryRef.current = scoringQuery;
   const queryEpoch = useRef(0);
@@ -142,7 +139,7 @@ export function useQaPage({ activeRunId, activeRejudge = null, scoringQuery = ''
     try {
       const payload = await api<ItemDetailResponse>(`/runs/${encodeURIComponent(runId)}/items/${index}${queryRef.current ? '?' + queryRef.current : ''}`);
       if (aliveRef.current && activeRunIdRef.current === runId && epoch === queryEpoch.current) {
-        setQaDetails((prev) => ({ ...prev, [index]: {...payload.item, profile_scores:qaPageRef.current.items.find(item => item.index === index)?.profile_scores} }));
+        setQaDetails((prev) => ({ ...prev, [index]: {...payload.item, profile_scores:payload.item.profile_scores} }));
       }
     } finally {
       if (epoch === queryEpoch.current) setLoadingQaItems((prev) => {
@@ -177,28 +174,6 @@ export function useQaPage({ activeRunId, activeRejudge = null, scoringQuery = ''
       if (value) params.set(key, value);
     }
     const payload = await api<ItemPage>(`/runs/${encodeURIComponent(runId)}/items?${params}`);
-    const selectedProfile = params.get('scoring_profile');
-    const profiles = profilesRef.current;
-    if (profiles.length && payload.items.length) {
-      const views = await Promise.all(profiles.map(async profile => {
-        if (profile === selectedProfile) return [profile, payload.items] as const;
-        const profileParams = new URLSearchParams(params);
-        profileParams.set('scoring_profile', profile);
-        profileParams.delete('scoring_batch');
-        profileParams.delete('score');
-        const other = await api<ItemPage>('/runs/' + encodeURIComponent(runId) + '/items?' + profileParams);
-        const byIndex = new Map(other.items.map(item => [item.index, item]));
-        const rows = await Promise.all(payload.items.map(async item => {
-          const found = byIndex.get(item.index);
-          if (found) return found;
-          const detail = await api<ItemDetailResponse>('/runs/' + encodeURIComponent(runId) + '/items/' + item.index + '?' + profileParams);
-          return {...detail.item, index:item.index};
-        }));
-        return [profile, rows] as const;
-      }));
-      payload.items = payload.items.map(item => ({...item, profile_scores:Object.fromEntries(views.map(([profile, rows]) =>
-        [profile, rows.find(row => row.index === item.index)?.judge || {}]))}));
-    }
     if (!aliveRef.current || activeRunIdRef.current !== runId || epoch !== queryEpoch.current) return;
     setQaPage(payload);
 

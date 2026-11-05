@@ -190,7 +190,7 @@ describe("init() 的自动选中（1.0 :2758 / :2761-2765）", () => {
     render(<App/>);
     await waitFor(()=>expect(mockApi.mock.calls.some(([path])=>path==='/runs/scoringRun?include_history=true')).toBe(true));
     await waitFor(()=>expect(screen.getByTestId('runs-view').textContent).toContain('补评运行中'));
-    await waitFor(()=>expect(screen.getByTestId('runs-view').textContent).toContain('独立评分任务'));
+    await waitFor(()=>expect(screen.getByTestId('runs-view').textContent).toContain('最近评分'));
     await waitFor(()=>expect(screen.getByTestId('runs-view').textContent).toContain('25/1104'));
     expect(mockApi.mock.calls.filter(([path])=>String(path).startsWith('/runs?')).length).toBeGreaterThan(1);
   });

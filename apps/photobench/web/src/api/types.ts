@@ -294,7 +294,23 @@ export interface RejudgeTask {
 }
 
 /** 一条 run。字段来自 `/api/v1/runs` 实测响应（2026-10-06，8771）。 */
+export interface ExecutionVersion extends RejudgeTask {
+  execution_id: string;
+  run_id: string;
+  kind: string;
+  source_run_id?: string;
+  inherited_count?: number;
+  answer_count?: number;
+  qa_count?: number;
+  turn_count?: number;
+  build_revision?: string;
+  batch_ids?: string[];
+}
+
 export interface Run {
+  task_id?: string;
+  task_run_ids?: string[];
+  execution_versions?: ExecutionVersion[];
   read_revision?: string | null;
   history_mode?: "full" | "checkpoint" | null;
   persistence?: { status?: string; error?: string } | null;

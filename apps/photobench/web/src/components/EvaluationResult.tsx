@@ -41,7 +41,7 @@ export function ChoiceMatchingResult({value, definition, standalone = false}: {v
   const verdict = matched == null ? "尚无匹配结论" : matched === "other" ? "给定选项均不匹配" : !d.correct_option ? "正确项未记录" : matched === d.correct_option ? "匹配正确" : "匹配错误";
   return <section aria-label="选项语义匹配" className={standalone ? "evaluation-panel" : ""}>
     {standalone && <><h4>ATM-Bench式QS · 选项语义匹配</h4><p className="muted small">答题模型回答原问题，Judge 将回答与选项逐项比较；这里展示 Judge 的匹配结果。</p></>}
-    <p className="evaluation-score">{verdict}{standalone && <> · QS {r.score == null ? "未评分" : String(r.score) + "/1 分"}</>}</p>
+    <p className="evaluation-score">{verdict}{standalone && <> · QS {r.score == null ? (r.judge_status === "not_collected" ? "未运行采集" : "未评分") : String(r.score) + "/1 分"}</>}</p>
     <div className="evaluation-choice-definition">
       <p className="muted small">{r.matched_option != null ? <>Judge匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</> : <>尚无匹配结论 · 正确项 {String(d.correct_option || "未记录")}</>}</p>
       <ul className="evaluation-options">{choiceOptions.map(o => {
@@ -69,7 +69,7 @@ export function EvaluationResult({value, definition, showChoiceMatching = true}:
   return <section aria-label="题型评分" className="evaluation-panel">
     <h4>{evaluationTypeLabel({...d, ...r}) || String(r.scorer)}</h4>
     <p className="muted small">{scoringExplanation({...d, ...r})}</p>
-    <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
+    <p className="evaluation-score">主分 {r.score == null ? (r.judge_status === "not_collected" ? "未运行采集" : "未评分") : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : r.score == null ? "未完成" : "已评分"}</p>
     <p>{evaluationReason(r.reason)}</p>
     {showChoiceMatching && (["choice", "choice_judge"].includes(String(r.scorer)) || r.matched_option != null || Array.isArray(r.comparisons)) && <ChoiceMatchingResult value={r} definition={d} />}
     {Object.keys(metrics).length > 0 && <div className="evaluation-table-wrap"><table><thead><tr><th>集合</th><th>Recall</th><th>Jaccard</th><th>Precision</th><th>F1</th></tr></thead><tbody>{["delivery", "tools"].map(k => {const m = obj(metrics[k]); return <tr key={k}><td>{k === "delivery" ? "模型交付" : "工具累计召回"}</td>{["recall", "jaccard", "precision", "f1"].map(v => <td key={v}>{pct(m[v])}</td>)}</tr>;})}</tbody></table></div>}

@@ -28,10 +28,16 @@ from urllib.parse import quote
 from photobench.application.runs.index import RunIndex
 from photobench.domain.datasets.ports import QaMetadataSource
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
-from photobench.domain.evaluation.profile_view import choice_matching_result, item_scores, profile_state
+from photobench.domain.evaluation.profile_view import (
+    choice_matching_result,
+    item_profile_results,
+    item_scores,
+    profile_state,
+)
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunReadViews, RunRevisions, RunStore
 from photobench.domain.runs import analysis
+from photobench.domain.runs.task_history import execution_metadata, task_families
 
 #: 详情/题目两条路径会各解析一次同一个 run.json。最大的一个 447 MB、解析 2.03 s，
 #: 前端翻页会把同一份反复解析成几十次。1.0 靠「全部常驻内存」绕过这件事（代价是
@@ -226,7 +232,7 @@ class ReadRuns:
 
     # -- 用例 ---------------------------------------------------------------
 
-    def list_runs(self, page: int = 1, page_size: int = 20) -> dict[str, Any]:
+    def list_runs(self, page: int = 1, page_size: int = 20, *, group_tasks: bool = False) -> dict[str, Any]:
         """``GET /api/runs``（1.0 ``:7648`` 的分支 + ``list_runs`` ``:5343``）。
 
         **还在跑的 run 要叠上去。** 索引里没有它们——写侧只在 run 结束时 ``upsert``，
@@ -248,6 +254,8 @@ class ReadRuns:
                 if run_id not in known
             ] + rows
             rows.sort(key=_run_sort_key, reverse=True)
+        if group_tasks:
+            rows = task_families(rows)
         response = analysis.paginate_rows(rows, page, page_size)
         response["active_count"] = sum(
             1
@@ -284,6 +292,23 @@ class ReadRuns:
                 result["summary"]["scoring"] = selected["summary"]["scoring"]
                 result["selected_scoring_profile"] = scoring_profile
                 result["selected_scoring_batch"] = selected["selected_scoring_batch"]
+            entries = sorted(self._index.entries(), key=_run_sort_key, reverse=True)
+            fresh = {
+                **(self._index.entry(run_id) or {}),
+                **execution_metadata(result),
+                **{
+                    k: result[k]
+                    for k in ("run_id", "started_at", "status", "item_count", "qa_count", "build_revision")
+                    if k in result
+                },
+            }
+            entries = [e for e in entries if e.get("run_id") != run_id]
+            entries.append(fresh)
+            entries.sort(key=_run_sort_key, reverse=True)
+            family = next((f for f in task_families(entries) if run_id in f["task_run_ids"]), {})
+            for field in ("task_id", "task_run_ids", "execution_versions"):
+                if field in family:
+                    result[field] = family[field]
             entry = self._index.entry(run_id) or {}
             persistence = entry.get("persistence") or {}
             if persistence.get("status") in {"failed", "stop_pending"}:
@@ -506,6 +531,8 @@ class ReadRuns:
                     strict=False,
                 )
             ]
+            for item in summaries:
+                item["profile_scores"] = item_profile_results(cached, str(item.get("qa_id")))
             return {
                 "items": summaries,
                 "page": page,
@@ -546,6 +573,7 @@ class ReadRuns:
                 item["scope_source"] = "saved_run_scope_v1"
             item["review"] = (self.get_reviews(run_id).get("reviews") or {}).get(str(item.get("qa_id")))
             item["scoring_results"] = item_scores(cached, str(item.get("qa_id")))
+            item["profile_scores"] = item_profile_results(cached, str(item.get("qa_id")))
             item["choice_matching_result"] = choice_matching_result(cached, str(item.get("qa_id")))
             item["diagnostic_results"] = [
                 v

@@ -1,5 +1,5 @@
 import { scoreChoices } from "../analysis/presentation.ts";
-import { EvaluationSummary } from "../../components/EvaluationResult.tsx";
+import { OPEN_PROFILE, PROFILE_LABELS } from "../../lib/scoring.ts";
 /**
  * 运行详情外壳。逐行照搬 1.0
  * `services/photobench/frontend/src/App.vue:3039-3058`（只读权威）：标题 / 状态 /
@@ -28,13 +28,12 @@ import { EvaluationSummary } from "../../components/EvaluationResult.tsx";
 import type { ReactNode } from "react";
 
 import type { GraphQuality, Run } from "../../api/types.ts";
-import { EXECUTION_PHASES } from "../../lib/constants.ts";
 import { albumName, duration, fmtDate, modelName, qaName } from "../../lib/format.ts";
 import { MemoryLayerPanel } from "../memory/MemoryLayerPanel.tsx";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
 import { ErrorAnalysisPanel } from "../analysis/ErrorAnalysisPanel.tsx";
 import { KeyMetrics } from "./KeyMetrics.tsx";
-import { PhaseList } from "./PhaseList.tsx";
+import { ExecutionHistory } from "./ExecutionHistory.tsx";
 import { RunTaskStatus } from "./RunTaskStatus.tsx";
 import { RejudgeCard } from "./RejudgeCard.tsx";
 import type { RejudgeCardProps } from "./RejudgeCard.tsx";
@@ -79,6 +78,8 @@ function toggleScore(current: string[], value: string, checked: boolean): string
 }
 
 export interface RunDetailProps {
+  readProfile?: string;
+  onReadProfileChange?: (value:string) => void;
   recovery?: ReactNode;
   activeRun: Run | null;
   exportScores: string[];
@@ -92,7 +93,7 @@ export interface RunDetailProps {
 }
 
 export function RunDetail({
-  activeRun, recovery,
+  activeRun, recovery, readProfile = OPEN_PROFILE, onReadProfileChange,
   exportScores,
   onExportScoresChange,
   onExportTraces,
@@ -113,10 +114,11 @@ export function RunDetail({
             </h2>
             <div className="detail-head-tools">
               <RunTaskStatus run={activeRun} />
-              <div className="export-control">
+              <details className="export-control"><summary>导出轨迹</summary><div className="export-control-body">
+                <label>筛分标准 <select aria-label="导出筛分标准" value={readProfile} onChange={e => onReadProfileChange?.(e.target.value)}>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}<option value="">历史评分</option></select></label>
                 <span className="field-label">导出轨迹</span>
                 <span className="export-score-filter">
-                  {scoreChoices({evaluation_summary: activeRun.summary?.evaluation_summary}).filter(s => s.value !== "None").slice().reverse().map(({value, label}) => (
+                  {scoreChoices({evaluation_summary: readProfile ? {scorer:readProfile === OPEN_PROFILE ? "answer_quality" : "choice", max_score:readProfile === OPEN_PROFILE ? 2 : 1} : activeRun.summary?.evaluation_summary}).filter(s => s.value !== "None").slice().reverse().map(({value, label}) => (
                     <label className="checkbox-inline" key={value}>
                       <input
                         type="checkbox"
@@ -134,28 +136,13 @@ export function RunDetail({
                 <button className="btn compact" onClick={onExportSftTraces}>
                   导出 SFT JSON
                 </button>
-              </div>
+              </div></details>
             </div>
           </div>
-          <EvaluationSummary value={(activeRun.summary as Record<string, unknown> | undefined)?.evaluation_summary} />
           <p className="run-meta">
-            开始 {fmtDate(activeRun.started_at)} · 总耗时 {duration(activeRun)}
-            {runScopeMeta(activeRun)}
-            {"judge_use_gt_images" in activeRun ? ` · 评分设置：${activeRun.judge_use_gt_images ? "GT 图片辅助" : "文字 GT"}` : ""}
+            最近答题开始 {fmtDate(activeRun.started_at)} · 本次执行耗时 {duration(activeRun)}
           </p>
-          {activeRun.fatal_error ? (
-            <div className="run-error-banner">
-              <b>任务终止原因</b>
-              <span>{String(activeRun.fatal_error)}</span>
-              {activeRun.failed_phase ? (
-                <small>
-                  失败阶段：
-                  {EXECUTION_PHASES.find((item) => item.key === String(activeRun.failed_phase))?.label ||
-                    String(activeRun.failed_phase)}
-                </small>
-              ) : null}
-            </div>
-          ) : null}
+          <details className="run-scope-source"><summary>相册来源</summary><p className="run-meta">{runScopeMeta(activeRun)}</p></details>
           {activeRun.mode !== "build" ? <details className="recovery-panel" aria-label="续跑与评分" key="recovery-actions">
             <summary className="recovery-panel-head"><h3>续跑与评分</h3><span>展开后可继续答题或为已有回答评分</span></summary>
             <div className="recovery-grid">
@@ -163,9 +150,9 @@ export function RunDetail({
               <RejudgeCard {...rejudge} embedded />
             </div>
           </details> : null}
-          <PhaseList activeRun={activeRun} />
           <KeyMetrics run={activeRun} />
-          <ErrorAnalysisPanel key={[activeRun.run_id,activeRun.selected_scoring_profile,activeRun.selected_scoring_batch].join(":")} scoringProfile={String(activeRun.selected_scoring_profile || "")} scoringBatch={String(activeRun.selected_scoring_batch || "")} runId={activeRun.run_id} terminal={["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status || "")} />
+          <ExecutionHistory run={activeRun} />
+          <ErrorAnalysisPanel key={[activeRun.run_id,activeRun.selected_scoring_profile,activeRun.selected_scoring_batch].join(":")} scoringProfile={OPEN_PROFILE} scoringBatch={String(activeRun.selected_scoring_batch || "")} runId={activeRun.run_id} terminal={["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status || "")} />
           {memory ? <MemoryLayerPanel key={`memory-${activeRun.run_id}`} {...memory} /> : null}
           <GraphQualityPanel quality={graphQuality ?? null} />
           <h3 className="result-heading">结果指标</h3>

@@ -55,16 +55,15 @@ describe("状态列（1.0 :3023-3025）", () => {
   it('原测评结束后仍显示补评运行状态和独立评分项目数量', () => {
     renderTable([run({status:'completed_with_errors',qa_count:487,summary:{completed:487,judge_valid_count:487},phases:{qa_eval:{progress:{completed:487,total:487}}},rejudge:{status:'running',completed:25,total:1104}})]);
     expect(screen.getByText('补评运行中')).toBeTruthy();
-    expect(screen.getByText('独立评分任务')).toBeTruthy();
-    expect(screen.getByText('25/1104').parentElement?.textContent).toBe('补评 25/1104 项');
+    expect(screen.getByText('最近评分 · 25/1104 项')).toBeTruthy();
+    expect(screen.getAllByRole('row')).toHaveLength(2);
     expect(screen.getAllByText('487/487')).toHaveLength(2);
   });
-  it('本轮补评成功和原测评错误分别显示在独立记录行', () => {
+  it('本轮补评成功在同一行展示，旧错误留在日志版本', () => {
     renderTable([run({status:'completed_with_errors',rejudge:{rejudge_id:'new',status:'completed',completed:10,total:10,failed:0}})]);
     expect(screen.getByText('补评完成')).toBeTruthy();
-    const taskRow=screen.getByRole('row',{name:'补评任务 new'});
-    expect(taskRow.textContent).not.toContain('完成但有错误');
-    expect(screen.getByText('完成但有错误').closest('tr')).not.toBe(taskRow);
+    expect(screen.queryByText('完成但有错误')).toBeNull();
+    expect(screen.getAllByRole('row')).toHaveLength(2);
   });
   it("按完成有效评分的样本数计算，不使用Agent完成数或Judge尝试结束数", () => {
     renderTable([run({ qa_count: 487, summary: { completed: 69, judge_valid_count: 68 }, phases: { qa_eval: {
@@ -72,7 +71,7 @@ describe("状态列（1.0 :3023-3025）", () => {
       progress: { judge_completed: 72, judge_total: 486, completed: 69, total: 487 },
     } } })]);
     const label = screen.getByText("68/487");
-    expect(screen.getByRole("columnheader", { name: "进度" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "累计题数" })).toBeTruthy();
     expect(label.hasAttribute("title")).toBe(false);
     expect(label.parentElement?.hasAttribute("title")).toBe(false);
     expect(screen.queryByRole("progressbar")).toBeNull();
@@ -195,12 +194,13 @@ it("评分缺失以完成但有错误显示，保留实际评分数", () => {
   expect(screen.queryByRole("progressbar")).toBeNull();
 });
 
-it("历史混合评分保留原显示口径，旧开放式分明确满分2", () => {
+it("旧混合评分不混进两套标准，未运行标准明确标记", () => {
   renderTable([run({summary: {answer_quality_mean: 0.533, evaluation_summary: {count: 10, mean: 0.2666666667}}}),
     run({run_id: "old", summary: {answer_quality_mean: 1.5}})]);
   expect(screen.getByRole("columnheader", {name: "答案得分"})).toBeTruthy();
-  expect(screen.getByText("26.7%")).toBeTruthy();
-  expect(screen.getByText("1.5 / 2")).toBeTruthy();
+  expect(screen.queryByText("26.7%")).toBeNull();
+  expect(screen.queryByText("1.5 / 2")).toBeNull();
+  expect(screen.getAllByText("未运行采集")).toHaveLength(6);
   expect(screen.queryByText("0.533")).toBeNull();
 });
 

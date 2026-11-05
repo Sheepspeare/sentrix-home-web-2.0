@@ -1,3 +1,4 @@
+import { PROFILE_LABELS } from "../../lib/scoring.ts";
 import { useEffect, useRef, useState } from "react";
 import { api, BASE, post } from "../../api/client.ts";
 import type {
@@ -288,12 +289,13 @@ function HtmlExport({ job }: { job: AnalysisJob<unknown> }) {
 export function ErrorAnalysisPanel({
   runId,
   terminal,
-  scoringProfile = '', scoringBatch = '',
+  scoringProfile: initialProfile = '', scoringBatch = '',
 }: {
   runId: string;
   terminal: boolean;
   scoringProfile?:string; scoringBatch?:string;
 }) {
+  const [scoringProfile, setScoringProfile] = useState(initialProfile);
   const [open, setOpen] = useState(false),
     [job, setJob] = useState<AnalysisJob | null>(null),
     [error, setError] = useState("");
@@ -527,6 +529,7 @@ export function ErrorAnalysisPanel({
       {open && (
         <>
           <div className="analysis-toolbar">
+            <label>分析标准 <select aria-label="错误分析评分标准" value={scoringProfile} onChange={e => {setScoringProfile(e.target.value);setJob(null);setData(null);setError('');setPage(1);}}>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}<option value="">历史评分</option></select></label>
             <b>{status[job?.status || ""] || "读取分析状态…"}</b>
             {activeAnalysis(job) && <span>已处理 {job?.processed} 题</span>}
             <button
@@ -640,6 +643,7 @@ export function ErrorAnalysisPanel({
                   ))
                 )}
                 <div className="analysis-toolbar">
+            <label>分析标准 <select aria-label="错误分析评分标准" value={scoringProfile} onChange={e => {setScoringProfile(e.target.value);setJob(null);setData(null);setError('');setPage(1);}}>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}<option value="">历史评分</option></select></label>
                   <button
                     className="btn compact"
                     disabled={casesLoading || page <= 1}

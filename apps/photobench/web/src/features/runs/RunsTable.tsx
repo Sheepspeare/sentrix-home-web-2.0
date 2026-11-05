@@ -10,19 +10,13 @@
  */
 import { qaProgress } from "../../lib/qaProgress.ts";
 import { OPEN_PROFILE, PROFILE_LABELS } from '../../lib/scoring.ts';
-import { Fragment, type RefObject } from "react";
+import { type RefObject } from "react";
 
 import type { Run } from "../../api/types.ts";
 import type { RunPageState } from "../../hooks/useRuns.ts";
-import { albumName, duration, fmtDate, fmtPct, modelName, statusLabel } from "../../lib/format.ts";
+import { albumName, duration, fmtDate, fmtPct, modelName } from "../../lib/format.ts";
 import { modeBadgeClass, modeLabel } from "../../lib/qaBrowser.ts";
 import { RunTaskStatus } from "./RunTaskStatus.tsx";
-
-function answerScore(run: Run): string {
-  const evaluation = run.summary?.evaluation_summary as Record<string, unknown> | undefined;
-  if (Number(evaluation?.count) > 0) return fmtPct(evaluation?.mean);
-  return run.summary?.answer_quality_mean == null ? "-" : `${run.summary.answer_quality_mean} / 2`;
-}
 
 function RunProgress({ run }: { run: Run }) {
   const progress = qaProgress(run);
@@ -91,10 +85,10 @@ export function RunsTable({
             <tr>
               <th>模型</th>
               <th>相册</th>
-              <th>开始时间</th>
-              <th>耗时</th>
+              <th>最近答题</th>
+              <th>本次耗时</th>
               <th>状态</th>
-              <th>进度</th>
+              <th>累计题数</th>
               <th>媒体召回率</th>
               <th>答案得分</th>
               <th></th>
@@ -102,28 +96,27 @@ export function RunsTable({
           </thead>
           <tbody>
             {runs.map((run) => (
-              <Fragment key={run.run_id}>
+
               <tr
-                className={"run-row" + (activeRunId === run.run_id ? " selected" : "")}
+                key={run.run_id}
+                className={"run-row" + (activeRunId === run.run_id || run.task_run_ids?.includes(activeRunId || "") ? " selected" : "")}
                 onClick={() => onSelectRun(run)}
               >
                 <td>
                   <b>{modelName(run)}</b>
                   <span className={"mode-badge " + modeBadgeClass(run.mode)}>{modeLabel(run.mode)}</span>
-                  {run.rejudge && <small className="muted">首次测评</small>}
+                  {run.execution_versions && <small className="muted">{run.execution_versions.length} 次执行</small>}
                 </td>
                 <td className="muted small">{albumName(run)}</td>
                 <td className="muted small">{fmtDate(run.started_at)}</td>
                 <td className="muted small">{duration(run)}</td>
                 <td>
-                  <span className={`phase-status ${run.status || ""}`}>{statusLabel(run.status)}</span>
+                  <RunTaskStatus run={run} />
                 </td>
                 <td><RunProgress run={run} /></td>
                 <td>
-                  {fmtPct(
-                    run.summary?.media_retrieval_recall_macro ??
-                      run.summary?.retrieval_recall_macro ??
-                      run.summary?.retrieval_recall_mean,
+                  {run.summary?.media_retrieval_recall_macro == null && run.summary?.retrieval_recall_macro == null && run.summary?.retrieval_recall_mean == null ? "未运行采集" : fmtPct(
+                    run.summary?.media_retrieval_recall_macro ?? run.summary?.retrieval_recall_macro ?? run.summary?.retrieval_recall_mean,
                   )}
                 </td>
                 <td className='run-scoring-cell'>
@@ -133,9 +126,9 @@ export function RunsTable({
                     const score=profile === OPEN_PROFILE
                       ? typeof result?.scored_mean === 'number' ? result.scored_mean.toFixed(2)+' / 2.00 分' : '—'
                       : fmtPct(result?.total_score ?? result?.normalized_mean);
-                    return <div className="run-score-line" key={profile}><span title={label}>{profile === OPEN_PROFILE ? '开放式0/1/2' : label}</span><span>{!result || result.status==='not_collected' ? '未采集' : result.total_score == null ? '均值 '+score+'（未完成）' : score}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</span></div>;
+                    return <div className="run-score-line" key={profile}><span title={label}>{profile === OPEN_PROFILE ? '开放式0/1/2' : label}</span><span>{!result || result.status==='not_collected' ? '未运行采集' : result.total_score == null ? '均值 '+score+'（未完成）' : score}{result?.scored != null ? ' · '+result.scored+'/'+result.total : ''}</span></div>;
                   })}
-                  {(!(Array.isArray(run.scoring_profiles) && run.scoring_profiles.length) || Boolean(run.summary?.legacy_scoring_label)) && <div className="small muted">历史混合评分 <span>{answerScore(run)}</span></div>}
+
                 </td>
                 <td>
                   <button
@@ -149,18 +142,7 @@ export function RunsTable({
                   </button>
                 </td>
               </tr>
-              {run.rejudge && <tr className="run-row scoring-task-row" onClick={() => onSelectRun(run)}
-                aria-label={`补评任务 ${run.rejudge.rejudge_id || run.run_id}`}>
-                <td><b>补评任务</b><small className="muted">{modelName(run)}</small></td>
-                <td className="small muted">{albumName(run)}<small>关联测评：{run.run_id}</small></td>
-                <td className="small muted">{fmtDate(run.rejudge.started_at)}</td>
-                <td className="small muted">{run.rejudge.finished_at ? duration({run_id:run.run_id,started_at:run.rejudge.started_at,finished_at:run.rejudge.finished_at}) : '—'}</td>
-                <td><RunTaskStatus run={run} /></td>
-                <td><div className="run-scoring-progress">补评 <span>{run.rejudge.completed ?? 0}/{run.rejudge.total ?? '—'}</span> 项</div></td>
-                <td colSpan={2} className="small muted">本轮失败 {run.rejudge.failed ?? '未记录'} 项 · 逐项记录见任务日志</td>
-                <td><button className="btn compact" onClick={event => {event.stopPropagation(); onSelectRun(run);}}>查看日志</button></td>
-              </tr>}
-              </Fragment>
+
             ))}
           </tbody>
         </table>

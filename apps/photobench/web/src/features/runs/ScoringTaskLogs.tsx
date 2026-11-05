@@ -12,7 +12,7 @@ export function ScoringTaskLogs({ tasks }: { tasks: RejudgeTask[] }) {
       </summary>
       <p className="small muted">任务 ID：{task.rejudge_id || "未记录"}</p>
       <p>本轮评分 {task.completed ?? 0}/{task.total ?? "—"} 项 · 失败 {task.failed ?? "未记录"} 项</p>
-      <p className="small muted">复用已保存的回答；本轮状态和错误独立记录。评分结果见下方所选标准与批次。</p>
+      <p className="small muted">复用已保存的回答；本轮状态和错误独立记录。每题、每轮、每套标准各算一项，累计题数按题目去重。</p>
       {task.error ? <p className="error">{task.error}</p> : null}
       {!!task.error_details?.length && <details className="phase-errors">
         <summary>本轮 {task.error_details.length} 条错误记录</summary>

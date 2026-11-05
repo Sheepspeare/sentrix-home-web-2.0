@@ -170,19 +170,17 @@ export function useRunDetail(options: RunDetailOptions) {
   const [batchMode, setBatchMode] = useState<'auto' | 'resume' | 'new'>('auto');
   const [resumeBatches, setResumeBatches] = useState<Record<string,string>>({});
   const [batchNonce, setBatchNonce] = useState(newBatchNonce);
-  const [readProfile, setReadProfile] = useState('');
+  const [readProfile, setReadProfile] = useState('photobench_open_v1');
   const [readBatch, setReadBatch] = useState('');
   const initializedReadRun = useRef<string | null>(null);
   useEffect(() => {
     if (!activeRunId || activeRun?.run_id !== activeRunId || initializedReadRun.current === activeRunId) return;
     initializedReadRun.current = activeRunId;
     const batches = Array.isArray(activeRun.scoring_batches) ? activeRun.scoring_batches as Array<{profile_id:string}> : [];
-    setReadProfile(batches[0]?.profile_id || '');
+    setReadProfile(batches[0]?.profile_id || 'photobench_open_v1');
     setReadBatch('');
   }, [activeRunId, activeRun]);
   const readQuery = readProfile ? new URLSearchParams({scoring_profile:readProfile, scoring_batch:readBatch}).toString() : '';
-  const readQueryRef = useRef(readQuery);
-  readQueryRef.current = readQuery;
   const [scoringPreview, setScoringPreview] = useState<{qa_count:number;turn_count:number;subscore_count:number;profiles:Record<string,number>} | null>(null);
   const [scoringPreviewError, setScoringPreviewError] = useState("");
   const [rejudgeScope, setRejudgeScope] = useState<RejudgeScope>("missing");
@@ -310,7 +308,6 @@ export function useRunDetail(options: RunDetailOptions) {
     async ({ resetPage = false, includeHistory }: { resetPage?: boolean; includeHistory?: boolean } = {}) => {
       const runId = activeRunIdRef.current;
       if (!runId) return;
-      const query = readQueryRef.current;
       const pending = detailRequest.current;
       if (!includeHistory && !resetPage && pending?.runId === runId && !pending.controller.signal.aborted) return;
       pending?.controller.abort();
@@ -320,7 +317,7 @@ export function useRunDetail(options: RunDetailOptions) {
       detailRequest.current = { controller, runId };
       let payload: Run;
       try {
-        const read = (withHistory: boolean) => api<Run>(`/runs/${encodeURIComponent(runId)}?include_history=${withHistory}${query ? '&' + query : ''}`, {
+        const read = (withHistory: boolean) => api<Run>(`/runs/${encodeURIComponent(runId)}?include_history=${withHistory}`, {
           timeoutMs: 60000, signal: controller.signal,
         });
         payload = await read(full);
@@ -336,12 +333,12 @@ export function useRunDetail(options: RunDetailOptions) {
       } finally {
         if (detailRequest.current?.controller === controller) detailRequest.current = null;
       }
-      if (controller.signal.aborted || activeRunIdRef.current !== runId || query !== readQueryRef.current) return;
+      if (controller.signal.aborted || activeRunIdRef.current !== runId) return;
       historyRead.current = { runId, at: full ? Date.now() : known?.at ?? 0,
         lastTime: Number(payload.telemetry_live?.history?.at(-1)?.t ?? known?.lastTime ?? 0),
         terminal: full ? TERMINAL_STATUSES.has(payload.status || "") : known?.terminal ?? false };
       setActiveRun(previous => retainFullHistory(previous, payload));
-      if (!query) updateRunSummary?.(runId, effectiveRunSummary(payload), payload);
+      updateRunSummary?.(runId, effectiveRunSummary(payload), payload);
       if (resetPage) {
         analysisOpen.current = false;
         setKeyframeAnalysis(null);
@@ -386,15 +383,6 @@ export function useRunDetail(options: RunDetailOptions) {
     }
   }, [activeRunIdRef, loadKeyframeAnalysis, loadMemoryEffectiveness, loadGraphQuality]);
 
-  const loadedReadQuery = useRef(readQuery);
-  useEffect(() => {
-    if (loadedReadQuery.current === readQuery) return;
-    loadedReadQuery.current = readQuery;
-    if (activeRunIdRef.current) {
-      detailRequest.current?.controller.abort();
-      void loadActiveRun().catch(error => setError?.(String(error.message)));
-    }
-  }, [readQuery]);
 
   /**
    * 1.0 `:2333` 是「惰性建草稿」的副作用版本，React 里 render 不能写 state，

@@ -30,10 +30,13 @@ def _pagination(raw_page: str, raw_page_size: str) -> tuple[int, int]:
 
 
 @router.get("/runs")
-def list_runs(request: Request, page: str = "1", page_size: str = "20") -> dict[str, Any]:
+def list_runs(
+    request: Request, page: str = "1", page_size: str = "20", group_tasks: bool = False
+) -> dict[str, Any]:
     """1.0 ``:7648``。"""
     page_value, page_size_value = _pagination(page, page_size)
-    return get_container(request).runs.list_runs(page=page_value, page_size=page_size_value)
+    options = {"group_tasks": True} if group_tasks else {}
+    return get_container(request).runs.list_runs(page=page_value, page_size=page_size_value, **options)
 
 
 @router.get("/runs/{run_id}", response_model=RunMetricsResponse, response_model_exclude_unset=True)
