@@ -42,7 +42,7 @@ it("评分失败时仍显示完整选项和正确项", () => {
   render(<EvaluationResult value={{scorer: "choice_judge", answer_format: "choice", score: null, judge_status: "failed"}} definition={{correct_option: "A", options: [{id: "A", text: "紫纱幔和红床单"}, {id: "B", text: "其他布置"}]}} />);
   const correct = screen.getByText("紫纱幔和红床单").closest("li")!;
   expect(within(correct).getByText("正确项")).toBeTruthy();
-  expect(within(correct).getByText("未记录匹配结果")).toBeTruthy();
+  expect(within(correct).getByText("未记录逐项比较")).toBeTruthy();
   expect(screen.getByText("其他布置")).toBeTruthy();
   expect(screen.getByText(/选项仅供评测端使用/)).toBeTruthy();
 });
@@ -64,7 +64,7 @@ it("选项只显示一组，逐项合并正确项、匹配状态和理由", () =
 it("未记录的比较不冒充不匹配，已有选项仍完整展示", () => {
   render(<EvaluationResult definition={{options: [{id: "A", text: "日期甲"}, {id: "B", text: "日期乙"}]}} value={{scorer: "choice_judge", comparisons: [{option_id: "A", matches: false, reason: "日期不同"}]}} />);
   const row = screen.getByText("日期乙").closest("li")!;
-  expect(within(row).getByText("未记录匹配结果")).toBeTruthy();
+  expect(within(row).getByText("未记录逐项比较")).toBeTruthy();
   expect(within(row).queryByText("不匹配")).toBeNull();
 });
 
@@ -87,8 +87,17 @@ it("独立QS批次的choice评分显示其他及逐项比较，沿用定义说�
   expect(screen.getByText(/匹配：其他（给定选项之外） · 正确选项：B/)).toBeTruthy();
   expect(screen.getByText(/选项仅供评测端使用/)).toBeTruthy();
   expect(screen.getAllByText("不匹配")).toHaveLength(2);
-  expect(screen.queryByText("未记录匹配结果")).toBeNull();
+  expect(screen.queryByText("未记录逐项比较")).toBeNull();
   expect(screen.getByText("未提及甲")).toBeTruthy();
   expect(screen.getByText(/协议 scoring-v1 · 模型 judge-real/)).toBeTruthy();
   expect(screen.queryByText(/undefined|确定性评分/)).toBeNull();
+});
+
+
+it("开放式满分不推导出选项匹配，也不沿用选择题评分说明", () => {
+  render(<EvaluationResult value={{scorer: "answer_quality", score: 2, max_score: 2, normalized_score: 1}}
+    definition={{answer_format: "choice", correct_option: "A", options: [{id: "A", text: "正确选项"}]}} />);
+  expect(screen.getByText(/按 0 \/ 1 \/ 2 分评价回答质量/)).toBeTruthy();
+  expect(screen.queryByRole("list")).toBeNull();
+  expect(screen.queryByText(/未记录逐项比较/)).toBeNull();
 });

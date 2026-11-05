@@ -1,5 +1,5 @@
 import { OPEN_PROFILE, ATM_PROFILE } from '../../lib/scoring.ts';
-import { EvaluationResult, EvaluationTypeBadge, evaluationReason } from "../../components/EvaluationResult.tsx";
+import { ChoiceMatchingResult, EvaluationResult, EvaluationTypeBadge, evaluationReason } from "../../components/EvaluationResult.tsx";
 import { ItemScoringResults } from '../../components/ScoringResults.tsx';
 import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
 /**
@@ -218,7 +218,8 @@ function QaItemDetail({
           </span>
         ))}
       </div>
-      <EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} />
+      <EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} showChoiceMatching={!detail.choice_matching_result} />
+      {detail.choice_matching_result != null && <ChoiceMatchingResult value={detail.choice_matching_result} definition={detail.evaluation} standalone />}
       <ItemScoringResults results={detail.scoring_results} diagnostics={detail.diagnostic_results} />
       <section className="qa-layer-chain">
         <div className="qa-layer-chain-head">

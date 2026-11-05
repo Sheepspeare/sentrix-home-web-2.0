@@ -10,7 +10,7 @@ from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.profile_scoring import ProfileScoring, prepare_batches
 from photobench.application.runs.scoring import preview, run_scoring
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
-from photobench.domain.evaluation.profile_view import profile_state
+from photobench.domain.evaluation.profile_view import choice_matching_result, profile_state
 from photobench.domain.evaluation.profiles import (
     ATM,
     OPEN,
@@ -630,14 +630,26 @@ def test_question_rubric_is_preserved_in_both_standards_and_saved_requests(profi
 
 @pytest.mark.parametrize("matched", ["A", "other"])
 def test_choice_projection_retains_saved_comparisons_and_protocol(matched):
-    s = state("choice_judge", options=[{"id": "A", "text": "甲"}, {"id": "B", "text": "乙"}],
-              correct_option="A")
-    comparisons = [{"option_id": option, "matches": option == matched, "reason": option + "原始理由"}
-                   for option in ("A", "B")]
-    svc, batches, _, _ = setup(s, [ATM], [task(), {
-        "status": "other" if matched == "other" else "matched", "matched_option": matched,
-        "comparisons": comparisons, "reason": "原始结论",
-    }])
+    s = state(
+        "choice_judge", options=[{"id": "A", "text": "甲"}, {"id": "B", "text": "乙"}], correct_option="A"
+    )
+    comparisons = [
+        {"option_id": option, "matches": option == matched, "reason": option + "原始理由"}
+        for option in ("A", "B")
+    ]
+    svc, batches, _, _ = setup(
+        s,
+        [ATM],
+        [
+            task(),
+            {
+                "status": "other" if matched == "other" else "matched",
+                "matched_option": matched,
+                "comparisons": comparisons,
+                "reason": "原始结论",
+            },
+        ],
+    )
     b = batches[0]
     target = scoring_targets(s, b, "all")[0]
     saved = svc.score(b, target)
@@ -650,3 +662,40 @@ def test_choice_projection_retains_saved_comparisons_and_protocol(matched):
     assert result["judge_model"] == "j"
     assert result["score"] == (1 if matched == "A" else 0)
     assert s == before
+
+
+def test_choice_matching_is_independent_of_main_profile_and_evaluation_turn():
+    s = state("choice_judge", turns=2, options=[{"id": "A", "text": "甲"}], correct_option="A")
+    s["scoring_batches"] = [
+        {"profile_id": ATM, "batch_id": "old", "judge": {"model": "judge-old"}},
+        {"profile_id": ATM, "batch_id": "new", "judge": {"model": "judge-new"}},
+    ]
+    s["scoring_results"] = {
+        "old:q:1": {"score": 1, "max_score": 1, "status": "completed", "matched_option": "A"},
+        "new:q:0": {"score": 1, "max_score": 1, "status": "completed", "matched_option": "A"},
+        "new:q:1": {
+            "score": 0,
+            "max_score": 1,
+            "status": "completed",
+            "matched_option": "other",
+            "comparisons": [{"option_id": "A", "matches": False, "reason": "原始理由"}],
+        },
+    }
+    before = copy.deepcopy(s)
+    for profile in ("", OPEN, ATM):
+        view = {**s, "selected_scoring_profile": profile}
+        result = choice_matching_result(view, "q")
+        assert result["batch_id"] == "new"
+        assert result["matched_option"] == "other" and result["score"] == 0
+        assert result["turn_index"] == 1 and result["judge_model"] == "judge-new"
+        assert result["comparisons"][0]["reason"] == "原始理由"
+    old = choice_matching_result({**s, "selected_scoring_profile": ATM, "selected_scoring_batch": "old"}, "q")
+    assert old["matched_option"] == "A" and old["score"] == 1
+    del s["scoring_results"]["new:q:1"]
+    missing = choice_matching_result(s, "q")
+    assert missing["status"] == "not_collected" and missing["score"] is None
+    assert "matched_option" not in missing  # Do not substitute an old batch or a different turn.
+    s["scoring_results"]["new:q:1"] = before["scoring_results"]["new:q:1"]
+    assert s == before
+    assert choice_matching_result(state(), "q") is None
+    assert choice_matching_result(state("choice_judge"), "q") is None

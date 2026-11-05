@@ -28,7 +28,7 @@ from urllib.parse import quote
 from photobench.application.runs.index import RunIndex
 from photobench.domain.datasets.ports import QaMetadataSource
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
-from photobench.domain.evaluation.profile_view import item_scores, profile_state
+from photobench.domain.evaluation.profile_view import choice_matching_result, item_scores, profile_state
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunReadViews, RunRevisions, RunStore
 from photobench.domain.runs import analysis
@@ -546,6 +546,7 @@ class ReadRuns:
                 item["scope_source"] = "saved_run_scope_v1"
             item["review"] = (self.get_reviews(run_id).get("reviews") or {}).get(str(item.get("qa_id")))
             item["scoring_results"] = item_scores(cached, str(item.get("qa_id")))
+            item["choice_matching_result"] = choice_matching_result(cached, str(item.get("qa_id")))
             item["diagnostic_results"] = [
                 v
                 for v in (cached.get("diagnostic_results") or {}).values()

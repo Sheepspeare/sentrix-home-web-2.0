@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from photobench.domain.evaluation.media import saved_media_metrics
 from photobench.domain.evaluation.profiles import (
+    ATM,
     LABELS,
     OPEN,
     evaluation_turn,
@@ -33,6 +34,34 @@ def item_scores(state: Mapping[str, Any], qa_id: str) -> list[dict[str, Any]]:
     return [
         copy.deepcopy(r) for r in (state.get("scoring_results") or {}).values() if str(r["qa_id"]) == qa_id
     ]
+
+
+def choice_matching_result(state: Mapping[str, Any], qa_id: str) -> dict[str, Any] | None:
+    """Expose this standard's selected batch independently of the page's main score."""
+    row: Mapping[str, Any] = next(
+        (r for r in (state.get("qa_snapshot") or {}).get("rows") or [] if str(r["qa_id"]) == qa_id), {}
+    )
+    if (row.get("evaluation") or {}).get("answer_format") != "choice":
+        return None
+    selected = state.get("selected_scoring_batch", "") if state.get("selected_scoring_profile") == ATM else ""
+    batch = select_batch(state, ATM, selected)
+    if not batch:
+        return None
+    turn = evaluation_turn(row)
+    value = (state.get("scoring_results") or {}).get(result_key(batch["batch_id"], qa_id, turn)) or {}
+    fields = ("version", "rule_version", "matched_option", "comparisons", "reason", "semantic_aux")
+    return {
+        **{k: copy.deepcopy(value[k]) for k in fields if k in value},
+        "profile_id": ATM,
+        "batch_id": batch["batch_id"],
+        "turn_index": turn,
+        "scorer": "choice",
+        "answer_format": "choice",
+        "status": value.get("status", "not_collected"),
+        "score": value.get("score") if valid_result(value) else None,
+        "max_score": 1,
+        "judge_model": value.get("judge_model") or (batch.get("judge") or {}).get("model"),
+    }
 
 
 def primary_profile_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -97,9 +126,9 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
                 "judge_model": value.get("judge_model") or ((batch or {}).get("judge") or {}).get("model"),
                 "scoring_rule": {
                     "rule_version": (batch or {}).get("rule_version"),
-                    "frozen_prompt_template": ((batch or {}).get("config") or {}).get("prompts", {}).get(
-                        value.get("purpose")
-                    ),
+                    "frozen_prompt_template": ((batch or {}).get("config") or {})
+                    .get("prompts", {})
+                    .get(value.get("purpose")),
                     "use_gt_images": ((batch or {}).get("config") or {}).get("use_gt_images"),
                     "use_gt_metadata": ((batch or {}).get("config") or {}).get("use_gt_metadata"),
                 },
