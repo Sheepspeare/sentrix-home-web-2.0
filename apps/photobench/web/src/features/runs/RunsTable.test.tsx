@@ -52,6 +52,13 @@ function renderTable(runs: Run[], page: Partial<RunPageState> = {}, handlers?: P
 }
 
 describe("状态列（1.0 :3023-3025）", () => {
+  it("隔离小样按保存答卷显示数量", () => {
+    renderTable([run({source_run_id: 'full', qa_count: 3, item_count: 3,
+      summary: {judge_valid_count: 3},
+      phases: {qa_eval: {progress: {agent_completed: 487, total: 487}}}})]);
+    expect(screen.getAllByText('3/3')[0]?.parentElement?.textContent).toBe('答卷 3/3');
+    expect(screen.queryByText('487/3')).toBeNull();
+  });
   it('原测评结束后仍显示补评运行状态和独立评分项目数量', () => {
     renderTable([run({status:'completed_with_errors',qa_count:487,summary:{completed:487,judge_valid_count:487},phases:{qa_eval:{progress:{completed:487,total:487}}},rejudge:{status:'running',completed:25,total:1104}})]);
     expect(screen.getByText('补评运行中')).toBeTruthy();

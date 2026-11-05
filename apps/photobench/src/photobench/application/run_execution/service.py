@@ -481,7 +481,6 @@ class RunExecution:
         if self._cancel_signal.is_set():
             state.request_cancel(self._cancel_source)
         self._judge = None if request.mode == "build" else self._build_judge(request, state)
-        state.start_persist_writer()
         state.persist()
         return state
 
@@ -493,6 +492,7 @@ class RunExecution:
         # make a failed run appear completed).
         if state.get("finished_at") and state.get("status") in {"failed", "cancelled"}:
             return state.data
+        state.start_persist_writer()
         run_id = str(state.get("run_id") or request.run_id)
         sampler = GpuSampler(
             self.telemetry,

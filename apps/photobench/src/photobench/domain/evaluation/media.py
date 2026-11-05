@@ -6,6 +6,33 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from photobench.domain.evaluation.contract import media_set_metrics
+from photobench.domain.evaluation.profiles import stable_media_key
+
+
+def delivered_media_aliases(record: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Resolve recorded handles by asset identity, without guessing from list order."""
+    by_asset: dict[str, set[tuple[str, str]]] = {}
+    for ref in record.get("predicted_media") or []:
+        if ref.get("asset_id") and ref.get("media_type") in {"image", "video"} and ref.get("media_id"):
+            kind, identifier = stable_media_key(ref).split(":", 1)
+            by_asset.setdefault(str(ref["asset_id"]), set()).add((kind, identifier))
+    aliases: dict[str, set[tuple[str, str]]] = {}
+    unresolved: set[str] = set()
+    for attachment in record.get("attachments") or []:
+        handle, asset_id = attachment.get("handle"), attachment.get("asset_id")
+        if isinstance(handle, str) and handle.strip() and asset_id is not None:
+            refs = by_asset.get(str(asset_id), set())
+            if not refs:
+                unresolved.add(handle)
+            aliases.setdefault(handle, set()).update(refs)
+        elif isinstance(handle, str):
+            unresolved.add(handle)
+    return [
+        {"handle": handle, "media_type": kind, "media_id": identifier}
+        for handle, refs in aliases.items()
+        if len(refs) == 1 and handle not in unresolved
+        for kind, identifier in refs
+    ]
 
 
 def media_metrics_for_sets(

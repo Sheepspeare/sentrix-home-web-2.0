@@ -308,6 +308,7 @@ export interface ExecutionVersion extends RejudgeTask {
 }
 
 export interface Run {
+  source_run_id?: string;
   task_id?: string;
   task_run_ids?: string[];
   execution_versions?: ExecutionVersion[];

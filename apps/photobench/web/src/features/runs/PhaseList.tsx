@@ -154,7 +154,9 @@ export function InitialExecutionPhases({ activeRun }: PhaseListProps) {
                 <p>{phaseSummary(phaseDef.key, displayPhase, activeRun.item_count)}</p>
                 <p>文件登记、去重、元数据读取与预览准备；媒体处理见流水线。</p>
               </details> : phaseDef.key === "qa_eval" ? <div className="phase-summary">
-                {activeRun.rejudge ? <p>首次答题进度 {String(phase?.progress?.completed ?? "未记录")}/{String(phase?.progress?.total ?? activeRun.qa_count ?? "—")}</p>
+                {qa.copiedAnswers ? <><p>复用答卷 {qa.agentRatio} · 有效评分 {qa.validRatio}</p>
+                  <p className="muted small">阶段日志来自源任务，源任务答题 {qa.sourceAgentRatio}。</p></>
+                  : activeRun.rejudge ? <p>首次答题进度 {String(phase?.progress?.completed ?? "未记录")}/{String(phase?.progress?.total ?? activeRun.qa_count ?? "—")}</p>
                   : <p>答题已执行 {qa.agentRatio} · {qa.judgeEnabled ? `有效评分 ${qa.validRatio}` : "Judge 未配置"}</p>}
                 {!activeRun.rejudge && qa.judgeEnabled && qa.attempted !== null ? <p className="muted small">
                   评分尝试已结束 {qa.attemptedRatio}（含失败）{qa.skipped ? ` · 未进入评分 ${qa.skipped} 题` : ""}

@@ -3,6 +3,7 @@
 import copy
 import json
 
+import pytest
 from test_run_read import _read_runs, _state, _write
 
 from photobench.domain.runs.analysis import run_list_entry
@@ -62,6 +63,50 @@ def test_scoring_missing_timestamp_stays_after_answers_and_deduplicates_inherite
     assert "results" not in versions[1]
     assert versions[-1]["inherited_count"] == 2
     assert rows == before
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_copied_sample_exposes_source_without_changing_scores_or_phase_logs(tmp_path, committed):
+    root = tmp_path / "results"
+    state = _state(
+        "sample",
+        qa_count=2,
+        source_run_id="full",
+        phases={"qa_eval": {"progress": {"agent_completed": 487, "total": 487}}},
+    )
+    if committed:
+        write_committed_snapshot(root / "sample", state)
+        metadata = root / "sample" / ".snapshots"
+        # Reproduce a saved metadata projection from before source provenance was exposed.
+        for path in metadata.glob("*/metadata.json"):
+            payload = json.loads(path.read_text())
+            payload["entry"].pop("source_run_id", None)
+            path.write_text(json.dumps(payload))
+    else:
+        _write(root, "sample", state)
+        path = root / "sample" / "run.json"
+        stat = path.stat()
+        (path.parent / ".photobench-read-index.json").write_text(
+            json.dumps(
+                {
+                    "signature": [2, stat.st_ino, stat.st_size, stat.st_mtime_ns],
+                    "entry": {"run_id": "sample", "qa_count": 2, "item_count": 2},
+                }
+            )
+        )
+    before = {
+        p: p.read_bytes()
+        for p in (root / "sample").rglob("*")
+        if p.is_file() and p.name != ".photobench-read-index.json"
+    }
+    reader = _read_runs(root)
+    entry = reader.list_runs()["runs"][0]
+    assert entry["source_run_id"] == "full"
+    assert entry["item_count"] == 2
+    detail = reader.get_run("sample", include_history=False)
+    assert detail["source_run_id"] == "full"
+    assert detail["phases"]["qa_eval"]["progress"]["agent_completed"] == 487
+    assert {p: p.read_bytes() for p in before} == before
 
 
 def test_missing_parent_and_cycle_terminate_without_guessing():

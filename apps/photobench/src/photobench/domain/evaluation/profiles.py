@@ -15,7 +15,7 @@ from photobench.domain.runs.judge import JUDGE_PROMPT, JUDGE_PROMPT_KINDS
 
 OPEN = "photobench_open_v1"
 ATM = "atm_qs_v1"
-RULE_VERSION = "scoring-2026.11.06-v2"
+RULE_VERSION = "scoring-2026.11.06-v3"
 LABELS = {OPEN: "开放式回答（0/1/2，历史口径）", ATM: "ATM-Bench式QS"}
 PROMPTS = {
     OPEN: {"answer_quality": JUDGE_PROMPT},
@@ -87,8 +87,8 @@ def profile_configs(
             raise ValueError("GT flags must be booleans")
         result[profile] = {"prompts": prompts, **flags}
         if profile == OPEN:
-            version = raw.get("quality_input_version", "task_v2")
-            if version not in {"legacy_v1", "task_v2"}:
+            version = raw.get("quality_input_version", "task_v3")
+            if version not in {"legacy_v1", "task_v2", "task_v3"}:
                 raise ValueError("Unknown answer quality input version")
             result[profile]["quality_input_version"] = version
         elif "quality_input_version" in raw:
@@ -186,9 +186,10 @@ def make_batch(
         "qa_snapshot_sha256": digest(snapshot.get("rows") or []),
     }
     if config.get("gt_metadata_mode") == "readable_v1":
-        from photobench.domain.evaluation.gt_context import empty_context
+        from photobench.domain.evaluation.gt_context import CAPTURE_INSTRUCTIONS, empty_context
 
         frozen["gt_metadata_snapshot"] = copy.deepcopy(metadata_snapshot or empty_context())
+        frozen["gt_metadata_instructions"] = CAPTURE_INSTRUCTIONS
     return {
         **frozen,
         "batch_id": "score-" + digest([frozen, nonce])[:24],

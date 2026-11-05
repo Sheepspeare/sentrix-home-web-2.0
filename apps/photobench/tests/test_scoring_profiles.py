@@ -156,7 +156,7 @@ def test_frozen_custom_atm_open_template_keeps_original_protocol():
 def test_new_open_profile_freezes_data_only_input_protocol():
     s = state()
     service, batches, http, _ = setup(s, [OPEN], [task(), {"score": 2}])
-    assert batches[0]["config"]["quality_input_version"] == "task_v2"
+    assert batches[0]["config"]["quality_input_version"] == "task_v3"
     service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
     data = json.loads(http.calls[-1]["messages"][1]["content"])
     assert data["question"] == "多少？"
@@ -174,6 +174,52 @@ def test_frozen_open_without_protocol_keeps_legacy_input():
     assert "**本题评分规则**" in http.calls[-1]["messages"][1]["content"]
     assert batches[0]["config"] == original["config"]
     assert batches[0]["rule_version"] == original["rule_version"]
+
+
+@pytest.mark.parametrize("version", ["legacy_v1", "task_v2", "task_v3"])
+def test_delivered_aliases_only_enter_new_open_quality_requests(version):
+    s = state()
+    record = s["items"][0]["runtime_turns"][0]
+    record.update(
+        answer="photo_1",
+        attachments=[{"handle": "photo_1", "asset_id": "asset-a"}],
+        predicted_media=[media("a.jpg", asset_id="asset-a")],
+    )
+    service, batches, http, saved = setup(
+        s,
+        [OPEN],
+        [task(), {"score": 2}],
+        configs={OPEN: {"quality_input_version": version}},
+    )
+    frozen = copy.deepcopy(batches[0]["config"])
+    service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    quality, diagnostic = http.calls[-1], http.calls[0]
+    assert "delivered_media_aliases" not in json.dumps(diagnostic)
+    assert batches[0]["config"] == frozen
+    assert next(iter(saved[-1]["scoring_results"].values()))["requests"][-1]["input"] == quality
+    if version == "legacy_v1":
+        assert "**本题评分规则**" in quality["messages"][1]["content"]
+        assert "delivered_media_aliases" not in json.dumps(quality)
+    else:
+        data = json.loads(quality["messages"][1]["content"])
+        assert data["answer"] == "photo_1"
+        if version == "task_v3":
+            assert data["delivered_media_aliases"] == [
+                {"handle": "photo_1", "media_type": "image", "media_id": "a.jpg"}
+            ]
+            assert "不能仅因编号写法不同扣分" in quality["messages"][0]["content"]
+        else:
+            assert set(data) == {
+                "question",
+                "answer",
+                "reference",
+                "expected_action",
+                "answerability",
+                "task_type",
+                "question_type",
+                "conversation",
+            }
+            assert "delivered_media_aliases" not in quality["messages"][0]["content"]
 
 
 def test_request_boundaries_commit_materials_without_extra_preparation_snapshots():

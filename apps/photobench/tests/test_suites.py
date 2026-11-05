@@ -86,6 +86,9 @@ class FakeExecution:
         self.cancels: list[str] = []
         self.state = _State({"run_id": request.run_id, "status": "running", "items": [], "phases": {}})
 
+    def prepare(self, request: RunRequest) -> _State:
+        return self.state
+
     def cancel(self, source: str = "api") -> None:
         self.cancels.append(source)
         self.state.request_cancel(source)

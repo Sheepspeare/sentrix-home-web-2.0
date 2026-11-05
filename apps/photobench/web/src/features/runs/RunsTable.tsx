@@ -23,7 +23,7 @@ function RunProgress({ run }: { run: Run }) {
   const showOriginal = progress.applicable && progress.judgeEnabled;
   if (!showOriginal) return <span className="muted">—</span>;
   return <div className="run-progress-count">
-    {showOriginal && progress.agent !== null ? <div>答题 <span>{progress.agentRatio}</span></div> : null}
+    {showOriginal && progress.agent !== null ? <div>{progress.copiedAnswers ? "答卷" : "答题"} <span>{progress.agentRatio}</span></div> : null}
     {showOriginal && <div aria-label={`有效评分 ${progress.validRatio}`}>评分 <span>{progress.validRatio}</span></div>}
   </div>;
 }

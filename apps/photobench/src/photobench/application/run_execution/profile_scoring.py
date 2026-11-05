@@ -10,8 +10,12 @@ from typing import Any
 
 from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
-from photobench.domain.evaluation.gt_context import READABLE_CONTEXT, capture_context
-from photobench.domain.evaluation.media import saved_media_metrics
+from photobench.domain.evaluation.gt_context import (
+    LEGACY_INSTRUCTIONS,
+    READABLE_CONTEXT,
+    capture_context,
+)
+from photobench.domain.evaluation.media import delivered_media_aliases, saved_media_metrics
 from photobench.domain.evaluation.profiles import (
     ATM,
     OPEN,
@@ -349,7 +353,10 @@ class ProfileScoring:
                         refs, source = gt_image_refs(row, turn)
                         if config.get("gt_metadata_mode") == READABLE_CONTEXT:
                             cached["metadata"], attachment = capture_context(
-                                refs, batch["gt_metadata_snapshot"], source
+                                refs,
+                                batch["gt_metadata_snapshot"],
+                                source,
+                                instructions=batch.get("gt_metadata_instructions", LEGACY_INSTRUCTIONS),
                             )
                             if refs:
                                 cached["attachments"].append(attachment)
@@ -399,6 +406,7 @@ class ProfileScoring:
                     gt_row=row,
                     gt_turn=turn,
                     assets_by_name=self.assets,
+                    media_aliases=delivered_media_aliases(record),
                 )
             elif purpose == "list":
                 output = {

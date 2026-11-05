@@ -90,7 +90,7 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
             return entry
         path = run_dir / "run.json"
         stat = path.stat()
-        signature = [2, stat.st_ino, stat.st_size, stat.st_mtime_ns]
+        signature = [3, stat.st_ino, stat.st_size, stat.st_mtime_ns]
         index = run_dir / ".photobench-read-index.json"
         try:
             cached = json.loads(index.read_text(encoding="utf-8"))

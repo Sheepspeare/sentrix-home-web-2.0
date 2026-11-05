@@ -10,12 +10,15 @@ export function qaProgress(run: Run) {
   const progress = phase?.progress;
   const total = run.qa_count === null ? null : count(run.qa_count) ?? count(run.summary?.total) ??
     count(progress?.total) ?? count(progress?.judge_total) ?? count(phase?.judge_total);
-  const agent = count(progress?.agent_completed) ?? count(phase?.agent_completed) ?? count(progress?.completed);
+  const sourceAgent = count(progress?.agent_completed) ?? count(phase?.agent_completed) ?? count(progress?.completed);
+  const copiedAnswers = Boolean(run.source_run_id);
+  const agent = copiedAnswers ? count(run.item_count) : sourceAgent;
   const valid = count(run.summary?.judge_valid_count);
-  const attempted = count(progress?.judge_completed) ?? count(phase?.judge_completed);
+  const attempted = copiedAnswers ? null : count(progress?.judge_completed) ?? count(phase?.judge_completed);
   const judgeEnabled = (progress?.judge_concurrency ?? phase?.judge_concurrency) !== 0;
   return {
     applicable: run.mode !== "build", judgeEnabled, agent, valid, attempted,
+    copiedAnswers, sourceAgentRatio: ratio(sourceAgent, count(progress?.agent_total) ?? count(progress?.total)),
     agentRatio: ratio(agent, total), validRatio: ratio(valid, total),
     attemptedRatio: ratio(attempted, count(progress?.judge_total) ?? count(phase?.judge_total) ?? total),
     skipped: count(progress?.judge_skipped),

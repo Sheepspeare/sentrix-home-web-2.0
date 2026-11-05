@@ -33,6 +33,7 @@ def execution_metadata(state: dict[str, Any]) -> dict[str, Any]:
         resume["inherited_count"] = len(set(inherited))
     tasks = [*(state.get("rejudge_history") or []), *([state["rejudge"]] if state.get("rejudge") else [])]
     return {
+        **({"source_run_id": state["source_run_id"]} if state.get("source_run_id") else {}),
         "resume_context": resume,
         "scoring_executions": [{k: t[k] for k in TASK_FIELDS if k in t} for t in tasks],
     }

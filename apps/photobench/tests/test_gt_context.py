@@ -7,7 +7,13 @@ import pytest
 from test_scoring_profiles import media, setup, state, task
 
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
-from photobench.domain.evaluation.gt_context import capture_context, context_index, empty_context
+from photobench.domain.evaluation.gt_context import (
+    CAPTURE_INSTRUCTIONS,
+    LEGACY_INSTRUCTIONS,
+    capture_context,
+    context_index,
+    empty_context,
+)
 from photobench.domain.evaluation.profiles import ATM, OPEN, profile_configs, scoring_targets, valid_result
 from photobench.infrastructure.datasets.albums import JsonAlbumSource
 
@@ -148,6 +154,38 @@ def test_changed_mapping_creates_new_batch_and_legacy_batch_id_stays_unchanged()
     saved["gt_metadata_snapshot"] = empty_context("album-x")
     _, b, _, _ = setup(saved, [OPEN], configs=legacy)
     assert a[0]["batch_id"] == b[0]["batch_id"] and "gt_metadata_snapshot" not in a[0]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_missing_capture_fields_keep_the_frozen_instruction_protocol(legacy):
+    saved = with_evidence()
+    saved["gt_metadata_snapshot"] = empty_context("album-x")
+    svc, batches, http, _ = setup(saved, [OPEN], [task(), {"score": 1, "reason": "核对答案"}])
+    batch = batches[0]
+    if legacy:
+        batch.pop("gt_metadata_instructions")
+        batch["rule_version"] = "scoring-2026.11.06-v2"
+    result = svc.score(batch, scoring_targets(saved, batch, "all")[0])
+    assert valid_result(result)
+    context = http.calls[1]["messages"][1]["content"][-1]["text"]
+    expected = LEGACY_INSTRUCTIONS if legacy else CAPTURE_INSTRUCTIONS
+    assert context.startswith(expected + "[")
+    assert result["gt_metadata"]["materials"][0]["status"] == "not_recorded"
+    if not legacy:
+        assert "不能据此认定媒体不存在" in context
+        assert batch["gt_metadata_instructions"] == CAPTURE_INSTRUCTIONS
+
+
+def test_changed_capture_instructions_create_a_batch_without_changing_existing_inputs(monkeypatch):
+    from photobench.application.run_execution.profile_scoring import prepare_batches
+
+    saved = with_evidence()
+    _, first, _, _ = setup(saved, [OPEN])
+    monkeypatch.setattr("photobench.domain.evaluation.gt_context.CAPTURE_INSTRUCTIONS", "future instructions")
+    second = prepare_batches(saved, profile_configs([OPEN]), {"url": "http://judge/v1", "model": "j"})
+    assert first[0]["gt_metadata_instructions"] == CAPTURE_INSTRUCTIONS
+    assert second[0]["gt_metadata_instructions"] == "future instructions"
+    assert first[0]["batch_id"] != second[0]["batch_id"]
 
 
 def test_resume_batch_does_not_read_current_mapping(tmp_path, monkeypatch):

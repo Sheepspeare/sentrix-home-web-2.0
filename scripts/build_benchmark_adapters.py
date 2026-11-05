@@ -122,14 +122,15 @@ def build_atm(source: Path, output: Path, media_mode: str = "reference") -> dict
                 continue
             if any(i not in media for i in ids):
                 raise ValueError("Unresolved list target")
+            abstention = bool(re.match(r"^ABSTENTION(?:[.：: ]|$)", original["answer"].strip(), re.I))
             row = {
                 "qa_id": "atm-" + original["id"],
                 "source_qa_id": original["id"],
                 "benchmark_id": "atm-bench",
                 "question": original["question"],
                 "answer": original["answer"],
-                "expected_action": "answer",
-                "answerability": "answerable",
+                "expected_action": "refuse" if abstention else "answer",
+                "answerability": "insufficient_evidence" if abstention else "answerable",
                 "retrieval_media_refs": [media[i] for i in evidence],
                 "answer_evidence_media_refs": [media[i] for i in evidence],
                 "source_qa": original,

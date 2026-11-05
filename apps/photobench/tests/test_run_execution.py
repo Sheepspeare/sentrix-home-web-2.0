@@ -1738,6 +1738,17 @@ def test_frozen_configuration_is_verified_before_import_or_qa(mismatch):
     assert "import_album" not in execution.client.call_names()
 
 
+def test_prepare_commits_pending_state_without_background_work():
+    execution, client, writer, *_ = _execution()
+    state = execution.prepare(_request())
+    assert writer.last_state()["run_id"] == "run_test"
+    assert writer.last_state()["status"] == "pending"
+    assert not state.writer_pending()
+    assert client.calls == []
+    assert execution.prepare(_request()) is state
+    assert len(writer.snapshots) == 1
+
+
 def test_cancel_before_execute_is_retained_and_makes_no_product_calls():
     execution, client, *_ = _execution()
     execution.cancel(source="queued_cancel")

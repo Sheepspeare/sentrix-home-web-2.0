@@ -14,6 +14,14 @@ function activeRun(phases: Run["phases"]): Run {
 }
 
 describe("阶段卡（1.0 :3099-3129）", () => {
+  it("隔离小样区分答卷与源任务日志", () => {
+    const {container} = render(<PhaseList activeRun={{run_id:'sample', source_run_id:'full',
+      qa_count:3, item_count:3, summary:{judge_valid_count:3},
+      phases:{qa_eval:{status:'done',progress:{agent_completed:487,total:487}}}}}/>);
+    expect(container.textContent).toContain('复用答卷 3/3');
+    expect(container.textContent).toContain('源任务答题 487/487');
+    expect(container.textContent).not.toContain('487/3');
+  });
   it("补评分单独显示本轮日志，首次执行错误默认折叠", () => {
     const run: Run = {
       ...activeRun({qa_eval:{status:"partial",error_details:[{sample_id:"q1",reason:"旧错误"}]}}),

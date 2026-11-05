@@ -396,7 +396,9 @@ class RunSuites:
                 )
                 request = freeze_runtime_request(request, connection, self._build_revision)
                 requests[run_id] = request
-                self._active[run_id] = self._new_execution(request)
+                execution = self._new_execution(request)
+                execution.prepare(request)
+                self._active[run_id] = execution
                 created.append(run_id)
 
         def _run_sequentially() -> None:
@@ -615,7 +617,9 @@ class RunSuites:
             )
         with self._lock:
             self._require_inactive()
-            self._active[new_run_id] = self._new_execution(request)
+            execution = self._new_execution(request)
+            execution.prepare(request)
+            self._active[new_run_id] = execution
 
         def _run_resumed() -> None:
             try:
