@@ -65,9 +65,7 @@ def validate_evaluation(row: Mapping[str, Any]) -> None:
         if scorer != "open_judge" or not isinstance(rubric, str) or not rubric.strip():
             raise ValueError("Answer quality rubric requires nonempty text on open_judge")
     policy = definition.get("media_metrics_policy", "include")
-    if policy not in ("include", "exclude") or (
-        policy == "exclude" and scorer in {"media_set", "atm_list"}
-    ):
+    if policy not in ("include", "exclude") or (policy == "exclude" and scorer in {"media_set", "atm_list"}):
         raise ValueError("Invalid media metrics policy")
     index = definition.get("applies_to_turn")
     if type(index) is not int or not 0 <= index < max(1, len(row.get("conversation") or [])):

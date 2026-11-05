@@ -162,8 +162,10 @@ def retrieval_quality_counts(cases: Sequence[dict[str, Any]], channel: str) -> d
 
 
 def retrieval_quality_card(counts: Mapping[str, Any], channel: str, *, partial: bool) -> str:
-    title = ("候选检索" if channel == "candidate" else "最终交付") + " × " + (
-        "含部分正确率" if partial else "满分率"
+    title = (
+        ("候选检索" if channel == "candidate" else "最终交付")
+        + " × "
+        + ("含部分正确率" if partial else "满分率")
     )
     total = counts["valid"]
     excluded = "；".join(f"{name}{n}题" for name, n in counts["excluded"].items()) or "无"
@@ -187,14 +189,16 @@ def retrieval_quality_card(counts: Mapping[str, Any], channel: str, *, partial: 
                 f'<div role="cell" class="matrix-cell {"hit" if hit else "miss"}'
                 f' {"correct" if passed else "wrong"}" data-count="{n}" '
                 f'aria-label="{name}：{n}题，占有效样本{rate(n, total)}">'
-                f'<span>{name}</span><strong>{rate(n, total)}</strong><small>{n} / {total}题</small></div>'
+                f"<span>{name}</span><strong>{rate(n, total)}</strong><small>{n} / {total}题</small></div>"
             )
         body += "</div>"
     body += '</div><div class="matrix-conditions">'
     for hit in (True, False):
         body += (
-            '<div><span>' + ("命中组" if hit else "未命中组")
-            + ("正确率" if partial else "满分率") + "</span><b>"
+            "<div><span>"
+            + ("命中组" if hit else "未命中组")
+            + ("正确率" if partial else "满分率")
+            + "</span><b>"
             + rate(correct[hit], groups[hit])
             + f"</b><small>{correct[hit]} / {groups[hit]}题</small></div>"
         )
@@ -207,9 +211,7 @@ def retrieval_quality_card(counts: Mapping[str, Any], channel: str, *, partial: 
     return card(title, body, note)
 
 
-def retrieval_quality(
-    cases: Sequence[dict[str, Any]], source: Mapping[str, Any]
-) -> str:
+def retrieval_quality(cases: Sequence[dict[str, Any]], source: Mapping[str, Any]) -> str:
     profile = source.get("scoring_profile") or (source.get("scoring_definition") or {}).get("profile_id")
     results = [case.get("evaluation_result") or {} for case in cases]
     if not profile:

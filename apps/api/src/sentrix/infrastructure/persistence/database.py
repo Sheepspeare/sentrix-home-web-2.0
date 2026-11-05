@@ -9,6 +9,7 @@ inside a transaction, and recorded in ``schema_migrations``.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -17,6 +18,8 @@ from pathlib import Path
 from sentrix.domain.media.capture_time import time_sort_key, within_time_bounds
 
 BUSY_TIMEOUT_MS = 30_000
+_connection_locks: dict[Path, threading.RLock] = {}
+_connection_locks_guard = threading.Lock()
 
 
 class MigrationError(RuntimeError):
@@ -38,24 +41,29 @@ class Database:
     def __init__(self, path: Path, migrations_dir: Path) -> None:
         self.path = Path(path)
         self.migrations_dir = Path(migrations_dir)
+        # 同一文件的实例共享连接锁，避免并发切换WAL及SQLite文件句柄竞争。
+        # 图谱查询会在同一线程嵌套读取，因此连接锁允许重入。
+        with _connection_locks_guard:
+            self._connect_lock = _connection_locks.setdefault(self.path.resolve(), threading.RLock())
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path)
-        connection.row_factory = sqlite3.Row
-        connection.create_function(
-            "capture_sort_key",
-            1,
-            lambda value: time_sort_key(datetime.fromisoformat(value) if value else None),
-            deterministic=True,
-        )
-        connection.create_function("capture_in_bounds", 3, _capture_in_bounds, deterministic=True)
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
-        try:
-            yield connection
-        finally:
-            connection.close()
+        with self._connect_lock:
+            connection = sqlite3.connect(self.path)
+            connection.row_factory = sqlite3.Row
+            connection.create_function(
+                "capture_sort_key",
+                1,
+                lambda value: time_sort_key(datetime.fromisoformat(value) if value else None),
+                deterministic=True,
+            )
+            connection.create_function("capture_in_bounds", 3, _capture_in_bounds, deterministic=True)
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+            try:
+                yield connection
+            finally:
+                connection.close()
 
     def migrations(self) -> list[tuple[str, Path]]:
         """磁盘上的 ``(版本号, 脚本路径)``，按版本号排序。
@@ -68,7 +76,10 @@ class Database:
         scripts = sorted(self.migrations_dir.glob("*.sql"))
         if not scripts:
             raise MigrationError(f"迁移目录里没有任何 .sql: {self.migrations_dir}")
-        return [(script.stem.split("_", 1)[0], script) for script in scripts]
+        versions = [(script.stem.split("_", 1)[0], script) for script in scripts]
+        if len({version for version, _ in versions}) != len(versions):
+            raise MigrationError("迁移版本号重复")
+        return versions
 
     def applied_versions(self) -> set[str]:
         with self.connect() as connection:
@@ -107,6 +118,22 @@ class Database:
             done = connection.execute(
                 "SELECT 1 FROM schema_migrations WHERE version = ?", (version,)
             ).fetchone()
+            if done is not None and script.name == "0015_text_vectors.sql":
+                text_table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='text_vectors'"
+                ).fetchone()
+                if text_table is None:
+                    # 已发布的xy曾用0015记录拍摄时间迁移；main的0015是文本向量。
+                    # 在同一事务内按已知表结构改记编号，再创建文本表。
+                    capture_columns = {row[1] for row in connection.execute("PRAGMA table_info(assets)")}
+                    place_columns = {row[1] for row in connection.execute("PRAGMA table_info(asset_places)")}
+                    if (
+                        "capture_time_json" not in capture_columns
+                        or "nearest_evidence_json" not in place_columns
+                    ):
+                        raise MigrationError("0015记录与文本向量/拍摄时间表结构不一致")
+                    connection.execute("UPDATE schema_migrations SET version='0016' WHERE version='0015'")
+                    done = None
             if done is not None:
                 connection.execute("COMMIT")
                 return False

@@ -45,7 +45,7 @@ from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetE
 from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS
 from sentrix.domain.identity.ports import FaceRepository, PersonCropRenderer
 from sentrix.domain.media.inspection import CERTAINTY_SUPPORTED
-from sentrix.domain.media.models import Observation
+from sentrix.domain.media.models import MediaType, Observation
 from sentrix.domain.media.ports import (
     AssetRepository,
     ObservationRepository,
@@ -789,6 +789,25 @@ class AssistantToolbox:
             )
 
         asked = str(arguments.get("question") or "").strip() or DEFAULT_INSPECT_QUESTION
+        # Parent video/audio assets can appear beside image keyframes in a result set.
+        # They are not image payloads; never send their bytes to the photo inspector.
+        if asset.media_type is not MediaType.IMAGE:
+            return ToolOutcome(
+                observation={
+                    "failure_reason": "unsupported_media_type",
+                    "asset_id": asset_id,
+                    "media_kind": asset.media_type.value,
+                },
+                model_visible={
+                    "error": "unsupported_media_type",
+                    "message": (
+                        "inspect_photo 只接受图片，当前 handle 是视频或音频原件。"
+                        "请从检索结果选择 media_kind=image、source_kind=video_keyframe 的视频关键帧"
+                        "或普通照片复核；没有相关关键帧时请重新检索，不要把未查看的原片当作视觉证据。"
+                    ),
+                },
+                failure_reason="unsupported_media_type",
+            )
         identities = self._faces.list_photo_identities(asset_id)
         manifest = self._faces.list_face_manifest(asset_id)
         described = sum(

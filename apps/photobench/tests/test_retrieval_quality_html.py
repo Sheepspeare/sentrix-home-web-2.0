@@ -46,8 +46,12 @@ def test_candidate_and_delivery_use_distinct_saved_sets_and_conditional_denomina
     delivery = retrieval_quality_counts(cases, "delivery")
     assert candidate["valid"] == delivery["valid"] == 6
     assert candidate["cells"] == {
-        (True, 2): 1, (True, 1): 1, (True, 0): 1,
-        (False, 2): 1, (False, 1): 1, (False, 0): 1,
+        (True, 2): 1,
+        (True, 1): 1,
+        (True, 0): 1,
+        (False, 2): 1,
+        (False, 1): 1,
+        (False, 0): 1,
     }
     assert delivery["cells"] == {(True, 1): 1, (True, 0): 1, (False, 2): 2, (False, 1): 1, (False, 0): 1}
     full = retrieval_quality_card(candidate, "candidate", partial=False)
@@ -109,8 +113,11 @@ def test_native_atm_and_projected_fractional_list_scores_only_report_full_credit
     case = case_from_item(
         item(
             judge={
-                "score": 0.5, "max_score": 1, "normalized_score": 0.5,
-                "scorer": "atm_list", "judge_status": "completed",
+                "score": 0.5,
+                "max_score": 1,
+                "normalized_score": 0.5,
+                "scorer": "atm_list",
+                "judge_status": "completed",
             },
             evaluation={"scorer": "atm_list"},
             candidate_retrieval_counts={"matched": 1, "predicted": 1, "gt": 2},

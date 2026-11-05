@@ -290,6 +290,40 @@ def test_video_probe_failure_is_recorded_not_swallowed():
     assert "ffprobe failed: boom" in probe.probe_error
 
 
+def test_video_without_metadata_keeps_capture_time_unknown():
+    clock_value = datetime(2026, 10, 28, 4, 7, 20, tzinfo=UTC)
+    use_case, assets, _ = build_video(
+        metadata_reader=FakeVideoMetadata(error="ffprobe: command not found"),
+        clock=lambda: clock_value,
+    )
+    result = use_case.execute(
+        ImportRequest(scope_id="album1", file_name="clip.mov", content_type=None, content=b"mov")
+    )
+    asset = assets.rows[result.asset_id]
+    assert asset.captured_at is None
+    assert asset.capture_time.status == "unknown"
+    assert asset.created_at == clock_value
+
+
+def test_image_without_exif_keeps_capture_time_unknown():
+    clock_value = datetime(2026, 10, 28, 4, 7, 20, tzinfo=UTC)
+    assets = FakeAssets()
+    use_case = ImportAssets(
+        assets=assets,
+        observations=FakeObservations(),
+        storage=FakeStorage(),
+        metadata=FakeMetadata(),
+        clock=lambda: clock_value,
+    )
+    result = use_case.execute(
+        ImportRequest(scope_id="album1", file_name="a.jpg", content_type="image/jpeg", content=b"jpg")
+    )
+    asset = assets.rows[result.asset_id]
+    assert asset.captured_at is None
+    assert asset.capture_time.status == "unknown"
+    assert asset.created_at == clock_value
+
+
 def test_transcode_failure_keeps_the_import_and_records_the_reason():
     """转码是增强：失败回落原片，但失败原因要留下来（1.0 的 browser_preview_error）。"""
     use_case, _, videos = build_video(

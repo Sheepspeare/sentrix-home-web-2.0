@@ -201,14 +201,26 @@ def test_explicit_query_timezone_uses_same_rules_as_metadata():
     assert _within(bounds, datetime.fromisoformat("2018-03-31T23:30:00+07:00"))
 
 
-def test_unknown_capture_is_not_replaced_by_import_time():
-    from apps.api.tests.unit.test_import_assets import FakeAssets, FakeMetadata, FakeObservations, FakeStorage
-    from sentrix.application.media.import_assets import ImportAssets, ImportRequest
+def test_unknown_capture_is_not_replaced_by_import_time(migrations_ready_db, tmp_path):
+    from io import BytesIO
 
-    assets = FakeAssets()
+    from PIL import Image
+
+    from sentrix.application.media.import_assets import ImportAssets, ImportRequest
+    from sentrix.infrastructure.media.metadata import PillowMetadataReader
+    from sentrix.infrastructure.media.storage import FileSystemMediaStorage
+    from sentrix.infrastructure.persistence.repositories.assets import SqliteObservationRepository
+
+    content = BytesIO()
+    Image.new("RGB", (8, 8)).save(content, format="JPEG")
+    assets = SqliteAssetRepository(migrations_ready_db)
     importer = ImportAssets(
-        assets=assets, observations=FakeObservations(), storage=FakeStorage(), metadata=FakeMetadata()
+        assets=assets,
+        observations=SqliteObservationRepository(migrations_ready_db),
+        storage=FileSystemMediaStorage(tmp_path / "media"),
+        metadata=PillowMetadataReader(),
     )
-    result = importer.execute(ImportRequest("album1", "unknown.jpg", "image/jpeg", b"test"))
-    assert assets.get(result.asset_id).captured_at is None
-    assert assets.get(result.asset_id).capture_time.status == "unknown"
+    result = importer.execute(ImportRequest("album1", "unknown.jpg", "image/jpeg", content.getvalue()))
+    restored = assets.get(result.asset_id)
+    assert restored.captured_at is None
+    assert restored.capture_time.status == "unknown"

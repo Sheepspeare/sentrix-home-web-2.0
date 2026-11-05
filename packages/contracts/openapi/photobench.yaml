@@ -40,6 +40,13 @@ paths:
           type: string
           default: '20'
           title: Page Size
+      - name: group_tasks
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Group Tasks
       responses:
         '200':
           description: Successful Response
@@ -1216,6 +1223,13 @@ paths:
           type: string
           default: ''
           title: Content Subtype
+      - name: scoring_question_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Question Type
       - name: test_scenario
         in: query
         required: false
@@ -1523,6 +1537,13 @@ paths:
           type: string
           default: ''
           title: Content Subtype
+      - name: scoring_question_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Question Type
       - name: test_scenario
         in: query
         required: false
@@ -1865,6 +1886,13 @@ paths:
           type: string
           default: ''
           title: Content Subtype
+      - name: scoring_question_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Scoring Question Type
       - name: test_scenario
         in: query
         required: false

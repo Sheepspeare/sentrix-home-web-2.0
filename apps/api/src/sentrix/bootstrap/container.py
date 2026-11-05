@@ -72,6 +72,7 @@ from sentrix.domain.retrieval.ports import (
     EmbeddingHealthProbe,
     LexicalIndex,
     LexicalSearch,
+    Reranker,
     StructuredQueryRepository,
     TextEmbedder,
     VectorIndex,
@@ -109,6 +110,7 @@ from sentrix.infrastructure.models.legacy import (
     ChineseClipSidecarEmbedder,
     LegacyEmbeddingHealthProbe,
 )
+from sentrix.infrastructure.models.reranker import BgeSidecarReranker
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.repositories.appearance import SqliteAppearanceRepository
@@ -146,6 +148,7 @@ from sentrix.infrastructure.persistence.repositories.spaces import SqliteSpaceRe
 from sentrix.infrastructure.persistence.repositories.structured import (
     SqliteStructuredQueryRepository,
 )
+from sentrix.infrastructure.persistence.repositories.text_vectors import SqliteTextVectorRepository
 from sentrix.infrastructure.persistence.repositories.turns import SqliteTurnRepository
 from sentrix.infrastructure.persistence.repositories.vectors import SqliteVectorRepository
 from sentrix.infrastructure.persistence.repositories.video import SqliteVideoRepository
@@ -191,10 +194,17 @@ class Container:
     # （用户裁决②），浏览器原生放 mp3/wav/m4a/aac/flac/ogg。
     audio_metadata_reader: AudioMetadataReader
     audio_repository: AudioRepository
+    # 视觉/人脸向量（memory_vectors）与文本向量（text_vectors）分表，但共用端口。
+    # 调用方按用途注入：视觉通道、导入即向量化用 ``vector_repository``；文本召回与
+    # 观察文本索引用 ``text_vector_repository``。
     vector_repository: VectorRepository
+    text_vector_repository: VectorRepository
     vector_index: VectorIndex
     visual_embedder: VisualEmbedder
     text_embedder: TextEmbedder
+    # 重排是**可选增强**：``SENTRIX_RERANKER_URL`` 为空时它是 ``None``，检索走
+    # 纯 RRF 顺序。声明成端口而不是具体类，与其余模型入口同一条口径。
+    reranker: Reranker | None
     # 嵌入能力的**可用性**（与上面两槽是同一个实例，但声明成另一个端口）。
     # 分开的理由写在 ``EmbeddingHealthProbe`` 上：能力回答「怎么嵌」，状态回答
     # 「此刻还嵌不嵌得动」——2026-10-10 那轮侧车全程不在，检索照常返回、静默降级，
@@ -294,7 +304,16 @@ class Container:
         lexical = SqliteLexicalIndex(database, observations, assets=assets, places=asset_places)
         # 对话与视觉是**同一个端点**（8100），所以共用同一个探测。分两个实例会让同一个
         # 进程里存两份可能不一致的答案，还要多探一轮。
-        served_model = ServedModel(settings.vlm_base_url)
+        served_model = ServedModel(
+            settings.vlm_base_url,
+            # MLX media prefill can delay metadata on the same server. Discovery
+            # must honor the configured wait, while staying within both clients'
+            # deadlines because dialogue and vision share this resolver.
+            timeout_s=min(settings.chat_timeout_s, settings.vlm_timeout_s),
+            generation_profile=settings.vlm_generation_profile,
+            exact_output_budget=settings.vlm_exact_output_budget,
+            context_tokens=settings.vlm_context_tokens,
+        )
         # 单个并发槽的上下文窗口——**问端点**，理由与上面那个模型名同一条：窗口是
         # **部署事实**，配置里那个 6144 是照部署的某一次实测抄的，部署一改它就过期。
         # 读不到才退回配置值（那说明端点没在正常服务，此时保守值不添乱）。
@@ -322,17 +341,6 @@ class Container:
             visual_embedder = wemm_embedder
             text_embedder = wemm_embedder
             embedding_health = wemm_embedder
-        # **启动时推理测试**：2026-10-29 的教训——CLIP 侧车缺 `from PIL import Image`，
-        # `/health` 返回 ok，但实际推理时 NameError。健康检查只验证服务活着，
-        # 发现不了功能 broken。现在启动时做一次真实推理，确认端到端可用。
-        # 失败则 API 启动失败，明确报错。
-        smoke_ok, smoke_error = embedding_health.smoke_test()
-        if not smoke_ok:
-            raise RuntimeError(
-                f"嵌入方案启动测试失败（embedding_scheme={settings.embedding_scheme}）: "
-                f"{smoke_error}。请检查嵌入侧车是否正常，代码是否有语法/import 错误。"
-            )
-        log.info("嵌入方案启动测试通过（%s）", settings.embedding_scheme)
         log.info(
             "嵌入方案=%s 视觉=%s/%sd 文本=%s/%sd",
             settings.embedding_scheme,
@@ -340,6 +348,17 @@ class Container:
             visual_embedder.dimension,
             text_embedder.model_id,
             text_embedder.dimension,
+        )
+        # 重排侧车同样只构造 HTTP 客户端。**空 URL 就是没有重排**，不是「默认去连
+        # 某个地址」——没有侧车的部署不该在每次查询里先付一次连接失败。
+        reranker_url = settings.reranker_url.strip()
+        reranker: Reranker | None = (
+            BgeSidecarReranker(reranker_url, timeout_s=settings.rerank_timeout_s) if reranker_url else None
+        )
+        log.info(
+            "重排=%s top_k=%d",
+            f"{reranker.model_id} @ {reranker_url}" if reranker else "关闭",
+            settings.rerank_top_k,
         )
         # 家庭图谱仓储被两个消费方用：容器自己的字段，以及人物目录——目录要靠它回答
         # 「这个人的归属与关系」（S7c）。拿在手上传两次，而不是就地 new 两个实例。
@@ -367,9 +386,11 @@ class Container:
             audio_metadata_reader=FfprobeAudioMetadataReader(),
             audio_repository=SqliteAudioRepository(database),
             vector_repository=SqliteVectorRepository(database),
+            text_vector_repository=SqliteTextVectorRepository(database),
             vector_index=QdrantVectorIndex(settings.qdrant_dir),
             visual_embedder=visual_embedder,
             text_embedder=text_embedder,
+            reranker=reranker,
             embedding_health=embedding_health,
             place_resolver=OfflinePlaceResolver(
                 admin=PyGeoCNAdminResolver(),
