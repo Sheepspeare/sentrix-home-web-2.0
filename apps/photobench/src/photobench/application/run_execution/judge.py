@@ -115,6 +115,7 @@ class JudgeRunner:
         self.judge_model = str(judge_model or "")
         self.judge_api_key = str(judge_api_key or "")
         self.answer_quality_prompt = answer_quality_prompt or JUDGE_PROMPT
+        self.answer_quality_input_version = "legacy_v1"
         self.task_judge_prompt = task_judge_prompt or TASK_JUDGE_PROMPT
         self.evidence_judge_prompt = evidence_judge_prompt or EVIDENCE_JUDGE_PROMPT
         self.evidence_enabled = bool(evidence_enabled)
@@ -437,23 +438,39 @@ class JudgeRunner:
             and definition.get("answer_quality_rubric")
         ):
             prompt += (
-                "\n\n本题专用评分说明（评测端提供，仅约束本题评分）：\n"
-                + definition["answer_quality_rubric"]
+                "\n\n本题专用评分说明（评测端提供，仅约束本题评分）：\n" + definition["answer_quality_rubric"]
             )
-        context = self._conversation_context(conversation)
-        judge_text = (
-            f"{context}**当前问题**：{question}\n**模型回答**：【{answer}】\n"
-            f"**预期行为（GT）**：{expected_action or '未标注'}\n"
-            f"**任务类型（GT）**：{task_type or '未标注'}\n"
-            f"**问题类型（GT）**：{question_type or '未标注'}\n"
-            f"**可回答性（GT）**：{answerability or '未标注'}\n"
-            f"**参考答案（GT）**：【{reference}】\n"
-            f"**本题评分规则**：\n{rubric}\n"
-            "仅评价模型回答是否按预期行为有效完成本轮任务。核心信息由截至本轮的用户实际要求决定；参考答案中用户未要求的附加描述不得自动成为扣分项。"
-            "评分前必须专门检查：模型是否否定了当前问题或已确认对话明确给出的事件、对象、记录存在性等前提；若最终结论正确但同时否定了这些已知前提，应按相关事实错误降为1分。"
-            "只输出JSON："
-            '{"score":0|1|2,"reason":"简短中文理由"}'
-        )
+        if self.answer_quality_input_version == "task_v2":
+            judge_text = json.dumps(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "reference": reference,
+                    "expected_action": expected_action,
+                    "answerability": answerability,
+                    "task_type": task_type,
+                    "question_type": question_type,
+                    "conversation": [
+                        {"question": t.get("message"), "answer": t.get("answer")} for t in conversation or []
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        else:
+            context = self._conversation_context(conversation)
+            judge_text = (
+                f"{context}**当前问题**：{question}\n**模型回答**：【{answer}】\n"
+                f"**预期行为（GT）**：{expected_action or '未标注'}\n"
+                f"**任务类型（GT）**：{task_type or '未标注'}\n"
+                f"**问题类型（GT）**：{question_type or '未标注'}\n"
+                f"**可回答性（GT）**：{answerability or '未标注'}\n"
+                f"**参考答案（GT）**：【{reference}】\n"
+                f"**本题评分规则**：\n{rubric}\n"
+                "仅评价模型回答是否按预期行为有效完成本轮任务。核心信息由截至本轮的用户实际要求决定；参考答案中用户未要求的附加描述不得自动成为扣分项。"
+                "评分前必须专门检查：模型是否否定了当前问题或已确认对话明确给出的事件、对象、记录存在性等前提；若最终结论正确但同时否定了这些已知前提，应按相关事实错误降为1分。"
+                "只输出JSON："
+                '{"score":0|1|2,"reason":"简短中文理由"}'
+            )
         image_audit: dict[str, Any] | None = None
         content: str | list[dict[str, Any]] = judge_text
         if self.judge_use_gt_images:

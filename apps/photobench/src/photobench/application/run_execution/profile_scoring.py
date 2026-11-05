@@ -306,6 +306,7 @@ class ProfileScoring:
         runner.request_transform = None
         runner.judge_use_gt_images = bool(config["use_gt_images"])
         runner.answer_quality_prompt = config["prompts"].get("answer_quality", runner.answer_quality_prompt)
+        runner.answer_quality_input_version = config.get("quality_input_version", "legacy_v1")
 
         def observe(event: dict[str, Any]) -> None:
             event = {

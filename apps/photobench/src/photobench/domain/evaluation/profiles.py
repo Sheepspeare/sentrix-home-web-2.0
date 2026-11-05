@@ -10,13 +10,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import PurePosixPath
 from typing import Any
 
-from photobench.domain.evaluation.atm.constants import LLM_JUDGE_PROMPT
-from photobench.domain.evaluation.prompts import CHOICE_PROMPT, NUMBER_MATCH_PROMPT
+from photobench.domain.evaluation.prompts import ATM_OPEN_PROMPT, CHOICE_PROMPT, NUMBER_MATCH_PROMPT
 from photobench.domain.runs.judge import JUDGE_PROMPT, JUDGE_PROMPT_KINDS
 
 OPEN = "photobench_open_v1"
 ATM = "atm_qs_v1"
-RULE_VERSION = "scoring-2026.11.04-v1"
+RULE_VERSION = "scoring-2026.11.06-v2"
 LABELS = {OPEN: "开放式回答（0/1/2，历史口径）", ATM: "ATM-Bench式QS"}
 PROMPTS = {
     OPEN: {"answer_quality": JUDGE_PROMPT},
@@ -24,7 +23,7 @@ PROMPTS = {
         "choice": CHOICE_PROMPT,
         "number": NUMBER_MATCH_PROMPT.replace("规范化模型回答", "模型开放式回答")
         + "允许等值单位换算及等价日期写法；必须对照原问题和参考答案，不能补猜。",
-        "open": LLM_JUDGE_PROMPT,
+        "open": ATM_OPEN_PROMPT,
     },
 }
 
@@ -67,6 +66,7 @@ def profile_configs(
             "use_gt_images",
             "use_gt_metadata",
             "gt_metadata_mode",
+            "quality_input_version",
         }:
             raise ValueError("Invalid scoring profile configuration")
         prompts = dict(PROMPTS[profile])
@@ -86,6 +86,13 @@ def profile_configs(
         if any(type(v) is not bool for v in flags.values()):
             raise ValueError("GT flags must be booleans")
         result[profile] = {"prompts": prompts, **flags}
+        if profile == OPEN:
+            version = raw.get("quality_input_version", "task_v2")
+            if version not in {"legacy_v1", "task_v2"}:
+                raise ValueError("Unknown answer quality input version")
+            result[profile]["quality_input_version"] = version
+        elif "quality_input_version" in raw:
+            raise ValueError("Answer quality input version is only valid for the open profile")
         # Explicit old-client flags retain their protocol. Frozen batches never pass here.
         if "gt_metadata_mode" in raw or "use_gt_metadata" not in raw:
             if raw.get("gt_metadata_mode", "readable_v1") != "readable_v1":

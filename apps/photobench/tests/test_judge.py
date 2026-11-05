@@ -372,8 +372,8 @@ def test_a_failed_sub_judge_marks_the_item_failed_not_scored():
     assert "judge_error" in item["judge"]["reason"]
 
 
-def test_the_prompt_constant_is_the_1_0_text():
-    """提示词是判分口径本身；这条钉住它没有被「整理」过。"""
+def test_quality_prompt_keeps_the_public_output_contract():
+    """默认规则允许按版本维护；输出协议保持0/1/2与理由。"""
     assert JUDGE_PROMPT.startswith("你是通用对话任务的回答质量评测员")
     assert '{"score":0|1|2,"reason":"简短中文理由"}' in JUDGE_PROMPT
 
