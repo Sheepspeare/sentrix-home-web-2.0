@@ -1420,6 +1420,6 @@ details.qa-results-body[open] > summary::before { content:"▾ "; }
 .export-control-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 12px; }
 .detail-head-tools .export-control { display: block; }
 .detail-head-tools .export-control > summary { cursor: pointer; font-size: 13px; color: #526176; }
-.item-score-card .evaluation-panel { border: 0; margin: 0; padding: 14px 0; box-shadow: none; background: transparent; }
-.score-history { margin-top: 10px; font-size: 12px; }
+.item-score-card .evaluation-panel { border: 0; margin: 0; padding: 14px 15px; box-shadow: none; background: transparent; }
+.score-history { margin: 0; padding: 0 15px 15px; font-size: 12px; }
 @media (max-width: 700px) { .execution-history { padding: 14px; } .execution-history-head label { width: 100%; display: block; } .execution-history select { display: block; width: 100%; margin-top: 8px; } }
