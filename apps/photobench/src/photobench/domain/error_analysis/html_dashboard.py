@@ -447,6 +447,7 @@ def render_charts(
         ("answerability", "不同证据条件下的表现"),
         ("content_type", "内容题型"),
         ("content_subtype", "细分题型"),
+        ("scoring_question_type", "ATM原生题型 · 样本量与质量"),
     ):
         rows = groups.get(dim, [])
         if any(r["value"] not in UNLABELED and r["total"] for r in rows):

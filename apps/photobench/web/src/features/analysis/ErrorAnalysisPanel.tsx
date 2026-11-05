@@ -190,6 +190,11 @@ function CaseCard({
       <p>{c.reference_answer || "未记录"}</p>
       <h5>{c.turns.length > 1 ? "最终回答" : "模型回答"}</h5>
       <p>{c.answer || "未记录"}</p>
+      {c.scoring_evidence && <details>
+        <summary>题型评分与扣分依据 · {displayLabel(c.dimensions.scoring_question_type || "unknown")}</summary>
+        <p>本次评分标准、批次、判分理由及已保存的媒体集合差异；缺失记录见判断限制。</p>
+        <pre>{pretty(c.scoring_evidence)}</pre>
+      </details>}
       {c.text_truncated && <p>当前为截短摘要，完整内容可读取原始轨迹。</p>}
       <p>
         数据缺口：{c.missing.map(displayLabel).join("、") || "未发现"}

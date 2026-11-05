@@ -271,6 +271,7 @@ class AnalysisQuery(BaseModel):
     benchmark_group: str = ""
     content_type: str = ""
     content_subtype: str = ""
+    scoring_question_type: str = ""
     test_scenario: str = ""
     tool_name: str = ""
     issue_kind: str = ""

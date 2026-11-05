@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from photobench.domain.datasets.ability_taxonomy import ABILITY_FIELDS, ability_dimensions, ability_labels
+from photobench.domain.error_analysis.scoring import project_case_scoring
 from photobench.domain.error_analysis.taxonomy import (
     ABILITY_DISPLAY_PROJECTION,
     QUALITY_DIMENSIONS,
@@ -27,7 +28,7 @@ def quality_bucket(judge: dict[str, Any] | None) -> int | None:
     return judge_bucket_for_summary(judge)
 
 
-RULE_VERSION = 12
+RULE_VERSION = 13
 TERMINAL = {"completed", "completed_with_errors", "failed", "cancelled", "interrupted"}
 NORMAL = {"answered", "answered_with_gap", "policy_refusal"}
 LABELS = {
@@ -64,6 +65,7 @@ DIMENSIONS = (
     "task_type",
     "content_type",
     "content_subtype",
+    "scoring_question_type",
     "test_scenario",
     "difficulty",
     "angle",
@@ -571,7 +573,7 @@ def case_from_item(item: Mapping[str, Any], index: int) -> dict[str, Any]:
     source_labels = {
         k: saved_labels(item.get(k))
         for k in DIMENSIONS
-        if k not in {"content_type", "content_subtype", "test_scenario"}
+        if k not in {"content_type", "content_subtype", "test_scenario", "scoring_question_type"}
     }
     dimension_labels = {k: list(v) for k, v in source_labels.items()}
     dimension_labels = {
@@ -761,7 +763,7 @@ def case_from_item(item: Mapping[str, Any], index: int) -> dict[str, Any]:
         "tool_json_invalid": sum(e["code"] == "tool_argument_json_invalid" for e in events),
         "retrieval_counts": {"candidate": retrieval, "delivery": delivery},
     }
-    return project_case_abilities(case)
+    return project_case_scoring(project_case_abilities(case))
 
 
 class Aggregator:
@@ -782,6 +784,7 @@ class Aggregator:
                 "benchmark_group",
                 "content_type",
                 "content_subtype",
+                "scoring_question_type",
                 "difficulty",
                 "answerability",
             )
@@ -801,6 +804,7 @@ class Aggregator:
         self.group_errors: dict[tuple[str, str, str, str], int] = Counter()
 
     def add(self, case: dict[str, Any]) -> None:
+        case = project_case_scoring(case)
         self.total += 1
         if case.get("ability_taxonomy_version"):
             self.ability_versions.add(case["ability_taxonomy_version"])

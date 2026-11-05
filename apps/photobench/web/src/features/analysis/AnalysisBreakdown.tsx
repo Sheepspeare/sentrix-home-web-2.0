@@ -34,6 +34,7 @@ const groupChoices = [
   "conversation_type",
   "content_type",
   "content_subtype",
+  "scoring_question_type",
 ];
 const count = (r: Row, key: string) => Number(r[key] || 0);
 

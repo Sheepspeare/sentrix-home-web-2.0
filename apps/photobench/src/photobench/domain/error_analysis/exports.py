@@ -14,9 +14,12 @@ from photobench.domain.datasets.qa_taxonomy import taxonomy_document
 from photobench.domain.error_analysis.html_dashboard import score_labels
 from photobench.domain.error_analysis.html_report import document as _document
 from photobench.domain.error_analysis.html_report import render_report
+from photobench.domain.error_analysis.scoring import ATM_TYPES, project_case_scoring
 from photobench.domain.error_analysis.taxonomy import QUALITY_DIMENSIONS
 
 DISPLAY_LABELS = {
+    **ATM_TYPES,
+    "scoring_question_type": "ATM原生题型",
     "gt_conflict": "GT证据冲突",
     "service_error": "服务请求失败",
     "execution_failure": "答题执行失败",
@@ -130,6 +133,7 @@ def _csv(rows: Sequence[Sequence[Any]]) -> str:
 def export_report(
     report: dict[str, Any], cases: Sequence[dict[str, Any]], format: str, filters: Mapping[str, Any]
 ) -> str:
+    cases = [project_case_scoring(case) for case in cases]
     labels = {
         **DISPLAY_LABELS,
         **(
@@ -153,6 +157,7 @@ def export_report(
                     "task_type",
                     "content_type",
                     "content_subtype",
+                    "scoring_question_type",
                     "ability_family",
                     "ability_type",
                     "benchmark_group",
@@ -180,6 +185,7 @@ def export_report(
                         c["dimensions"].get("task_type", "unknown"),
                         c["dimensions"].get("content_type", "unknown"),
                         c["dimensions"].get("content_subtype", "unknown"),
+                        c["dimensions"].get("scoring_question_type", "unknown"),
                         c["dimensions"].get("ability_family", "unknown"),
                         c["dimensions"].get("ability_type", "unknown"),
                         c["dimensions"].get("benchmark_group", "unknown"),

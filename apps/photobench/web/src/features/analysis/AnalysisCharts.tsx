@@ -73,7 +73,7 @@ export function AnalysisCharts({ report: r, filter }: {
   const scores = scoreChoices(r, unit);
   const selectedScore = scores.find(s => s.value === score)!;
   const isAbility = ["ability_family", "ability_type"].includes(dimension);
-  const isContent = isAbility || ["content_type", "content_subtype"].includes(dimension);
+  const isContent = isAbility || ["content_type", "content_subtype", "scoring_question_type"].includes(dimension);
   const groups = unit === "turn" ? r.turn_groups || {} : r.groups;
   const allRows = groups[dimension] || [];
   const child = ["content_subtype", "ability_type"].includes(dimension);
@@ -175,7 +175,7 @@ export function AnalysisCharts({ report: r, filter }: {
           {scores.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select></label>}
         <label>分组方式<select aria-label="分布分组方式" value={dimension} onChange={e => { setDimension(e.target.value); setParent(""); }}>
-          {Object.entries(dimensions).filter(([key]) => r.rule_version >= 7 || !["ability_family", "ability_type", "benchmark_group"].includes(key)).filter(([key]) => unit !== "turn" || ["ability_family", "ability_type", "benchmark_group", "content_type", "content_subtype", "difficulty", "answerability"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          {Object.entries(dimensions).filter(([key]) => r.rule_version >= 7 || !["ability_family", "ability_type", "benchmark_group"].includes(key)).filter(([key]) => unit !== "turn" || ["ability_family", "ability_type", "benchmark_group", "content_type", "content_subtype", "scoring_question_type", "difficulty", "answerability"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select></label>
         {dimension === "content_subtype" && <label>内容大类<select aria-label="分析内容大类" value={parent} onChange={e => setParent(e.target.value)}>
           <option value="">全部大类</option>{Object.entries(qaTaxonomy.tasks).map(([key, task]) => <option key={key} value={key}>{task.label}</option>)}

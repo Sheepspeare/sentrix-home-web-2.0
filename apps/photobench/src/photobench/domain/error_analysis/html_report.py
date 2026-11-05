@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from photobench.domain.error_analysis.html_dashboard import render_charts, score_composition, selected_turns
-from photobench.domain.evaluation.presentation import evaluation_html, evaluation_summary_html
+from photobench.domain.evaluation.presentation import evaluation_summary_html
 
 STYLES = """
 :root{color-scheme:light;--ink:#1c2c43;--muted:#62738a;--line:#dfe6ef;
@@ -209,6 +209,10 @@ CONTROLLER = r"""
   function hydrate(i) {
     const card=cards[i];if(card.dataset.loaded)return;
     const c=cases[i], b=node('div',undefined,'detail-body');
+    if(c.scoring_evidence){
+      b.append(node('h3','题型评分与扣分依据 · '+label(c.scoring_evidence.question_type)),
+        fold('评分标准、原分、判分理由及列表差异',node('pre',JSON.stringify(c.scoring_evidence,null,2))));
+    }
     if(c.text_truncated)b.append(node('p','分析摘要曾截短；完整文本与调用轨迹请从运行页导出。','notice'));
     const turns=c.turns.length ? c.turns : [{question:c.question,answer:c.answer,
       reference_answer:c.reference_answer,score:c.score,turn:0}];
@@ -643,7 +647,6 @@ def render_report(
         ability = " / ".join(
             case_labels.get(v, v) for v in case["dimensions"].get("ability_type", "unknown").split(" / ")
         )
-        body += evaluation_html(case.get("evaluation_result"), case.get("evaluation"))
         score_key = str(case["score"])
         body += (
             f'<details class="case-card" id="case-{i}"><summary><span class="case-identity">'

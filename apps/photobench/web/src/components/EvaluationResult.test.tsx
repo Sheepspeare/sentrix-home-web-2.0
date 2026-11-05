@@ -75,3 +75,20 @@ it("历史缺少选项定义时保留已存的匹配理由", () => {
   expect(screen.getByText("选项原文未记录")).toBeTruthy();
   expect(screen.getByText("日期一致")).toBeTruthy();
 });
+
+it("独立QS批次的choice评分显示其他及逐项比较，沿用定义说明", () => {
+  render(<EvaluationResult definition={{answer_format: "choice", correct_option: "B", options: [
+    {id: "A", text: "行为甲"}, {id: "B", text: "行为乙"},
+  ]}} value={{scorer: "choice", profile_id: "atm_qs_v1", rule_version: "scoring-v1", judge_model: "judge-real",
+    score: 0, max_score: 1, normalized_score: 0, judge_status: "completed", matched_option: "other",
+    comparisons: [{option_id: "A", matches: false, reason: "未提及甲"},
+      {option_id: "B", matches: false, reason: "未提及乙"}], reason: "给定选项均未匹配"}} />);
+  expect(screen.getByText("选择题语义匹配")).toBeTruthy();
+  expect(screen.getByText(/匹配：其他（给定选项之外） · 正确选项：B/)).toBeTruthy();
+  expect(screen.getByText(/选项仅供评测端使用/)).toBeTruthy();
+  expect(screen.getAllByText("不匹配")).toHaveLength(2);
+  expect(screen.queryByText("未记录匹配结果")).toBeNull();
+  expect(screen.getByText("未提及甲")).toBeTruthy();
+  expect(screen.getByText(/协议 scoring-v1 · 模型 judge-real/)).toBeTruthy();
+  expect(screen.queryByText(/undefined|确定性评分/)).toBeNull();
+});

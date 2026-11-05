@@ -111,6 +111,7 @@ QUALITY_DIMENSIONS = (
     "benchmark_group",
     "content_type",
     "content_subtype",
+    "scoring_question_type",
     "difficulty",
     "answerability",
     "media_type",

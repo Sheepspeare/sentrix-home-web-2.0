@@ -42,7 +42,14 @@ def evaluation_summary_html(summary: Mapping[str, Any]) -> str:
     def pct(value: Any) -> str:
         return f"{value:.1%}" if type(value) in (int, float) else "未评分"
 
-    names = {"choice": "选择题", "media_list": "媒体列表", "open": "开放回答"}
+    names = {
+        "choice": "选择题",
+        "media_list": "媒体列表",
+        "open": "开放回答",
+        "number": "ATM数值题",
+        "list_recall": "ATM列表题",
+        "open_end": "ATM开放题",
+    }
     rows = "".join(
         f"<tr><td>{html.escape(names.get(key, key))}</td>"
         f"<td>{row['scored']} / {row['count']}</td><td>{pct(row['mean'])}</td></tr>"

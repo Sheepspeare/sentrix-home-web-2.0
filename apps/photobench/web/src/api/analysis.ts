@@ -44,6 +44,7 @@ export interface AnalysisTurn {
   behavior_correct: boolean | null;
   judge_reason: string;
   score: number | null;
+  scoring_evidence?: Record<string, unknown>;
   evaluation_result?: Record<string, unknown>;
   evaluation?: Record<string, unknown>;
   ability_family?: string[];
@@ -61,6 +62,7 @@ export interface AnalysisCase {
   answer: string;
   reference_answer: string;
   score: number | null;
+  scoring_evidence?: Record<string, unknown>;
   evaluation_result?: Record<string, unknown>;
   evaluation?: Record<string, unknown>;
   execution: string;

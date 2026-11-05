@@ -7,12 +7,16 @@ export const dimensions: Record<string, string> = {
   benchmark_group: "测试分组",
   content_type: "内容题型",
   content_subtype: "细分题型",
+  scoring_question_type: "ATM原生题型",
   difficulty: "难度",
   answerability: "可回答性",
   media_type: "媒体类型",
   conversation_type: "对话形式",
 };
 const labels: Record<string, string> = {
+  number: "ATM数值题",
+  list_recall: "ATM列表题",
+  open_end: "ATM开放题",
   T1_retrieve_media: "媒体检索",
   T1_media_retrieval: "媒体检索",
   T2_fact_qa: "事实问答",

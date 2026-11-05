@@ -2,7 +2,7 @@ type Dict = Record<string, unknown>;
 const obj = (v: unknown): Dict => v && typeof v === "object" ? v as Dict : {};
 const pct = (v: unknown) => typeof v === "number" ? (v * 100).toFixed(1) + "%" : "未评分";
 const names: Record<string, string> = {choice: "选择题语义匹配", media_list: "媒体列表", open: "开放回答", number: "ATM 数值", list_recall: "ATM 列表召回", open_end: "ATM 开放问答"};
-const scorerTypes: Record<string, string> = {atm_number: "number", atm_list: "list_recall", atm_open: "open_end"};
+const scorerTypes: Record<string, string> = {choice: "choice", number: "number", list: "list_recall", open: "open_end", answer_quality: "open", atm_number: "number", atm_list: "list_recall", atm_open: "open_end"};
 export function evaluationTypeLabel(value: unknown): string {
   const d = obj(value);
   const key = String(d.source_qtype || scorerTypes[String(d.scorer)] || d.answer_format || "");
@@ -37,8 +37,8 @@ export function EvaluationResult({value, definition}: {value: unknown; definitio
   const options = Array.isArray(d.options) ? d.options.map(obj) : [];
   const choiceOptions: Dict[] = [...options, ...comparisons.filter(c => !options.some(o => o.id === c.option_id)).map(c => ({id: c.option_id}))];
   return <section aria-label="题型评分" className="evaluation-panel">
-    <h4>{evaluationTypeLabel(r) || String(r.scorer)}</h4>
-    <p className="muted small">{scoringExplanation(r)}</p>
+    <h4>{evaluationTypeLabel({...d, ...r}) || String(r.scorer)}</h4>
+    <p className="muted small">{scoringExplanation({...d, ...r})}</p>
     <p className="evaluation-score">主分 {r.score == null ? "未评分" : String(r.score) + "/" + String(r.max_score)} · 归一化 {pct(r.normalized_score)} · {r.judge_status === "needs_review" ? "题目待复核" : r.judge_status === "failed" ? "评分失败" : "已评分"}</p>
     <p>{evaluationReason(r.reason)}</p>
     {choiceOptions.length > 0 && <div className="evaluation-choice-definition">
@@ -63,7 +63,7 @@ export function EvaluationResult({value, definition}: {value: unknown; definitio
     {Object.keys(metrics).length > 0 && <details className="evaluation-disclosure"><summary>GT、预测、交集与差集</summary><pre>{JSON.stringify(metrics, null, 2)}</pre></details>}
     {r.number_aux != null && <p>LLM 数值辅分 {pct(obj(r.number_aux).score)} · 与官方分{r.number_aux_disagrees === true ? "不一致" : r.number_aux_disagrees === false ? "一致" : "尚不可比较"}</p>}
     {(r.number_aux != null || r.semantic_aux != null) && <details className="evaluation-disclosure"><summary>辅分与归一化依据</summary><pre>{JSON.stringify(r.number_aux || r.semantic_aux, null, 2)}</pre></details>}
-    <small>协议 {String(r.version)} · 模型 {String(r.judge_model || "确定性评分")}</small>
+    <small>协议 {String(r.version || r.rule_version || d.version || "未记录")} · 模型 {String(r.judge_model || (["media_set", "atm_list", "list", "atm_number"].includes(String(r.scorer)) ? "确定性评分" : "未记录"))}</small>
   </section>;
 }
 export function EvaluationSummary({value}: {value: unknown}) {

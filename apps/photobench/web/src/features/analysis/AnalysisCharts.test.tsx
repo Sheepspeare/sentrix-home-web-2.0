@@ -303,3 +303,24 @@ it("规则7保存的旧报告继续显示v1名称，不随新版字典静默更�
   expect(screen.getByText("过程与时间线整理")).toBeTruthy();
   expect(screen.queryByText("媒体定位与筛选")).toBeNull();
 });
+
+it("ATM原生题型可独立分组并按题型和分数筛选", () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const report = { schema_version: 2, rule_version: 13, generated_at: 1, item_count: 3,
+    source: {}, result_fingerprint: "r", gt_fingerprint: "g", counts: {score_2: 1, score_0: 2},
+    denominators: {quality_valid: 3, quality_missing: 0}, errors: [], heatmap: [], behavior_matrix: [], definitions: [],
+    groups: {scoring_question_type: [
+      {value: "number", total: 1, score_0: 1},
+      {value: "list_recall", total: 1, score_2: 1},
+      {value: "open_end", total: 1, score_0: 1},
+    ]},
+  } as AnalysisReport;
+  const filter = vi.fn();
+  render(<AnalysisCharts report={report} filter={filter} />);
+  fireEvent.change(screen.getByLabelText("分布分组方式"), {target: {value: "scoring_question_type"}});
+  expect(screen.getByText("ATM数值题")).toBeTruthy();
+  expect(screen.getByText("ATM列表题")).toBeTruthy();
+  expect(screen.getByText("ATM开放题")).toBeTruthy();
+  fireEvent.click(screen.getByLabelText("ATM数值题 错误（0分）"));
+  expect(filter).toHaveBeenLastCalledWith(expect.objectContaining({scoring_question_type: "number", score: "0"}));
+});

@@ -71,17 +71,37 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
                     k: value[k]
                     for k in (
                         "batch_id",
+                        "rule_version",
                         "profile_id",
                         "status",
                         "reason",
                         "finished_at",
                         "purpose",
                         "choice_match",
+                        "version",
+                        "answer_format",
+                        "source_qtype",
+                        "matched_option",
+                        "comparisons",
+                        "semantic_aux",
                         "formula",
                         "target",
                         "predicted",
+                        "intersection",
+                        "number_aux",
+                        "number_aux_disagrees",
+                        "choice_semantic_aux",
                     )
                     if k in value
+                },
+                "judge_model": value.get("judge_model") or ((batch or {}).get("judge") or {}).get("model"),
+                "scoring_rule": {
+                    "rule_version": (batch or {}).get("rule_version"),
+                    "frozen_prompt_template": ((batch or {}).get("config") or {}).get("prompts", {}).get(
+                        value.get("purpose")
+                    ),
+                    "use_gt_images": ((batch or {}).get("config") or {}).get("use_gt_images"),
+                    "use_gt_metadata": ((batch or {}).get("config") or {}).get("use_gt_metadata"),
                 },
                 "score": value.get("score") if valid_result(value) else None,
                 "max_score": 2 if profile == OPEN else 1,

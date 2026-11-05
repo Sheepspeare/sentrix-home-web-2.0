@@ -626,3 +626,27 @@ def test_question_rubric_is_preserved_in_both_standards_and_saved_requests(profi
     assert rubric not in http.calls[0]["messages"][0]["content"]
     if profile == ATM:
         assert "2分对应accuracy=true" in http.calls[-1]["messages"][0]["content"]
+
+
+@pytest.mark.parametrize("matched", ["A", "other"])
+def test_choice_projection_retains_saved_comparisons_and_protocol(matched):
+    s = state("choice_judge", options=[{"id": "A", "text": "甲"}, {"id": "B", "text": "乙"}],
+              correct_option="A")
+    comparisons = [{"option_id": option, "matches": option == matched, "reason": option + "原始理由"}
+                   for option in ("A", "B")]
+    svc, batches, _, _ = setup(s, [ATM], [task(), {
+        "status": "other" if matched == "other" else "matched", "matched_option": matched,
+        "comparisons": comparisons, "reason": "原始结论",
+    }])
+    b = batches[0]
+    target = scoring_targets(s, b, "all")[0]
+    saved = svc.score(b, target)
+    before = copy.deepcopy(s)
+    result = profile_state(s, ATM, b["batch_id"])["items"][0]["evaluation_result"]
+    assert result["matched_option"] == saved["matched_option"] == matched
+    assert result["comparisons"] == saved["comparisons"] == comparisons
+    assert result["answer_format"] == "choice"
+    assert result["version"] == saved["version"]
+    assert result["judge_model"] == "j"
+    assert result["score"] == (1 if matched == "A" else 0)
+    assert s == before
