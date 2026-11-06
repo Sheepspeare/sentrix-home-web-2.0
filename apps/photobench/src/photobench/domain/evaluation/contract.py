@@ -214,26 +214,15 @@ def evaluation_summary(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         valid = [s for s in scores if isinstance(s, (int, float))]
         return sum(valid) / len(valid) if valid else None
 
-    groups = sorted(
-        {
-            str(
-                (x.get("evaluation") or x.get("evaluation_result") or {}).get("source_qtype")
-                or (x.get("evaluation") or x.get("evaluation_result") or {})["answer_format"]
-            )
-            for x in eligible
-        }
-    )
+    def question_type(item: Mapping[str, Any]) -> str:
+        definition = item.get("evaluation") or item.get("evaluation_result") or {}
+        # 原始题集允许不标题型；评分结果仍须可汇总和落盘。
+        return str(definition.get("source_qtype") or definition.get("answer_format") or "unclassified")
+
+    groups = sorted({question_type(item) for item in eligible})
     by_type = {}
     for kind in groups:
-        rows = [
-            x
-            for x in eligible
-            if (
-                (x.get("evaluation") or x.get("evaluation_result") or {}).get("source_qtype")
-                or (x.get("evaluation") or x.get("evaluation_result") or {})["answer_format"]
-            )
-            == kind
-        ]
+        rows = [x for x in eligible if question_type(x) == kind]
         by_type[kind] = {
             "count": len(rows),
             "mean": mean(rows),

@@ -186,6 +186,24 @@ def test_binary_one_is_correct_and_recovers_as_valid():
     assert summary["mean"] == summary["coverage"] == 1
 
 
+def test_untyped_open_scores_persist_without_inventing_a_question_type(tmp_path):
+    from photobench.infrastructure.results.store import FileResultWriter, FileRunStore
+
+    items = [
+        {"qa_id": "old-1", "evaluation_result": {"scorer": "open_judge", "normalized_score": 0}},
+        {"qa_id": "old-2", "evaluation_result": {"scorer": "open_judge", "normalized_score": 0.5}},
+    ]
+    summary = evaluation_summary(items)
+    assert summary["mean"] == 0.25
+    assert summary["coverage"] == 1
+    assert summary["by_type"] == {"unclassified": {"count": 2, "scored": 2, "mean": 0.25}}
+    store = FileRunStore(tmp_path)
+    state = {"run_id": "old-untyped", "status": "running", "qa_count": 2, "items": items}
+    FileResultWriter(tmp_path).write_snapshot("old-untyped", state)
+    assert store.load_state("old-untyped")["items"] == items
+    assert "evaluation" not in items[0]
+
+
 def test_numeric_aux_normalization_is_blind_and_failure_keeps_official():
     record = {"message": "How much?", "answer": "$12", "reference_answer": "$12"}
     r, req = execute(definition("atm_number"), [{"normalized_answer": "USD 12"}, {"score": 1}], record=record)

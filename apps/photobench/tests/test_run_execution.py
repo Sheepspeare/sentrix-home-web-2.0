@@ -550,7 +550,7 @@ def test_processing_requires_two_consecutive_zero_pending_snapshots():
     调用次数上可区分。
     """
     client = FakeSentrixClient(
-        asset_polls=[[], []],
+        asset_polls=[_assets(), _assets()],
         turns={"turn_1": [_completed_turn()]},
         import_result={"imported": 2, "events": 1, "summarized": 1, "failures": []},
     )
@@ -767,13 +767,8 @@ class _TickingTime:
         return "20260101-000000"
 
 
-def test_a_scope_with_no_assets_is_partial_not_a_silent_success():
-    """导入之后 scope 里没有资产 → 相位压 partial，而不是「处理完了，0 张」。
-
-    1.0 的判据是「这一轮一张都没收进来」（``:2913``）；2.0 的导入会报 ``deduplicated``，
-    所以换成本条更准的判据（scope 里到底有没有资产）——**它同时覆盖了 1.0 那条的用场**：
-    在空相册上把题全问一遍，产出的是一份全错的 run.json，而那正是这条要拦的事。
-    """
+def test_a_scope_with_no_assets_stops_before_answering():
+    """去重回执也需有实际资产；空相册终止构建并保留处理阶段诊断。"""
     client = FakeSentrixClient(
         asset_polls=[[]],
         turns={"turn_1": [_completed_turn()]},
@@ -782,10 +777,40 @@ def test_a_scope_with_no_assets_is_partial_not_a_silent_success():
     execution, _client, _writer, _lifecycle, _albums = _execution(client=client)
     state = execution.execute(_request())
     phase = state["phases"]["pipeline_processing"]
-    assert phase["status"] == "partial"
+    assert phase["status"] == "failed"
     assert phase["progress"]["total"] == 0
     assert phase["error_details"][0]["error_type"] == "empty_import"
-    assert state["status"] == "completed_with_errors"
+    assert state["status"] == "failed"
+    assert state["failed_phase"] == "pipeline_processing"
+    assert "qa_eval" not in state["phases"]
+    assert "start_turn" not in client.call_names()
+
+
+@pytest.mark.parametrize("explicit_pipeline", [False, True])
+def test_all_media_import_failures_preserve_errors_and_never_call_agent_or_judge(
+    monkeypatch, explicit_pipeline
+):
+    failures = [{"file_name": name, "reason": "No module named 'tzfpy'"} for name in ("a.jpg", "b.jpg")]
+    client = FakeSentrixClient(
+        explicit_pipeline=explicit_pipeline,
+        asset_polls=[[]],
+        import_result={"imported": 0, "deduplicated": 0, "failures": failures},
+    )
+    execution, *_ = _execution(client=client)
+
+    def forbidden(*_, **__):
+        pytest.fail("An empty import must stop before Agent or Judge requests")
+
+    monkeypatch.setattr(execution, "_phase_qa_eval", forbidden)
+    monkeypatch.setattr(execution, "_build_judge", lambda *_: SimpleNamespace(judge_item=forbidden))
+    state = execution.execute(_request())
+    assert state["status"] == "failed"
+    assert state["failed_phase"] == "pipeline_processing"
+    assert state["phases"]["photo_import"]["failed_count"] == 2
+    assert state["phases"]["photo_import"]["error_details"][0]["reason"] == "No module named 'tzfpy'"
+    assert state["phases"]["pipeline_processing"]["error_details"][0]["error_type"] == "empty_import"
+    assert "qa_eval" not in state["phases"]
+    assert "start_turn" not in client.call_names()
 
 
 def test_the_stall_detector_ignores_status_flapping_inside_the_pending_set(

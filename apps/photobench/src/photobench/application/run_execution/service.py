@@ -1735,6 +1735,8 @@ class RunExecution:
             state.phase_partial("pipeline_processing", phase_result)
         else:
             state.phase_done("pipeline_processing", phase_result)
+        if not assets:
+            raise RuntimeError("导入后相册为空，已停止测评；请修复导入错误后重新构建相册")
 
     def _phase_processing_explicit(self, state: RunState, request: RunRequest) -> None:
         """调用主产品的真实流水线，同时旁路轮询源资产状态用于实时进度。"""
@@ -1933,6 +1935,8 @@ class RunExecution:
             state.phase_partial("pipeline_processing", phase_result)
         else:
             state.phase_done("pipeline_processing", phase_result)
+        if not asset_ids:
+            raise RuntimeError("导入后没有可处理的源资产，已停止测评；请修复导入错误后重新构建相册")
 
     @staticmethod
     def _stall_timeout() -> int:
