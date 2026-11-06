@@ -862,6 +862,9 @@ class JudgeRunner:
         return tuple(kind for kind in kinds if not self._valid_result(record.get(kind), kind))
 
     def needs_judge_recovery(self, item: Mapping[str, Any]) -> bool:
+        # 选择题、列表题与 ATM 评分器的分数不出自 Judge，不参与「缺分补评」。
+        if (item.get("evaluation") or {}).get("scorer", "open_judge") != "open_judge":
+            return False
         return item.get("execution_status") == "completed" and any(
             self.missing_judge_fields(record) for record in item.get("runtime_turns") or []
         )
@@ -895,6 +898,11 @@ class JudgeRunner:
             record[kind] = value
 
         for index, record in enumerate(turn_records):
+            # 「提供选择题选项」的追加轮是测评服务的行为，不是题目的一部分：
+            # 它的 JSON 回复没有 0/1/2 语义，也不该产生 task/evidence 判分。
+            # 原题轮数以 conversation 为准，超出的轮次一律跳过。
+            if index >= len(conversation) and conversation:
+                continue
             missing = self.missing_judge_fields(record) if only_missing else ()
             if only_missing and not missing:
                 continue
@@ -937,6 +945,12 @@ class JudgeRunner:
                 and record.get("answer")
                 and (record.get("task_judge") or {}).get("actual_action") != "clarify"
             )
+            # 选择题、列表题与 ATM 各评分器有自己的评分通道（score_typed 与程序计分），
+            # 答题质量 Judge 只服务 open_judge。把选项匹配或集合交付的题送进来，
+            # Judge 返回的 JSON 没有 0/1/2 语义，只能记成评分失败。
+            needs_quality = (
+                (row.get("evaluation") or {}).get("scorer", "open_judge") == "open_judge"
+            )
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                 quality_future = (
                     pool.submit(
@@ -953,7 +967,8 @@ class JudgeRunner:
                         gt_turn=turn_definition,
                         assets_by_name=assets_by_name,
                     )
-                    if (expected in ANSWER_QUALITY_RUBRICS or turn_reference.strip())
+                    if needs_quality
+                    and (expected in ANSWER_QUALITY_RUBRICS or turn_reference.strip())
                     and (not only_missing or "judge" in missing)
                     else None
                 )
@@ -984,12 +999,20 @@ class JudgeRunner:
                     else {"score": None, "reason": "not_applicable"},
                 )
 
-        task_judges = [record.get("task_judge") or {} for record in turn_records]
+        # 聚合只取原题轮次：选项轮没有判分，不能成为 item 的最终判分来源。
+        # 有题面定义时以它为准（选项轮是追加的，不属于原题）；
+        # 没有题面定义时全部轮次都是真实作答，不能截断。
+        original_turns = turn_records[: len(conversation)] if conversation else turn_records
+        task_judges = [record.get("task_judge") or {} for record in original_turns]
         task_judge = task_judges[-1] if task_judges else {"actual_action": None, "correct": None}
-        judge = turn_records[-1].get("judge") if turn_records else {"score": None, "reason": "not_applicable"}
+        judge = (
+            original_turns[-1].get("judge")
+            if original_turns
+            else {"score": None, "reason": "not_applicable"}
+        )
         evidence_judge = (
-            turn_records[-1].get("evidence_judge")
-            if turn_records
+            original_turns[-1].get("evidence_judge")
+            if original_turns
             else {"score": None, "reason": "not_applicable"}
         )
         judge_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -1006,18 +1029,18 @@ class JudgeRunner:
             judge_ms += float(item.get("judge_ms") or 0)
         all_judge_outputs = [
             value
-            for record in turn_records
+            for record in original_turns
             for value in (record.get("judge"), record.get("evidence_judge"), record.get("task_judge"))
         ]
         # 任何一个子判分 failed，item 的 judge_status 就是 failed——读侧靠它区分
-        # 「真的打了 0 分」与「根本没打成」。
+        # 「真的打了 0 分」与「根本没打成」。选项轮没有判分，不参与这个判定。
         judge_terminal_status = (
             "failed"
             if any(
                 isinstance(value, dict) and value.get("judge_status") == "failed"
                 for value in all_judge_outputs
             )
-            or any(self.missing_judge_fields(record) for record in turn_records)
+            or (needs_quality and any(self.missing_judge_fields(record) for record in original_turns))
             else "completed"
         )
         item.update(

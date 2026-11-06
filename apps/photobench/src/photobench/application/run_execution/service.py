@@ -51,7 +51,7 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -264,6 +264,17 @@ class RunRequest:
     judge_use_gt_images: bool = False
     runtime_snapshot: RunRuntimeSnapshot | None = None
     snapshot_source: str = "creation_config"
+
+
+def turn_counts(
+    conversation: Sequence[Mapping[str, Any]], turn_records: Sequence[Mapping[str, Any]]
+) -> tuple[int, int]:
+    """题面轮数与实际处理轮数各记一格。
+
+    「提供选择题选项」的追加轮是测评服务的行为：题面轮数（题型标签、按题计分
+    的分母）不因它变化，实际处理轮数照实记，日志和轨迹里两者都能对上。
+    """
+    return (len(conversation) if conversation else 1), len(turn_records)
 
 
 def freeze_runtime_request(
@@ -2637,10 +2648,10 @@ class RunExecution:
                 {
                     "answer": str(last_result.get("answer") or ""),
                     "conversation_id": conversation_id,
-                    # 选项轮不计入题面对话轮数：它是答题方式，不是题目的一部分。
-                    "conversation_turn_count": (
-                        (len(turn_records) - 1 if choice_labels else len(turn_records)) if conversation else 1
-                    ),
+                    # 选项轮是测评服务追加的答题方式，不属于题目设计：轮数按题面记，
+                    # 实际处理轮数另记一格供日志核对。
+                    "conversation_turn_count": turn_counts(conversation, turn_records)[0],
+                    "processed_turn_count": turn_counts(conversation, turn_records)[1],
                     "conversation_context_mode": "shared_conversation_id" if conversation else "single_turn",
                     "runtime_turns": turn_records,
                     "turn_status": last_result.get("status"),

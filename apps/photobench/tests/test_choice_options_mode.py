@@ -9,6 +9,7 @@ import pytest
 
 from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.profile_scoring import ProfileScoring
+from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.evaluation.contract import scoring_options
 from photobench.domain.evaluation.profiles import ATM, OPEN, profile_configs
 from photobench.domain.runs.choice_options import choice_prompt, option_labels, parse_choice_answer
@@ -87,8 +88,6 @@ def _scoring_state(answer: str, *, correct_option: str = "B"):
             "review_status": "verified",
         },
     }
-    from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
-
     return {
         "run_id": "r",
         "album_id": "album-x",
@@ -187,3 +186,97 @@ def test_blind_mode_still_uses_judge():
     # 盲选项模式不读 agent_choice，仍按 Judge 语义匹配走。
     assert result.get("answer_side") != "agent_choice"
     assert any("比较" in json.dumps(c["payload"], ensure_ascii=False) for c in http.calls)
+
+
+def test_judge_skips_appended_option_turn():
+    """开放式标准只评选项轮之前的原题回答；选项轮不产生 task/evidence/judge。"""
+    row = {
+        "qa_id": "q",
+        "question": "石碑刻了什么？",
+        "answer": "三峡坝址基石",
+        "expected_action": "answer",
+        # 题面只有一轮：选项轮是测评服务追加的，超出 conversation 长度。
+        "conversation": [{"message": "石碑刻了什么？", "expected_action": "answer"}],
+        "evaluation": {
+            "scorer": "choice_judge",
+            "answer_format": "choice",
+            "max_score": 1,
+            "applies_to_turn": 0,
+            "options": OPTIONS,
+            "correct_option": "C",
+            "review_status": "verified",
+        },
+    }
+    item = {
+        "qa_id": "q",
+        "execution_status": "completed",
+        "reference_answer": "三峡坝址基石",
+        "runtime_turns": [
+            {"message": "石碑刻了什么？", "answer": "刻的是坝址基石。", "expected_action": "answer"},
+            {"message": "请整理前面的信息…", "answer": '{"choice":"C","reason":"照片原文"}'},
+        ],
+    }
+    calls = []
+
+    class Http:
+        def request_json(self, url, payload=None, *a, **k):
+            calls.append(payload)
+            body = json.dumps({"actual_action": "answer", "reason": "作答"})
+            return {"choices": [{"message": {"content": body}}], "usage": {"total_tokens": 5}}
+
+    runner = JudgeRunner(
+        http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event()
+    )
+    out = runner.judge_item(item, row, {})
+    # 选项轮不发任何请求：唯一的调用是原题轮的任务判定。
+    assert len(calls) == 1
+    # 聚合只看原题轮，选项轮不进 task_judges。
+    assert len(out["task_judges"]) == 1
+    # 选择题不产生答题质量分，且不因此把整题判成评分失败。
+    assert out["judge"].get("reason") in {"not_labeled", "not_applicable"}
+    assert out["judge_status"] == "completed"
+
+
+def test_non_open_scorer_never_requests_quality_judge():
+    """选择题不走答题质量通道：整轮不发请求，也不要求 0/1/2 质量分。"""
+    calls = []
+
+    class Http:
+        def request_json(self, url, payload=None, *a, **k):
+            calls.append(payload)
+            body = json.dumps({"actual_action": "answer", "reason": "作答"})
+            return {"choices": [{"message": {"content": body}}]}
+
+    runner = JudgeRunner(
+        http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event()
+    )
+    row = {
+        "evaluation": {
+            "scorer": "choice_judge",
+            "answer_format": "choice",
+            "max_score": 1,
+            "applies_to_turn": 0,
+            "options": OPTIONS,
+            "correct_option": "A",
+            "review_status": "verified",
+        }
+    }
+    item = {
+        "qa_id": "q",
+        "execution_status": "completed",
+        "reference_answer": "ref",
+        "runtime_turns": [{"message": "q", "answer": "a", "expected_action": "answer"}],
+    }
+    out = runner.judge_item(item, row, {})
+    # 只有任务判定这一个请求，没有质量评分请求。
+    assert len(calls) == 1
+    assert out["judge"].get("reason") in {"not_labeled", "not_applicable"}
+    assert out["judge_status"] == "completed"
+
+
+def test_turn_count_uses_question_design_not_option_turn():
+    """conversation_turn_count 按题面记，processed_turn_count 记实际处理轮数。"""
+    from photobench.application.run_execution.service import turn_counts
+
+    assert turn_counts(conversation=[{}, {}, {}], turn_records=[{}, {}, {}, {}]) == (3, 4)
+    assert turn_counts(conversation=[], turn_records=[{}]) == (1, 1)
