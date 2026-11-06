@@ -9,16 +9,23 @@ export function ScoringSettings({value, onChange, disabled = false, hideGt = fal
         if (profiles.length) onChange({...value,profiles});
       }} /><span>{label}</span><span className='scoring-choice-state' aria-hidden='true'>{value.profiles.includes(id) ? '已选择' : '未选择'}</span></label>
       <p className='scoring-choice-description'>{id === OPEN_PROFILE ? '所有题由Judge对照参考答案评0、1、2分。' : '选择与数值题匹配计0/1；列表Jaccard；开放题计0/1。'}</p>
-      {!hideGt && <div className='scoring-gt-options'><label title='勾选后向Judge一并附加GT图片及每张图片对应的拍摄时间、可读地点。'>
+      {!hideGt && id === OPEN_PROFILE && <div className='scoring-gt-options'><label title='勾选后向Judge一并附加GT图片及每张图片对应的拍摄时间、可读地点。'>
         <input aria-label={label + ' · GT图片辅助'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.use_gt_images ?? false}
           onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], use_gt_images:e.target.checked}}})} />
         GT图片辅助
       </label><small>勾选后附加图片及对应的拍摄时间、可读地点。</small></div>}
-      {id === ATM_PROFILE && <div className='scoring-gt-options'><label title='勾选后答题模型在最后一轮收到选项，用 JSON 自报选择和理由；不勾选则模型看不到选项，由Judge语义匹配。'>
-        <input aria-label={label + ' · 提供选择题选项'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.choice_options_visible ?? true}
-          onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], choice_options_visible:e.target.checked}}})} />
-        提供选择题选项
-      </label><small>勾选后模型看到选项并自报选择，程序按答案键核对；不勾选沿用Judge语义匹配。</small></div>}
+      {id === ATM_PROFILE && <div className='scoring-gt-options'>
+        {!hideGt && <><label title='勾选后向Judge一并附加GT图片及每张图片对应的拍摄时间、可读地点。'>
+          <input aria-label={label + ' · GT图片辅助'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.use_gt_images ?? false}
+            onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], use_gt_images:e.target.checked}}})} />
+          GT图片辅助
+        </label><small>附加图片及拍摄时间、可读地点。</small></>}
+        <label title='勾选后答题模型在最后一轮收到选项，用 JSON 自报选择和理由；不勾选则模型看不到选项，由Judge语义匹配。'>
+          <input aria-label={label + ' · 提供选择题选项'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.choice_options_visible ?? true}
+            onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], choice_options_visible:e.target.checked}}})} />
+          提供选择题选项
+        </label><small>模型看选项自报选择，程序按答案键核对；不勾选用Judge语义匹配。</small>
+      </div>}
     </div>)}
     </div>
     <details className='scoring-details'><summary>评分方式与补评说明</summary>

@@ -47,7 +47,10 @@ describe('独立评分标准', () => {
     expect(screen.queryByRole('checkbox',{name:/GT元数据/})).toBeNull();
     fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
     fireEvent.click(screen.getByRole('checkbox',{name:PROFILE_LABELS[ATM_PROFILE]}));
-    expect(screen.getAllByText('勾选后附加图片及对应的拍摄时间、可读地点。')).toHaveLength(2);
+    expect(screen.getAllByText('勾选后附加图片及对应的拍摄时间、可读地点。')).toHaveLength(1);
+    expect(screen.getAllByText('附加图片及拍摄时间、可读地点。')).toHaveLength(1);
+    // 选择题选项开关只在 ATM 下出现，与 GT 图片辅助同一行并列。
+    expect(screen.getAllByLabelText(PROFILE_LABELS[ATM_PROFILE]+' · 提供选择题选项')).toHaveLength(1);
     expect(screen.getByText(/地点按冻结的媒体标注映射读取/)).toBeTruthy();
   });
   it('结果配置区分整套图片资料与历史文字协议', () => {
