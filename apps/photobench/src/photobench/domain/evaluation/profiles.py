@@ -173,7 +173,19 @@ def item_scoring_error(state: Mapping[str, Any], item: Mapping[str, Any]) -> str
         if batch_id not in batches:
             return f"Missing primary scoring batch: {batch_id}"
         batch = batches[batch_id]
-        for index, record in enumerate(item.get("runtime_turns") or [item]):
+        turns = item.get("runtime_turns") or [item]
+        # 「提供选择题选项」的追加轮由测评服务生成，不属于题目定义：
+        # 只有题面轮次参与评分完整性校验。题面轮数记在 item 上
+        # （conversation_turn_count），没有时按对话定义长度回落。
+        authored = int(item.get("conversation_turn_count") or 0)
+        if not authored:
+            definition = state.get("qa_snapshot") or {}
+            row: Mapping[str, Any] = next(
+                (r for r in definition.get("rows") or [] if str(r.get("qa_id")) == str(item.get("qa_id"))),
+                {},
+            )
+            authored = len(row.get("conversation") or []) or len(turns)
+        for index, record in enumerate(turns[:authored]):
             result = results.get(result_key(batch_id, str(item["qa_id"]), index)) or {}
             prefix = f"{batch['profile_id']} turn {index + 1}"
             if not valid_result(result) or result.get("answer_fingerprint") != answer_fingerprint(record):

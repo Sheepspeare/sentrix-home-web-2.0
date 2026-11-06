@@ -570,8 +570,11 @@ class ProfileScoring:
     ) -> dict[str, Any]:
 
         all_results = []
+        # 「提供选择题选项」的追加轮是测评服务生成的，不属于题面：它不参与
+        # 任何一套标准的逐轮评分，只作为答题方式记录在 runtime_turns 里。
+        authored = int(item.get("conversation_turn_count") or 0) or len(item.get("runtime_turns") or [item])
         for batch in batches:
-            for index, record in enumerate(item.get("runtime_turns") or [item]):
+            for index, record in enumerate((item.get("runtime_turns") or [item])[:authored]):
                 target = {
                     "key": result_key(batch["batch_id"], str(row["qa_id"]), index),
                     "qa_id": str(row["qa_id"]),
