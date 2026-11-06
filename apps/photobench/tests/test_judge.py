@@ -178,6 +178,26 @@ def test_twice_invalid_quality_json_is_failed_without_a_fallback_score():
     assert result["judge_status"] == "failed"
 
 
+def test_format_retry_accepts_zero_when_reference_agrees_with_gt_not_model():
+    reason = (
+        "模型声称相册里没有相关记录，但GT图片中清晰展示了6张早餐券，与参考答案一致。"
+        "模型未能识别可见证据，给出了错误的事实性否定回答。"
+    )
+    http = FakeHttpClient(
+        [
+            judge_reply('{"score":0, reason":"数量错误"}'),
+            judge_reply(json.dumps({"score": 0, "reason": reason}, ensure_ascii=False)),
+        ]
+    )
+    result = _runner(http).judge("准备了多少张早餐券？", "照片中共有6张早餐券。", "没有相关记录，无法确认。")
+    assert result["score"] == 0
+    assert result["judge_status"] == "completed"
+    assert result["consistency_version"] == 5
+    assert result["reason"] == reason
+    assert len(http.calls) == 2
+    assert "格式保护" in http.payloads()[1]["messages"][0]["content"]
+
+
 def test_reference_answer_can_be_scored_without_inventing_a_behavior_label():
     http = FakeHttpClient([judge_reply('{"score":1,"reason":"只完成部分核心要求"}')])
     item = {
@@ -198,7 +218,7 @@ def test_an_answerable_question_does_not_turn_a_valid_judge_zero_into_a_missing_
     )
     result = _runner(http).judge("q", "ref", "answer")
     assert result["score"] == 0
-    assert result["consistency_version"] == 4
+    assert result["consistency_version"] == 5
     assert len(http.calls) == 1
 
 
@@ -211,7 +231,7 @@ def test_correct_reference_in_a_negative_judge_reason_keeps_the_real_zero():
     result = _runner(http).judge("碑上刻了什么字？", "三峡壩址基石", "三垟耀址基石")
     assert result["score"] == 0
     assert result["reason"] == reason
-    assert result["consistency_version"] == 4
+    assert result["consistency_version"] == 5
     assert len(result["attempts"]) == len(http.calls) == 1
 
 

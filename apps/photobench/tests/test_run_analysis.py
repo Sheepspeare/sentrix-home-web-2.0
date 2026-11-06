@@ -131,6 +131,53 @@ def test_v3_history_keeps_the_recorded_consistency_policy():
     assert original == {"score": 0, "reason": reason, "consistency_version": 3}
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "模型声称相册里没有相关记录，但GT图片中清晰展示了6张早餐券，与参考答案一致。"
+        "模型未能识别可见证据，给出了错误的事实性否定回答。",
+        "GT图片展示了六张券，与标准答案完全一致。模型回答五张，数量错误。",
+        "GT照片展示了完整场景，符合预期。模型未回答所问数量。",
+        "参考照片可用，核心信息完整。模型回答错误。",
+    ],
+)
+def test_reference_subject_is_not_inherited_by_implicit_answer_praise(reason):
+    assert analysis.judge_score_consistency(0, reason) is True
+    record = {"score": 0, "reason": reason, "consistency_version": 5}
+    assert analysis.judge_score_for_summary(record) == 0
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "与参考答案一致，核心问题已回答。",
+        "符合预期。",
+        "核心信息完整。",
+        "已核对GT图片，模型回答与参考答案一致。",
+        "GT照片可用；该回答完全准确。",
+    ],
+)
+def test_explicit_answer_praise_or_initial_shorthand_still_rejects_zero(reason):
+    assert analysis.judge_score_consistency(0, reason) is False
+
+
+def test_v4_history_keeps_its_policy_and_failed_observations_stay_unscored():
+    reason = "GT图片展示了六张券，与参考答案一致。模型回答五张，数量错误。"
+    old = {"score": 0, "reason": reason, "consistency_version": 4}
+    assert analysis.judge_score_consistency(0, reason, version=4) is False
+    assert analysis.judge_score_for_summary(old) is None
+    assert old == {"score": 0, "reason": reason, "consistency_version": 4}
+    failed = {
+        "score": None,
+        "reason": "judge_inconsistent_score_reason",
+        "raw_text": json.dumps({"score": 0, "reason": reason}),
+        "judge_status": "failed",
+        "consistency_version": 4,
+    }
+    assert analysis.judge_score_for_summary(failed) is None
+    assert analysis.judge_projection(failed) == failed
+
+
 def test_judge_score_for_summary_rejects_out_of_range_scores():
     assert analysis.judge_score_for_summary({"score": 3}) is None
     assert analysis.judge_score_for_summary({}) is None

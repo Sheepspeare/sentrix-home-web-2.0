@@ -52,7 +52,7 @@ from photobench.domain.runtime.metrics import (
 # 1.0 ``:933`` / ``:1261``。
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
 RANKING_KS = (1, 5, 10)
-JUDGE_CONSISTENCY_VERSION = 4
+JUDGE_CONSISTENCY_VERSION = 5
 
 
 def now_iso() -> str:
@@ -93,14 +93,17 @@ def judge_score_consistency(
             r"(?:(?:是|为|基本上?|完全|总体上?|整体上?|均|都|确实|非常)\s*){0,3}"
             r"(?:正确|准确)"
         )
+        # An omitted subject is treated as the answer only at the start of the
+        # reason. Later clauses may still refer to GT or the reference facts.
+        implicit_start = r"\A" if version >= 5 else "^"
         assertions = (
             rf"{subject}{praise}" if version >= 4 else rf"{subject}.{{0,12}}(?:正确|准确)",
             rf"{clause_subject}{praise}" if version >= 4 else rf"{clause_subject}.{{0,12}}(?:正确|准确)",
             rf"(?:{subject}|{clause_subject}).{{0,12}}与.{{0,12}}(?:参考答案|标准答案).{{0,8}}一致",
             rf"(?:{subject}|{clause_subject}).{{0,8}}符合.{{0,8}}预期",
-            r"^\s*与.{0,12}(?:参考答案|标准答案).{0,8}一致",
-            r"^\s*符合.{0,8}预期",
-            r"^\s*核心信息.{0,12}(?:一致|完整|正确)",
+            rf"{implicit_start}\s*与.{{0,12}}(?:参考答案|标准答案).{{0,8}}一致",
+            rf"{implicit_start}\s*符合.{{0,8}}预期",
+            rf"{implicit_start}\s*核心信息.{{0,12}}(?:一致|完整|正确)",
         )
         return not any(re.search(pattern, cleaned, flags=re.MULTILINE) for pattern in assertions)
     positive_patterns = (
@@ -170,7 +173,7 @@ def judge_consistency_status(judge: dict[str, Any] | None) -> str | None:
     if (
         not judge.get("score_derivation")
         and isinstance(recorded_version, int)
-        and recorded_version in (2, 3, 4)
+        and recorded_version in (2, 3, 4, 5)
     ):
         version = recorded_version
     if not judge_score_consistency(judge.get("score"), str(judge.get("reason") or ""), version=version):
