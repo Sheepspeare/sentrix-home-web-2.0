@@ -122,3 +122,36 @@ def capture_context(
         ),
     }
     return audit, attachment
+
+
+def pair_image_context(
+    images: Sequence[Mapping[str, Any]],
+    image_audit: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    instructions: str,
+) -> list[dict[str, Any]]:
+    """Keep each original image next to its own frozen, readable capture fields."""
+    refs = image_audit["references"]
+    materials = metadata["materials"]
+    if len(images) != 2 * len(refs) or len(materials) != len(refs):
+        raise ValueError("GT image/capture material count mismatch")
+    content = [{"type": "text", "text": instructions + "以下每段拍摄资料对应紧随其后的一张GT图片。"}]
+    for index, (ref, material) in enumerate(zip(refs, materials, strict=True)):
+        if stable_media_key(ref) != stable_media_key(material["reference"]):
+            raise ValueError("GT image/capture identity mismatch")
+        image = images[index * 2 + 1]
+        if image.get("type") != "image_url":
+            raise ValueError("GT image attachment missing")
+        content.extend(
+            [
+                {
+                    "type": "text",
+                    "text": "GT图片及对应拍摄资料："
+                    + json.dumps(
+                        {k: v for k, v in material.items() if k != "entry_sha256"}, ensure_ascii=False
+                    ),
+                },
+                dict(image),
+            ]
+        )
+    return content

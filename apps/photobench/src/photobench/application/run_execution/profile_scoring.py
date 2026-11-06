@@ -12,8 +12,8 @@ from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
 from photobench.domain.evaluation.gt_context import (
     LEGACY_INSTRUCTIONS,
-    READABLE_CONTEXT,
     capture_context,
+    pair_image_context,
 )
 from photobench.domain.evaluation.media import delivered_media_aliases, saved_media_metrics
 from photobench.domain.evaluation.profiles import (
@@ -27,6 +27,7 @@ from photobench.domain.evaluation.profiles import (
     make_batch,
     result_key,
     summarize_batches,
+    uses_readable_metadata,
     valid_result,
 )
 from photobench.domain.runs.analysis import now_iso
@@ -351,14 +352,18 @@ class ProfileScoring:
                 if purpose not in {"choice", "list"}:
                     if config["use_gt_metadata"]:
                         refs, source = gt_image_refs(row, turn)
-                        if config.get("gt_metadata_mode") == READABLE_CONTEXT:
+                        if uses_readable_metadata(config):
+                            if config.get("gt_metadata_mode") == "image_metadata_v1":
+                                refs = [ref for ref in refs if ref["media_type"] == "image"]
                             cached["metadata"], attachment = capture_context(
                                 refs,
                                 batch["gt_metadata_snapshot"],
                                 source,
                                 instructions=batch.get("gt_metadata_instructions", LEGACY_INSTRUCTIONS),
                             )
-                            if refs:
+                            if config.get("gt_metadata_mode") == "image_metadata_v1":
+                                cached["metadata"]["mode"] = "image_metadata_v1"
+                            elif refs:
                                 cached["attachments"].append(attachment)
                         else:
                             cached["metadata"], attachment = self._legacy_metadata(refs, source)
@@ -369,6 +374,10 @@ class ProfileScoring:
                         if audit["status"] in {"mapping_error", "attachment_error"}:
                             raise ValueError(
                                 "GT image attachment failed: " + json.dumps(audit, ensure_ascii=False)
+                            )
+                        if config.get("gt_metadata_mode") == "image_metadata_v1" and images:
+                            images = pair_image_context(
+                                images, audit, cached["metadata"], batch["gt_metadata_instructions"]
                             )
                         cached["images"] = [images, audit]
                 with self.lock:

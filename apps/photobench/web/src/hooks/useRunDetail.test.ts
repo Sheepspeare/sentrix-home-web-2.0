@@ -283,7 +283,7 @@ describe("canRejudge / rejudgePercent（1.0 :365-374）", () => {
     expect(result.current.rejudgeConfirmation?.message).toContain("7 题、8 轮、8 项");
     expect(postMock).not.toHaveBeenCalled();
     await act(async () => {await result.current.confirmRejudge();});
-    expect(postMock).toHaveBeenCalledWith("/runs/r1/rejudge",expect.objectContaining({judge_url:"u",judge_model:"m",scoring_configs:{photobench_open_v1:{use_gt_images:false,gt_metadata_mode:'readable_v1',prompts:{answer_quality:"p"}}}}));
+    expect(postMock).toHaveBeenCalledWith("/runs/r1/rejudge",expect.objectContaining({judge_url:"u",judge_model:"m",scoring_configs:{photobench_open_v1:{use_gt_images:false,gt_metadata_mode:'image_metadata_v1',prompts:{answer_quality:"p"}}}}));
   });
 });
 
@@ -424,7 +424,7 @@ it("确认时使用冻结范围、分标准GT和提示词，重复确认只发�
   await act(async()=>{await Promise.all([result.current.confirmRejudge(),result.current.confirmRejudge()]);});
   const requests=postMock.mock.calls.filter(([path])=>path.endsWith('/rejudge'));
   expect(requests).toHaveLength(1);
-  expect(requests[0][1]).toEqual(expect.objectContaining({scope:"failed",judge_model:"old-model",scoring_configs:{photobench_open_v1:{use_gt_images:true,gt_metadata_mode:'readable_v1',prompts:{answer_quality:"original"}}}}));
+  expect(requests[0][1]).toEqual(expect.objectContaining({scope:"failed",judge_model:"old-model",scoring_configs:{photobench_open_v1:{use_gt_images:true,gt_metadata_mode:'image_metadata_v1',prompts:{answer_quality:"original"}}}}));
 });
 
 it("切换任务后不能把旧确认提交给新任务", async()=>{

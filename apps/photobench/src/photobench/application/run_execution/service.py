@@ -65,6 +65,7 @@ from photobench.config import default_qa_concurrency
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import RequestOutcomeUnknownError
+from photobench.domain.evaluation.profiles import uses_readable_metadata
 from photobench.domain.evaluation.prompts import evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter
@@ -673,7 +674,7 @@ class RunExecution:
             }
         metadata = {}
         if request.frozen_qa_snapshot is None and any(
-            c.get("gt_metadata_mode") == "readable_v1" for c in request.scoring_configs.values()
+            uses_readable_metadata(c) for c in request.scoring_configs.values()
         ):
             metadata["gt_metadata_snapshot"] = self.albums.gt_metadata_snapshot(album_id)
         return {

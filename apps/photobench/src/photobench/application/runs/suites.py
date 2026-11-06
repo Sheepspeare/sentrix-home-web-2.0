@@ -62,7 +62,13 @@ from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import InvalidRequestError
 from photobench.domain.evaluation.contract import scoring_options
-from photobench.domain.evaluation.profiles import LABELS, profile_configs, scoring_targets, summarize_batches
+from photobench.domain.evaluation.profiles import (
+    LABELS,
+    profile_configs,
+    scoring_targets,
+    summarize_batches,
+    uses_readable_metadata,
+)
 from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter, RunStore
@@ -1011,7 +1017,7 @@ class RunSuites:
         except ValueError as exc:
             raise InvalidRequestError(str(exc)) from exc
         if any(
-            c["use_gt_images"] or (c["use_gt_metadata"] and c.get("gt_metadata_mode") != "readable_v1")
+            c["use_gt_images"] or (c["use_gt_metadata"] and not uses_readable_metadata(c))
             for c in configs.values()
         ) and str(state.get("sentrix_url") or "").rstrip("/") != self._config.sentrix_url.rstrip("/"):
             raise InvalidRequestError("GT辅助评分需先将产品连接指向原测评服务")
@@ -1023,7 +1029,7 @@ class RunSuites:
             "evidence_enabled": bool(state.get("evidence_judge_enabled")),
         }
         metadata_snapshot = None
-        if resume_ids is None and any(c.get("gt_metadata_mode") == "readable_v1" for c in configs.values()):
+        if resume_ids is None and any(uses_readable_metadata(c) for c in configs.values()):
             try:
                 metadata_snapshot = self._albums.gt_metadata_snapshot(str(state["album_id"]))
             except ValueError as exc:
@@ -1117,10 +1123,7 @@ class RunSuites:
                 assets = {}
                 if any(
                     b["config"]["use_gt_images"]
-                    or (
-                        b["config"]["use_gt_metadata"]
-                        and b["config"].get("gt_metadata_mode") != "readable_v1"
-                    )
+                    or (b["config"]["use_gt_metadata"] and not uses_readable_metadata(b["config"]))
                     or b["diagnostics"].get("evidence_enabled")
                     for b in batches
                 ):

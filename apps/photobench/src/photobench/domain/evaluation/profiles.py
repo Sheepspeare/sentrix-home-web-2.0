@@ -15,7 +15,8 @@ from photobench.domain.runs.judge import JUDGE_PROMPT, JUDGE_PROMPT_KINDS
 
 OPEN = "photobench_open_v1"
 ATM = "atm_qs_v1"
-RULE_VERSION = "scoring-2026.11.06-v3"
+RULE_VERSION = "scoring-2026.11.06-v4"
+READABLE_METADATA_MODES = {"readable_v1", "image_metadata_v1"}
 LABELS = {OPEN: "开放式回答（0/1/2，历史口径）", ATM: "ATM-Bench式QS"}
 PROMPTS = {
     OPEN: {"answer_quality": JUDGE_PROMPT},
@@ -95,10 +96,18 @@ def profile_configs(
             raise ValueError("Answer quality input version is only valid for the open profile")
         # Explicit old-client flags retain their protocol. Frozen batches never pass here.
         if "gt_metadata_mode" in raw or "use_gt_metadata" not in raw:
-            if raw.get("gt_metadata_mode", "readable_v1") != "readable_v1":
+            mode = raw.get("gt_metadata_mode", "image_metadata_v1")
+            if mode not in READABLE_METADATA_MODES:
                 raise ValueError("Unknown GT metadata mode")
-            result[profile].update(use_gt_metadata=True, gt_metadata_mode="readable_v1")
+            result[profile].update(
+                use_gt_metadata=flags["use_gt_images"] if mode == "image_metadata_v1" else True,
+                gt_metadata_mode=mode,
+            )
     return result
+
+
+def uses_readable_metadata(config: Mapping[str, Any]) -> bool:
+    return bool(config.get("use_gt_metadata") and config.get("gt_metadata_mode") in READABLE_METADATA_MODES)
 
 
 def answer_fingerprint(record: Mapping[str, Any]) -> str:
@@ -185,7 +194,7 @@ def make_batch(
         "qa_definition_sha256": snapshot.get("definition_sha256"),
         "qa_snapshot_sha256": digest(snapshot.get("rows") or []),
     }
-    if config.get("gt_metadata_mode") == "readable_v1":
+    if uses_readable_metadata(config):
         from photobench.domain.evaluation.gt_context import CAPTURE_INSTRUCTIONS, empty_context
 
         frozen["gt_metadata_snapshot"] = copy.deepcopy(metadata_snapshot or empty_context())

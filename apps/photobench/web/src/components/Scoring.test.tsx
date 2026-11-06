@@ -31,22 +31,32 @@ describe('独立评分标准', () => {
     expect(body.scoring_configs[OPEN_PROFILE].prompts).toEqual({answer_quality:'open'});
     expect(body.scoring_configs[ATM_PROFILE].prompts).toEqual({choice:'', number:'number'});
   });
-  it('新评分默认固定可读拍摄资料，图片独立且不提交旧元数据开关', () => {
+  it('新评分由图片开关控制整套材料，不提交旧元数据开关', () => {
     const selection=defaultScoring(); selection.profiles.push(ATM_PROFILE);
     selection.configs[OPEN_PROFILE].use_gt_metadata=false;
+    selection.configs[OPEN_PROFILE].use_gt_images=true;
     const body=scoringPayload(selection);
+    expect(body.scoring_configs[OPEN_PROFILE].use_gt_images).toBe(true);
     for (const profile of [OPEN_PROFILE,ATM_PROFILE]) {
-      expect(body.scoring_configs[profile]).toEqual({use_gt_images:false,gt_metadata_mode:'readable_v1',prompts:{}});
+      expect(body.scoring_configs[profile]).toEqual({use_gt_images:profile===OPEN_PROFILE,gt_metadata_mode:'image_metadata_v1',prompts:{}});
     }
   });
-  it('图片切换保留默认拍摄文字，界面只保留图片选项', () => {
+  it('图片开关同时控制对应拍摄资料，界面只保留一个选项', () => {
     function Settings() {const [value,setValue]=useState(defaultScoring()); return <ScoringSettings value={value} onChange={setValue}/>;}
     render(<Settings/>);
     expect(screen.queryByRole('checkbox',{name:/GT元数据/})).toBeNull();
     fireEvent.click(screen.getByLabelText(PROFILE_LABELS[OPEN_PROFILE]+' · GT图片辅助'));
     fireEvent.click(screen.getByRole('checkbox',{name:PROFILE_LABELS[ATM_PROFILE]}));
-    expect(screen.getAllByText('默认附加拍摄时间和可读地点；图片按需开启。')).toHaveLength(2);
+    expect(screen.getAllByText('勾选后附加图片及对应的拍摄时间、可读地点。')).toHaveLength(2);
     expect(screen.getByText(/地点按冻结的媒体标注映射读取/)).toBeTruthy();
+  });
+  it('结果配置区分整套图片资料与历史文字协议', () => {
+    render(<ScoringResults summary={{scoring:{profiles:{
+      [OPEN_PROFILE]:{status:'completed',gt_config:{use_gt_images:true,use_gt_metadata:true,gt_metadata_mode:'image_metadata_v1'}},
+      [ATM_PROFILE]:{status:'completed',gt_config:{use_gt_images:false,use_gt_metadata:true,gt_metadata_mode:'readable_v1'}},
+    }}}}/>);
+    expect(screen.getByText('图片＋对应拍摄时间与可读地点')).toBeTruthy();
+    expect(screen.getByText(/拍摄时间与可读地点（历史文字协议）/)).toBeTruthy();
   });
   it('未执行标准固定显示未运行采集，部分评分只展示均值和覆盖率', () => {
     render(<ScoringResults summary={{scoring:{profiles:{[OPEN_PROFILE]:{status:'incomplete',scored:1,total:2,coverage:.5,scored_mean:1,normalized_mean:.5,total_score:null,diagnostic_pending:1}}}}} />);
