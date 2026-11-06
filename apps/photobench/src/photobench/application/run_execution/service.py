@@ -78,6 +78,7 @@ from photobench.domain.runs.analysis import (
     ranking_metrics,
     retrieval_metric_projection,
 )
+from photobench.domain.runs.choice_options import choice_prompt, option_labels, parse_choice_answer
 from photobench.domain.runs.execution import (
     RunCancelledError,
     agent2_trace_from,
@@ -2476,6 +2477,17 @@ class RunExecution:
             raise ValueError("conversation 必须是列表")
         messages = [str(turn.get("message") or "").strip() for turn in conversation if isinstance(turn, dict)]
         query = messages[-1] if messages else str(row["question"])
+        # 选择题「提供选项」模式：原对话一字不动，末尾追加一轮带选项的追问。
+        # 字母与选项的映射在这里定下来并随题落盘，评分端只按它回查。
+        evaluation = row.get("evaluation") or {}
+        choice_labels: list[dict[str, str]] = []
+        if (
+            request.evaluation_options.get("choice_options_visible", True)
+            and evaluation.get("answer_format") == "choice"
+            and (evaluation.get("options") or [])
+        ):
+            choice_labels = option_labels(evaluation["options"])
+            messages = [*(messages or [query]), choice_prompt(choice_labels)]
         gt_refs = normalize_media_refs(row, "retrieval")
         answer_refs = normalize_media_refs(row, "answer_evidence") or gt_refs
         item: dict[str, Any] = {
@@ -2625,7 +2637,10 @@ class RunExecution:
                 {
                     "answer": str(last_result.get("answer") or ""),
                     "conversation_id": conversation_id,
-                    "conversation_turn_count": len(turn_records) if conversation else 1,
+                    # 选项轮不计入题面对话轮数：它是答题方式，不是题目的一部分。
+                    "conversation_turn_count": (
+                        (len(turn_records) - 1 if choice_labels else len(turn_records)) if conversation else 1
+                    ),
                     "conversation_context_mode": "shared_conversation_id" if conversation else "single_turn",
                     "runtime_turns": turn_records,
                     "turn_status": last_result.get("status"),
@@ -2744,6 +2759,10 @@ class RunExecution:
                     "request_stage": request_stage,
                 }
         item.update(retrieval_metric_projection(item))
+        if item.get("execution_status") == "completed" and choice_labels:
+            parsed = parse_choice_answer(str(item.get("answer") or ""), choice_labels)
+            item["choice_prompt"] = {"mode": "options_visible", "labels": choice_labels}
+            item["agent_choice"] = parsed
         if item["execution_status"] == "completed":
             item["attribution"] = derive_attribution(item)
         return item

@@ -140,6 +140,8 @@ def profile_state(state: dict[str, Any], profile: str = "", batch_id: str = "") 
                         "source_qtype",
                         "matched_option",
                         "comparisons",
+                        "answer_side",
+                        "agent_choice",
                         "semantic_aux",
                         "formula",
                         "target",

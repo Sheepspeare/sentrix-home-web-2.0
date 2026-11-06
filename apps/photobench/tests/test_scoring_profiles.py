@@ -265,7 +265,9 @@ def test_choice_key_never_reaches_judge(option, expected):
         "reason": "语义结论",
         "comparisons": [{"option_id": i, "matches": i == option, "reason": "对照"} for i in ("A", "B")],
     }
-    service, batches, http, _ = setup(s, [ATM], [task(), reply])
+    service, batches, http, _ = setup(
+        s, [ATM], [task(), reply], configs={ATM: {"choice_options_visible": False}}
+    )
     result = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
     assert result["score"] == expected and valid_result(result)
     wire = json.dumps(http.calls[-1], ensure_ascii=False)
@@ -752,6 +754,7 @@ def test_choice_projection_retains_saved_comparisons_and_protocol(matched):
                 "reason": "原始结论",
             },
         ],
+        configs={ATM: {"choice_options_visible": False}},
     )
     b = batches[0]
     target = scoring_targets(s, b, "all")[0]

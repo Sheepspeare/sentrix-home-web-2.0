@@ -19,6 +19,7 @@ function scoringExplanation(value: unknown): string {
   if (d.scorer === "atm_list") return "列表召回题：按实际交付的图片 / 视频 ID 集合计算主分；工具累计召回单列展示。";
   if (d.source_qtype === "open_end" || d.scorer === "atm_open") return "开放问答题：Judge 按回答内容判 0 / 1 分；媒体交付和工具证据另列指标。";
   if (d.answer_format === "media_list") return "列表召回题：按实际交付媒体集合评分。";
+  if (d.answer_side === "agent_choice") return "选择题：答题模型收到题干和选项，最后一轮用 JSON 自报选项与理由；程序按答案键核对，选择正确记 1 分，其余记 0 分。解析不出选择时这道题不计分。";
   if (d.answer_format === "choice") return "选择题：选项仅供评测端使用，答题模型回答原问题。Judge 逐项匹配回答含义，程序核对正确项；全部不匹配归为“其他”，记 0 分。";
   return "开放问答题：按题目定义评价回答内容，媒体指标单独计算。";
 }
@@ -38,29 +39,34 @@ export function ChoiceMatchingResult({value, definition, standalone = false}: {v
   const choiceOptions: Dict[] = [...options, ...comparisons.filter(c => !options.some(o => o.id === c.option_id)).map(c => ({id: c.option_id}))];
   if (!choiceOptions.length) return null;
   const matched = r.matched_option;
+  // 「提供选择题选项」模式下，选择是答题模型自己报的，不是 Judge 匹配出来的。
+  const agentSide = r.answer_side === "agent_choice";
+  const agentChoice = obj(r.agent_choice);
   const verdict = matched == null ? "尚无匹配结论" : matched === "other" ? "给定选项均不匹配" : !d.correct_option ? "正确项未记录" : matched === d.correct_option ? "匹配正确" : "匹配错误";
-  return <section aria-label="选项语义匹配" className={standalone ? "evaluation-panel" : ""}>
-    {standalone && <><h4>ATM-Bench式QS · 选项语义匹配</h4><p className="muted small">答题模型回答原问题，Judge 将回答与选项逐项比较；这里展示 Judge 的匹配结果。</p></>}
-    <p className="evaluation-score">{verdict}{standalone && <> · QS {r.score == null ? (r.judge_status === "not_collected" ? "未运行采集" : "未评分") : String(r.score) + "/1 分"}</>}</p>
+  const agentVerdict = matched == null ? "模型未给出可解析的选择" : !d.correct_option ? "正确项未记录" : matched === d.correct_option ? "选择正确" : "选择错误";
+  return <section aria-label={agentSide ? "模型选项选择" : "选项语义匹配"} className={standalone ? "evaluation-panel" : ""}>
+    {standalone && <><h4>ATM-Bench式QS · {agentSide ? "模型选项选择" : "选项语义匹配"}</h4><p className="muted small">{agentSide ? "答题模型收到题干与选项，最后一轮自行选择；这里展示模型的选择和理由，程序按答案键核对。" : "答题模型回答原问题，Judge 将回答与选项逐项比较；这里展示 Judge 的匹配结果。"}</p></>}
+    <p className="evaluation-score">{(agentSide ? agentVerdict : verdict)}{standalone && <> · QS {r.score == null ? (r.judge_status === "not_collected" ? "未运行采集" : "未评分") : String(r.score) + "/1 分"}</>}</p>
     <div className="evaluation-choice-definition">
-      <p className="muted small">{r.matched_option != null ? <>Judge匹配：{r.matched_option === "other" ? "其他（给定选项之外）" : String(r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</> : <>尚无匹配结论 · 正确项 {String(d.correct_option || "未记录")}</>}</p>
+      <p className="muted small">{r.matched_option != null ? <>{agentSide ? "模型选择" : "Judge匹配"}：{r.matched_option === "other" ? "其他（给定选项之外）" : String(agentChoice.letter || r.matched_option)} · 正确选项：{String(d.correct_option || "未记录")}</> : <>尚无匹配结论 · 正确项 {String(d.correct_option || "未记录")}</>}</p>
       <ul className="evaluation-options">{choiceOptions.map(o => {
         const comparison = comparisons.find(c => c.option_id === o.id);
         const matches = comparison?.matches ?? (r.matched_option === o.id ? true : undefined);
-        return <li className={[o.id === d.correct_option ? "is-correct" : "", matches === true ? "is-match" : ""].filter(Boolean).join(" ")} key={String(o.id)}>
+        return <li className={[o.id === d.correct_option ? "is-correct" : "", matches === true ? "is-match" : "", agentSide && r.matched_option === o.id ? "is-selected" : ""].filter(Boolean).join(" ")} key={String(o.id)}>
           <span className="evaluation-option-id">{String(o.id)}</span>
           <div className="evaluation-option-content">
             <div className="evaluation-option-heading">
               <span className="evaluation-option-text">{String(o.text || "选项原文未记录")}</span>
               {o.id === d.correct_option && <span className="evaluation-badge">正确项</span>}
-              <span className={"evaluation-badge" + (matches === true ? "" : " neutral")}>{matches === true ? "匹配" : matches === false ? "不匹配" : "未记录逐项比较"}</span>
+              {agentSide ? (r.matched_option === o.id && <span className="evaluation-badge">模型选择</span>) : <span className={"evaluation-badge" + (matches === true ? "" : " neutral")}>{matches === true ? "匹配" : matches === false ? "不匹配" : "未记录逐项比较"}</span>}
             </div>
             {comparison?.reason != null && <p className="evaluation-option-reason">{String(comparison.reason)}</p>}
           </div>
         </li>;
       })}</ul>
     </div>
-    {standalone && <><p className="muted small">第 {Number(r.turn_index || 0) + 1} 轮 · 评分批次 {String(r.batch_id || "未记录")}</p><small>模型 {String(r.judge_model || "未记录")}</small></>}
+    {agentSide && r.reason != null && String(r.reason).trim() !== "" && <p className="evaluation-option-reason"><strong>模型理由：</strong>{String(r.reason)}</p>}
+    {standalone && <><p className="muted small">第 {Number(r.turn_index || 0) + 1} 轮 · 评分批次 {String(r.batch_id || "未记录")}</p><small>{agentSide ? "确定性核对" : "模型 " + String(r.judge_model || "未记录")}</small></>}
   </section>;
 }
 export function EvaluationResult({value, definition, showChoiceMatching = true}: {value: unknown; definition?: unknown; showChoiceMatching?: boolean}) {

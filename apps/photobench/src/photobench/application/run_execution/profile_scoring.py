@@ -10,6 +10,7 @@ from typing import Any
 
 from photobench.application.run_execution.judge import JudgeRunner
 from photobench.application.run_execution.typed_scoring import media_metrics_for_turn, score_typed
+from photobench.domain.evaluation.contract import result_record
 from photobench.domain.evaluation.gt_context import (
     LEGACY_INSTRUCTIONS,
     capture_context,
@@ -82,6 +83,39 @@ def prepare_batches(
             batches.append(batch)
         selected.append(batch)
     return selected
+
+
+def agent_choice_result(row: Mapping[str, Any], item: Mapping[str, Any], index: int) -> dict[str, Any]:
+    """选择题「提供选项」模式的评分结果：按模型自报的字母核对答案键。
+
+    解析失败是失败，不是 0 分——与 Judge 调用失败按同一口径处理，
+    否则「模型没按规定格式回答」和「模型选错了」会被混成一个数。
+    """
+    definition = row.get("evaluation") or {}
+    turns = item.get("runtime_turns") or [item]
+    record = turns[index] if index < len(turns) else {}
+    saved = item.get("agent_choice") or {}
+    chosen = str(saved.get("option_id") or "")
+    letter = str(saved.get("letter") or "")
+    if saved.get("status") != "ok" or not chosen:
+        return result_record(
+            definition,
+            None,
+            status="failed",
+            reason=str(saved.get("reason") or "json解析失败"),
+            matched_option=None,
+            comparisons=[],
+            answer_side="agent_choice",
+        )
+    return result_record(
+        definition,
+        int(chosen == definition.get("correct_option")),
+        reason=str(saved.get("reason") or ""),
+        matched_option=chosen,
+        comparisons=[],
+        answer_side="agent_choice",
+        agent_choice={"letter": letter, "option_id": chosen, "answer": str(record.get("answer") or "")},
+    )
 
 
 class ProfileScoring:
@@ -421,6 +455,13 @@ class ProfileScoring:
                 output = {
                     **list_score(row["evaluation"]["target_media_refs"], record, self.universe),
                     "reason": "Jaccard",
+                    "call_observations": [],
+                }
+            elif purpose == "choice" and config.get("choice_options_visible", True):
+                # 勾选「提供选择题选项」：答题模型已在最后一轮自报选择，
+                # 这里只做确定性核对，不发 Judge。
+                output = {
+                    **agent_choice_result(row, item, index),
                     "call_observations": [],
                 }
             elif purpose == "choice":

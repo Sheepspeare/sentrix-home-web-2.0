@@ -37,9 +37,9 @@ describe('独立评分标准', () => {
     selection.configs[OPEN_PROFILE].use_gt_images=true;
     const body=scoringPayload(selection);
     expect(body.scoring_configs[OPEN_PROFILE].use_gt_images).toBe(true);
-    for (const profile of [OPEN_PROFILE,ATM_PROFILE]) {
-      expect(body.scoring_configs[profile]).toEqual({use_gt_images:profile===OPEN_PROFILE,gt_metadata_mode:'image_metadata_v1',prompts:{}});
-    }
+    expect(body.scoring_configs[OPEN_PROFILE]).toEqual({use_gt_images:true,gt_metadata_mode:'image_metadata_v1',prompts:{}});
+    // ATM 额外带上选择题选项开关，默认勾选；开放题标准不带这个字段。
+    expect(body.scoring_configs[ATM_PROFILE]).toEqual({use_gt_images:false,gt_metadata_mode:'image_metadata_v1',choice_options_visible:true,prompts:{}});
   });
   it('图片开关同时控制对应拍摄资料，界面只保留一个选项', () => {
     function Settings() {const [value,setValue]=useState(defaultScoring()); return <ScoringSettings value={value} onChange={setValue}/>;}

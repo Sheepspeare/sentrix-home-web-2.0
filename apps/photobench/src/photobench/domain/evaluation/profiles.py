@@ -68,6 +68,7 @@ def profile_configs(
             "use_gt_metadata",
             "gt_metadata_mode",
             "quality_input_version",
+            "choice_options_visible",
         }:
             raise ValueError("Invalid scoring profile configuration")
         prompts = dict(PROMPTS[profile])
@@ -94,6 +95,15 @@ def profile_configs(
             result[profile]["quality_input_version"] = version
         elif "quality_input_version" in raw:
             raise ValueError("Answer quality input version is only valid for the open profile")
+        # 选择题选项可见性只对 ATM 有意义：它决定答题模型是否收到选项，
+        # 不勾选时是盲选项加 Judge 语义匹配。默认可见，与新建 run 的默认一致。
+        visible = raw.get("choice_options_visible", True)
+        if type(visible) is not bool:
+            raise ValueError("choice_options_visible must be a boolean")
+        if profile == ATM:
+            result[profile]["choice_options_visible"] = visible
+        elif "choice_options_visible" in raw:
+            raise ValueError("Choice option visibility is only valid for the ATM profile")
         # Explicit old-client flags retain their protocol. Frozen batches never pass here.
         if "gt_metadata_mode" in raw or "use_gt_metadata" not in raw:
             mode = raw.get("gt_metadata_mode", "image_metadata_v1")

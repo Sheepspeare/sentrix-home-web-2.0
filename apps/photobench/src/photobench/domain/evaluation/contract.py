@@ -96,6 +96,7 @@ def scoring_options(value: object = None) -> dict[str, Any]:
         "open_scale": "ternary",
         "choice_semantic_aux": False,
         "number_semantic_aux": True,
+        "choice_options_visible": True,
     }
     if value is None:
         return defaults
@@ -103,7 +104,8 @@ def scoring_options(value: object = None) -> dict[str, Any]:
         raise ValueError("Invalid evaluation_options")
     result = defaults | value
     if result["open_scale"] not in {"ternary", "binary"} or any(
-        type(result[k]) is not bool for k in ("choice_semantic_aux", "number_semantic_aux")
+        type(result[k]) is not bool
+        for k in ("choice_semantic_aux", "number_semantic_aux", "choice_options_visible")
     ):
         raise ValueError("Invalid evaluation option value")
     return result

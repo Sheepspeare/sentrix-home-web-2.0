@@ -101,3 +101,39 @@ it("开放式满分不推导出选项匹配，也不沿用选择题评分说明"
   expect(screen.queryByRole("list")).toBeNull();
   expect(screen.queryByText(/未记录逐项比较/)).toBeNull();
 });
+
+it("提供选项模式下展示模型选择、理由和选中样式", () => {
+  render(<EvaluationResult value={{
+    scorer: "choice_judge", score: 1, max_score: 1, normalized_score: 1,
+    answer_side: "agent_choice", matched_option: "C", comparisons: [],
+    agent_choice: {letter: "C", option_id: "C", answer: "选了C"}, reason: "门口写着沙湖路",
+  }} definition={{correct_option: "C", options: [{id: "A", text: "江滩公园东门"}, {id: "C", text: "沙湖路 18 号"}]}} />);
+  expect(screen.getByText(/模型选择：C · 正确选项：C/)).toBeTruthy();
+  expect(screen.getByText("选择正确")).toBeTruthy();
+  expect(screen.getAllByText("门口写着沙湖路").length).toBeGreaterThan(0);
+  const selected = screen.getByText("沙湖路 18 号").closest("li") as HTMLElement;
+  expect(selected.className).toContain("is-selected");
+  expect(selected.className).toContain("is-correct");
+  expect(screen.getByText(/答题模型收到题干和选项/)).toBeTruthy();
+});
+
+it("提供选项模式下错选标红且仍显示模型选择", () => {
+  render(<EvaluationResult value={{
+    scorer: "choice_judge", score: 0, max_score: 1, normalized_score: 0,
+    answer_side: "agent_choice", matched_option: "A", comparisons: [], reason: "看成了东门",
+  }} definition={{correct_option: "C", options: [{id: "A", text: "江滩公园东门"}, {id: "C", text: "沙湖路 18 号"}]}} />);
+  expect(screen.getByText("选择错误")).toBeTruthy();
+  const wrong = screen.getByText("江滩公园东门").closest("li") as HTMLElement;
+  expect(wrong.className).toContain("is-selected");
+  expect(wrong.className).not.toContain("is-correct");
+});
+
+it("提供选项模式下解析失败不计分并说明原因", () => {
+  render(<EvaluationResult value={{
+    scorer: "choice_judge", score: null, max_score: 1, judge_status: "failed",
+    answer_side: "agent_choice", matched_option: null, comparisons: [],
+    reason: "json解析失败：未取到有效选项",
+  }} definition={{correct_option: "C", options: [{id: "C", text: "沙湖路 18 号"}]}} />);
+  expect(screen.getByText(/未评分/)).toBeTruthy();
+  expect(screen.getByText(/模型未给出可解析的选择/)).toBeTruthy();
+});

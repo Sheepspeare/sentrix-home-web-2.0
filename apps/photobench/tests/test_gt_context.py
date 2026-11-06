@@ -296,7 +296,12 @@ def test_atm_choice_is_blind_and_list_does_not_add_a_judge_call(mode):
         "comparisons": [{"option_id": i, "matches": i == "A", "reason": "对照"} for i in ("A", "B")],
     }
     svc, batches, http, _ = setup(
-        saved, [ATM], [task(), reply], configs={ATM: {"use_gt_images": True, "gt_metadata_mode": mode}}
+        saved,
+        [ATM],
+        [task(), reply],
+        configs={
+            ATM: {"use_gt_images": True, "gt_metadata_mode": mode, "choice_options_visible": False}
+        },
     )
     result = svc.score(batches[0], scoring_targets(saved, batches[0], "all")[0])
     assert valid_result(result)
