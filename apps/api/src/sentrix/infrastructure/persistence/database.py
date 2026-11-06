@@ -132,7 +132,21 @@ class Database:
                         or "nearest_evidence_json" not in place_columns
                     ):
                         raise MigrationError("0015记录与文本向量/拍摄时间表结构不一致")
-                    connection.execute("UPDATE schema_migrations SET version='0016' WHERE version='0015'")
+                    connection.execute("UPDATE schema_migrations SET version='0018' WHERE version='0015'")
+                    done = None
+            if done is not None and script.name == "0016_video_jobs.sql":
+                video_table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='video_jobs'"
+                ).fetchone()
+                if video_table is None:
+                    capture_columns = {row[1] for row in connection.execute("PRAGMA table_info(assets)")}
+                    place_columns = {row[1] for row in connection.execute("PRAGMA table_info(asset_places)")}
+                    if (
+                        "capture_time_json" not in capture_columns
+                        or "nearest_evidence_json" not in place_columns
+                    ):
+                        raise MigrationError("0016记录与视频任务/拍摄时间表结构不一致")
+                    connection.execute("UPDATE schema_migrations SET version='0018' WHERE version='0016'")
                     done = None
             if done is not None:
                 connection.execute("COMMIT")

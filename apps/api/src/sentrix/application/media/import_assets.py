@@ -68,8 +68,9 @@ S8c 追加一条：**音频走同一条链，但不转码、不转写**（用户
 4. 交付的 content-type 由后端按后缀定（``audio_mime_type``），不照抄上传方给的
    ``application/octet-stream``——音频没有转码件这条退路，类型错了就没有第二次机会。
 
-**不做转写**：1.0 的 ``observations.transcript`` 与 ``compose_text`` 里的那一段都不搬
-（``docs/refactor/s8-deviations.md`` §1.1），2.0 的 ``compose_text`` 保持七字段。
+**独立音频资产不转写**：1.0 的 ``observations.transcript`` 与 ``compose_text`` 里的那一段都不搬
+（``docs/refactor/s8-deviations.md`` §1.1），2.0 的 ``compose_text`` 保持七字段。视频场景
+的可选 ASR 在 ``ExtractVideoScenes``，按原片时间戳给关键帧场景文本补充语音上下文。
 
 **去重命中时只重跑幂等的那几步**（视觉向量 + 地点）。事件归属不重跑：它不是幂等的，
 对同一条 Observation 再跑一次可能给它开出第二个事件。1.0 有过 223 张图没有任何视觉
@@ -456,6 +457,12 @@ class ImportAssets:
                 video_scenes = self._extract_video_scenes(asset)
         else:
             video_scenes = self._extract_video_scenes(asset)
+        if (
+            staged.media_type is MediaType.VIDEO
+            and video_scenes.timings
+            and self._video_repository is not None
+        ):
+            self._video_repository.save_processing_timings(asset.id, video_scenes.timings)
 
         # 整个视频阶段的秒数落库**排在场景抽取之后**：1.0 的 ``video_processing_seconds``
         # 覆盖的是「探测 → 图片流水线 → 抽帧建场景」整段（``processor.py:205/420``），

@@ -109,7 +109,7 @@ def test_duplicate_migration_versions_fail_before_creating_database(tmp_path):
     assert not database.path.exists()
 
 
-@pytest.mark.parametrize("baseline", ["fresh", "xy", "main"])
+@pytest.mark.parametrize("baseline", ["fresh", "xy", "main", "previous_merge", "current_main"])
 def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
     source = Path(__file__).resolve().parents[2] / "src/sentrix/infrastructure/persistence/migrations"
     old_scripts = tmp_path / "old"
@@ -118,9 +118,16 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
         if script.name[:4] < "0015":
             (old_scripts / script.name).write_bytes(script.read_bytes())
     if baseline == "xy":
-        (old_scripts / "0015_capture_time.sql").write_bytes((source / "0016_capture_time.sql").read_bytes())
+        (old_scripts / "0015_capture_time.sql").write_bytes((source / "0018_capture_time.sql").read_bytes())
     elif baseline == "main":
         (old_scripts / "0015_text_vectors.sql").write_bytes((source / "0015_text_vectors.sql").read_bytes())
+    if baseline == "previous_merge":
+        for name in ("0015_text_vectors.sql", "0018_capture_time.sql"):
+            target = name.replace("0018", "0016")
+            (old_scripts / target).write_bytes((source / name).read_bytes())
+    elif baseline == "current_main":
+        for name in ("0015_text_vectors.sql", "0016_video_jobs.sql", "0017_video_job_config_hash.sql"):
+            (old_scripts / name).write_bytes((source / name).read_bytes())
     path = tmp_path / "t.db"
     old = Database(path, old_scripts)
     old.migrate()
@@ -138,8 +145,10 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
     with current.connect() as connection:
         assert connection.execute("SELECT value FROM regression_sentinel").fetchone()[0] == "preserved"
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-        assert versions.count("0015") == versions.count("0016") == 1
+        assert versions.count("0015") == versions.count("0016") == versions.count("0018") == 1
         assert connection.execute("SELECT COUNT(*) FROM text_vectors").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM video_jobs").fetchone()[0] == 0
+        assert "config_hash" in {row[1] for row in connection.execute("PRAGMA table_info(video_jobs)")}
         assert "capture_time_json" in {row[1] for row in connection.execute("PRAGMA table_info(assets)")}
         assert "nearest_evidence_json" in {
             row[1] for row in connection.execute("PRAGMA table_info(asset_places)")
@@ -147,7 +156,7 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
         if baseline == "xy":
             assert (
                 connection.execute(
-                    "SELECT applied_at FROM schema_migrations WHERE version='0016'"
+                    "SELECT applied_at FROM schema_migrations WHERE version='0018'"
                 ).fetchone()[0]
                 == connection.execute("SELECT applied_at FROM capture_audit").fetchone()[0]
             )

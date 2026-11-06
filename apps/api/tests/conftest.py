@@ -287,6 +287,9 @@ def isolated_app(settings, fake_embedding_startup):
         # 抽帧同理：真实现起 ffmpeg。这里给的是「每个场景一张真 JPEG」的假件，
         # 所以契约测试能走完整条「导入视频 → 场景成型 → 关键帧落库」的链。
         video_keyframe_extractor=FakeVideoKeyframeExtractor(),
+        video_scene_planner=None,
+        audio_transcriber=None,
+        cross_modal_embedder=None,
     )
     return app
 
