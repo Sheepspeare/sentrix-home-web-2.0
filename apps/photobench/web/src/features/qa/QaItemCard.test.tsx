@@ -7,6 +7,34 @@ import { QaItemCard } from "./QaItemCard.tsx";
 
 afterEach(cleanup);
 
+it("后台刷新保留正文、媒体节点和已展开轨迹，首次加载仍显示提示", () => {
+  const detail: RunItemDetail = { index: 0, answer: "原始回答", predicted_media: [
+    { media_type: "image", media_id: "used.jpg", asset_id: "used-1", file_name: "used.jpg" },
+  ], runtime_turns: [{ index: 0, message: "问题", answer: "原始回答" }] };
+  const props = { summary: { index: 0, question: "刷新测试" }, detail: undefined as RunItemDetail | undefined,
+    loading: true, open: true, albumId: "album3", modelLabel: "qwen", activeRejudge: null,
+    onToggle: () => {}, onOpenImage: () => {}, onOpenJudgeInput: () => {} };
+  const { container, rerender } = render(<QaItemCard {...props} />);
+  expect(screen.getByText("正在加载该题完整记录…")).toBeTruthy();
+  rerender(<QaItemCard {...props} detail={detail} loading={false} />);
+  const body = container.querySelector(".item-body");
+  const media = screen.getByAltText("used.jpg");
+  const trace = container.querySelector<HTMLDetailsElement>(".debug-trace-node")!;
+  trace.open = true; fireEvent(trace, new Event("toggle"));
+  for (let poll = 0; poll < 3; poll++) {
+    rerender(<QaItemCard {...props} detail={detail} loading />);
+    expect(screen.queryByText("正在加载该题完整记录…")).toBeNull();
+    expect(container.querySelector(".item-body")).toBe(body);
+    expect(screen.getByAltText("used.jpg")).toBe(media);
+    expect(trace.open).toBe(true);
+    expect(container.querySelector(".qa-expanded")?.getAttribute("aria-busy")).toBe("true");
+    rerender(<QaItemCard {...props} detail={{ ...detail, answer: "更新回答" }} loading={false} />);
+    expect(container.querySelector(".debug-trace-node")).toBe(trace);
+    expect(trace.open).toBe(true);
+    expect(container.querySelector(".item-body")).toBe(body);
+  }
+});
+
 function renderCard(detail: RunItemDetail) {
   return render(
     <QaItemCard

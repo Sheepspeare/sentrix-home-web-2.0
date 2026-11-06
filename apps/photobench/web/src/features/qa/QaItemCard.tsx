@@ -149,10 +149,8 @@ export function QaItemCard({
         </span>
       </button>
       {open && (
-        <div className="qa-expanded">
-          {loading ? (
-            <div className="qa-results-empty">正在加载该题完整记录…</div>
-          ) : detail ? (
+        <div className="qa-expanded" aria-busy={loading}>
+          {detail ? (
             <QaItemDetail
               detail={detail}
               albumId={albumId}
@@ -162,6 +160,8 @@ export function QaItemCard({
               review={undefined}
               onReviewChange={undefined}
             />
+          ) : loading ? (
+            <div className="qa-results-empty">正在加载该题完整记录…</div>
           ) : null}
         </div>
       )}

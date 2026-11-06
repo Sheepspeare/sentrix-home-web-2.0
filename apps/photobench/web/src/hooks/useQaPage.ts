@@ -186,7 +186,8 @@ export function useQaPage({ activeRunId, activeRejudge = null, scoringQuery = ''
       const newJudge: Judge = summary.judge || {};
       if (
         (summary.profile_scores && JSON.stringify(summary.profile_scores) !== JSON.stringify(detail.profile_scores)) ||
-        (queryRef.current && (newJudge.status !== oldJudge.status || newJudge.finished_at !== oldJudge.finished_at)) ||
+        (queryRef.current && (newJudge.status !== oldJudge.status ||
+          (newJudge.finished_at != null && newJudge.finished_at !== oldJudge.finished_at))) ||
         newJudge.rejudge_id &&
         (newJudge.rejudge_id !== oldJudge.rejudge_id ||
           (newJudge.status === "completed" && oldJudge.status !== "completed"))

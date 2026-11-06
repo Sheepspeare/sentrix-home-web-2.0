@@ -40,6 +40,36 @@ beforeEach(() => {
 });
 
 describe("useQaPage · judge 增量刷新（1.0 App.vue:2269-2283）", () => {
+  it("列表省略完成时间时，相同评分连续轮询不重拉已展开详情", async () => {
+    const scores = { photobench_open_v1: { status: "completed", score: 2 } };
+    mockApi.mockImplementation((path: string) => Promise.resolve(path.includes("/items/5?")
+      ? { index: 5, item: { index: 5, judge: { status: "completed", finished_at: "2026-11-07T03:36:21+08:00" }, profile_scores: scores } }
+      : pageOf([{ index: 5, judge: { status: "completed" }, profile_scores: scores }])));
+    const { result } = renderHook(() => useQaPage({ activeRunId: "run1", scoringQuery: "scoring_profile=photobench_open_v1" }));
+    await act(async () => { await result.current.toggleQa({ index: 5 }); });
+    for (let poll = 0; poll < 3; poll++) {
+      await act(async () => { await result.current.loadQaPage(); });
+    }
+    expect(mockApi.mock.calls.filter(([path]) => String(path).includes("/items/5?"))).toHaveLength(1);
+    expect(result.current.openQaItems.has(5)).toBe(true);
+    expect(result.current.qaDetails[5].judge?.finished_at).toBe("2026-11-07T03:36:21+08:00");
+  });
+
+  it("评分状态或明确的完成时间变化时仍刷新详情", async () => {
+    let judge: Judge = { status: "running" };
+    mockApi.mockImplementation((path: string) => Promise.resolve(path.includes("/items/5?")
+      ? detailOf(5, { ...judge }) : pageOf([{ index: 5, judge: { ...judge } }])));
+    const { result } = renderHook(() => useQaPage({ activeRunId: "run1", scoringQuery: "scoring_profile=photobench_open_v1" }));
+    await act(async () => { await result.current.toggleQa({ index: 5 }); });
+    judge = { status: "completed", finished_at: "first", score: 1 };
+    await act(async () => { await result.current.loadQaPage(); });
+    expect(result.current.qaDetails[5].judge?.score).toBe(1);
+    judge = { status: "completed", finished_at: "second", score: 2 };
+    await act(async () => { await result.current.loadQaPage(); });
+    expect(result.current.qaDetails[5].judge?.score).toBe(2);
+    expect(mockApi.mock.calls.filter(([path]) => String(path).includes("/items/5?"))).toHaveLength(3);
+  });
+
   // 判据：`newJudge.rejudge_id && (rejudge_id 变了 || (新 status==="completed" 且旧 !== "completed"))`
   // → 重拉；否则就地合并。下面两组的**唯一差别**就是 judge，答案必须不同。
 
