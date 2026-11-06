@@ -1,5 +1,10 @@
 # PhotoBench 题型评分
 
+本页保留evaluation-2026.11.03-v1的历史协议，供旧快照追溯。
+当前新测评与补评采用[双评分标准](photobench-dual-scoring.md)：
+按所选标准执行评分，新QS列表统一Jaccard，数值题由Judge对照参考答案匹配。
+下文的open_scale、any/all和混合汇总仅描述旧协议。
+
 实现版本：evaluation-2026.11.03-v1。原始QA通过独立evaluation字段追加定义，历史无定义的run沿原0/1/2量表读取。
 
 ## 定义与运行配置
