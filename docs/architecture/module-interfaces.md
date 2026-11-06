@@ -170,7 +170,7 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | 8 | 禁止 benchmark 泄漏进 agent | 提示词/代码不得出现评测地名、答案、题号 | `frozen.md` + Review |
 | 9 | 禁止出口清洗 | 清洗会掩盖真实模型问题，违反“先定位根因” | Review |
 | 10 | 应用不管理模型进程生命周期 | 只经 HTTP 消费端点；不建 model-manager | s11 裁决 |
-| 11 | 导入是同步长请求，没有任务队列 | 不假装异步、不藏进度 | s9 裁决 |
+| 11 | 图片/音频保留同步导入契约；视频通过 SQLite 持久 Job 与后台 worker 处理，浏览器生命周期不控制任务 | 视频任务必须可查询、可恢复、以唯一 worker claim 防重；其他媒体入口保持兼容 | video job/checkpoint capability |
 | 12 | 配置最小化：只有部署事实才进 `Settings` | 1.0 的 126 个 env flag 互相矛盾 | `config.py` + Review |
 
 > **第 12 条的判据**：这个值是不是“部署方决定、运行时会变”的事实？是 → 可以进 `Settings`；只是代码常量 → 放 domain，不要加环境变量。
@@ -234,7 +234,7 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | `VideoMetadataReader` | `:297` | `read(path) -> VideoMetadata` | `FfprobeVideoMetadataReader` |
 | `VideoTranscoder` | `:320` | `browser_preview(asset_id, source, codec) -> Path \| None` | `FfmpegVideoTranscoder` |
 | `VideoKeyframeExtractor` | `:332` | `extract(source, asset_id, scene_index, timestamp_sec) -> Path` | `FfmpegVideoKeyframeExtractor` |
-| `VideoRepository` | `:378` | `save_probe/save_processing_seconds/probe/list_derived/add_derived/cleanup_derivatives` | `SqliteVideoRepository` |
+| `VideoRepository` | `:416` | `save_probe/save_processing_seconds/probe/list_derived/add_derived/cleanup_derivatives/create_job/get_job/list_jobs/claim_job/update_job/stage/list_stages/update_stage/recover_stale_jobs/refresh_derived_file` | `SqliteVideoRepository` |
 | `AudioMetadataReader` | `:452` | `read(path) -> AudioMetadata` | `FfprobeAudioMetadataReader` |
 | `AudioRepository` | `:489` | `save_probe` | `SqliteAudioRepository` |
 | `MediaTypeResolver` | `:293` | `resolve(content_type, file_name)` | **无实现/未装配** |
