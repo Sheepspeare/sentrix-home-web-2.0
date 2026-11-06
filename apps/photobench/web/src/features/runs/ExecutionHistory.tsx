@@ -37,7 +37,7 @@ export function ExecutionHistory({ run }: { run: Run }) {
         : <><span>继承答案 <b>{selected.inherited_count ?? (selected.source_run_id ? '未记录' : 0)}</b></span><span>本轮新增保存 <b>{selected.answer_count != null && (!selected.source_run_id || selected.inherited_count != null) ? Math.max(0, selected.answer_count - (selected.inherited_count || 0)) : '未记录'}</b></span></>}
     </div>
     <details className="execution-source"><summary>来源与版本标识</summary><dl><dt>执行ID</dt><dd><code>{selected.execution_id}</code></dd><dt>答卷run</dt><dd><code>{selected.run_id}</code></dd><dt>来源run</dt><dd><code>{selected.source_run_id || (selected.kind === 'scoring' ? selected.run_id : '首次执行')}</code></dd>{selected.build_revision && <><dt>代码版本</dt><dd><code>{selected.build_revision}</code></dd></>}{selected.batch_ids && <><dt>评分批次</dt><dd>{selected.batch_ids.join(' · ')}</dd></>}</dl></details>
-    <details className="execution-log" key={selected.execution_id}><summary>查看本轮日志</summary>
+    <details className="execution-log" key={selected.execution_id} open><summary>查看本轮日志</summary>
       {error ? <p className="error">{error}</p> : !source ? <p>正在读取执行日志…</p> : selected.kind === 'scoring' ? task ? <ScoringTaskLogs tasks={[task]} /> : <p>此执行未保存详细日志。</p> : <>{source.fatal_error ? <p className="error">{String(source.fatal_error)}</p> : null}<InitialExecutionPhases activeRun={source}/></>}
     </details>
   </section>;

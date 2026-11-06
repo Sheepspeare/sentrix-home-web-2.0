@@ -91,7 +91,7 @@ describe("fatal_error 横幅（1.0 :3058）", () => {
     );
 
     expect(screen.queryByText("任务终止原因")).toBeNull();
-    fireEvent.click(screen.getByText("查看本轮日志"));
+    expect(screen.getByText("查看本轮日志").closest("details")?.open).toBe(true);
     expect(screen.getByText("磁盘写满")).not.toBeNull();
     // 阶段标签里也有「流水线处理」，锚定横幅那句而不是阶段卡。
     expect(screen.getByText("磁盘写满").closest("details")?.className).toBe("execution-log");
