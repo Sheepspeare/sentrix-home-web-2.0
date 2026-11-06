@@ -16,8 +16,12 @@ OTHER_LABEL = "其他（以上都不是）"
 
 _LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-_CHOICE_PATTERN = re.compile(r"""["']?choice["']?\s*[:：]\s*["']?([A-Za-z])["']?""")
+_CHOICE_PATTERN = re.compile(r"""["']?choice["']?\s*[:：]\s*["']?([A-Za-z])(?=["',}。;；]|$)""")
 _REASON_PATTERN = re.compile(r"""["']?reason["']?\s*[:：]\s*"((?:[^"\\]|\\.)*)\"""")
+_EXPLICIT_CHOICE_PATTERN = re.compile(
+    r"^(?:(?:答案|选项)(?:是|为)?\s*[:：]?\s*|(?:我)?(?:选择|选)\s*[:：]?\s*)?"
+    r"[（(]?\s*([A-Za-z])\s*[）)]?(?:[.．、:：。]\s*([^\n]*))?$"
+)
 
 
 def has_native_other(options: Sequence[Mapping[str, Any]]) -> bool:
@@ -66,26 +70,45 @@ def parse_choice_answer(text: str, labels: Sequence[Mapping[str, str]]) -> dict[
         return {"status": "failed", "reason": "回答为空，json解析失败"}
     by_letter = {str(item["letter"]).upper(): str(item["option_id"]) for item in labels}
     choice = reason = None
+    source_format = "json"
+    parsed_object = False
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
+            parsed_object = True
             choice = parsed.get("choice")
             reason = parsed.get("reason")
     except (ValueError, TypeError):
         pass
-    if choice is None:
-        matched = _CHOICE_PATTERN.search(raw)
-        if matched:
-            choice = matched.group(1)
+    if not parsed_object:
+        matches = list(_CHOICE_PATTERN.finditer(raw))
+        if len(matches) == 1 and len(re.findall(r"choice[\"']?\s*[:：]", raw)) == 1:
+            choice = matches[0].group(1)
+            source_format = "choice_field"
+        elif not matches:
+            matched = _EXPLICIT_CHOICE_PATTERN.fullmatch(raw)
+            if matched and (
+                not matched.group(2)
+                or any(
+                    item["letter"] == matched.group(1).upper() and item["text"] == matched.group(2).strip()
+                    for item in labels
+                )
+            ):
+                choice = matched.group(1)
+                source_format = "explicit_label"
     if reason is None:
         matched = _REASON_PATTERN.search(raw)
-        if matched:
+        if matched and source_format != "explicit_label":
             reason = matched.group(1).replace('\\"', '"')
-    letter = str(choice or "").strip().upper()
-    if len(letter) > 1:
-        letter = letter[:1]
+    letter = choice.strip().upper() if isinstance(choice, str) else ""
     option_id = by_letter.get(letter)
     if option_id is None:
         snippet = raw[:120].replace("\n", " ")
         return {"status": "failed", "reason": f"json解析失败：未取到有效选项（原始回答：{snippet}）"}
-    return {"status": "ok", "option_id": option_id, "letter": letter, "reason": str(reason or "").strip()}
+    return {
+        "status": "ok",
+        "option_id": option_id,
+        "letter": letter,
+        "reason": str(reason or "").strip(),
+        "source_format": source_format,
+    }

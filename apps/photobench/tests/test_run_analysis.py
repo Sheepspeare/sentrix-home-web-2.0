@@ -630,6 +630,20 @@ def test_multiturn_summary_uses_first_message_without_overwriting_question():
     assert "display_question" not in item
 
 
+def test_option_turn_does_not_change_authored_turn_count_in_projection():
+    item = {
+        "question": "原问题",
+        "conversation_turn_count": 1,
+        "processed_turn_count": 2,
+        "runtime_turns": [
+            {"message": "原问题", "answer": "自由回答"},
+            {"message": "提供选项", "answer": "B"},
+        ],
+    }
+    assert analysis.conversation_projection(item)["conversation_turn_count"] == 1
+    assert item["processed_turn_count"] == 2
+
+
 def test_tool_binding_uses_successful_attempt_in_same_turn_only():
     calls = [
         {"conversation_turn": 0, "step_id": "step_1", "status": "complete"},

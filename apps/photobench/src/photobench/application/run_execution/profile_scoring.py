@@ -27,6 +27,7 @@ from photobench.domain.evaluation.profiles import (
     list_score,
     make_batch,
     result_key,
+    scoring_turns,
     summarize_batches,
     uses_readable_metadata,
     valid_result,
@@ -93,7 +94,7 @@ def agent_choice_result(row: Mapping[str, Any], item: Mapping[str, Any], index: 
     """
     definition = row.get("evaluation") or {}
     turns = item.get("runtime_turns") or [item]
-    record = turns[index] if index < len(turns) else {}
+    record = turns[-1] if (item.get("choice_prompt") or {}).get("mode") == "options_visible" else turns[index]
     saved = item.get("agent_choice") or {}
     chosen = str(saved.get("option_id") or "")
     letter = str(saved.get("letter") or "")
@@ -114,7 +115,12 @@ def agent_choice_result(row: Mapping[str, Any], item: Mapping[str, Any], index: 
         matched_option=chosen,
         comparisons=[],
         answer_side="agent_choice",
-        agent_choice={"letter": letter, "option_id": chosen, "answer": str(record.get("answer") or "")},
+        agent_choice={
+            "letter": letter,
+            "option_id": chosen,
+            "answer": str(record.get("answer") or ""),
+            "source_format": saved.get("source_format"),
+        },
     )
 
 
@@ -570,11 +576,8 @@ class ProfileScoring:
     ) -> dict[str, Any]:
 
         all_results = []
-        # 「提供选择题选项」的追加轮是测评服务生成的，不属于题面：它不参与
-        # 任何一套标准的逐轮评分，只作为答题方式记录在 runtime_turns 里。
-        authored = int(item.get("conversation_turn_count") or 0) or len(item.get("runtime_turns") or [item])
         for batch in batches:
-            for index, record in enumerate((item.get("runtime_turns") or [item])[:authored]):
+            for index, record in enumerate(scoring_turns(row, item)):
                 target = {
                     "key": result_key(batch["batch_id"], str(row["qa_id"]), index),
                     "qa_id": str(row["qa_id"]),

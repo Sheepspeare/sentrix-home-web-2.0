@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import threading
 
@@ -45,6 +46,21 @@ def test_prompt_carries_options_and_keeps_question_out():
         ('{"choice": "B", "reason": "牌子写着西门"}', ("ok", "B")),
         ('说明如下 {"choice":"C"}', ("ok", "C")),
         ("choice: A", ("ok", "A")),
+        ("B", ("ok", "B")),
+        ("b", ("ok", "B")),
+        ("C. 沙湖路 18 号", ("ok", "C")),
+        ("答案：B", ("ok", "B")),
+        ("选择 B", ("ok", "B")),
+        ("(B)", ("ok", "B")),
+        ("B或者C", ("failed", None)),
+        ("B. 西门\nC. 沙湖路", ("failed", None)),
+        ("choice: B choice: C", ("failed", None)),
+        ("choice: B或者C", ("failed", None)),
+        ("choice: B 或 C", ("failed", None)),
+        ("B. 但也可能C", ("failed", None)),
+        ("B. 江滩公园东门", ("failed", None)),
+        ('{"choice": "B或C"}', ("failed", None)),
+        ('{"choice": ["B"]}', ("failed", None)),
         ("我认为是 B", ("failed", None)),
         ("", ("failed", None)),
         ('{"choice": "Z", "reason": "越界"}', ("failed", None)),
@@ -224,9 +240,7 @@ def test_judge_skips_appended_option_turn():
             body = json.dumps({"actual_action": "answer", "reason": "作答"})
             return {"choices": [{"message": {"content": body}}], "usage": {"total_tokens": 5}}
 
-    runner = JudgeRunner(
-        http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event()
-    )
+    runner = JudgeRunner(http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event())
     out = runner.judge_item(item, row, {})
     # 选项轮不发任何请求：唯一的调用是原题轮的任务判定。
     assert len(calls) == 1
@@ -247,9 +261,7 @@ def test_non_open_scorer_never_requests_quality_judge():
             body = json.dumps({"actual_action": "answer", "reason": "作答"})
             return {"choices": [{"message": {"content": body}}]}
 
-    runner = JudgeRunner(
-        http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event()
-    )
+    runner = JudgeRunner(http=Http(), judge_url="http://j/v1", judge_model="j", cancel=threading.Event())
     row = {
         "evaluation": {
             "scorer": "choice_judge",
@@ -280,3 +292,95 @@ def test_turn_count_uses_question_design_not_option_turn():
 
     assert turn_counts(conversation=[{}, {}, {}], turn_records=[{}, {}, {}, {}]) == (3, 4)
     assert turn_counts(conversation=[], turn_records=[{}]) == (1, 1)
+
+
+@pytest.mark.parametrize("authored", [1, 2])
+@pytest.mark.parametrize("profiles", [[ATM], [OPEN, ATM]])
+@pytest.mark.parametrize(
+    "answer,expected_score",
+    [
+        ('{"choice":"B","reason":"西门"}', 1),
+        ("A. 江滩公园东门", 0),
+        ("江滩公园西门", None),
+    ],
+)
+def test_choice_original_turns_shared_by_scoring_recovery_and_completion(
+    authored, profiles, answer, expected_score
+):
+    from photobench.application.run_execution.profile_scoring import prepare_batches
+    from photobench.domain.evaluation.profiles import (
+        item_scoring_error,
+        result_key,
+        scoring_targets,
+        summarize_batches,
+    )
+
+    state = _scoring_state("原始自由回答")
+    row = state["qa_snapshot"]["rows"][0]
+    row["evaluation"]["applies_to_turn"] = authored - 1
+    if authored > 1:
+        row["conversation"] = [
+            {"message": f"原问题{index}", "reference_answer": "西门", "expected_action": "answer"}
+            for index in range(authored)
+        ]
+    item = state["items"][0]
+    item["conversation_turn_count"] = authored
+    item["processed_turn_count"] = authored + 1
+    item["choice_prompt"] = {"mode": "options_visible", "labels": option_labels(OPTIONS)}
+    item["runtime_turns"] = [
+        {"message": f"原问题{index}", "answer": "原始自由回答", "expected_action": "answer"}
+        for index in range(authored)
+    ] + [{"message": "提供选项", "answer": answer}]
+    item["agent_choice"] = parse_choice_answer(answer, option_labels(OPTIONS))
+    calls = []
+
+    class Http:
+        def request_json(self, url, payload=None, *args, **kwargs):
+            calls.append(copy.deepcopy(payload))
+            assert "提供选项" not in json.dumps(payload, ensure_ascii=False)
+            assert answer not in json.dumps(payload, ensure_ascii=False)
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"score": 2, "accuracy": True, "actual_action": "answer", "reason": "ok"}
+                            )
+                        }
+                    }
+                ]
+            }
+
+    batches = prepare_batches(state, profile_configs(profiles), {"url": "http://judge/v1", "model": "j"})
+    state["primary_scoring_batch_ids"] = [b["batch_id"] for b in batches]
+    runner = JudgeRunner(http=Http(), judge_url="http://judge/v1", judge_model="j", cancel=threading.Event())
+    service = ProfileScoring(runner, state, threading.RLock(), lambda: None, {})
+    service.score_item(batches, item, row)
+    assert len(state["scoring_results"]) == authored * len(profiles)
+    atm = next(b for b in batches if b["profile_id"] == ATM)
+    result = state["scoring_results"][result_key(atm["batch_id"], "q", authored - 1)]
+    assert result["score"] == expected_score
+    assert not result["requests"]
+    if expected_score is not None:
+        assert result["agent_choice"]["answer"] == answer
+        assert item_scoring_error(state, item) is None
+    else:
+        assert "json解析失败" in item_scoring_error(state, item)
+        assert summarize_batches(state)[atm["batch_id"]]["scored"] == 0
+    for batch in batches:
+        for scope in ["all", "missing", "failed", "unscored", "needs_review"]:
+            assert all(t["turn_index"] < authored for t in scoring_targets(state, batch, scope))
+    key = result_key(atm["batch_id"], "q", authored - 1)
+    del state["scoring_results"][key]
+    targets = scoring_targets(state, atm, "missing")
+    assert any(t["key"] == key for t in targets)
+    for target in targets:
+        service.score(atm, target)
+    assert state["scoring_results"][key]["score"] == expected_score
+
+
+def test_original_turn_selection_preserves_unmarked_historical_dialogue():
+    from photobench.domain.evaluation.profiles import scoring_turns
+
+    turns = [{"answer": "one"}, {"answer": "two"}]
+    assert scoring_turns({}, {"runtime_turns": turns, "conversation_turn_count": 1}) == turns

@@ -1949,7 +1949,7 @@ def conversation_projection(item: dict[str, Any]) -> dict[str, Any]:
     messages = turns or planned
     return {
         "display_question": (messages[0].get("message") if messages else None) or item.get("question"),
-        "conversation_turn_count": len(messages) or item.get("conversation_turn_count") or 1,
+        "conversation_turn_count": item.get("conversation_turn_count") or len(messages) or 1,
         "conversation_context_mode": item.get("conversation_context_mode"),
         "agent_status": item.get("agent_status")
         or item.get("turn_status")

@@ -135,6 +135,14 @@ def evaluation_turn(row: Mapping[str, Any]) -> int:
     )
 
 
+def scoring_turns(row: Mapping[str, Any], item: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """原题对话参与评分；带明确标记的测评选项轮只提供模型选择。"""
+    turns = list(item.get("runtime_turns") or [item])
+    if (item.get("choice_prompt") or {}).get("mode") == "options_visible":
+        return turns[: len(row.get("conversation") or []) or 1]
+    return turns
+
+
 def result_key(batch_id: str, qa_id: str, turn: int) -> str:
     return f"{batch_id}:{qa_id}:{turn}"
 
@@ -169,23 +177,13 @@ def item_scoring_error(state: Mapping[str, Any], item: Mapping[str, Any]) -> str
     """Validate every original scoring batch/turn, independent of legacy Judge placeholders."""
     batches = {b["batch_id"]: b for b in state.get("scoring_batches") or []}
     results = state.get("scoring_results") or {}
+    rows = {str(r["qa_id"]): r for r in (state.get("qa_snapshot") or {}).get("rows") or []}
+    row = rows.get(str(item.get("qa_id")), {})
     for batch_id in state.get("primary_scoring_batch_ids") or []:
         if batch_id not in batches:
             return f"Missing primary scoring batch: {batch_id}"
         batch = batches[batch_id]
-        turns = item.get("runtime_turns") or [item]
-        # 「提供选择题选项」的追加轮由测评服务生成，不属于题目定义：
-        # 只有题面轮次参与评分完整性校验。题面轮数记在 item 上
-        # （conversation_turn_count），没有时按对话定义长度回落。
-        authored = int(item.get("conversation_turn_count") or 0)
-        if not authored:
-            definition = state.get("qa_snapshot") or {}
-            row: Mapping[str, Any] = next(
-                (r for r in definition.get("rows") or [] if str(r.get("qa_id")) == str(item.get("qa_id"))),
-                {},
-            )
-            authored = len(row.get("conversation") or []) or len(turns)
-        for index, record in enumerate(turns[:authored]):
+        for index, record in enumerate(scoring_turns(row, item)):
             result = results.get(result_key(batch_id, str(item["qa_id"]), index)) or {}
             prefix = f"{batch['profile_id']} turn {index + 1}"
             if not valid_result(result) or result.get("answer_fingerprint") != answer_fingerprint(record):
@@ -254,7 +252,7 @@ def scoring_targets(
             continue
         if qa_id not in rows:
             raise ValueError("Frozen QA definition missing: " + qa_id)
-        for turn_index, record in enumerate(item.get("runtime_turns") or [item]):
+        for turn_index, record in enumerate(scoring_turns(rows[qa_id], item)):
             if "answer" not in record:
                 continue
             key = result_key(str(batch["batch_id"]), qa_id, turn_index)
