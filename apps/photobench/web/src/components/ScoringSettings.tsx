@@ -24,7 +24,7 @@ export function ScoringSettings({value, onChange, disabled = false, hideGt = fal
           <input aria-label={label + ' · 提供选择题选项'} type='checkbox' disabled={disabled || !value.profiles.includes(id)} checked={value.configs[id]?.choice_options_visible ?? true}
             onChange={e => onChange({...value,configs:{...value.configs,[id]:{...value.configs[id], choice_options_visible:e.target.checked}}})} />
           提供选择题选项
-        </label><small>模型看选项自报选择，程序按答案键核对；不勾选用Judge语义匹配。</small>
+        </label>
       </div>}
     </div>)}
     </div>
