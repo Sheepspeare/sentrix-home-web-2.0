@@ -91,18 +91,49 @@ def test_snapshot_uses_state_lock_and_writer_error_still_stops():
 def test_result_pair_failure_leaves_previous_committed_state(tmp_path, monkeypatch):
     writer = FileResultWriter(tmp_path)
     writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": "before"}]})
-    original = Path.write_text
+    original = Path.open
 
     def fail_results(path, *args, **kwargs):
-        if "results" in path.name:
+        if path.name == "results.jsonl" and args and args[0] == "w":
             raise OSError("synthetic second-file failure")
         return original(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "write_text", fail_results)
+    monkeypatch.setattr(Path, "open", fail_results)
     with pytest.raises(OSError):
         writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": "after"}]})
     assert FileRunStore(tmp_path).load_state("r")["items"] == [{"answer": "before"}]
     assert json.loads((tmp_path / "r/results.jsonl").read_text()) == {"answer": "before"}
+
+
+def test_large_unicode_snapshot_has_bounded_encoding_memory_and_preserves_bytes(tmp_path):
+    import tracemalloc
+
+    payload = "data:image/jpeg;base64," + "A" * (64 * 1024) + "图片😀"
+    rows = [{"qa_id": f"q{index}", "answer": payload} for index in range(128)]
+    state = {"run_id": "r", "status": "running", "items": rows}
+    tracemalloc.start()
+    try:
+        FileResultWriter(tmp_path).write_snapshot("r", state)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    # Encoding must not allocate a complete Unicode run or join all JSONL rows.
+    assert peak < 4 * 1024 * 1024
+    assert (tmp_path / "r/run.json").read_text() == json.dumps(state, ensure_ascii=False)
+    assert (tmp_path / "r/results.jsonl").read_text() == "".join(
+        json.dumps(row, ensure_ascii=False) + "\n" for row in rows
+    )
+    assert FileRunStore(tmp_path).load_state("r") == state
+
+
+def test_encoding_failure_keeps_the_previous_committed_generation(tmp_path):
+    writer = FileResultWriter(tmp_path)
+    before = {"run_id": "r", "items": [{"answer": "before"}]}
+    writer.write_snapshot("r", before)
+    with pytest.raises(TypeError):
+        writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": object()}]})
+    assert FileRunStore(tmp_path).load_state("r") == before
+    assert len(list((tmp_path / "r/.snapshots").iterdir())) == 1
 
 
 def test_parsing_a_detached_generation_does_not_block_new_commits(tmp_path, monkeypatch):

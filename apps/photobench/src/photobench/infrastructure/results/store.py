@@ -42,9 +42,20 @@ def committed_path(run_dir: Path, name: str) -> Path:
     return run_dir / ".snapshots" / generation / name
 
 
-def _durable_text(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
-    with path.open("rb") as handle:
+def _durable_json(path: Path, value: Any) -> None:
+    """Encode to the file so image payloads never form one giant Unicode string."""
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(value, handle, ensure_ascii=False)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _durable_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            json.dump(row, handle, ensure_ascii=False)
+            handle.write("\n")
+        handle.flush()
         os.fsync(handle.fileno())
 
 
@@ -135,20 +146,15 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
         previous = json.loads(pointer.read_text())["generation"] if pointer.exists() else None
         temporary = run_dir / "snapshot-commit.tmp"
         try:
-            _durable_text(stage / "run.json", json.dumps(state, ensure_ascii=False))
-            _durable_text(
-                stage / "results.jsonl",
-                "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in state.get("items") or []),
-            )
-            _durable_text(
+            _durable_json(stage / "run.json", state)
+            _durable_jsonl(stage / "results.jsonl", state.get("items") or [])
+            _durable_json(
                 stage / "metadata.json",
-                json.dumps(
-                    {"entry": run_list_entry(state), "overview": _overview(state)}, ensure_ascii=False
-                ),
+                {"entry": run_list_entry(state), "overview": _overview(state)},
             )
             _sync_directory(stage)
             _sync_directory(stages)
-            _durable_text(temporary, json.dumps({"version": 1, "generation": generation}))
+            _durable_json(temporary, {"version": 1, "generation": generation})
             temporary.replace(pointer)
         except BaseException:
             temporary.unlink(missing_ok=True)

@@ -6,6 +6,7 @@ import fcntl
 import json
 import logging
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import IO
@@ -51,8 +52,8 @@ class FileRunStartupRecovery:
                     and (entry.get("rejudge") or {}).get("status") != "running"
                 ):
                     continue
-                original = path.read_bytes()
-                state = json.loads(original)
+                with path.open(encoding="utf-8") as handle:
+                    state = json.load(handle)
                 if not isinstance(state, dict):
                     continue
                 active = state.get("status") in {
@@ -68,8 +69,10 @@ class FileRunStartupRecovery:
                 # A crash after backup but before replacement must remain recoverable.
                 if backup.exists():
                     backup = run_dir / (f"run.before-orphan-recovery.{uuid.uuid4().hex}.json")
-                with backup.open("xb") as handle:
-                    handle.write(original)
+                with path.open("rb") as source, backup.open("xb") as handle:
+                    shutil.copyfileobj(source, handle, length=1024 * 1024)
+                    handle.flush()
+                    os.fsync(handle.fileno())
                 timestamp = now_iso()
                 state["recovery"] = {
                     "reason": "previous_instance_lost",
