@@ -142,22 +142,24 @@ def test_parsing_a_detached_generation_does_not_block_new_commits(tmp_path, monk
     writer = FileResultWriter(tmp_path)
     writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": "before"}]})
     entered, release, committed = threading.Event(), threading.Event(), threading.Event()
-    loads = json.loads
+    load = storage.load_snapshot_json
     loaded = []
 
-    def slow_loads(text, *args, **kwargs):
-        if threading.current_thread().name == "slow-reader" and '"items"' in text:
+    def slow_load(source):
+        if threading.current_thread().name == "slow-reader":
             entered.set()
             assert release.wait(3)
-        return loads(text, *args, **kwargs)
+        return load(source)
 
-    monkeypatch.setattr(storage.json, "loads", slow_loads)
+    monkeypatch.setattr(storage, "load_snapshot_json", slow_load)
     reader = threading.Thread(
         target=lambda: loaded.append(FileRunStore(tmp_path).load_state("r")), name="slow-reader"
     )
 
     def write():
-        writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": "after"}]})
+        # Two further commits prune the first generation while its handle is open.
+        for _ in range(3):
+            writer.write_snapshot("r", {"run_id": "r", "items": [{"answer": "after"}]})
         committed.set()
 
     reader.start()
@@ -165,13 +167,61 @@ def test_parsing_a_detached_generation_does_not_block_new_commits(tmp_path, monk
     new_write = threading.Thread(target=write)
     new_write.start()
     try:
-        assert committed.wait(1), "A reader parsing detached text held the commit lock"
+        assert committed.wait(1), "A reader parsing an open snapshot held the commit lock"
     finally:
         release.set()
         reader.join(3)
         new_write.join(3)
     assert loaded[0]["items"] == [{"answer": "before"}]
     assert FileRunStore(tmp_path).load_state("r")["items"] == [{"answer": "after"}]
+
+
+def test_unicode_snapshot_decoding_does_not_allocate_a_full_document_string(tmp_path):
+    import gc
+    import tracemalloc
+
+    # Real snapshots mix ASCII image data with small Chinese/emoji text fields.
+    state = {
+        "run_id": "r",
+        "items": [{"answer": "图片😀", "image": "A" * (64 * 1024)} for _ in range(128)],
+    }
+    FileResultWriter(tmp_path).write_snapshot("r", state)
+    collect_enabled = gc.isenabled()
+    gc.disable()
+    tracemalloc.start()
+    try:
+        for _ in range(3):
+            loaded = FileRunStore(tmp_path).load_state("r")
+            assert loaded == state
+            del loaded
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+        if collect_enabled:
+            gc.enable()
+    # ~8 MiB of decoded strings are necessary; a full UTF-32 source is not.
+    assert peak < 16 * 1024 * 1024
+
+
+def test_snapshot_stream_preserves_json_value_types(tmp_path):
+    from io import BytesIO
+
+    from photobench.infrastructure.results.store import load_snapshot_json
+
+    raw = (
+        b'{"integer":123456789012345678901234567890,"float":1.25,'
+        b'"small":1e-300,"overflow":1e400,"negative_zero":-0.0,'
+        b'"duplicate":1,"duplicate":2,"values":[true,false,null,{},[],"\\ud83d\\ude00"]}'
+    )
+    value = load_snapshot_json(BytesIO(raw))
+    assert value == json.loads(raw)
+    assert type(value["integer"]) is int
+    assert type(value["float"]) is float
+    assert type(value["small"]) is float
+    assert json.dumps(value) == json.dumps(json.loads(raw))
+    for invalid in (b"", b'{"a":', b"{} {}", b'{"x":01}'):
+        with pytest.raises(ValueError, match="Invalid result snapshot JSON"):
+            load_snapshot_json(BytesIO(invalid))
 
 
 def test_async_write_route_does_not_block_event_loop():

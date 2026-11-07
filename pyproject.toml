@@ -35,6 +35,10 @@ strict = true
 # strict 的检查范围内——不是等它长到 9,300 行才补。
 files = ["apps/api/src/sentrix", "apps/photobench/src", "scripts"]
 
+[[tool.mypy.overrides]]
+module = ["ijson", "ijson.*"]
+ignore_missing_imports = true
+
 # 第三方包缺 stub / py.typed 是环境事实，不是本仓库代码的问题：集中在配置里表达，
 # 而不是在每个 import 上散落 # type: ignore——那会把「这里真的有问题」也一起静音。
 [[tool.mypy.overrides]]

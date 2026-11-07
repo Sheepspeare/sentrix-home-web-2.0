@@ -14,8 +14,12 @@ import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import suppress
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
+
+import ijson
+from ijson.common import ObjectBuilder
 
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.runs.analysis import effective_summary, run_list_entry
@@ -40,6 +44,23 @@ def committed_path(run_dir: Path, name: str) -> Path:
     if not isinstance(generation, str) or len(generation) != 32 or not generation.isalnum():
         raise ValueError("invalid snapshot generation")
     return run_dir / ".snapshots" / generation / name
+
+
+def load_snapshot_json(source: BinaryIO) -> Any:
+    """Build the saved graph without a full UTF-32 copy of mixed image/text JSON."""
+    builder = ObjectBuilder()
+    try:
+        for event, value in ijson.basic_parse(source):
+            # Keep json.loads number types, including arbitrary-size integers.
+            # use_float=True in the native parser would overflow large integers.
+            builder.event(event, float(value) if isinstance(value, Decimal) else value)
+        return builder.value
+    except ijson.JSONError as error:
+        raise ValueError("Invalid result snapshot JSON") from error
+    finally:
+        # ObjectBuilder's initial setter closes over itself. Release that cycle
+        # immediately, so a finished request does not await cyclic GC for its GBs.
+        builder.containers.clear()
 
 
 def _durable_json(path: Path, value: Any) -> None:
@@ -111,7 +132,8 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
                 return entry
         except (OSError, ValueError, KeyError, TypeError):
             pass
-        state = json.loads(path.read_text(encoding="utf-8"))
+        with path.open("rb") as source:
+            state = load_snapshot_json(source)
         if not isinstance(state, dict) or not state.get("run_id"):
             raise ValueError("missing run_id")
         entry = run_list_entry(state)
@@ -224,10 +246,11 @@ class FileRunStore:
             path = committed_path(run_dir, "run.json")
             if not path.is_file():
                 raise KeyError(run_id)
-            # Detach the immutable generation bytes before releasing the lock.
-            # Parsing a large trace must not block the next durable commit.
-            text = path.read_text(encoding="utf-8")
-        value = json.loads(text)
+            # Pin the selected inode before releasing the commit lock. A later
+            # generation (or pruning this path) cannot change the open snapshot.
+            source = path.open("rb")
+        with source:
+            value = load_snapshot_json(source)
         if not isinstance(value, dict):
             raise KeyError(run_id)
         return value

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import logging
 import os
 import shutil
@@ -12,7 +11,12 @@ from pathlib import Path
 from typing import IO
 
 from photobench.domain.runs.analysis import now_iso
-from photobench.infrastructure.results.store import committed_path, read_entry, write_committed_snapshot
+from photobench.infrastructure.results.store import (
+    committed_path,
+    load_snapshot_json,
+    read_entry,
+    write_committed_snapshot,
+)
 
 log = logging.getLogger(__name__)
 
@@ -46,14 +50,15 @@ class FileRunStartupRecovery:
                     entry = read_entry(run_dir)
                 except ValueError:
                     # Old recovery also accepts records without run_id.
-                    entry = json.loads(path.read_bytes())
+                    with path.open("rb") as source:
+                        entry = load_snapshot_json(source)
                 if (
                     entry.get("status") not in {"running", "pending", "cancelling"}
                     and (entry.get("rejudge") or {}).get("status") != "running"
                 ):
                     continue
-                with path.open(encoding="utf-8") as handle:
-                    state = json.load(handle)
+                with path.open("rb") as source:
+                    state = load_snapshot_json(source)
                 if not isinstance(state, dict):
                     continue
                 active = state.get("status") in {
