@@ -107,6 +107,7 @@ class ReadRuns:
         self._live_states = live_states
         self._lock = threading.RLock()
         self._states: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._state_reads: dict[tuple[str, str], Future[dict[str, Any]]] = {}
         self._item_locks = tuple(threading.RLock() for _ in range(64))
         self._run_reads: dict[tuple[str, bool, str, str], Future[dict[str, Any]]] = {}
         self._qa_metadata: dict[str, dict[str, Any]] | None = None
@@ -132,6 +133,28 @@ class ReadRuns:
             if cached is not None:
                 self._states.move_to_end(run_id)
                 return cached
+            key = (run_id, revision)
+            pending = self._state_reads.get(key)
+            leader = pending is None
+            if pending is None:
+                pending = Future()
+                self._state_reads[key] = pending
+        if not leader:
+            return pending.result()
+        try:
+            state = self._load_state(run_id, revision)
+            pending.set_result(state)
+            return state
+        except BaseException as error:
+            pending.set_exception(error)
+            raise
+        finally:
+            with self._lock:
+                self._state_reads.pop(key, None)
+
+    def _load_state(self, run_id: str, revision: str) -> dict[str, Any]:
+        # Profile summaries and item reads share one in-flight decode of the
+        # same committed revision. Oversize/live states are still not cached.
         state = self._store.load_state(run_id)  # 不存在 -> KeyError，HTTP 层映射成 404
         weight = _object_bytes(state)
         if (

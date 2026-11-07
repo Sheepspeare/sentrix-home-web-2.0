@@ -347,6 +347,85 @@ def test_large_state_is_readable_but_does_not_enter_object_cache(tmp_path, monke
     assert not reader._state_weights
 
 
+@pytest.mark.parametrize("fail_first", [False, True])
+def test_overlapping_state_reads_share_decoding_without_retaining_large_states(
+    tmp_path, monkeypatch, fail_first
+):
+    from concurrent.futures import ThreadPoolExecutor
+
+    import photobench.application.runs.read_runs as reads
+
+    _write(tmp_path, "r", _state("r", status="running"))
+    entered, release = threading.Event(), threading.Event()
+    barrier = threading.Barrier(8)
+    calls = []
+
+    class Store(FileRunStore):
+        def load_state(self, run_id):
+            calls.append(run_id)
+            entered.set()
+            assert release.wait(3)
+            if fail_first:
+                raise ValueError("synthetic decoder failure")
+            return super().load_state(run_id)
+
+    reader = ReadRuns(Store(tmp_path), RunIndex(), _NoQaMetadata(), SimpleNamespace(), lambda: "unused")
+    monkeypatch.setattr(reads, "_STATE_CACHE_BYTES", 1)
+
+    def read():
+        barrier.wait(timeout=3)
+        return reader._state("r")
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(read) for _ in range(8)]
+        try:
+            assert entered.wait(3)
+            threading.Event().wait(0.2)
+            assert calls == ["r"]
+        finally:
+            release.set()
+        for future in futures:
+            if fail_first:
+                with pytest.raises(ValueError, match="synthetic decoder failure"):
+                    future.result(timeout=3)
+            else:
+                assert future.result(timeout=3)["status"] == "running"
+    assert not reader._states and not reader._state_reads
+    fail_first = False
+    FileResultWriter(tmp_path).write_snapshot("r", _state("r", status="completed"))
+    assert reader._state("r")["status"] == "completed"
+    assert calls == ["r", "r"]
+    assert not reader._states and not reader._state_reads
+
+
+def test_changed_revision_does_not_join_an_older_inflight_decode(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    writer = FileResultWriter(tmp_path)
+    writer.write_snapshot("r", _state("r", status="running"))
+    entered, release = threading.Event(), threading.Event()
+
+    class Store(FileRunStore):
+        def load_state(self, run_id):
+            state = super().load_state(run_id)
+            if state["status"] == "running":
+                entered.set()
+                assert release.wait(3)
+            return state
+
+    reader = ReadRuns(Store(tmp_path), RunIndex(), _NoQaMetadata(), SimpleNamespace(), lambda: "unused")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(reader._state, "r")
+        try:
+            assert entered.wait(3)
+            writer.write_snapshot("r", _state("r", status="completed"))
+            assert pool.submit(reader._state, "r").result(timeout=2)["status"] == "completed"
+        finally:
+            release.set()
+        assert first.result(timeout=3)["status"] == "running"
+    assert reader._state("r")["status"] == "completed"
+
+
 def test_concurrent_generations_are_complete_and_old_stages_are_bounded(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
 
