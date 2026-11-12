@@ -1,7 +1,7 @@
 /**
  * 人物与关系。对应 1.0 `src/app.js:648` 的 `peopleView()`。
  *
- * 三个 tab：**人物（默认） / 关系 / 人物介绍**。默认是名录不是图谱，依据是实测：
+ * 两个 tab：**人物（默认） / 关系**（原「人物介绍」tab 2026-11-12 取消）。默认是名录不是图谱，依据是实测：
  * 刚导入的相册跑出来的图是 8 个孤点（计划书 §0）；1.0 的默认恰恰是图谱，这是 F7
  * 要改的第一件事。
  *
@@ -29,14 +29,16 @@ import { PersonDetail } from "./family/PersonDetail";
 import { personDisplayName } from "./family/membership";
 import { splitByTier } from "./family/strangers";
 import { useFamilyGraph } from "./family/useFamilyGraph";
-import { PersonInsights } from "./PersonInsights";
 
-type View = "roster" | "graph" | "insights";
+/**
+ * 两个 tab：人物 / 关系。原「人物介绍」tab 已取消（2026-11-12）：它用另一套分层（核心 /
+ * 常见 / 偶发）重复列了一遍人，画像也与详情里的重复；画像反馈挪进了人物详情的「介绍」段。
+ */
+type View = "roster" | "graph";
 
 const TABS: readonly { value: View; label: string }[] = [
   { value: "roster", label: "人物" },
   { value: "graph", label: "关系" },
-  { value: "insights", label: "人物介绍" },
 ];
 
 export function PeoplePage() {
@@ -52,16 +54,8 @@ export function PeoplePage() {
    * 显示成「2 条」。布局与详情面板都走了 `dedupeRelationships`，这里对齐它们。
    */
   const edgeCount = confirmedRelationships(relationships).length;
-  const tiers = splitByTier(people);
-  // 只报非零的层：没有待认识的面孔时，页头不必挂一个「0 位可能认识」。
-  const summary = [
-    `${tiers.known.length} 位人物`,
-    tiers.likely.length > 0 ? `${tiers.likely.length} 位可能认识` : null,
-    tiers.passerby.length > 0 ? `${tiers.passerby.length} 张偶遇面孔` : null,
-    `${edgeCount} 条已确认关系`,
-  ]
-    .filter((item) => item !== null)
-    .join(" · ");
+  // 数字跟着各自的 tab 走：「人物」数认出来的人，「关系」数已确认的关系。
+  const tabCounts: Record<View, number> = { roster: splitByTier(people).known.length, graph: edgeCount };
   const selectedId = searchParams.get("person");
   const selected = people.find((person) => person.id === selectedId) ?? null;
 
@@ -121,11 +115,9 @@ export function PeoplePage() {
             onClick={() => changeView(tab.value)}
           >
             {tab.label}
+            {state === "loading" ? null : <span className="family-tab-count">{tabCounts[tab.value]}</span>}
           </button>
         ))}
-        <span className="family-tabs-note">
-          {state === "loading" ? "正在读取…" : summary}
-        </span>
       </div>
 
       {banner === null ? null : (
@@ -144,10 +136,6 @@ export function PeoplePage() {
               selectedId={selectedId}
               onSelect={(id) => selectPerson(id)}
               onChanged={refresh}
-              onMerged={async (targetId) => {
-                await refresh();
-                selectPerson(targetId);
-              }}
             />
           )}
 
@@ -171,11 +159,6 @@ export function PeoplePage() {
         </Section>
       ) : null}
 
-      {view === "insights" ? (
-        <Section kicker="人物介绍" title="看看系统记得的这个人，像不像他">
-          <PersonInsights scopeId={scopeId} />
-        </Section>
-      ) : null}
 
       {selected === null ? null : (
         <PersonDetail

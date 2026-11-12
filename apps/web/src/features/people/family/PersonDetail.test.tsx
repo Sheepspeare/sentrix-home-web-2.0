@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../shared/api/client", async (importOriginal) => {
@@ -14,6 +14,7 @@ vi.mock("../../../shared/api/client", async (importOriginal) => {
     rejectFaceCluster: vi.fn().mockResolvedValue({ cluster_id: "cluster_1", rejected_entity_id: "person_1" }),
     renamePerson: vi.fn(),
     setPersonHidden: vi.fn().mockResolvedValue(undefined),
+    mergePeople: vi.fn().mockResolvedValue({}),
   };
 });
 
@@ -101,7 +102,7 @@ afterEach(() => {
 });
 
 describe("PersonDetail 别名编辑", () => {
-  it("从 GET /people/{id} 读别名，保存时写 entity_properties 的 aliases 键", async () => {
+  it("别名取自名录投影，保存时写 entity_properties 的 aliases 键", async () => {
     vi.mocked(client.getPerson).mockResolvedValue({
       entity: {
         id: "person_1",
@@ -120,8 +121,8 @@ describe("PersonDetail 别名编辑", () => {
 
     render(
       <PersonDetail
-        person={person()}
-        people={[person()]}
+        person={person({ aliases: ["小明", "阿明"] })}
+        people={[]}
         relationships={[]}
         onClose={() => undefined}
         onChanged={vi.fn().mockResolvedValue(undefined)}
@@ -163,8 +164,8 @@ describe("PersonDetail 别名编辑的取消与快捷键", () => {
     });
     render(
       <PersonDetail
-        person={person()}
-        people={[person()]}
+        person={person({ aliases: ["阿娟"] })}
+        people={[]}
         relationships={[]}
         onClose={() => undefined}
         onChanged={vi.fn().mockResolvedValue(undefined)}
@@ -319,6 +320,115 @@ function relationRow(subject: string, predicate: string, inverse: string, object
   } as FamilyRelationship;
 }
 
+describe("PersonDetail 改名撞名时询问是否合并（隐藏式合并）", () => {
+  const wangA = () => person({ id: "wang_a", display_name: "王王", appearance_count: 36 });
+  const other = () => person({ id: "other", display_name: "老王", appearance_count: 5, aliases: ["阿王"] });
+
+  function mountFor(self: FamilyPerson, everyone: FamilyPerson[]) {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    const onRedirect = vi.fn();
+    render(
+      <PersonDetail
+        person={self}
+        people={everyone}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={onChanged}
+        onRedirect={onRedirect}
+      />,
+    );
+    return { onChanged, onRedirect };
+  }
+
+  function typeName(value: string) {
+    const input = screen.getByLabelText("姓名") as HTMLInputElement;
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("页面上没有任何合并按钮", () => {
+    mountFor(other(), [other(), wangA()]);
+    expect(screen.queryByRole("button", { name: /合并/ })).toBeNull();
+  });
+
+  it("改成别人的名字先问；「不是，只是同名」照常改名，不合并", async () => {
+    mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("已有一位「王王」，是同一个人吗？");
+    expect(client.renamePerson).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "不是，只是同名" }));
+
+    await waitFor(() => expect(client.renamePerson).toHaveBeenCalledWith("other", "王王"));
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("「是同一个人」合并，保留出现更多的那位，详情跟过去", async () => {
+    const { onRedirect } = mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "是同一个人，合并" }));
+
+    await waitFor(() => expect(client.mergePeople).toHaveBeenCalledWith("wang_a", ["other"], "王王"));
+    await waitFor(() => expect(onRedirect).toHaveBeenCalledWith("wang_a"));
+    expect(client.renamePerson).not.toHaveBeenCalled();
+  });
+
+  it("撞上的是别人的别名也会问，并说明是谁的别名", async () => {
+    mountFor(wangA(), [wangA(), other()]);
+    typeName("阿王");
+    expect((await screen.findByRole("dialog")).textContent).toContain("「阿王」是「老王」的别名");
+  });
+
+  it("确认身份撞上已确认的人：合并即完成确认，不再单独确认", async () => {
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    const { onRedirect } = mountFor(face, [face, wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "是同一个人，合并" }));
+
+    await waitFor(() => expect(client.mergePeople).toHaveBeenCalledWith("wang_a", ["face"], "王王"));
+    expect(client.batchConfirmPeople).not.toHaveBeenCalled();
+    await waitFor(() => expect(onRedirect).toHaveBeenCalledWith("wang_a"));
+  });
+
+  it("确认身份时答「只是同名」：告诉后端不要同名并入", async () => {
+    vi.mocked(client.batchConfirmPeople).mockResolvedValue({
+      confirmed: [{ person_id: "face", entity_id: "face", name: "王王", family_role: null, merged: false }],
+      failed: [],
+      count: 1,
+    });
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    mountFor(face, [face, wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "不是，只是同名" }));
+
+    await waitFor(() =>
+      expect(client.batchConfirmPeople).toHaveBeenCalledWith([
+        { person_id: "face", name: "王王", family_role: null, merge_same_name: false },
+      ]),
+    );
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("取消：什么都不写，名字框保留刚输入的内容", async () => {
+    mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).value).toBe("王王");
+    expect(client.renamePerson).not.toHaveBeenCalled();
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("只看同一相册：别的相册里的同名不算", () => {
+    const elsewhere = { ...wangA(), id: "far", scope_id: "album2" };
+    mountFor(other(), [other(), elsewhere]);
+    typeName("王王");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
 describe("PersonDetail 待确认人物", () => {
   function mountPending(overrides: Partial<FamilyPerson> = {}) {
     const onChanged = vi.fn().mockResolvedValue(undefined);
@@ -356,7 +466,7 @@ describe("PersonDetail 待确认人物", () => {
 
     await waitFor(() =>
       expect(client.batchConfirmPeople).toHaveBeenCalledWith([
-        { person_id: "person_1", name: "王王", family_role: "孩子" },
+        { person_id: "person_1", name: "王王", family_role: "孩子", merge_same_name: true },
       ]),
     );
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());

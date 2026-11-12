@@ -10,7 +10,7 @@
  * 儿子还是女儿）才多问一句，提交前给出将要记录的两句话。
  */
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 
 import {
   deleteFamilyRelationship,
@@ -37,9 +37,11 @@ interface Props {
   readonly run: (action: () => Promise<unknown>) => Promise<boolean>;
   /** 图上拖拽落到人身上时预选的对方。 */
   readonly relateTarget?: string | null;
+  /** 排在关系列表之前的内容（详情把「家庭归属」放在这里：它也是「他和这个家的关系」）。 */
+  readonly header?: ReactNode;
 }
 
-export function RelationEditor({ person, people, relationships, busy, run, relateTarget = null }: Props) {
+export function RelationEditor({ person, people, relationships, busy, run, relateTarget = null, header = null }: Props) {
   const [targetId, setTargetId] = useState<string | null>(relateTarget);
   const [role, setRole] = useState("");
   const [myRole, setMyRole] = useState("");
@@ -85,6 +87,7 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
   return (
     <section className="detail-section">
       <h3>关系</h3>
+      {header}
       {edges.length === 0 ? (
         <p className="detail-empty">当前无已确认关系。</p>
       ) : (

@@ -667,6 +667,11 @@ export interface BatchConfirmItem {
   person_id: string;
   name: string;
   family_role?: string | null;
+  /**
+   * 同名时是否并入那位已确认的人。默认（省略）为 true；用户在同名确认框里答了
+   * 「不是，只是同名」时传 false，照常确认成独立的人。
+   */
+  merge_same_name?: boolean;
 }
 
 export interface BatchConfirmOutcome {

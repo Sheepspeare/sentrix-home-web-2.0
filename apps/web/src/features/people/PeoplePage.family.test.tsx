@@ -130,9 +130,11 @@ describe("/people 名人录（F7 §0 真实形状）", () => {
     });
     // 「有没有内容」由人数决定，关系条数为 0 不算空——这正是 1.0 画空图的那个坑。
     expect(screen.queryByText("还没有可显示的人物")).toBeNull();
-    expect(screen.getByText("8 位人物 · 0 条已确认关系")).toBeTruthy();
+    // 数字跟着各自的 tab：人物 8、关系 0。
+    expect(screen.getByRole("tab", { name: "人物8" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "关系0" })).toBeTruthy();
     // 默认视图是名录（计划书裁决②），图谱 tab 此时不该被卸载掉门槛
-    expect(screen.getByRole("tab", { name: "人物" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /^人物/ }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("点一张卡走 ?person= 打开详情侧栏（不加路由）", async () => {
@@ -157,7 +159,7 @@ describe("图谱 tab", () => {
   }
 
   async function openGraph(container: HTMLElement) {
-    fireEvent.click(screen.getByRole("tab", { name: "关系" }));
+    fireEvent.click(screen.getByRole("tab", { name: /^关系/ }));
     await waitFor(() => {
       expect(container.querySelector(".graph-shell, .graph-empty")).not.toBeNull();
     });
@@ -185,7 +187,7 @@ describe("图谱 tab", () => {
     fireEvent.click(screen.getByRole("radio", { name: "父亲" }));
     fireEvent.click(screen.getByRole("button", { name: "建立关系" }));
 
-    await screen.findByText("3 位人物 · 1 条已确认关系");
+    await screen.findByRole("tab", { name: "关系1" });
     expect(client.putFamilyRelationship).toHaveBeenCalledWith({
       scopeId: "album1",
       subjectEntityId: son.id,

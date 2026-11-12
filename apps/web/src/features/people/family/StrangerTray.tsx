@@ -6,8 +6,9 @@
  *
  * - **标为路人 / 取消路人标记**：只是不再铺开，人脸与照片都留着；
  * - **这不是人物**：拒绝这些人的人脸分组（与详情里同名按钮同一条路），原始照片不受影响，
- *   已确认的人后端会拒绝，所以只对待确认的人生效；
- * - **合并为同一人**：交给名录的合并确认框。
+ *   已确认的人后端会拒绝，所以只对待确认的人生效。
+ *
+ * 没有「合并」：两张脸是同一个人时，给它们起同一个名字即可（详情会询问是否合并）。
  */
 
 import { useState } from "react";
@@ -24,30 +25,24 @@ import { PersonAvatar } from "./PersonAvatar";
 
 interface Props {
   readonly people: readonly FamilyPerson[];
-  /** 搜索或筛选时强制展开：搜到了却藏在折叠区里等于没搜到。 */
+  /** 搜索时强制展开：搜到了却藏在折叠区里等于没搜到。 */
   readonly forceOpen: boolean;
+  /** 初始是否展开。「待认识」视图里默认展开——那里本来就是来整理的。 */
+  readonly defaultOpen?: boolean;
   readonly selectedId: string | null;
   readonly onSelect: (personId: string) => void;
-  /** 名录的「合并人物」模式开着时，点脸是勾选而不是进详情。 */
-  readonly merging: boolean;
-  readonly isPicked: (personId: string) => boolean;
-  readonly onPick: (personId: string) => void;
-  readonly onMerge: (people: FamilyPerson[]) => void;
   readonly onChanged?: () => Promise<void>;
 }
 
 export function StrangerTray({
   people,
   forceOpen,
+  defaultOpen = false,
   selectedId,
   onSelect,
-  merging,
-  isPicked,
-  onPick,
-  onMerge,
   onChanged,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultOpen);
   const [selecting, setSelecting] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -61,7 +56,6 @@ export function StrangerTray({
   const rejectable = chosenPeople.filter(isPendingPerson);
   const hiddenChosen = chosenPeople.filter((person) => person.hidden);
   const visibleChosen = chosenPeople.filter((person) => !person.hidden);
-  const mixedScopes = new Set(chosenPeople.map((person) => person.scope_id)).size > 1;
   const canBatch = onChanged !== undefined;
 
   function stopSelecting() {
@@ -122,11 +116,11 @@ export function StrangerTray({
     <section className="stranger-tray" aria-label="偶遇面孔">
       <details open={open} onToggle={(event) => setExpanded(event.currentTarget.open)}>
         <summary>
-          偶遇面孔 · {people.length}
+          偶遇面孔 <span className="roster-filter-count">{people.length}</span>
           <small>只出现 1～2 次、或被标为路人的面孔{open ? "" : "，展开查看"}</small>
         </summary>
 
-        {canBatch && !merging ? (
+        {canBatch ? (
           <div className="stranger-toolbar" role="toolbar" aria-label="批量整理偶遇面孔">
             {selecting ? (
               <>
@@ -166,18 +160,6 @@ export function StrangerTray({
                   onClick={() => setConfirmReject(true)}
                 >
                   这不是人物
-                </button>
-                <button
-                  type="button"
-                  className="button ghost small"
-                  disabled={busy || chosenPeople.length < 2 || mixedScopes}
-                  title={mixedScopes ? "只能合并同一相册里的人物" : undefined}
-                  onClick={() => {
-                    onMerge(chosenPeople);
-                    stopSelecting();
-                  }}
-                >
-                  合并为同一人
                 </button>
                 <button type="button" className="button ghost small" disabled={busy} onClick={stopSelecting}>
                   完成
@@ -230,26 +212,22 @@ export function StrangerTray({
 
         <ul className="stranger-grid">
           {people.map((person) => {
-            const checked = merging ? isPicked(person.id) : selecting ? chosen.includes(person.id) : false;
+            const checked = selecting && chosen.includes(person.id);
             const classes = ["stranger-face"];
             if (checked) classes.push("checked");
-            if (!merging && !selecting && person.id === selectedId) classes.push("selected");
+            if (!selecting && person.id === selectedId) classes.push("selected");
             return (
               <li key={person.id}>
                 <button
                   type="button"
                   className={classes.join(" ")}
                   data-person-id={person.id}
-                  aria-pressed={merging || selecting ? checked : person.id === selectedId}
+                  aria-pressed={selecting ? checked : person.id === selectedId}
                   disabled={busy}
                   title={`${personDisplayName(person)} · 出现 ${person.appearance_count} 次`}
-                  onClick={() => {
-                    if (merging) onPick(person.id);
-                    else if (selecting) toggle(person.id);
-                    else onSelect(person.id);
-                  }}
+                  onClick={() => (selecting ? toggle(person.id) : onSelect(person.id))}
                 >
-                  {merging || selecting ? (
+                  {selecting ? (
                     <span className="person-card-check" aria-hidden="true">
                       {checked ? "✓" : ""}
                     </span>

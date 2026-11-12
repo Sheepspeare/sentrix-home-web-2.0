@@ -9,7 +9,8 @@
 .family-tab { border: 0; background: transparent; padding: 10px 14px; color: var(--muted); font-size: 12px; font-weight: 750; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .family-tab:hover { color: var(--ink); }
 .family-tab.active { color: var(--ink); border-bottom-color: var(--lime); }
-.family-tabs-note { margin-left: auto; color: var(--muted); font-size: 11px; padding-bottom: 8px; }
+.family-tab-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.family-tab.active .family-tab-count { background: var(--lime); color: var(--green-strong); }
 
 /* ---- 名录 ---- */
 
@@ -137,18 +138,15 @@
 /* ---- 手动合并人物（名录勾选 / 详情入口 / 共用确认框） ---- */
 
 .person-card { position: relative; }
-.person-card.picking { cursor: copy; }
 .person-card-check { position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; display: grid; place-items: center; border: 1.5px solid var(--faint); border-radius: 6px; background: var(--surface); color: var(--surface); font-size: 12px; font-weight: 800; }
-.person-card.picking.selected .person-card-check { border-color: var(--green); background: var(--green); }
 .person-card-pending { display: inline-flex; align-items: center; min-height: 18px; padding: 0 8px; border-radius: 999px; border: 1px dashed var(--faint); color: var(--muted); font-size: 10px; }
 
-.roster-merge-bar { position: sticky; top: 8px; z-index: 2; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -6px 0 16px; padding: 10px 14px; border: 1px solid var(--green); border-radius: 12px; background: var(--mint); color: var(--ink); font-size: 12px; }
-.roster-merge-bar > span { flex: 1 1 240px; }
 
 .merge-dialog-lead { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
 .merge-dialog-list { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
 .merge-dialog-option { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .merge-dialog-option.active { border-color: var(--green); background: var(--mint); }
+.same-name-pair .merge-dialog-option { cursor: default; }
 .merge-dialog-name { display: flex; flex-direction: column; font-size: 13px; font-weight: 700; color: var(--ink); }
 .merge-dialog-name small { font-weight: 400; color: var(--muted); font-size: 11px; }
 .merge-dialog-keep { margin-left: auto; font-size: 11px; font-weight: 750; color: var(--green); }
@@ -192,3 +190,18 @@
 
 .detail-confirm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; font-size: 11px; color: var(--muted); }
 .detail-confirm-row > span { flex: 1 1 100%; }
+
+/* 名录：我的人物 / 待认识 两个视图 */
+.roster-views { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); }
+.roster-view { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 750; cursor: pointer; }
+.roster-view.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.roster-toolbar .roster-search { flex: 1 1 200px; }
+.roster-tier > .roster-filters { margin-bottom: 14px; }
+.roster-elsewhere { margin: -8px 0 14px; color: var(--muted); font-size: 11px; }
+.roster-elsewhere .text-button { margin-left: 6px; }
+
+/* 详情：别名标签、整理段 */
+.detail-alias-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.detail-alias-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 0 9px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--ink); font-size: 11px; }
+.detail-tidy { border-top: 1px dashed var(--line); }
+.detail-tidy h3 { color: var(--muted); }
