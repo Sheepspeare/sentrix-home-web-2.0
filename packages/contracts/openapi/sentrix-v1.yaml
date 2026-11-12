@@ -3060,6 +3060,10 @@ components:
           - type: string
           - type: 'null'
           title: Family Role
+        merge_same_name:
+          type: boolean
+          title: Merge Same Name
+          default: true
       type: object
       title: BatchConfirmItem
     BatchConfirmOutcome:

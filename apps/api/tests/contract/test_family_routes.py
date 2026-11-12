@@ -446,14 +446,36 @@ def test_a_relationship_without_a_scope_is_a_400(family_client: TestClient) -> N
     assert response.json()["message"] == "scope_id is required"
 
 
-def test_a_label_outside_the_whitelist_is_a_400_with_the_whitelist_message(
+def test_a_user_can_write_a_custom_label_outside_the_kinship_whitelist(
     family_client: TestClient,
 ) -> None:
-    """白名单校验在仓储里，路由只把它的话术带出去。"""
-    response = _put_relationship(family_client, predicate="同事", inverse_predicate="同事")
+    """用户建关系不再从词表里选：「同事」「干妈 / 干女儿」这类称谓照样落库。"""
+    response = _put_relationship(family_client, predicate="干妈", inverse_predicate="干女儿")
+
+    assert response.status_code == 200
+    labels = {(row["predicate"], row["inverse_predicate"]) for row in response.json()["relationships"]}
+    assert labels == {("干妈", "干女儿"), ("干女儿", "干妈")}
+
+
+@pytest.mark.parametrize(
+    ("predicate", "message"),
+    [
+        ("   ", "family relationship requires both predicates"),
+        (
+            "一二三四五六七八九十一二三四五六七",
+            "关系标签不能超过 16 个字: 一二三四五六七八九十一二三四五六七",
+        ),
+        ("同\x00事", "关系标签不能包含控制字符"),
+    ],
+)
+def test_a_malformed_custom_label_is_a_400_with_the_repository_message(
+    family_client: TestClient, predicate: str, message: str
+) -> None:
+    """自定义称谓只做形状校验；仓储的话术原样带出去。"""
+    response = _put_relationship(family_client, predicate=predicate, inverse_predicate="同事")
 
     assert response.status_code == 400
-    assert response.json()["message"] == "关系标签不匹配: 同事 -> 同事"
+    assert response.json()["message"] == message
 
 
 def test_retracting_writes_a_block_so_the_model_cannot_restore_it(family_client: TestClient) -> None:

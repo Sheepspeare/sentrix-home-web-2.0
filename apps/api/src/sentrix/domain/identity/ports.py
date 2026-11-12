@@ -1143,7 +1143,9 @@ class FamilyGraphRepository(Protocol):
         校验顺序是行为的一部分（1.0 ``db.py:5808-5863``），前六道会抛、后两道静默：
 
         1. ``source`` 合法；2. 两端不是同一个人；3. 两端都是同 scope 的 person 实体；
-        4. 两个标签 strip 后非空；5. **``validate_relationship_pair`` 过白名单**；
+        4. 两个标签 strip 后非空；5. 标签校验：``source='model'`` 过亲属白名单
+           ``validate_relationship_pair``；``source='user_override'`` 只做形状校验
+           ``validate_custom_relationship_pair``（用户可以写自己的称谓，2026-11-12）；
         6. ``source='model'`` 且这对人被 block 过 → **返回空**（用户撤回过，模型不许恢复）；
         7. ``source='user_override'`` 且存在 block → **先删掉那一行**（用户重新建边即解锁）；
         8. ``source='model'`` 且当前有效边里有 ``locked`` 的 → **返回那些行**，不写。

@@ -148,6 +148,9 @@ class BatchConfirmItem(BaseModel):
     person_id: str = ""
     name: str = ""
     family_role: str | None = None
+    # 用户在「已有一位同名的人，是同一个人吗？」里答了「不是」时为 false：照常确认，
+    # 不并入那个同名的人。默认 true 保持原行为（同名即并入）。
+    merge_same_name: bool = True
 
 
 class BatchConfirmRequest(BaseModel):

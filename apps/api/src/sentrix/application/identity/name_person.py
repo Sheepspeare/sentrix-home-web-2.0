@@ -77,8 +77,12 @@ class NamePerson:
         *,
         name: str,
         family_role: str | None = None,
+        merge_same_name: bool = True,
     ) -> ConfirmResult | None:
         """按实体确认一个人：1.0 ``confirm_person_entity``。
+
+        ``merge_same_name`` 原样交给 ``ReviewCluster.confirm``：用户说了「只是同名」时为
+        ``False``，不做同名并入。
 
         三步，顺序是 1.0 的原文顺序：
 
@@ -104,7 +108,9 @@ class NamePerson:
 
         cluster = self._faces.active_cluster_for_entity(entity_id)
         if cluster is not None:
-            return self._review.confirm(cluster.id, name=clean_name, family_role=role)
+            return self._review.confirm(
+                cluster.id, name=clean_name, family_role=role, merge_same_name=merge_same_name
+            )
 
         confirmed = self._entities.confirm_person(
             entity_id,

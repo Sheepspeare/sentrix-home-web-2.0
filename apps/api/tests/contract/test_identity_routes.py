@@ -278,6 +278,46 @@ def test_confirming_with_an_existing_name_merges_into_that_person(identity_clien
     assert response.json()["entity"]["id"] == "ent_known"
 
 
+def _two_people_named_mom(identity_client: TestClient) -> None:
+    add_entity(identity_client, "ent_known", name="妈妈", status="confirmed", family_role="母亲")
+    add_cluster(identity_client, "cluster_known", status="confirmed", entity_id="ent_known", member_count=1)
+    add_instance(identity_client, "face_known", cluster_id="cluster_known")
+    add_entity(identity_client, "ent_new", name="待确认人物簇 · cluster_new")
+    add_cluster(identity_client, "cluster_new", entity_id="ent_new", member_count=1)
+    add_instance(identity_client, "face_new", cluster_id="cluster_new")
+
+
+def test_batch_confirm_still_merges_a_same_name_person_by_default(identity_client: TestClient):
+    """不带 ``merge_same_name`` 的旧调用方行为不变：同名即并入。"""
+    _two_people_named_mom(identity_client)
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm", json={"items": [{"person_id": "ent_new", "name": "妈妈"}]}
+    )
+
+    outcome = response.json()["confirmed"][0]
+    assert outcome["entity_id"] == "ent_known"
+    assert outcome["merged"] is True
+
+
+def test_batch_confirm_keeps_a_namesake_apart_when_the_user_says_they_differ(identity_client: TestClient):
+    """用户答了「不是同一个人，只是同名」：照常确认成独立的人，两个「妈妈」并存。"""
+    _two_people_named_mom(identity_client)
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm",
+        json={"items": [{"person_id": "ent_new", "name": "妈妈", "merge_same_name": False}]},
+    )
+
+    outcome = response.json()["confirmed"][0]
+    assert outcome["entity_id"] == "ent_new"
+    assert outcome["merged"] is False
+    people = {item["id"]: item for item in identity_client.get("/api/v1/people").json()["people"]}
+    assert people["ent_new"]["canonical_name"] == "妈妈"
+    assert people["ent_new"]["status"] == "confirmed"
+    assert people["ent_known"]["status"] == "confirmed"
+
+
 # ---- 拒绝 / 合并 / 拆分 -----------------------------------------------------------
 
 

@@ -871,7 +871,12 @@ def batch_confirm_people(
     scopes: set[str] = set()
     for item in payload.items:
         try:
-            result = use_case.confirm_entity(item.person_id, name=item.name, family_role=item.family_role)
+            result = use_case.confirm_entity(
+                item.person_id,
+                name=item.name,
+                family_role=item.family_role,
+                merge_same_name=item.merge_same_name,
+            )
         except Exception as error:  # noqa: BLE001 — 逐件回执正是要把失败收进响应
             failed.append(
                 BatchConfirmFailure(person_id=item.person_id, name=item.name, error=str(error)[:200])

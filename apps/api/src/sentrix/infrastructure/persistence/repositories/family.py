@@ -46,7 +46,10 @@ from sentrix.domain.identity.family import (
     FamilyPortraitRecord,
     FamilyRelationshipRecord,
 )
-from sentrix.domain.identity.family_graph import validate_relationship_pair
+from sentrix.domain.identity.family_graph import (
+    validate_custom_relationship_pair,
+    validate_relationship_pair,
+)
 from sentrix.domain.identity.models import entity_display_name
 from sentrix.domain.identity.ports import EntityRepository
 from sentrix.infrastructure.persistence.database import Database
@@ -463,7 +466,11 @@ class SqliteFamilyGraphRepository:
         inverse_predicate = str(inverse_predicate or "").strip()
         if not predicate or not inverse_predicate:
             raise ValueError("family relationship requires both predicates")
-        validate_relationship_pair(predicate, inverse_predicate)
+        # 用户建的边允许自定义称谓；模型推断仍过亲属白名单。
+        if source == SOURCE_USER_OVERRIDE:
+            validate_custom_relationship_pair(predicate, inverse_predicate)
+        else:
+            validate_relationship_pair(predicate, inverse_predicate)
 
         with self._database.connect() as connection, connection:
             self._family_entity(connection, scope_id, subject_entity_id)
