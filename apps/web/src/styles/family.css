@@ -176,7 +176,10 @@
 .relation-fields { display: flex; flex-direction: column; gap: 8px; }
 /* `.detail-form label` 把 label 排成竖列（0,1,1），这里要横排成一句话，所以选择器带上 .detail-form/.graph-toolbar 提权。 */
 .relation-line, .detail-form .relation-line { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--ink); }
-.relation-line select { flex: 1 1 120px; min-width: 0; }
+.relation-line select, .relation-line input { flex: 1 1 120px; min-width: 0; }
+.graph-toolbar .relation-line input { border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; font: inherit; color: var(--ink); background: var(--surface); }
+.relation-quick > span { color: var(--muted); font-size: 11px; }
+.relation-quick .relation-choice { background: var(--surface); }
 .relation-choice, .detail-form .relation-choice { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font-size: 12px; color: var(--ink); }
 .relation-choice.active, .detail-form .relation-choice.active { border-color: var(--green); color: var(--green); }
 .detail-form .relation-choice input { margin: 0; padding: 0; border: 0; }

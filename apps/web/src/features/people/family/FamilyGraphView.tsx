@@ -44,10 +44,10 @@ import {
 import {
   membershipLabel,
   membershipOf,
-  myRoleOptions,
   personDisplayName,
+  relationLabelSuggestions,
 } from "./membership";
-import { RelationRoleFields } from "./RelationEditor";
+import { RelationLabelFields, useRelationLabels } from "./RelationEditor";
 
 /** 命中另一个节点的半径：比节点本身松一点，拖拽时不必精确压中圆心。 */
 const DROP_RADIUS = NODE_RADIUS * 1.8;
@@ -451,6 +451,7 @@ export function FamilyGraphView({
           scopeId={selectedRow?.scope_id ?? ""}
           subjectName={nameOf(selectedEdge.subject)}
           objectName={nameOf(selectedEdge.object)}
+          suggestions={relationLabelSuggestions(edges.flatMap((item) => [item.predicate, item.inverse_predicate]))}
           onChanged={onChanged}
           onClose={() => setSelectedEdge(null)}
         />
@@ -463,15 +464,15 @@ export function FamilyGraphView({
  * 选中一条边后的编辑条：改谓词走 `PUT /family-graph/relationships`（后端会先 supersede
  * 这一对现有的关系，再落正反两行），删除走 `DELETE`（只带两端 id，谓词不在体里）。
  *
- * **方向原样保留**：编辑条里的 subject → object 就是用户在图上看到的方向；选择表里的
- * 每一项都同时带谓词与反向谓词，后端 `validate_relationship_pair` 只接受成对的标签。
- * 当前谓词不在词表里时（模型可能写出别的关系）仍能删除，但保存需要重新选一项。
+ * **方向原样保留**：「subject 是 object 的 predicate」。称谓由用户自己写（与详情建关系
+ * 共用 `RelationLabelFields`），后端对用户写的称谓只做形状校验。
  */
 function EdgeEditor({
   edge,
   scopeId,
   subjectName,
   objectName,
+  suggestions,
   onChanged,
   onClose,
 }: {
@@ -479,28 +480,26 @@ function EdgeEditor({
   scopeId: string;
   subjectName: string;
   objectName: string;
+  suggestions: readonly string[];
   onChanged: () => Promise<void>;
   onClose: () => void;
 }) {
   // 「subject 是 object 的 predicate」：subject 是对方、object 是「我」，与详情里建关系同一种说法。
-  const [role, setRole] = useState(myRoleOptions(edge.predicate).length > 0 ? edge.predicate : "");
-  const [myRole, setMyRole] = useState(edge.inverse_predicate);
+  const labels = useRelationLabels({ role: edge.predicate, reverse: edge.inverse_predicate });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const options = myRoleOptions(role);
-  const effectiveMyRole = options.length === 1 ? options[0] : options.includes(myRole) ? myRole : "";
 
   async function save() {
-    if (role === "" || effectiveMyRole === "" || scopeId === "") return;
+    if (!labels.ready || scopeId === "") return;
     setBusy(true);
     setError(null);
     try {
       await putFamilyRelationship({
         scopeId,
         subjectEntityId: edge.subject,
-        predicate: role,
+        predicate: labels.cleanRole,
         objectEntityId: edge.object,
-        inversePredicate: effectiveMyRole,
+        inversePredicate: labels.cleanReverse,
       });
       await onChanged();
       onClose();
@@ -535,23 +534,17 @@ function EdgeEditor({
       <strong>
         {subjectName} 是 {objectName} 的{edge.predicate}
       </strong>
-      {role === "" ? <span className="detail-empty">当前关系不在词表里，请重新选择。</span> : null}
-      <RelationRoleFields
+      <RelationLabelFields
+        labels={labels}
         otherName={subjectName}
         selfName={objectName}
-        role={role}
-        myRole={effectiveMyRole}
-        onRole={(next) => {
-          setRole(next);
-          setMyRole("");
-        }}
-        onMyRole={setMyRole}
+        suggestions={suggestions}
         disabled={busy}
       />
       <button
         type="button"
         className="button primary small"
-        disabled={busy || role === "" || effectiveMyRole === "" || scopeId === ""}
+        disabled={busy || !labels.ready || scopeId === ""}
         onClick={() => void save()}
       >
         保存关系

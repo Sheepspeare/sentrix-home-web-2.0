@@ -6,11 +6,12 @@
  * 在 B 的档案里 A 显示成「儿子」，读起来像关系只写了一边。这里每条关系都写成整句：
  * 「A 是 B 的父亲」。
  *
- * 建关系也改成整句：「[对方] 是 [我] 的 [称谓]」，反向称谓自动推出，推不出来（父亲 →
- * 儿子还是女儿）才多问一句，提交前给出将要记录的两句话。
+ * 建关系也是整句：「[对方] 是 [我] 的 [称谓]」。**称谓由用户自己写**（2026-11-12 起不再
+ * 从词表里选）：输入框给出建议（本相册用过的称谓在前、再是常用称谓），反向称谓按亲属表
+ * 自动填上、有几种可能时给出点选，不认识的称谓默认同一个词；两句都能改，提交前预览。
  */
 
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import {
   deleteFamilyRelationship,
@@ -20,10 +21,13 @@ import {
 } from "../../../shared/api/client";
 import { confirmedRelationships } from "./graphLayout";
 import {
+  MAX_RELATION_LABEL_LENGTH,
   myRoleOptions,
   personDisplayName,
   relationFromSelf,
-  RELATION_ROLE_GROUPS,
+  relationLabelError,
+  relationLabelSuggestions,
+  suggestReverse,
 } from "./membership";
 import { PersonAvatar } from "./PersonAvatar";
 import { PersonPicker } from "./PersonPicker";
@@ -43,8 +47,11 @@ interface Props {
 
 export function RelationEditor({ person, people, relationships, busy, run, relateTarget = null, header = null }: Props) {
   const [targetId, setTargetId] = useState<string | null>(relateTarget);
-  const [role, setRole] = useState("");
-  const [myRole, setMyRole] = useState("");
+  const labels = useRelationLabels();
+  const suggestions = useMemo(
+    () => relationLabelSuggestions(confirmedRelationships(relationships).flatMap((edge) => [edge.predicate, edge.inverse_predicate])),
+    [relationships],
+  );
 
   // 只能和同一记忆空间的人建关系；跨空间的拖拽预选在这里被过滤掉，提交按钮因此不可用。
   const others = people.filter((item) => item.id !== person.id && item.scope_id === person.scope_id);
@@ -60,9 +67,7 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
     .map((edge) => ({ edge, ...relationFromSelf(edge, person.id) }));
   const existing = target === undefined ? undefined : edges.find((item) => item.otherId === target.id);
 
-  const options = myRoleOptions(role);
-  const effectiveMyRole = options.length === 1 ? options[0] : options.includes(myRole) ? myRole : "";
-  const ready = target !== undefined && role !== "" && effectiveMyRole !== "";
+  const ready = target !== undefined && labels.ready;
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -72,14 +77,13 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
       putFamilyRelationship({
         scopeId: person.scope_id,
         subjectEntityId: target.id,
-        predicate: role,
+        predicate: labels.cleanRole,
         objectEntityId: person.id,
-        inversePredicate: effectiveMyRole,
+        inversePredicate: labels.cleanReverse,
       }),
     ).then((ok) => {
       if (!ok) return;
-      setRole("");
-      setMyRole("");
+      labels.reset();
       setTargetId(null);
     });
   }
@@ -136,16 +140,11 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
             label="对方"
             disabled={busy}
           />
-          <RelationRoleFields
+          <RelationLabelFields
+            labels={labels}
             otherName={target === undefined ? "对方" : personDisplayName(target)}
             selfName={selfName}
-            role={role}
-            myRole={effectiveMyRole}
-            onRole={(next) => {
-              setRole(next);
-              setMyRole("");
-            }}
-            onMyRole={setMyRole}
+            suggestions={suggestions}
             disabled={busy}
           />
           {existing === undefined ? null : (
@@ -162,78 +161,131 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
   );
 }
 
+export interface RelationLabels {
+  readonly role: string;
+  readonly reverse: string;
+  readonly cleanRole: string;
+  readonly cleanReverse: string;
+  readonly ready: boolean;
+  readonly error: string | null;
+  readonly setRole: (next: string) => void;
+  readonly setReverse: (next: string) => void;
+  readonly reset: () => void;
+}
+
 /**
- * 一句话选称谓：「{other} 是 {self} 的 [称谓]」+ 必要时「{self} 是 {other} 的 [儿子｜女儿]」+ 预览。
+ * 一对称谓的编辑状态。用户没碰过反向称谓时，它跟着正向称谓自动给默认值
+ * （`suggestReverse`）；用户手动改过就不再覆盖，清空后恢复自动。
+ */
+export function useRelationLabels(initial?: { role: string; reverse: string }): RelationLabels {
+  const [role, setRoleState] = useState(initial?.role ?? "");
+  const [reverse, setReverseState] = useState(initial?.reverse ?? "");
+  const [touched, setTouched] = useState(false);
+  const cleanRole = role.trim();
+  const cleanReverse = reverse.trim();
+  const error = relationLabelError(cleanRole) ?? relationLabelError(cleanReverse);
+  return {
+    role,
+    reverse,
+    cleanRole,
+    cleanReverse,
+    error,
+    ready: cleanRole !== "" && cleanReverse !== "" && error === null,
+    setRole(next) {
+      setRoleState(next);
+      if (!touched) setReverseState(suggestReverse(next));
+    },
+    setReverse(next) {
+      setReverseState(next);
+      setTouched(next.trim() !== "");
+    },
+    reset() {
+      setRoleState("");
+      setReverseState("");
+      setTouched(false);
+    },
+  };
+}
+
+/**
+ * 一句话写称谓：「{other} 是 {self} 的 [____]」+「{self} 是 {other} 的 [____]」+ 预览。
  * 详情建关系与图谱改关系共用，保证两处说的是同一种话。
  */
-export function RelationRoleFields({
+export function RelationLabelFields({
+  labels,
   otherName,
   selfName,
-  role,
-  myRole,
-  onRole,
-  onMyRole,
+  suggestions,
   disabled = false,
 }: {
+  labels: RelationLabels;
   otherName: string;
   selfName: string;
-  role: string;
-  /** 已生效的反向称谓：只有一个可选项时由调用方直接填上。 */
-  myRole: string;
-  onRole: (role: string) => void;
-  onMyRole: (role: string) => void;
+  suggestions: readonly string[];
   disabled?: boolean;
 }) {
-  const options = myRoleOptions(role);
-  // 同一屏可能同时有详情与图谱两份表单，单选组的 name 必须各自独立。
-  const radioName = useId();
+  // 同一屏可能同时有详情与图谱两份表单，datalist 的 id 必须各自独立。
+  const listId = useId();
+  const options = myRoleOptions(labels.cleanRole);
   return (
     <div className="relation-fields">
       <label className="relation-line">
         <span>
           <b>{otherName}</b> 是 {selfName} 的
         </span>
-        <select
-          aria-label="关系"
-          value={role}
+        <input
+          aria-label="关系称谓"
+          list={listId}
+          value={labels.role}
+          maxLength={MAX_RELATION_LABEL_LENGTH + 4}
+          placeholder="自己写，如 爸爸、同事、干妈"
           disabled={disabled}
-          onChange={(event) => onRole(event.target.value)}
-        >
-          <option value="">选择称谓…</option>
-          {RELATION_ROLE_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.roles.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          onChange={(event) => labels.setRole(event.target.value)}
+        />
+      </label>
+      <datalist id={listId}>
+        {suggestions.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
+      <label className="relation-line">
+        <span>
+          {selfName} 是 <b>{otherName}</b> 的
+        </span>
+        <input
+          aria-label="反向称谓"
+          value={labels.reverse}
+          maxLength={MAX_RELATION_LABEL_LENGTH + 4}
+          placeholder="反过来怎么称呼"
+          disabled={disabled}
+          onChange={(event) => labels.setReverse(event.target.value)}
+        />
       </label>
       {options.length > 1 ? (
-        <div className="relation-line" role="radiogroup" aria-label={`${selfName} 是 ${otherName} 的`}>
-          <span>
-            {selfName} 是 <b>{otherName}</b> 的
-          </span>
+        <div className="relation-line relation-quick" role="group" aria-label="反向称谓建议">
+          <span>可选：</span>
           {options.map((item) => (
-            <label key={item} className={myRole === item ? "relation-choice active" : "relation-choice"}>
-              <input
-                type="radio"
-                name={radioName}
-                value={item}
-                checked={myRole === item}
-                disabled={disabled}
-                onChange={() => onMyRole(item)}
-              />
+            <button
+              key={item}
+              type="button"
+              className={labels.cleanReverse === item ? "relation-choice active" : "relation-choice"}
+              aria-pressed={labels.cleanReverse === item}
+              disabled={disabled}
+              onClick={() => labels.setReverse(item)}
+            >
               {item}
-            </label>
+            </button>
           ))}
         </div>
       ) : null}
-      {role !== "" && myRole !== "" ? (
+      {labels.error === null ? null : (
+        <p className="error" role="alert">
+          {labels.error}
+        </p>
+      )}
+      {labels.ready ? (
         <p className="relation-preview" aria-live="polite">
-          将记录：{otherName} 是 {selfName} 的{role}；{selfName} 是 {otherName} 的{myRole}
+          将记录：{otherName} 是 {selfName} 的{labels.cleanRole}；{selfName} 是 {otherName} 的{labels.cleanReverse}
         </p>
       ) : null}
     </div>

@@ -52,10 +52,12 @@ describe("PersonDetail 建立关系的空间隔离", () => {
 
     fireEvent.click(target);
     // 「孩子 是 妈妈 的儿子」：反向有父亲/母亲两项，必须再选一次才能提交。
-    fireEvent.change(screen.getByLabelText("关系"), { target: { value: "儿子" } });
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "儿子" } });
     const submit = screen.getByRole("button", { name: "建立关系" }) as HTMLButtonElement;
+    // 「儿子」的反向有父亲/母亲两种可能：反向称谓留空，给出点选。
+    expect((screen.getByLabelText("反向称谓") as HTMLInputElement).value).toBe("");
     expect(submit.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: "母亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "母亲" }));
     expect(screen.getByText("将记录：孩子 是 妈妈 的儿子；妈妈 是 孩子 的母亲")).toBeTruthy();
     fireEvent.click(submit);
 
@@ -267,6 +269,58 @@ describe("PersonDetail 关系双向显示", () => {
     mountFor(son());
     fireEvent.click(document.querySelector('[data-option-id="dad"]') as Element);
     expect(screen.getByText("将替换现有关系：爸爸 是 儿子 的父亲")).toBeTruthy();
+  });
+});
+
+describe("PersonDetail 自定义称谓", () => {
+  function mountPair() {
+    render(
+      <PersonDetail
+        person={person()}
+        people={[person(), person({ id: "colleague", display_name: "小李" })]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    fireEvent.click(document.querySelector('[data-option-id="colleague"]') as Element);
+  }
+
+  it("词表外的称谓照样能写，反向默认同一个词，也可以改", async () => {
+    mountPair();
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: " 同事 " } });
+    const reverse = screen.getByLabelText("反向称谓") as HTMLInputElement;
+    expect(reverse.value).toBe("同事");
+    fireEvent.change(reverse, { target: { value: "领导" } });
+    expect(screen.getByText("将记录：小李 是 妈妈 的同事；妈妈 是 小李 的领导")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "建立关系" }));
+
+    await waitFor(() =>
+      expect(client.putFamilyRelationship).toHaveBeenCalledWith({
+        scopeId: "album1",
+        subjectEntityId: "colleague",
+        predicate: "同事",
+        objectEntityId: "person_1",
+        inversePredicate: "领导",
+      }),
+    );
+  });
+
+  it("亲属表里只有一种反向时自动填上；改了正向称谓、反向没动过就跟着变", () => {
+    mountPair();
+    const role = screen.getByLabelText("关系称谓");
+    const reverse = screen.getByLabelText("反向称谓") as HTMLInputElement;
+    fireEvent.change(role, { target: { value: "丈夫" } });
+    expect(reverse.value).toBe("妻子");
+    fireEvent.change(role, { target: { value: "朋友" } });
+    expect(reverse.value).toBe("朋友");
+  });
+
+  it("超过 16 个字提示且不能提交", () => {
+    mountPair();
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "一二三四五六七八九十一二三四五六七" } });
+    expect(screen.getByRole("alert").textContent).toContain("称谓不能超过 16 个字");
+    expect((screen.getByRole("button", { name: "建立关系" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

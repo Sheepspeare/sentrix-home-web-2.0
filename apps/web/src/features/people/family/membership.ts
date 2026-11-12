@@ -152,6 +152,38 @@ export const RELATION_ROLE_GROUPS: readonly RoleGroup[] = [
   { label: "其他", roles: ["朋友", "密友", "其他亲属"] },
 ];
 
+/** 自定义称谓的长度上限，与后端 `MAX_CUSTOM_LABEL_LENGTH` 一致。 */
+export const MAX_RELATION_LABEL_LENGTH = 16;
+
+/** 常用但不在亲属表里的称谓：只作输入建议，用户写什么都可以。 */
+const EXTRA_LABEL_SUGGESTIONS = ["同事", "同学", "邻居", "老师", "学生", "干妈", "干爹"];
+
+/**
+ * 称谓输入框的建议：这个相册里已经用过的称谓在前（用户自己的说法），再是常用称谓。
+ */
+export function relationLabelSuggestions(used: readonly string[]): string[] {
+  const common = [...RELATION_ROLE_GROUPS.flatMap((group) => group.roles), ...EXTRA_LABEL_SUGGESTIONS];
+  return [...new Set([...used.map((item) => item.trim()).filter((item) => item !== ""), ...common])];
+}
+
+/**
+ * 对方是我的 `role` 时，反向称谓的默认值：亲属表里只有一种可能就填它（父亲 → 不确定，
+ * 朋友 → 朋友）；有几种可能（儿子 / 女儿）就留空让用户点选；不认识的称谓默认同一个词
+ * ——同事、同学、邻居这类自定义关系多是对称的。用户随时可以改。
+ */
+export function suggestReverse(role: string): string {
+  const clean = role.trim();
+  if (clean === "") return "";
+  const options = myRoleOptions(clean);
+  if (options.length === 1) return options[0];
+  return options.length > 1 ? "" : clean;
+}
+
+/** 一个称谓的问题；空串不算错（只是还没填），返回 `null`。 */
+export function relationLabelError(label: string): string | null {
+  return label.trim().length > MAX_RELATION_LABEL_LENGTH ? `称谓不能超过 ${MAX_RELATION_LABEL_LENGTH} 个字` : null;
+}
+
 /**
  * 对方是我的 `role` 时，我可以是对方的什么人。
  *

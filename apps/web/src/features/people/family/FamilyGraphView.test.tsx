@@ -79,7 +79,7 @@ describe("关系图点边编辑", () => {
     expect(editor.textContent).toContain("爸爸 是 儿子 的父亲");
 
     // 「朋友」的反向只有「朋友」一项，界面直接填上，不再多问。
-    fireEvent.change(screen.getByLabelText("关系"), { target: { value: "朋友" } });
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "朋友" } });
     expect(editor.textContent).toContain("将记录：爸爸 是 儿子 的朋友；儿子 是 爸爸 的朋友");
     fireEvent.click(screen.getByRole("button", { name: "保存关系" }));
 

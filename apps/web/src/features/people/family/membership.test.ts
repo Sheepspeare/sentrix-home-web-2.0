@@ -4,7 +4,14 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { myRoleOptions, RELATION_INVERSES, RELATION_ROLE_GROUPS, relationFromSelf } from "./membership";
+import {
+  myRoleOptions,
+  RELATION_INVERSES,
+  RELATION_ROLE_GROUPS,
+  relationFromSelf,
+  relationLabelSuggestions,
+  suggestReverse,
+} from "./membership";
 
 /**
  * 前端的称谓表是后端 `RELATION_INVERSES` 的一份副本（为了提交前只给合法组合）。
@@ -34,7 +41,7 @@ describe("关系称谓表", () => {
     expect(frontend).toEqual(backend);
   });
 
-  it("下拉里的每个称谓都有合法的反向，且反向选项都被后端接受", () => {
+  it("常用称谓建议里的每个称谓都有合法的反向，且反向选项都被后端白名单接受", () => {
     for (const group of RELATION_ROLE_GROUPS) {
       for (const role of group.roles) {
         const options = myRoleOptions(role);
@@ -59,5 +66,20 @@ describe("relationFromSelf", () => {
 
   it("我是宾语时，对方的称谓是正向谓词", () => {
     expect(relationFromSelf(edge, "son")).toEqual({ otherId: "dad", otherRole: "父亲", selfRole: "儿子" });
+  });
+});
+
+describe("自定义称谓的默认与建议", () => {
+  it("反向称谓：唯一可能就填上，几种可能留空，不认识的默认同一个词", () => {
+    expect(suggestReverse("丈夫")).toBe("妻子");
+    expect(suggestReverse("父亲")).toBe("");
+    expect(suggestReverse("同事")).toBe("同事");
+    expect(suggestReverse("  ")).toBe("");
+  });
+
+  it("建议里本相册用过的称谓在前且去重", () => {
+    const list = relationLabelSuggestions(["干妈", " 师父 ", "父亲"]);
+    expect(list.slice(0, 3)).toEqual(["干妈", "师父", "父亲"]);
+    expect(list.filter((item) => item === "父亲")).toHaveLength(1);
   });
 });

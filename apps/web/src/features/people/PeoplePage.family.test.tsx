@@ -183,8 +183,8 @@ describe("图谱 tab", () => {
     await screen.findByRole("complementary");
     // 「儿子 是 爸爸 的儿子」→ 反向有父亲/母亲两项，选「父亲」。
     fireEvent.click(container.querySelector(`[data-option-id="${son.id}"]`) as Element);
-    fireEvent.change(screen.getByLabelText("关系"), { target: { value: "儿子" } });
-    fireEvent.click(screen.getByRole("radio", { name: "父亲" }));
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "儿子" } });
+    fireEvent.click(screen.getByRole("button", { name: "父亲" }));
     fireEvent.click(screen.getByRole("button", { name: "建立关系" }));
 
     await screen.findByRole("tab", { name: "关系1" });
