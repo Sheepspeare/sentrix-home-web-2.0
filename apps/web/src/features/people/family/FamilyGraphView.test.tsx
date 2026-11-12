@@ -122,3 +122,92 @@ describe("关系图点边编辑", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 });
+
+describe("关系图交互", () => {
+  const trio = [...people, person("person_c", "邻居")];
+
+  function mountGraph(overrides: Partial<Parameters<typeof FamilyGraphView>[0]> = {}) {
+    const props = {
+      people: trio,
+      relationships: [relation()],
+      selectedId: null,
+      onSelect: vi.fn(),
+      onRelate: vi.fn(),
+      onChanged: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    };
+    const view = render(<FamilyGraphView {...props} />);
+    return { ...view, props };
+  }
+
+  /** 读 `<g transform="translate(x y) scale(k)">` 与节点的 translate，换算出节点的屏幕坐标。 */
+  function screenOf(container: HTMLElement, id: string): { x: number; y: number } {
+    const view = container.querySelector(".graph-svg > g")?.getAttribute("transform") ?? "";
+    const [, tx, ty, k] = /translate\(([-\d.e]+) ([-\d.e]+)\) scale\(([-\d.e]+)\)/.exec(view) ?? [];
+    const node = container.querySelector(`[data-node-id="${id}"]`)?.getAttribute("transform") ?? "";
+    const [, nx, ny] = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(node) ?? [];
+    return { x: Number(tx) + Number(k) * Number(nx), y: Number(ty) + Number(k) * Number(ny) };
+  }
+
+  function drag(from: Element, start: { x: number; y: number }, end: { x: number; y: number }) {
+    fireEvent.pointerDown(from, { clientX: start.x, clientY: start.y });
+    fireEvent.pointerMove(window, { clientX: (start.x + end.x) / 2, clientY: (start.y + end.y) / 2 });
+    fireEvent.pointerMove(window, { clientX: end.x, clientY: end.y });
+    fireEvent.pointerUp(window, { clientX: end.x, clientY: end.y });
+  }
+
+  it("还没有关系的人也在图上，并带着 ⊕ 把手", () => {
+    const { container } = mountGraph();
+    expect(container.querySelector('[data-node-id="person_c"]')).not.toBeNull();
+    expect(container.querySelector('[data-relate-handle="person_c"]')).not.toBeNull();
+  });
+
+  it("从 ⊕ 拖到另一个人身上：触发建关系", () => {
+    const { container, props } = mountGraph();
+    const start = screenOf(container, "person_c");
+    const end = screenOf(container, "person_a");
+    drag(container.querySelector('[data-relate-handle="person_c"]') as Element, start, end);
+    expect(props.onRelate).toHaveBeenCalledWith("person_c", "person_a");
+  });
+
+  it("单击人物是选中；拖动人物是摆位置，不建关系、不选中", () => {
+    const { container, props } = mountGraph();
+    const node = container.querySelector('[data-node-id="person_c"]') as Element;
+    const start = screenOf(container, "person_c");
+    fireEvent.pointerDown(node, { clientX: start.x, clientY: start.y });
+    fireEvent.pointerUp(window, { clientX: start.x, clientY: start.y });
+    expect(props.onSelect).toHaveBeenCalledWith("person_c");
+
+    vi.mocked(props.onSelect).mockClear();
+    drag(node, start, { x: start.x + 120, y: start.y + 60 });
+    expect(props.onSelect).not.toHaveBeenCalled();
+    expect(props.onRelate).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-node-id="person_c"]')?.getAttribute("class")).toContain("pinned");
+    expect(screen.getByRole("button", { name: "重新排布" })).toBeTruthy();
+  });
+
+  it("以选中的人为中心：TA 在圆心，没选人时这个视图不可用", () => {
+    const { container, rerender, props } = mountGraph();
+    const focusTab = screen.getByRole("tab", { name: "以选中的人为中心" }) as HTMLButtonElement;
+    expect(focusTab.disabled).toBe(true);
+
+    rerender(<FamilyGraphView {...props} selectedId="person_b" />);
+    fireEvent.click(screen.getByRole("tab", { name: "以 儿子 为中心" }));
+    expect(container.querySelector('[data-node-id="person_b"]')?.getAttribute("transform")).toBe("translate(0 0)");
+    // 和儿子没有关系的邻居在最外圈并变淡。
+    expect(container.querySelector('[data-node-id="person_c"]')?.getAttribute("class")).toContain("dim");
+  });
+
+  it("双击一个人：选中并切到以 TA 为中心", () => {
+    const { container, props } = mountGraph();
+    fireEvent.doubleClick(container.querySelector('[data-node-id="person_a"]') as Element);
+    expect(props.onSelect).toHaveBeenCalledWith("person_a");
+  });
+
+  it("对称称谓只贴一个标签在中间", () => {
+    const friends = { ...relation(), predicate: "朋友", inverse_predicate: "朋友" };
+    const { container } = mountGraph({ relationships: [friends], selectedId: "person_a" });
+    const labels = [...container.querySelectorAll(".graph-edge-label")];
+    expect(labels).toHaveLength(1);
+  });
+});

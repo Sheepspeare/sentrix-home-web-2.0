@@ -94,6 +94,22 @@ export const parentRelations = new Set(["父亲", "母亲", "祖父", "祖母", 
 /** 配偶。1.0 声明了但布局没用它；留着是因为词表是唯一来源，别处要问「是不是配偶」时不该自己再列一遍。 */
 export const partnerRelations = new Set(["丈夫", "妻子"]);
 
+/**
+ * 口语称谓 → 亲属表里的标准称谓。称谓由用户自己写之后（2026-11-12），「爸爸」「外婆」也要
+ * 能参与辈分排序、去重优先级与连线长度；只用于界面计算，不改写库里的称谓。
+ */
+const KINSHIP_SYNONYMS: Readonly<Record<string, string>> = {
+  爸爸: "父亲", 爸: "父亲", 老爸: "父亲", 爹: "父亲",
+  妈妈: "母亲", 妈: "母亲", 老妈: "母亲", 娘: "母亲",
+  爷爷: "祖父", 奶奶: "祖母", 外公: "外祖父", 姥爷: "外祖父", 外婆: "外祖母", 姥姥: "外祖母",
+  老公: "丈夫", 先生: "丈夫", 老婆: "妻子", 太太: "妻子",
+};
+
+export function canonicalKinship(label: string): string {
+  const clean = label.trim();
+  return KINSHIP_SYNONYMS[clean] ?? clean;
+}
+
 /** 朋友。同上：词表留全，布局只用 membership 判行。 */
 export const friendRelations = new Set(["朋友", "密友"]);
 

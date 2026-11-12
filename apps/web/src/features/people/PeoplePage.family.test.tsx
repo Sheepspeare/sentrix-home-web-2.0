@@ -199,15 +199,18 @@ describe("图谱 tab", () => {
     expect(container.querySelectorAll(".detail-relations li")).toHaveLength(1);
     await openGraph(container);
     expect(container.querySelectorAll(".graph-edge")).toHaveLength(1);
-    expect(container.querySelectorAll("[data-node-id]")).toHaveLength(2);
+    // 认出来的人都在图上：爸爸、儿子，以及另一个相册里还没有关系的那位（散在外围）。
+    expect(container.querySelectorAll("[data-node-id]")).toHaveLength(3);
   });
 
-  it("没有已确认关系时图谱为空，只显示一行提示", async () => {
+  it("没有已确认关系时人照样在图上，并提示怎么建第一条关系", async () => {
     const { container } = mount();
     await openGraph(container);
 
-    expect(screen.getByText("当前无已确认关系")).toBeTruthy();
-    expect(container.querySelectorAll("[data-node-id]")).toHaveLength(0);
+    expect(screen.getByText(/还没有关系：把鼠标移到一个人身上/)).toBeTruthy();
+    // 8 个认出来的人都在图上，每人都有拖出关系的 ⊕ 把手。
+    expect(container.querySelectorAll("[data-node-id]")).toHaveLength(8);
+    expect(container.querySelectorAll("[data-relate-handle]")).toHaveLength(8);
     expect(container.querySelectorAll(".graph-edge")).toHaveLength(0);
   });
 
@@ -236,8 +239,11 @@ describe("图谱 tab", () => {
       expect(container.querySelectorAll("[data-node-id]")).toHaveLength(2);
     });
     expect(container.querySelectorAll(".graph-edge")).toHaveLength(1);
-    expect(container.querySelectorAll(".graph-edge-label")).toHaveLength(1);
-    expect(container.querySelector(".graph-edge-label")?.textContent).toBe("父亲");
+    // 两端各贴一个称谓：「父亲」贴爸爸、「儿子」贴孩子（<title> 里是整句，不算标签文字）。
+    const labels = [...container.querySelectorAll(".graph-edge-label")].map(
+      (node) => node.childNodes[node.childNodes.length - 1]?.textContent,
+    );
+    expect(labels).toEqual(["父亲", "儿子"]);
     const transform = transformOf(container);
     expect(transform).not.toBeNull();
     expect(transform).not.toContain("NaN");
