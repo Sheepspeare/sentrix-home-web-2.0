@@ -713,6 +713,78 @@ def test_resume_carries_only_the_finished_items_and_reuses_the_scope(tmp_path: P
     assert result["resumed_items"] == 1
 
 
+def test_explicit_service_resume_preserves_other_answers_scores_and_original(tmp_path):
+    import copy
+
+    from test_service_recovery import service_failure
+
+    kept = {"qa_id": "q1", "execution_status": "completed", "answer": "valid zero-score answer"}
+    retry = service_failure("q2")
+    saved = _cancelled_state(
+        items=[kept, retry, {"qa_id": "q3", "execution_status": "scheduled"}],
+        scoring_results={
+            "kept": {"qa_id": "q1", "status": "completed", "score": 0, "requests": [{"raw": "keep"}]},
+            # A service-error placeholder may itself receive 1; eligibility ignores the score.
+            "retry": {"qa_id": "q2", "status": "completed", "score": 1, "requests": [{"raw": "error"}]},
+        },
+        diagnostic_results={"d1": {"qa_id": "q1"}, "d2": {"qa_id": "q2"}},
+    )
+    before = copy.deepcopy(saved)
+    captured, gate = [], threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    try:
+        plan = suites.recovery_plan("run-1")
+        assert [r["qa_id"] for r in plan["retryable_service_failures"]] == ["q2"]
+        response = suites.resume_run(
+            "run-1", {"retry_qa_ids": ["q2"], "retry_reason": "provider quota error"}
+        )
+        request = captured[0]
+        assert request.run_id != "run-1"
+        assert response["resumed_items"] == 1
+        assert request.prior_items == (kept,)
+        assert request.prior_scoring["scoring_results"] == {"kept": saved["scoring_results"]["kept"]}
+        assert request.prior_scoring["diagnostic_results"] == {"d1": {"qa_id": "q1"}}
+        assert request.resume_context["retry_qa_ids"] == ["q2"]
+        assert request.resume_context["replaced_scoring_result_keys"] == ["retry"]
+        assert request.resume_context["source_retried_items_sha256"]["q2"]
+        assert request.frozen_qa_snapshot == saved["qa_snapshot"]
+        assert saved == before
+    finally:
+        gate.set()
+
+
+def test_service_failure_only_run_can_be_resumed_without_unstarted_rows(tmp_path):
+    from test_service_recovery import service_failure
+
+    saved = _cancelled_state(items=[service_failure(f"q{i}") for i in range(1, 4)])
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    plan = suites.recovery_plan("run-1")
+    assert plan["remaining_qa_count"] == 0
+    assert len(plan["retryable_service_failures"]) == 3
+    assert plan["can_resume"] is True
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"retry_qa_ids": "q1"},
+        {"retry_qa_ids": ["q1", "q1"], "retry_reason": "x"},
+        {"retry_qa_ids": ["q1"]},
+        {"retry_qa_ids": ["q1"], "retry_reason": "x"},
+        {"retry_qa_ids": ["unknown"], "retry_reason": "x"},
+    ],
+)
+def test_explicit_service_resume_rejects_invalid_or_non_failure_selection(tmp_path, payload):
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": _cancelled_state()}))
+    with pytest.raises(InvalidRequestError):
+        suites.resume_run("run-1", payload)
+    assert not suites._active
+
+
 def test_queued_requests_freeze_topology_before_configuration_changes(tmp_path):
     captured = []
     gate = threading.Event()

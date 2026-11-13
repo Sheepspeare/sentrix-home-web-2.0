@@ -77,6 +77,7 @@ from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name, safe_slug
 from photobench.domain.runs.judge import judge_chat_url
 from photobench.domain.runs.judge_recovery import RECOVERY_SCOPES, recovery_fields
+from photobench.domain.runs.service_recovery import service_retry_evidence
 from photobench.domain.runtime.ports import LifecycleProvider, RunRuntimeSnapshot, TelemetryProvider
 from photobench.domain.sentrix.ports import CancellableOperations, SentrixClient
 
@@ -452,12 +453,14 @@ class RunSuites:
         **与 ``reuse`` 共用同一块地基**：两者都是「绑到一个已经存在的 scope 上、
         不重新导入」。差别只在题目集——``reuse`` 从头跑全部，``resume`` 跳过已跑完的。
 
-        **只续跑「没跑过」的题**，判据逐条照 1.0 ``:3414-3417``：
+        默认只续跑「没跑过」的题，判据逐条照 1.0 ``:3414-3417``：
         ``execution_status not in {"scheduled", "running"}`` 的算已完成。
         这也正是取消掉的题必须标 ``scheduled`` 而不能标 ``failed`` 的原因——
         标 failed 的话它们会被当成「已跑完」，续跑时永远跳过（2026-10-15 改的）。
 
         同时按轮次补缺失的 Judge 结果，成功子评分和失败尝试保留。
+        显式 ``retry_qa_ids`` 只允许恢复有结构化服务故障、未交付答案的单轮题，
+        必须填写 ``retry_reason``；原 run 保留完整故障与评分历史。
         ``product_build_revision`` 可显式选择已配置的产品版本；原版本来源存入
         ``resume_context``，运行前仍须通过产品配置与版本核验。
         """
@@ -528,14 +531,33 @@ class RunSuites:
             }
         if snapshot.get("definition_sha256") != qa_fingerprint(snapshot["rows"]):
             raise InvalidRequestError("原测评QA快照校验失败，不能续跑")
+        retry_ids = payload.get("retry_qa_ids", [])
+        if (
+            not isinstance(retry_ids, list)
+            or any(not isinstance(q, str) or not q.strip() for q in retry_ids)
+            or len(set(retry_ids)) != len(retry_ids)
+        ):
+            raise InvalidRequestError("retry_qa_ids must be a list of unique QA IDs")
+        reason = payload.get("retry_reason", "")
+        if retry_ids and (not isinstance(reason, str) or not reason.strip()):
+            raise InvalidRequestError("retry_reason is required for explicit service recovery")
+        frozen_ids = {str(row.get("qa_id")) for row in snapshot["rows"]}
+        items_by_id = {str(item.get("qa_id")): item for item in saved.get("items") or []}
+        retry_evidence = {}
+        for qa_id in retry_ids:
+            evidence = service_retry_evidence(items_by_id.get(qa_id) or {})
+            if qa_id not in frozen_ids or evidence is None:
+                raise InvalidRequestError(f"QA has no retryable undelivered service failure: {qa_id}")
+            retry_evidence[qa_id] = evidence
+        retry_set = set(retry_ids)
         prior_items = tuple(
             item
             for item in (saved.get("items") or [])
             if isinstance(item, dict)
             and str(item.get("execution_status") or "") not in {"scheduled", "running"}
+            and str(item.get("qa_id")) not in retry_set
         )
         prior_ids = [str(item.get("qa_id")) for item in prior_items]
-        frozen_ids = {str(row.get("qa_id")) for row in snapshot["rows"]}
         if len(prior_ids) != len(set(prior_ids)) or not set(prior_ids) <= frozen_ids:
             raise InvalidRequestError("saved results do not uniquely match the frozen QA snapshot")
         model_profile = str(saved.get("model_profile") or "")
@@ -558,6 +580,28 @@ class RunSuites:
             }
         )
         resumed_judge = self._frozen_judge_settings(frozen_judge)
+        prior_scoring = {
+            k: copy.deepcopy(saved[k])
+            for k in (
+                "gt_metadata_snapshot",
+                "scoring_batches",
+                "scoring_results",
+                "scoring_summaries",
+                "diagnostic_results",
+                "primary_scoring_batch_ids",
+            )
+            if k in saved
+        }
+        replaced_scoring_keys = []
+        if retry_set:
+            for key in ("scoring_results", "diagnostic_results"):
+                records = prior_scoring.get(key) or {}
+                if key == "scoring_results":
+                    replaced_scoring_keys = [k for k, r in records.items() if r.get("qa_id") in retry_set]
+                prior_scoring[key] = {k: r for k, r in records.items() if r.get("qa_id") not in retry_set}
+            prior_scoring["scoring_summaries"] = summarize_batches(
+                {**saved, **prior_scoring, "items": list(prior_items)}
+            )
         request = RunRequest(
             album_id=album_id,
             qa_set=qa_set,
@@ -579,18 +623,7 @@ class RunSuites:
             judge_prompts=copy.deepcopy(saved.get("judge_prompts") or {}),
             prior_items=prior_items,
             scoring_configs=saved.get("scoring_configs") or {},
-            prior_scoring={
-                k: copy.deepcopy(saved[k])
-                for k in (
-                    "gt_metadata_snapshot",
-                    "scoring_batches",
-                    "scoring_results",
-                    "scoring_summaries",
-                    "diagnostic_results",
-                    "primary_scoring_batch_ids",
-                )
-                if k in saved
-            },
+            prior_scoring=prior_scoring,
             repair_missing_judges=repair_missing and not bool(saved.get("scoring_profiles")),
             evaluation_options=scoring_options(saved.get("evaluation_options")),
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
@@ -606,6 +639,16 @@ class RunSuites:
                 "source_input_integrity": saved.get("input_integrity"),
                 "qa_definition_sha256": snapshot["definition_sha256"],
                 "inherited_qa_ids": [item.get("qa_id") for item in prior_items],
+                "retry_qa_ids": retry_ids,
+                "retry_reason": reason.strip() if retry_ids else None,
+                "retry_evidence": retry_evidence,
+                "source_retried_items_sha256": {
+                    q: hashlib.sha256(
+                        json.dumps(items_by_id[q], sort_keys=True, ensure_ascii=False).encode()
+                    ).hexdigest()
+                    for q in retry_ids
+                },
+                "replaced_scoring_result_keys": replaced_scoring_keys,
                 "repair_missing_judges": repair_missing,
                 "selected_product_build_revision": target_revision or None,
                 "source_judge_use_gt_images": saved.get("judge_use_gt_images"),
@@ -674,6 +717,7 @@ class RunSuites:
             "scope_id": scope_id,
             # 带回来的题数——调用方据此判断续跑到底省了多少。
             "resumed_items": len(prior_items),
+            "retried_qa_ids": retry_ids,
             "repair_missing_judges": repair_missing,
         }
 
@@ -991,12 +1035,18 @@ class RunSuites:
             "required_build_revision"
         )
         current_revision = self._config.public_runtime_connection_config().get("product_build_revision")
+        retryable_failures = [
+            {"qa_id": item["qa_id"], **evidence}
+            for item in state.get("items") or []
+            if (evidence := service_retry_evidence(item)) is not None
+        ]
         return {
             "run_id": run_id,
+            "retryable_service_failures": retryable_failures,
             "inherited_qa_count": len(done),
             "remaining_qa_count": remaining,
             "can_resume": bool(
-                remaining
+                (remaining or retryable_failures)
                 and state.get("scope_id")
                 and state.get("status") in {"failed", "cancelled", "interrupted", "completed_with_errors"}
             ),
