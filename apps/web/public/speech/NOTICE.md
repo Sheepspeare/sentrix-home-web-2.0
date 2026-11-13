@@ -1,15 +1,12 @@
-# Local speech assets
+# Speech capture
 
-Runtime: sherpa-onnx 1.12.20, copyright sherpa-onnx authors, Apache-2.0.
-The original license is included in LICENSE-sherpa-onnx.txt.
-Source: https://github.com/k2-fsa/sherpa-onnx/tree/v1.12.20
+The browser AudioWorklet is Sentrix code. No ASR model or WASM runtime is served here.
 
-Model: SenseVoice-Small, INT8 ONNX conversion by k2-fsa of the
-2024-07-17 multilingual SenseVoice model. Model weights are distributed
-separately from runtime source code and retain their own license terms:
-https://github.com/FunAudioLLM/SenseVoice#license
-https://k2-fsa.github.io/sherpa/onnx/sense-voice/
+Recognition runs in the local Python API with sherpa-onnx 1.12.40 (Apache-2.0).
+The original sherpa-onnx license is retained in LICENSE-sherpa-onnx.txt.
+Source: https://github.com/k2-fsa/sherpa-onnx/tree/v1.12.40
 
-The exact official bundle URL and SHA-256 are recorded in
-apps/web/speech-assets.lock.json. Generated vendor files are unmodified.
-The surrounding recording UI, AudioWorklet and worker integration are Sentrix code.
+SenseVoice-Small INT8 weights are installed separately under SENTRIX_DATA_DIR.
+Source and checksums: scripts/speech-model.lock.json.
+The preparation script preserves the official model bundle's LICENSE and README.
+Model license: https://github.com/FunAudioLLM/SenseVoice#license

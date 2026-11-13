@@ -422,7 +422,7 @@ export function AssistantPanel({
           aria-label={speech.phase === "recording" ? "停止并识别" : "语音输入"}
           aria-pressed={speech.phase === "recording"}
           aria-describedby="assistant-speech-status"
-          title={speech.unavailable ?? "在本机识别语音，音频不会上传"}
+          title={speech.unavailable ?? "将录音发送到本机后端识别，不使用云端 ASR"}
           disabled={busy || historyLoading || conversationId === null || speech.unavailable !== null
             || (speech.active && speech.phase !== "recording")}
           onClick={() => void (speech.phase === "recording" ? speech.stop() : speech.start())}
@@ -447,7 +447,7 @@ export function AssistantPanel({
         ) : null}
       </form>
       <p id="assistant-speech-status" className="assistant-speech-status" role="status" aria-live="polite">
-        {speech.unavailable ?? (speech.message || "语音在本机识别，点击“停止并识别”后自动发送。")}
+        {speech.unavailable ?? (speech.message || "录音发送至本机后端识别，点击“停止并识别”后自动发送。")}
       </p>
       {speech.error ? <p className="error" role="alert">{speech.error}</p> : null}
 

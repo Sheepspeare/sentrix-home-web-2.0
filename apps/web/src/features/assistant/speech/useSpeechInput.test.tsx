@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./recognizer", () => ({
   MAX_RECORDING_SECONDS: 60,
-  SherpaRecognizer: class {
+  BackendSpeechRecognizer: class {
     load = mocks.load; transcribe = mocks.transcribe; dispose = mocks.disposeModel;
   },
 }));
@@ -47,7 +47,7 @@ describe("本机语音输入生命周期", () => {
     expect(mocks.transcribe).toHaveBeenCalledWith(expect.any(Float32Array), 16000);
   });
 
-  it("取消模型加载后晚到的完成不会打开麦克风", async () => {
+  it("取消服务检查后晚到的完成不会打开麦克风", async () => {
     const loaded = deferred<void>(); mocks.load.mockReturnValue(loaded.promise);
     const { result } = renderHook(() => useSpeechInput({ contextKey: "a", enabled: true, onTranscript: vi.fn() }));
     let started!: Promise<void>;
@@ -60,7 +60,7 @@ describe("本机语音输入生命周期", () => {
     expect(mocks.disposeMic).toHaveBeenCalled();
   });
 
-  it("切换会话时丢弃晚到的识别结果并释放模型", async () => {
+  it("切换会话时中止请求并丢弃晚到的识别结果", async () => {
     const decoded = deferred<string>(); mocks.transcribe.mockReturnValue(decoded.promise);
     const onTranscript = vi.fn();
     const { result, rerender } = renderHook(({ contextKey }) => useSpeechInput({ contextKey, enabled: true, onTranscript }),
@@ -125,7 +125,7 @@ describe("本机语音输入生命周期", () => {
   });
 });
 
-it("三轮录音及 busy 切换只加载一次模型，取消录音也保留模型", async () => {
+it("三轮录音及 busy 切换复用服务检查结果，取消录音不销毁客户端", async () => {
   const { result, rerender } = renderHook(({ enabled }) => useSpeechInput({ contextKey: "a", enabled, onTranscript: vi.fn() }), { initialProps: { enabled: true } });
   for (let i = 0; i < 3; i++) {
     await act(() => result.current.start());
@@ -140,7 +140,7 @@ it("三轮录音及 busy 切换只加载一次模型，取消录音也保留模�
   expect(mocks.disposeModel).not.toHaveBeenCalled();
 });
 
-it("识别失败销毁异常模型，下次录音重新初始化", async () => {
+it("识别失败中止客户端请求，下次录音重新检查服务", async () => {
   mocks.transcribe.mockRejectedValueOnce(new Error("解码失败"));
   const onTranscript = vi.fn();
   const { result } = renderHook(() => useSpeechInput({ contextKey: "a", enabled: true, onTranscript }));

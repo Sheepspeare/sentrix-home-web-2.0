@@ -169,7 +169,7 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | 7 | `photobench` 不得 import `sentrix` | 评测不能污染产品，只能走 HTTP | `photobench-isolation` |
 | 8 | 禁止 benchmark 泄漏进 agent | 提示词/代码不得出现评测地名、答案、题号 | `frozen.md` + Review |
 | 9 | 禁止出口清洗 | 清洗会掩盖真实模型问题，违反“先定位根因” | Review |
-| 10 | 应用不管理模型进程生命周期 | 只经 HTTP 消费端点；不建 model-manager | s11 裁决 |
+| 10 | 应用不管理外部模型服务进程生命周期 | 默认只经 HTTP 消费端点；用户明确指定的助手 SenseVoice 在 API 进程内启动加载，无独立 model-manager | s11 裁决与助手语音后端变更 |
 | 11 | 图片/音频保留同步导入契约；视频通过 SQLite 持久 Job 与后台 worker 处理，浏览器生命周期不控制任务 | 视频任务必须可查询、可恢复、以唯一 worker claim 防重；其他媒体入口保持兼容 | video job/checkpoint capability |
 | 12 | 配置最小化：只有部署事实才进 `Settings` | 1.0 的 126 个 env flag 互相矛盾 | `config.py` + Review |
 
@@ -222,6 +222,14 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 - `ChatModel.complete` 必须抛 `ModelServiceError` 族；`PromptTooLongError` / `OutputTruncatedError` 是控制流，不是普通错误。
 - `TurnRepository.claim` 是并发闸门：`pending → running` 只能有一个执行者抢到。
 - `TurnEventBroker` 是进程内实时流；历史补偿必须由 `TurnRepository.events_after` 提供，两半合起来才是完整 SSE。
+
+助手语音新增 `SpeechRecognizer`（同 `domain/assistant/ports.py`）：
+`load/available/load_error/transcribe/close`；Container 字段 `speech_recognizer`，
+实现 `SenseVoiceRecognizer`。启动加载一次，退出释放，请求不懒加载；
+每段独立 stream、共享模型、单并发，忙碌抛 `SpeechBusy`，不排队。
+启动失败记录日志并由 `/api/v1/assistant/speech/status` 显式报告，识别请求返回 503；
+其他文字功能继续可用。无语音返回空串，非法 PCM 返回 400，推理失败返回 503。
+这是用户明确要求的进程内 ASR，不改变媒体导入转写或现有对话模型部署。
 
 ### 3.3 Media
 
@@ -886,7 +894,7 @@ def test_chat_model_maps_prompt_too_long():
 |---|---|---|---|---|
 | `SENTRIX_DEPLOYMENT_PROFILE` | 集中部署预设server/mac；显式值优先 | `server` | 嵌入方案、Agent/Chat预算、人脸provider默认 | 否 |
 | `SENTRIX_AGENT_WALL_TIME_S` | Agent墙钟预算；mac缺省600 | `180` | Agent预算 | 否 |
-| `SENTRIX_DATA_DIR` | 数据根，派生 db/media/previews/qdrant/geo | `data` | 全部持久化/索引 | 生产必设 |
+| `SENTRIX_DATA_DIR` | 数据根，派生 db/media/previews/qdrant/geo/models（含 sensevoice-small） | `data` | 全部持久化/索引 | 生产必设 |
 | `SENTRIX_WEB_DIST_DIR` | 前端构建产物 | `apps/web/dist` | Web 挂载 | 否 |
 | `SENTRIX_API_HOST` | 监听地址 | `0.0.0.0` | API | 否 |
 | `SENTRIX_API_PORT` | 端口 | `8191` | API | 否 |
@@ -1126,8 +1134,8 @@ T006 指标 v2 的可选契约见 [photobench-metrics-contract.md](photobench-me
 ### 9.3 冻结/不实现能力
 
 - 媒体导入的 ASR / 转写 / `transcript` 列仍不启用；2026-11-13 用户要求新增的
-  “问一句”语音输入在浏览器本机以 SenseVoice-Small / sherpa-onnx WASM 转成可编辑草稿，
-  不接入媒体导入链、不新增后端模型进程。见 [语音输入运行手册](../runbooks/assistant-speech.md)。
+  “问一句”语音输入按用户后续要求改为本机 API 内 SenseVoice-Small / sherpa-onnx 推理，
+  启动加载、后续复用；不接入媒体导入链、不启动独立模型服务进程。见 [语音输入运行手册](../runbooks/assistant-speech.md)。
 - OCR 只有导入期 `ocr_text` 一条路，没有独立 PaddleOCR 适配器或 VLM 回退；
 - 导入支持按 operation_id 协作取消（2026-10-23新增）；仍无持久 batch/job 队列；
 - 无云端大模型入口（评测可配，产品侧不内置）；

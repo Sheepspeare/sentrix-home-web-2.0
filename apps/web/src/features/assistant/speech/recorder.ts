@@ -8,9 +8,8 @@ export interface SpeechRecorder {
 
 export function speechUnavailableReason(): string | null {
   if (!globalThis.isSecureContext) return "语音输入需要 HTTPS 或 localhost，请使用安全地址打开。";
-  if (!navigator.mediaDevices?.getUserMedia || !globalThis.AudioContext || !globalThis.AudioWorkletNode
-    || !globalThis.Worker || !globalThis.WebAssembly) {
-    return "当前浏览器不支持本机语音输入，请使用新版 Safari、Chrome 或 Edge。";
+  if (!navigator.mediaDevices?.getUserMedia || !globalThis.AudioContext || !globalThis.AudioWorkletNode) {
+    return "当前浏览器不支持语音录音，请使用新版 Safari、Chrome 或 Edge。";
   }
   return null;
 }
@@ -28,7 +27,7 @@ export class MicrophoneRecorder implements SpeechRecorder {
   private stopped: (() => void) | null = null;
 
   constructor() {
-    // Must resume during the click gesture, before model loading/permission awaits (Safari).
+    // Must resume during the click gesture, before service checks/permission awaits (Safari).
     this.context = new AudioContext();
     this.resumed = this.context.resume();
     void this.resumed.catch(() => {});

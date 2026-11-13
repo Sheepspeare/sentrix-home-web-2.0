@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MAX_RECORDING_SECONDS, SherpaRecognizer, type SpeechRecognizer } from "./recognizer";
+import { MAX_RECORDING_SECONDS, BackendSpeechRecognizer, type SpeechRecognizer } from "./recognizer";
 import { MicrophoneRecorder, speechUnavailableReason, type SpeechRecorder } from "./recorder";
 
 type Phase = "idle" | "loading" | "permission" | "recording" | "transcribing";
@@ -25,7 +25,7 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
   const generation = useRef(0);
   const currentPhase = useRef<Phase>("idle");
   const recognizer = useRef<SpeechRecognizer | null>(null);
-  const modelReady = useRef(false);
+  const serviceReady = useRef(false);
   const recorder = useRef<SpeechRecorder | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcript = useRef(onTranscript);
@@ -46,7 +46,7 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
     if (all || currentPhase.current === "loading" || currentPhase.current === "transcribing") {
       recognizer.current?.dispose();
       recognizer.current = null;
-      modelReady.current = false;
+      serviceReady.current = false;
     }
     currentPhase.current = "idle";
   }, []);
@@ -81,7 +81,7 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
     const token = generation.current;
     transition("transcribing");
     if (timer.current) clearTimeout(timer.current);
-    setMessage("正在本机识别…");
+    setMessage("正在本机后端识别…");
     try {
       const audio = await recorder.current!.stop();
       if (token !== generation.current) return;
@@ -103,17 +103,17 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
   const start = useCallback(async () => {
     if (!enabled || unavailable || currentPhase.current !== "idle") return;
     const token = ++generation.current;
-    transition(modelReady.current ? "permission" : "loading");
+    transition(serviceReady.current ? "permission" : "loading");
     setError(null);
-    setMessage(modelReady.current ? "正在开启麦克风…" : "正在加载本机语音模型（首次加载较慢）…");
+    setMessage(serviceReady.current ? "正在开启麦克风…" : "正在检查本机后端语音服务…");
     try {
       recorder.current = new MicrophoneRecorder();
-      recognizer.current ??= new SherpaRecognizer();
-      if (!modelReady.current) await recognizer.current.load((progress) => {
+      recognizer.current ??= new BackendSpeechRecognizer();
+      if (!serviceReady.current) await recognizer.current.load((progress) => {
         if (token === generation.current) setMessage(progress);
       });
       if (token !== generation.current) return;
-      modelReady.current = true;
+      serviceReady.current = true;
       transition("permission");
       setMessage("请允许浏览器使用麦克风…");
       await recorder.current.start();

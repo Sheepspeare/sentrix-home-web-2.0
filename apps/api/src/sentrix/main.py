@@ -43,11 +43,13 @@ from sentrix.api.routes import (
     relationships,
     search,
     spaces,
+    speech,
     timeline,
     videos,
 )
 from sentrix.bootstrap.container import Container
 from sentrix.config import Settings, load_settings
+from sentrix.domain.assistant.ports import SpeechUnavailable
 from sentrix.domain.errors import DomainError
 from sentrix.infrastructure.thread_limits import apply_process_thread_limits
 
@@ -155,6 +157,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         executor.start()
     try:
         container: Container = app.state.container
+        try:
+            await run_in_threadpool(container.speech_recognizer.load)
+        except SpeechUnavailable as exc:
+            log.warning("助手语音不可用: %s", exc)
         from sentrix.api.routes.media import recover_video_jobs
 
         recover_video_jobs(container)
@@ -171,6 +177,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             log.warning("体验实例嵌入依赖暂不可用，将自动重试: %s", smoke_error)
         yield
     finally:
+        await run_in_threadpool(app.state.container.speech_recognizer.close)
         for executor in executors:
             executor.stop()
 
@@ -209,6 +216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(internal.router)
     v1.include_router(search.router)
     v1.include_router(assistant.router)
+    v1.include_router(speech.router)
     v1.include_router(diagnostics.router)
     v1.include_router(timeline.router)
     v1.include_router(memories.router)
