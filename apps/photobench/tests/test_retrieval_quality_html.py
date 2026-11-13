@@ -108,7 +108,11 @@ def test_multiturn_pairs_only_the_primary_score_when_its_turn_is_selected():
 def test_html_export_respects_the_selected_profile_and_keeps_the_scope(profile):
     cases = samples()
     exported = export_report(report(cases, scoring_profile=profile), cases, "html", {})
-    assert exported.count('class="retrieval-matrix"') == (2 if profile == "atm_qs_v1" else 4)
+    assert exported.count('class="retrieval-matrix"') == (4 if profile == "atm_qs_v1" else 6)
+    assert "候选检索 × 满分率（any）" in exported
+    assert "最终交付 × 满分率（any）" in exported
+    assert "候选检索 × 满分率（all）" in exported
+    assert "最终交付 × 满分率（all）" in exported
     assert ("候选检索 × 含部分正确率" in exported) == (profile != "atm_qs_v1")
     assert "最终交付 × 满分率" in exported and "有效6题" in exported
 
@@ -130,11 +134,66 @@ def test_native_atm_and_projected_fractional_list_scores_only_report_full_credit
     )
     assert case["score"] == 1
     exported = retrieval_quality([case], {})
-    assert exported.count('class="retrieval-matrix"') == 1  # delivery has no saved counts
+    assert exported.count('class="retrieval-matrix"') == 2  # delivery has no saved counts
     assert "含部分正确率" not in exported
     assert 'aria-label="命中 · 满分：0题，占有效样本0.0%"' in exported
     case["evaluation_result"]["profile_id"] = "photobench_open_v1"
     assert "含部分正确率" in retrieval_quality([case], {})
+
+
+def test_all_coverage_uses_full_gt_coverage_in_each_channel_without_changing_any():
+    cases = samples()
+    before = copy.deepcopy(cases)
+    candidate = retrieval_quality_counts(cases, "candidate")
+    delivery = retrieval_quality_counts(cases, "delivery")
+    assert candidate["all_cells"] == {(True, 1): 1, (False, 2): 2, (False, 1): 1, (False, 0): 2}
+    assert delivery["all_cells"] == {(False, 2): 2, (False, 1): 2, (False, 0): 2}
+    for counts in (candidate, delivery):
+        assert sum(counts["all_cells"].values()) == sum(counts["cells"].values()) == counts["valid"]
+    rendered = retrieval_quality_card(candidate, "candidate", partial=False, match_mode="all")
+    assert 'aria-label="全部命中 · 未满分：1题，占有效样本16.7%"' in rendered
+    assert 'aria-label="未全部命中 · 满分：2题，占有效样本33.3%"' in rendered
+    assert "全部命中组满分率</span><b>0.0%</b><small>0 / 1题" in rendered
+    assert "未全部命中组满分率</span><b>40.0%</b><small>2 / 5题" in rendered
+    assert "未全部命中包含部分命中和零命中" in rendered
+    assert cases == before
+
+
+@pytest.mark.parametrize(
+    ("matched", "predicted", "gt", "any_hit", "all_hit"),
+    [
+        (0, 0, 2, False, False),
+        (1, 1, 2, True, False),
+        (2, 2, 2, True, True),
+        (2, 3, 2, True, True),
+        (1, 2, 1, True, True),
+    ],
+)
+def test_all_means_recall_of_one_not_exact_set_equality(matched, predicted, gt, any_hit, all_hit):
+    case = media_case(2, 0, 0)
+    case["retrieval_counts"]["candidate"].update(matched=matched, predicted=predicted, gt=gt)
+    counts = retrieval_quality_counts([case], "candidate")
+    assert counts["cells"] == {(any_hit, 2): 1}
+    assert counts["all_cells"] == {(all_hit, 2): 1}
+
+
+@pytest.mark.parametrize("channel", ["candidate", "delivery"])
+def test_all_excludes_invalid_gt_and_preserves_primary_turn_scope(channel):
+    valid = media_case(2, 2, 2)
+    invalid = copy.deepcopy(valid)
+    invalid["retrieval_counts"][channel].update(gt=0, matched=0)
+    out_of_scope = copy.deepcopy(valid)
+    out_of_scope.update(evaluation={"applies_to_turn": 1}, matched_turns=[0])
+    missing_score = copy.deepcopy(valid)
+    missing_score["score"] = None
+    counts = retrieval_quality_counts([valid, invalid, out_of_scope, missing_score], channel)
+    assert counts["valid"] == 1
+    assert counts["all_cells"] == counts["cells"] == {(True, 2): 1}
+    assert counts["excluded"] == {"缺少有效媒体计数或GT": 1, "主评分轮不在筛选范围": 1, "缺少有效主评分": 1}
+    empty = retrieval_quality_card(
+        retrieval_quality_counts([invalid], channel), channel, partial=False, match_mode="all"
+    )
+    assert "没有可配对" in empty and "0.0%" not in empty
 
 
 def test_zero_sample_and_empty_hit_group_remain_uncovered():
