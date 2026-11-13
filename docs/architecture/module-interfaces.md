@@ -1125,7 +1125,9 @@ T006 指标 v2 的可选契约见 [photobench-metrics-contract.md](photobench-me
 
 ### 9.3 冻结/不实现能力
 
-- ASR / 转写 / `transcript` 列不存在；
+- 媒体导入的 ASR / 转写 / `transcript` 列仍不启用；2026-11-13 用户要求新增的
+  “问一句”语音输入在浏览器本机以 SenseVoice-Small / sherpa-onnx WASM 转成可编辑草稿，
+  不接入媒体导入链、不新增后端模型进程。见 [语音输入运行手册](../runbooks/assistant-speech.md)。
 - OCR 只有导入期 `ocr_text` 一条路，没有独立 PaddleOCR 适配器或 VLM 回退；
 - 导入支持按 operation_id 协作取消（2026-10-23新增）；仍无持久 batch/job 队列；
 - 无云端大模型入口（评测可配，产品侧不内置）；

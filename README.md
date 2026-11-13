@@ -58,6 +58,10 @@ SENTRIX_DEPLOYMENT_PROFILE=mac ./scripts/deploy/start_legacy_mac.sh
 make web-dev        # http://localhost:4274/
 ```
 
+“问一句”的本机语音输入需先准备 SenseVoice-Small / sherpa-onnx WASM 静态资源：
+`npm --prefix apps/web run speech:prepare`。识别在浏览器端完成，音频不上传；
+资源准备、生产构建和浏览器要求见[语音输入运行手册](docs/runbooks/assistant-speech.md)。
+
 该目标默认代理到 `http://127.0.0.1:8191`，并启用已有的本地用户模式，无需运行 8210
 控制面；账号登录、管理台与反馈功能需要控制面。完整 Mac 启动脚本已启动 API 时，
 无需再运行 `make dev`。

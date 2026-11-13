@@ -1,0 +1,13 @@
+{
+  "version": "1.12.20",
+  "directory": "sensevoice-1.12.20",
+  "archiveRoot": "sherpa-onnx-wasm-simd-1.12.20-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small",
+  "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.20/sherpa-onnx-wasm-simd-1.12.20-vad-asr-zh_en_ja_ko_cantonese-sense_voice_small.tar.bz2",
+  "sha256": "b3d47b2dbfef23c09b2fd20dc4eb82b6a07c763c9b0197e92dea736bc981eb5b",
+  "files": [
+    "sherpa-onnx-asr.js",
+    "sherpa-onnx-wasm-main-vad-asr.js",
+    "sherpa-onnx-wasm-main-vad-asr.wasm",
+    "sherpa-onnx-wasm-main-vad-asr.data"
+  ]
+}

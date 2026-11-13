@@ -14,6 +14,8 @@ import { Lightbox } from "../../shared/ui/Lightbox";
 import { ResultSetWall } from "./ResultSetWall";
 import { TurnTimeline, isTerminalStatus } from "./TurnTimeline";
 import { useTurnStream } from "./useTurnStream";
+import { useSpeechInput } from "./speech/useSpeechInput";
+import "./speech/speechInput.css";
 
 interface Exchange {
   key: string;
@@ -134,6 +136,11 @@ export function AssistantPanel({
     attemptNo,
     turnId: liveTurnId,
   } = useTurnStream();
+  const speech = useSpeechInput({
+    contextKey: JSON.stringify([scopeId, conversationId]),
+    enabled: conversationId !== null && !historyLoading && !busy,
+    onTranscript: (recognized) => setText((draft) => draft.trim() ? `${draft.trimEnd()} ${recognized}` : recognized),
+  });
 
   const settled = useRef<string | null>(null);
   /** 当前这一轮是哪个会话的哪条 exchange——切换会话后到达的结果不该串台。 */
@@ -363,7 +370,7 @@ export function AssistantPanel({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const question = text.trim();
-    if (question === "" || conversationId === null || busy) {
+    if (question === "" || conversationId === null || busy || historyLoading || speech.active) {
       return;
     }
     setText("");
@@ -382,11 +389,29 @@ export function AssistantPanel({
           onChange={(event) => setText(event.target.value)}
           placeholder="例如：给我看看在海边的照片"
           aria-label="向助手提问"
-          disabled={conversationId === null || historyLoading}
+          disabled={conversationId === null || historyLoading || speech.active}
         />
         <button
+          type="button"
+          className="assistant-voice-button"
+          aria-label={speech.phase === "recording" ? "停止并识别" : "语音输入"}
+          aria-pressed={speech.phase === "recording"}
+          aria-describedby="assistant-speech-status"
+          title={speech.unavailable ?? "在本机识别语音，音频不会上传"}
+          disabled={busy || historyLoading || conversationId === null || speech.unavailable !== null
+            || (speech.active && speech.phase !== "recording")}
+          onClick={() => void (speech.phase === "recording" ? speech.stop() : speech.start())}
+        >
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+          </svg>
+          {speech.phase === "recording" ? "停止并识别" : speech.phase === "transcribing" ? "识别中…" : speech.active ? "准备中…" : "语音输入"}
+        </button>
+        {speech.active ? <button type="button" onClick={speech.cancel}>取消语音</button> : null}
+        <button
           type="submit"
-          disabled={busy || historyLoading || conversationId === null || text.trim() === ""}
+          disabled={busy || historyLoading || conversationId === null || text.trim() === "" || speech.active}
         >
           {busy ? "处理中…" : "发送"}
         </button>
@@ -396,6 +421,10 @@ export function AssistantPanel({
           </button>
         ) : null}
       </form>
+      <p id="assistant-speech-status" className="assistant-speech-status" role="status" aria-live="polite">
+        {speech.unavailable ?? (speech.message || "语音在本机识别，识别后可编辑再发送。")}
+      </p>
+      {speech.error ? <p className="error" role="alert">{speech.error}</p> : null}
 
       {error !== null ? <p className="error">{error}</p> : null}
       {historyError !== null ? (

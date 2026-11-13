@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "speech:prepare": "node scripts/prepare-speech-assets.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
@@ -27,6 +28,7 @@
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
+    "vite-plugin-mkcert": "2.1.0",
     "vitest": "^5.0.1"
   }
 }

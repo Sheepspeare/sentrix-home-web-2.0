@@ -1,0 +1,48 @@
+# “问一句”端侧语音输入
+
+用户明确要求新增 SenseVoice-Small + sherpa-onnx 端侧识别。本次选择浏览器本机推理，
+属于前端输入能力；不恢复媒体导入 ASR/transcript，不增加 Python 模型侧车、API 或数据迁移。
+实现遵循 `module-interfaces.md` §0.5、§5、§7.3 的必要文件、失败可见、测试与登记要求，
+参考仓库 [PR #30](https://github.com/ysh12304124/sentrix-home-web-2.0/pull/30) 分别记录改动与验证。
+
+## 影响与失败语义
+
+- `AssistantPanel` 只把确认后的识别文本追加至草稿，仍由用户发送。
+- `SpeechRecognizer` 是前端异步能力边界，`SherpaRecognizer` 实现 Worker 通信、超时和取消；
+  `SpeechRecorder` 隔离麦克风资源，`useSpeechInput` 编排加载、权限、录音与转写。
+- Worker 使用官方同版本 JS/WASM/data，不在 React 主线程解码；录音最长 60 秒，加载与解码有上限。
+- 失败明确显示错误，原草稿保留，文字输入继续可用。取消和会话/相册切换使晚到结果失效；
+  取消之后才获批的麦克风音轨也立即关闭。
+- 无后端外部契约、配置、数据库、索引和 PhotoBench 变更；无新 Python 模块。
+- 官方模型权重由部署准备脚本下载并核验，不提交 Git；部署与性能边界见
+  [运行手册](../runbooks/assistant-speech.md)。
+
+## PR 验证记录
+
+- 新语音测试覆盖草稿追加与显式发送、表单提交互斥、超时、取消、会话切换、
+  卸载释放、权限拒绝与重试、60 秒自动停止、空结果、晚到权限和 PCM 尾段。
+- TypeScript 构建与生产打包独立验证。
+- 新增语音专项 15 项通过。Chromium 158 使用合成中文 WAV 作为模拟麦克风，
+  通过真实 AudioWorklet → Worker → SenseVoice-Small WASM → 输入框链路；识别到
+  “请帮我找一下去年旅行时拍的照片”。模拟设备循环播放会产生后续重复片段，不据此评估准确率。
+  取消后草稿保留，未自动发送问答，所有语音资源来自 localhost，没有录音上传；
+  浏览器无页面异常，390px 窄屏无横向溢出。真人麦克风、Safari 和实体手机尚未实测。
+- `make ci` 在 Python lint 阶段报现有 43 项错误；本次没有修改 Python 源码。
+- 修改前 HEAD 的助手测试与修改后均有两项相同失败：历史照片 alt/URL 的旧断言，
+  以及时间线折叠按钮的旧断言。不能将新增专项通过描述为全仓 CI 通过。
+- 全前端门禁另有既有界面测试失败，日志与本次专项结果分开报告。
+- `make -k ci` 继续检查后还发现既有类型、架构、模块登记错误；覆盖率测试在收集阶段
+  等待超过 12 分钟后中断，不宣称覆盖率通过。PhotoBench 前端 750 项测试及构建通过；
+  主前端为 184 项通过、29 项失败（其中本次新增的 15 项全部通过）。
+
+不对其他会话正在开发的人物后台任务代码作修复或提交，不自动合并/发布远端 PR。
+回滚仅撤销语音入口、speech 目录与资源准备登记；现有问答数据不受影响。
+
+## vite-plugin-mkcert 开发 HTTPS
+
+本地工作目录直接运行 make dev 和 make web-dev；移除手工读取证书逻辑，
+使用锁定的 vite-plugin-mkcert 2.1.0 自动生成 localhost/本机 IP 证书。
+构建使用插件自身的 serve 限制，Vitest 明确排除插件，避免测试安装系统信任。
+15 项专项、TypeScript 和构建通过；实际 make web-dev 已自动下载 mkcert，
+停在 macOS 管理员密码提示，已中止验证进程。系统信任安装需用户在自己终端首次启动时完成。
+不依赖 /private/tmp/sentrix-assistant-speech-https；旧 worktree 保留为此前提交记录。
