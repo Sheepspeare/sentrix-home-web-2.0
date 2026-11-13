@@ -53,3 +53,31 @@ it("取消加载拒绝未完成请求，释放资源", async () => {
   await rejection;
   expect(FakeWorker.instance.terminate).toHaveBeenCalledTimes(1);
 });
+
+it("并发加载共享一个 Worker，成功后再次加载不发起初始化", async () => {
+  const recognizer = new SherpaRecognizer();
+  const first = recognizer.load(vi.fn());
+  const worker = FakeWorker.instance;
+  const second = recognizer.load(vi.fn());
+  expect(second).toBe(first);
+  expect(FakeWorker.instance).toBe(worker);
+  expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  worker.reply({ type: "ready" });
+  await Promise.all([first, second]);
+  await recognizer.load(vi.fn());
+  expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  recognizer.dispose();
+});
+
+it("取消后立即重试不会被旧加载请求清除", async () => {
+  const recognizer = new SherpaRecognizer();
+  const first = recognizer.load(vi.fn());
+  const rejection = expect(first).rejects.toMatchObject({ name: "AbortError" });
+  recognizer.dispose();
+  const retry = recognizer.load(vi.fn());
+  await rejection;
+  expect(recognizer.load(vi.fn())).toBe(retry);
+  FakeWorker.instance.reply({ type: "ready" });
+  await retry;
+  recognizer.dispose();
+});

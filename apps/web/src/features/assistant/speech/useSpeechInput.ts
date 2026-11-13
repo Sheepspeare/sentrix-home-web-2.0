@@ -17,7 +17,7 @@ function errorMessage(error: unknown): string {
 export function useSpeechInput({ contextKey, enabled, onTranscript }: {
   contextKey: string;
   enabled: boolean;
-  onTranscript: (text: string) => void;
+  onTranscript: (text: string, autoSend: boolean) => Promise<string> | string | void;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState("");
@@ -25,6 +25,7 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
   const generation = useRef(0);
   const currentPhase = useRef<Phase>("idle");
   const recognizer = useRef<SpeechRecognizer | null>(null);
+  const modelReady = useRef(false);
   const recorder = useRef<SpeechRecorder | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcript = useRef(onTranscript);
@@ -36,14 +37,17 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
     setPhase(next);
   }, []);
 
-  const release = useCallback(() => {
+  const release = useCallback((all = false) => {
     generation.current++;
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     recorder.current?.dispose();
     recorder.current = null;
-    recognizer.current?.dispose();
-    recognizer.current = null;
+    if (all || currentPhase.current === "loading" || currentPhase.current === "transcribing") {
+      recognizer.current?.dispose();
+      recognizer.current = null;
+      modelReady.current = false;
+    }
     currentPhase.current = "idle";
   }, []);
 
@@ -59,8 +63,10 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
     setPhase("idle");
     setMessage("");
     setError(null);
-    return release;
-  }, [contextKey, enabled, release]);
+    return () => release();
+  }, [contextKey, release]);
+
+  useEffect(() => () => release(true), [release]);
 
   const fail = useCallback((cause: unknown, token: number) => {
     if (token !== generation.current) return;
@@ -70,7 +76,7 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
     setError(errorMessage(cause));
   }, [release]);
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(async (reason: "manual" | "timeout" = "manual") => {
     if (currentPhase.current !== "recording") return;
     const token = generation.current;
     transition("transcribing");
@@ -80,36 +86,41 @@ export function useSpeechInput({ contextKey, enabled, onTranscript }: {
       const audio = await recorder.current!.stop();
       if (token !== generation.current) return;
       recorder.current = null;
-      if (audio.samples.length < audio.sampleRate * 0.2) throw new Error("录音太短，请再说一次。");
+      if (audio.samples.length < audio.sampleRate * 0.2) {
+        transition("idle");
+        throw new Error("录音太短，请再说一次。");
+      }
       const text = (await recognizer.current!.transcribe(audio.samples, audio.sampleRate)).trim();
       if (token !== generation.current) return;
-      if (!text) throw new Error("未识别到语音，请靠近麦克风再试一次。");
-      transcript.current(text);
       transition("idle");
-      setMessage("已填入识别文字，请确认后发送。");
+      if (!text) throw new Error("未识别到语音，请靠近麦克风再试一次。");
+      const message = await transcript.current(text, reason === "manual");
+      if (token !== generation.current) return;
+      setMessage(message || (reason === "timeout" ? "已达到录音时限，请确认文字后发送。" : "识别完成。"));
     } catch (cause) { fail(cause, token); }
   }, [fail, transition]);
 
   const start = useCallback(async () => {
     if (!enabled || unavailable || currentPhase.current !== "idle") return;
     const token = ++generation.current;
-    transition("loading");
+    transition(modelReady.current ? "permission" : "loading");
     setError(null);
-    setMessage("正在加载本机语音模型（首次加载较慢）…");
+    setMessage(modelReady.current ? "正在开启麦克风…" : "正在加载本机语音模型（首次加载较慢）…");
     try {
       recorder.current = new MicrophoneRecorder();
       recognizer.current ??= new SherpaRecognizer();
-      await recognizer.current.load((progress) => {
+      if (!modelReady.current) await recognizer.current.load((progress) => {
         if (token === generation.current) setMessage(progress);
       });
       if (token !== generation.current) return;
+      modelReady.current = true;
       transition("permission");
       setMessage("请允许浏览器使用麦克风…");
       await recorder.current.start();
       if (token !== generation.current) return;
       transition("recording");
       setMessage(`正在录音，点击“停止并识别”结束（最长 ${MAX_RECORDING_SECONDS} 秒）。`);
-      timer.current = setTimeout(() => { void stop(); }, MAX_RECORDING_SECONDS * 1000);
+      timer.current = setTimeout(() => { void stop("timeout"); }, MAX_RECORDING_SECONDS * 1000);
     } catch (cause) { fail(cause, token); }
   }, [enabled, fail, stop, transition, unavailable]);
 

@@ -2,8 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ ask: vi.fn(), start: vi.fn(), stop: vi.fn(), cancel: vi.fn(),
-  phase: "idle", active: false, transcript: null as null | ((text: string) => void) }));
-vi.mock("./useSpeechInput", () => ({ useSpeechInput: (options: { onTranscript: (text: string) => void }) => {
+  phase: "idle", active: false, transcript: null as null | ((text: string, autoSend: boolean) => Promise<string>) }));
+vi.mock("./useSpeechInput", () => ({ useSpeechInput: (options: { onTranscript: (text: string, autoSend: boolean) => Promise<string> }) => {
   mocks.transcript = options.onTranscript;
   return { ...mocks, message: "", error: null, unavailable: null };
 } }));
@@ -18,10 +18,10 @@ vi.mock("../../../shared/api/client", async (original) => ({
 
 import { AssistantPanel } from "../AssistantPanel";
 
-beforeEach(() => { vi.clearAllMocks(); mocks.phase = "idle"; mocks.active = false; });
+beforeEach(() => { vi.clearAllMocks(); mocks.phase = "idle"; mocks.active = false; mocks.ask.mockResolvedValue(true); });
 afterEach(cleanup);
 
-it("语音按钮不提交表单，识别文字追加到草稿，确认后才发送", async () => {
+it("手动停止后自动发送合成草稿，成功后清空", async () => {
   render(<AssistantPanel conversationId="c1" scopeId="album1" />);
   const input = screen.getByRole("textbox", { name: "向助手提问" }) as HTMLInputElement;
   await waitFor(() => expect(input.disabled).toBe(false));
@@ -29,11 +29,9 @@ it("语音按钮不提交表单，识别文字追加到草稿，确认后才发�
   fireEvent.click(screen.getByRole("button", { name: "语音输入" }));
   expect(mocks.start).toHaveBeenCalledTimes(1);
   expect(mocks.ask).not.toHaveBeenCalled();
-  act(() => mocks.transcript!("找一下去年旅行的照片。"));
-  expect(input.value).toBe("请帮我 找一下去年旅行的照片。");
-  expect(mocks.ask).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  expect(mocks.ask).toHaveBeenCalledTimes(1);
+  await act(async () => { await mocks.transcript!("找一下去年旅行的照片。", true); });
+  expect(input.value).toBe("");
+  expect(mocks.ask).toHaveBeenCalledExactlyOnceWith("c1", "请帮我 找一下去年旅行的照片。");
 });
 
 it("录音时阻止 Enter/表单提交，支持停止和取消", async () => {
@@ -48,4 +46,45 @@ it("录音时阻止 Enter/表单提交，支持停止和取消", async () => {
   fireEvent.click(screen.getByRole("button", { name: "取消语音" }));
   expect(mocks.stop).toHaveBeenCalledTimes(1);
   expect(mocks.cancel).toHaveBeenCalledTimes(1);
+});
+
+it("超时只填回草稿，发送失败保留文字，同步重复提交只请求一次", async () => {
+  render(<AssistantPanel conversationId="c1" scopeId="album1" />);
+  const input = screen.getByRole("textbox", { name: "向助手提问" }) as HTMLInputElement;
+  await waitFor(() => expect(input.disabled).toBe(false));
+  await act(async () => { await mocks.transcript!("超时文字", false); });
+  expect(input.value).toBe("超时文字");
+  expect(mocks.ask).not.toHaveBeenCalled();
+  mocks.ask.mockResolvedValue(false);
+  await act(async () => {
+    fireEvent.submit(input.closest("form")!);
+    fireEvent.submit(input.closest("form")!);
+  });
+  expect(mocks.ask).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe("超时文字");
+});
+
+it("旧请求完成不清空用户后来编辑的草稿", async () => {
+  let accept!: (accepted: boolean) => void;
+  mocks.ask.mockReturnValue(new Promise<boolean>((resolve) => { accept = resolve; }));
+  render(<AssistantPanel conversationId="c1" scopeId="album1" />);
+  const input = screen.getByRole("textbox", { name: "向助手提问" }) as HTMLInputElement;
+  await waitFor(() => expect(input.disabled).toBe(false));
+  let submitted!: Promise<string>;
+  act(() => { submitted = mocks.transcript!("已发送的问题", true); });
+  fireEvent.change(input, { target: { value: "下一条草稿" } });
+  await act(async () => { accept(true); await submitted; });
+  expect(input.value).toBe("下一条草稿");
+});
+
+it("自动发送失败时保留识别文字并返回明确提示", async () => {
+  mocks.ask.mockResolvedValue(false);
+  render(<AssistantPanel conversationId="c1" scopeId="album1" />);
+  const input = screen.getByRole("textbox", { name: "向助手提问" }) as HTMLInputElement;
+  await waitFor(() => expect(input.disabled).toBe(false));
+  let message = "";
+  await act(async () => { message = await mocks.transcript!("保留这个问题", true); });
+  expect(mocks.ask).toHaveBeenCalledExactlyOnceWith("c1", "保留这个问题");
+  expect(input.value).toBe("保留这个问题");
+  expect(message).toContain("发送失败或状态未确认");
 });

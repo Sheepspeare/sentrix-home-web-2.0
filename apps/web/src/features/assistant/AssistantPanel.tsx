@@ -136,11 +136,6 @@ export function AssistantPanel({
     attemptNo,
     turnId: liveTurnId,
   } = useTurnStream();
-  const speech = useSpeechInput({
-    contextKey: JSON.stringify([scopeId, conversationId]),
-    enabled: conversationId !== null && !historyLoading && !busy,
-    onTranscript: (recognized) => setText((draft) => draft.trim() ? `${draft.trimEnd()} ${recognized}` : recognized),
-  });
 
   const settled = useRef<string | null>(null);
   /** 当前这一轮是哪个会话的哪条 exchange——切换会话后到达的结果不该串台。 */
@@ -298,7 +293,7 @@ export function AssistantPanel({
         },
         ...previous,
       ]);
-      void ask(conversationId, question);
+      return ask(conversationId, question);
     },
     [ask, conversationId],
   );
@@ -367,14 +362,44 @@ export function AssistantPanel({
     );
   }, []);
 
+  const submitting = useRef(false);
+  const draftVersion = useRef(0);
+  const contextRef = useRef(conversationId);
+  useEffect(() => { contextRef.current = conversationId; draftVersion.current++; }, [conversationId, scopeId]);
+
+  async function submitQuestion(question: string): Promise<string> {
+    if (!question.trim() || conversationId === null || busy || historyLoading || submitting.current) {
+      return "当前暂不能发送，已保留文字，请稍后发送。";
+    }
+    submitting.current = true;
+    const context = conversationId;
+    const version = draftVersion.current;
+    try {
+      const accepted = await runQuestion(question.trim());
+      if (contextRef.current !== context || draftVersion.current !== version) return "";
+      if (accepted) {
+        setText("");
+        return "已发送，正在等待回答。";
+      }
+      return "发送失败或状态未确认，已保留文字，请检查会话后再试。";
+    } finally { submitting.current = false; }
+  }
+
+  const speech = useSpeechInput({
+    contextKey: JSON.stringify([scopeId, conversationId]),
+    enabled: conversationId !== null && !historyLoading && !busy,
+    onTranscript: async (recognized, autoSend) => {
+      const question = text.trim() ? `${text.trimEnd()} ${recognized}` : recognized;
+      setText(question);
+      if (!autoSend) return "已达到录音时限，请确认文字后发送。";
+      return submitQuestion(question);
+    },
+  });
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const question = text.trim();
-    if (question === "" || conversationId === null || busy || historyLoading || speech.active) {
-      return;
-    }
-    setText("");
-    runQuestion(question);
+    if (speech.active) return;
+    await submitQuestion(text);
   }
 
   // 最新一轮在最上面；“下一页”只挂在它上面，不能挂到列表末尾的旧问题上。
@@ -386,7 +411,7 @@ export function AssistantPanel({
       <form className="assistant-ask" onSubmit={submit}>
         <input
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => { draftVersion.current++; setText(event.target.value); }}
           placeholder="例如：给我看看在海边的照片"
           aria-label="向助手提问"
           disabled={conversationId === null || historyLoading || speech.active}
@@ -422,7 +447,7 @@ export function AssistantPanel({
         ) : null}
       </form>
       <p id="assistant-speech-status" className="assistant-speech-status" role="status" aria-live="polite">
-        {speech.unavailable ?? (speech.message || "语音在本机识别，识别后可编辑再发送。")}
+        {speech.unavailable ?? (speech.message || "语音在本机识别，点击“停止并识别”后自动发送。")}
       </p>
       {speech.error ? <p className="error" role="alert">{speech.error}</p> : null}
 

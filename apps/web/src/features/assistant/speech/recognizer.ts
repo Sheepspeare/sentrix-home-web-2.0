@@ -11,13 +11,19 @@ export const MAX_RECORDING_SECONDS = 60;
 export class SherpaRecognizer implements SpeechRecognizer {
   private worker: Worker | null = null;
   private ready = false;
+  private loading: Promise<void> | null = null;
   private pending: { reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
 
   load(onProgress: (message: string) => void): Promise<void> {
     if (this.ready) return Promise.resolve();
+    if (this.loading) return this.loading;
     this.worker = new Worker("/speech/recognizer-worker.js");
-    return this.request<void>({ type: "load", base: SPEECH_ASSET_BASE }, 300_000, onProgress)
-      .then(() => { this.ready = true; });
+    const worker = this.worker;
+    const loading = this.request<void>({ type: "load", base: SPEECH_ASSET_BASE }, 300_000, onProgress)
+      .then(() => { if (this.worker === worker) this.ready = true; })
+      .finally(() => { if (this.loading === loading) this.loading = null; });
+    this.loading = loading;
+    return loading;
   }
 
   transcribe(samples: Float32Array, sampleRate: number): Promise<string> {
@@ -74,5 +80,6 @@ export class SherpaRecognizer implements SpeechRecognizer {
     this.worker?.terminate();
     this.worker = null;
     this.ready = false;
+    this.loading = null;
   }
 }

@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("本机语音输入生命周期", () => {
-  it("停止后填回文字，不自动发起问答，并复用已加载模型", async () => {
+  it("手动停止产生自动发送意图", async () => {
     const onTranscript = vi.fn();
     const { result } = renderHook(() => useSpeechInput({ contextKey: "a", enabled: true, onTranscript }));
     await act(() => result.current.start());
@@ -43,7 +43,7 @@ describe("本机语音输入生命周期", () => {
     expect(onTranscript).not.toHaveBeenCalled();
     await act(() => result.current.stop());
     expect(result.current.phase).toBe("idle");
-    expect(onTranscript).toHaveBeenCalledExactlyOnceWith("给我看看海边的照片。");
+    expect(onTranscript).toHaveBeenCalledExactlyOnceWith("给我看看海边的照片。", true);
     expect(mocks.transcribe).toHaveBeenCalledWith(expect.any(Float32Array), 16000);
   });
 
@@ -101,6 +101,7 @@ describe("本机语音输入生命周期", () => {
     await act(() => result.current.start());
     await act(() => vi.advanceTimersByTimeAsync(60_000));
     await act(() => result.current.stop());
+    expect(onTranscript).toHaveBeenCalledWith("给我看看海边的照片。", false);
     expect(mocks.stop).toHaveBeenCalledTimes(1);
     expect(onTranscript).toHaveBeenCalledTimes(1);
   });
@@ -122,4 +123,42 @@ describe("本机语音输入生命周期", () => {
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
   });
+});
+
+it("三轮录音及 busy 切换只加载一次模型，取消录音也保留模型", async () => {
+  const { result, rerender } = renderHook(({ enabled }) => useSpeechInput({ contextKey: "a", enabled, onTranscript: vi.fn() }), { initialProps: { enabled: true } });
+  for (let i = 0; i < 3; i++) {
+    await act(() => result.current.start());
+    await act(() => result.current.stop());
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+  }
+  await act(() => result.current.start());
+  act(() => result.current.cancel());
+  await act(() => result.current.start());
+  expect(mocks.load).toHaveBeenCalledTimes(1);
+  expect(mocks.disposeModel).not.toHaveBeenCalled();
+});
+
+it("识别失败销毁异常模型，下次录音重新初始化", async () => {
+  mocks.transcribe.mockRejectedValueOnce(new Error("解码失败"));
+  const onTranscript = vi.fn();
+  const { result } = renderHook(() => useSpeechInput({ contextKey: "a", enabled: true, onTranscript }));
+  await act(() => result.current.start());
+  await act(() => result.current.stop());
+  expect(result.current.error).toBe("解码失败");
+  expect(onTranscript).not.toHaveBeenCalled();
+  expect(mocks.disposeModel).toHaveBeenCalledTimes(1);
+  await act(() => result.current.start());
+  expect(mocks.load).toHaveBeenCalledTimes(2);
+  expect(result.current.phase).toBe("recording");
+});
+
+it("重复手动停止只识别和提交一次", async () => {
+  const onTranscript = vi.fn();
+  const { result } = renderHook(() => useSpeechInput({ contextKey: "a", enabled: true, onTranscript }));
+  await act(() => result.current.start());
+  await act(async () => { await Promise.all([result.current.stop(), result.current.stop()]); });
+  expect(mocks.stop).toHaveBeenCalledTimes(1);
+  expect(onTranscript).toHaveBeenCalledExactlyOnceWith("给我看看海边的照片。", true);
 });
