@@ -155,6 +155,7 @@ def signals_prompt(pairs: tuple[CausalPair, ...]) -> str:
             '"confidence":0.0,"reason":"无"}]}',
             "edge_type must be exactly LEADS_TO, ENABLES, or NONE.",
             "reason: Chinese, at most 12 characters; use 无 when has_causal=false.",
+            "Use double quotes for all JSON keys and strings. Use lowercase true/false booleans.",
             "Do not add explanations, markdown, or missing fields.",
         )
     )

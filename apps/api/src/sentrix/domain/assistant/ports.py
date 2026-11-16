@@ -23,6 +23,7 @@ from sentrix.domain.assistant.models import (
 )
 from sentrix.domain.assistant.result_set import ResultSet
 from sentrix.domain.assistant.tools import ToolSpec
+from sentrix.domain.errors import DomainError
 
 
 class ModelServiceError(RuntimeError):
@@ -122,19 +123,6 @@ class ConversationRepository(Protocol):
     def rename(self, conversation_id: str, title: str, updated_at: datetime) -> bool: ...
 
     def delete(self, conversation_id: str, updated_at: datetime) -> bool: ...
-
-    def add_message(
-        self,
-        *,
-        conversation_id: str,
-        scope_id: str,
-        turn_id: str,
-        role: str,
-        content: str,
-        created_at: datetime,
-    ) -> Message: ...
-
-    def list_messages(self, conversation_id: str, limit: int) -> Sequence[Message]: ...
 
     def history_for_prompt(self, conversation_id: str, limit: int) -> Sequence[Message]: ...
 
@@ -290,3 +278,44 @@ class ToolExecutor(Protocol):
     """把一次工具调用变成一份观察。实现放在 application 层。"""
 
     def execute(self, call: ToolCall, arguments: Mapping[str, Any]) -> Mapping[str, Any]: ...
+
+
+class SpeechUnavailable(DomainError):
+    code = "speech_unavailable"
+    status_code = 503
+
+
+class SpeechBusy(DomainError):
+    code = "speech_busy"
+    status_code = 429
+
+
+class InvalidSpeechAudio(DomainError):
+    code = "invalid_speech_audio"
+    status_code = 400
+
+
+class SpeechRecognitionFailed(DomainError):
+    code = "speech_recognition_failed"
+    status_code = 503
+
+
+class SpeechRecognizer(Protocol):
+    """助手语音输入，不写入媒体库。启动时 load，关闭时 close，请求不得懒加载。
+
+    transcribe 接受单声道 little-endian float32 PCM（8–192 kHz、0.2–60 秒）。
+    无语音返回空串；非法输入、不可用、忙碌、推理失败分别抛上面的领域错误。
+    单个模型实例串行推理，无等待队列；客户端取消不销毁共享模型。
+    """
+
+    @property
+    def available(self) -> bool: ...
+
+    @property
+    def load_error(self) -> str: ...
+
+    def load(self) -> None: ...
+
+    def transcribe(self, pcm: bytes, sample_rate: int) -> str: ...
+
+    def close(self) -> None: ...

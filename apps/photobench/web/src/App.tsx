@@ -140,6 +140,8 @@ export function App({ initialLoading = false }: AppProps) {
     setStartScoring(defaultScoring(selectedAlbum));
   }, [selectedAlbum]);
   const [deleteScopeAfterRun, setDeleteScopeAfterRun] = useState(false);
+  const [graphEnabled, setGraphEnabled] = useState(true);
+  const [graphBaselineRunId, setGraphBaselineRunId] = useState("");
   const [suiteRunning, setSuiteRunning] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxTarget | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("runs");
@@ -280,6 +282,8 @@ export function App({ initialLoading = false }: AppProps) {
             ? modelApi.modelEndpoint.trim()
             : "",
         endpoint_model: selectedModels.has("__current__") ? modelApi.selectedEndpointModel : "",
+        graph_enabled: graphEnabled,
+        graph_baseline_run_id: graphEnabled ? graphBaselineRunId.trim() || undefined : undefined,
         delete_scope_after_run: reuseApi.runMode === "full" ? deleteScopeAfterRun : false,
       });
       // 1.0 :2682-2683：选中新 run。`useRuns` 没暴露 `setActiveRunId`，`selectRun` 是等价入口。
@@ -375,6 +379,7 @@ export function App({ initialLoading = false }: AppProps) {
         keyframeAnalysisError: runs.keyframeAnalysisError,
         summary: effectiveRunSummary(runs.activeRun),
         chainDetail,
+        onExpandedChange: runs.setAnalysisOpen,
         onOpenChainNode: openChainNode,
         onCloseChainDetail: () => setChainDetail(null),
         onOpenImage: (media: ChainMedia) => {
@@ -399,6 +404,7 @@ export function App({ initialLoading = false }: AppProps) {
               model={{ ...modelApi, selectedModels, setSelectedModels }}
               reuse={reuseApi}
               album={{ selectedAlbum, setSelectedAlbum, selectedQa, setSelectedQa }}
+              baselineRuns={runs.runs}
               start={{
                 ...startInput,
                 scoring: startScoring, onScoringChange: setStartScoring,
@@ -407,6 +413,10 @@ export function App({ initialLoading = false }: AppProps) {
                   judgeModel:configApi.judgeModel,onSavePrompt:()=> {void configApi.saveJudgePrompt(runs.activePromptKind,runs.rejudgePrompt);},onResetPrompt:runs.resetJudgePrompt},
                 deleteScopeAfterRun,
                 onDeleteScopeAfterRunChange: setDeleteScopeAfterRun,
+                graphEnabled,
+                onGraphEnabledChange: setGraphEnabled,
+                graphBaselineRunId,
+                onGraphBaselineRunIdChange: setGraphBaselineRunId,
                 onStart: () => {
                   void startSuite();
                 },

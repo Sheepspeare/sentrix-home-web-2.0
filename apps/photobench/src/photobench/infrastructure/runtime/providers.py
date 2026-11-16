@@ -108,10 +108,7 @@ def gateway_matches_selected(observed: str, expected: str) -> bool:
     gateway, upstream, token = benchmark_gateway()
     if not (gateway and upstream and token):
         return False
-    return (
-        normalize_openai_base_url(observed) == gateway
-        and normalize_openai_base_url(expected) == upstream
-    )
+    return normalize_openai_base_url(observed) == gateway and normalize_openai_base_url(expected) == upstream
 
 
 def _configured_set(env_name: str, defaults: tuple[str, ...]) -> set[str]:

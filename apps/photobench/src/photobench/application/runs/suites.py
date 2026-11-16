@@ -307,6 +307,10 @@ class RunSuites:
         models = payload.get("models", [])
         if not isinstance(models, list) or not models:
             raise InvalidRequestError("models must contain at least one model")
+        graph_enabled = payload.get("graph_enabled", True)
+        if not isinstance(graph_enabled, bool):
+            raise InvalidRequestError("graph_enabled must be a boolean")
+        graph_baseline_run_id = str(payload.get("graph_baseline_run_id") or "").strip()
         model_base_url = normalize_model_base_url(str(payload.get("model_base_url") or ""))
         manager_url = normalize_service_url(str(payload.get("vllm_manager_url") or ""))
         runtime_framework = self._detect_framework(
@@ -401,6 +405,8 @@ class RunSuites:
                     judge_api_key=deps.judge.judge_api_key,
                     scoring_configs=configs,
                     evaluation_options=scoring_options(payload.get("evaluation_options")),
+                    graph_enabled=graph_enabled,
+                    graph_baseline_run_id=graph_baseline_run_id if graph_enabled else "",
                     judge_prompts={
                         "answer_quality": deps.judge.answer_quality_prompt,
                         "task_decision": deps.judge.task_judge_prompt,
@@ -440,6 +446,7 @@ class RunSuites:
             "models": [str(model) for model in models],
             "qa_set": qa_set,
             "mode": mode,
+            "graph_enabled": graph_enabled,
             # 回显复用的那个 scope（1.0 ``start_suite`` 的响应形状）。full 模式为 None。
             "existing_scope_id": existing_scope_id or None,
             "current_model_snapshot": None,
@@ -626,6 +633,8 @@ class RunSuites:
             prior_scoring=prior_scoring,
             repair_missing_judges=repair_missing and not bool(saved.get("scoring_profiles")),
             evaluation_options=scoring_options(saved.get("evaluation_options")),
+            graph_enabled=saved.get("graph_enabled") is not False,
+            graph_baseline_run_id=str(saved.get("graph_baseline_run_id") or ""),
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
             evidence_judge_enabled=bool(saved.get("evidence_judge_enabled")),

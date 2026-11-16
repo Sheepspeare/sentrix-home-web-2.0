@@ -50,6 +50,7 @@ from PIL import Image, ImageOps
 
 from sentrix.domain.assistant.intent import json_output_fact
 from sentrix.domain.assistant.ports import ModelServiceError
+from sentrix.domain.assistant.request_context import request_slot
 from sentrix.domain.media.models import MODEL_FACT_CONFIDENCE, ObservationFact
 from sentrix.domain.media.ports import ObservationSemantics
 from sentrix.infrastructure.assistant.chat_client import MAX_ANSWER_TOKENS
@@ -274,14 +275,15 @@ def chat_json(
             "messages": [{"role": "user", "content": content}],
             "max_tokens": MAX_ANSWER_TOKENS,
         }
+        slot = request_slot()
+        if slot is not None:
+            body["id_slot"] = slot
         if model.generation_profile == "qwen35_nonthinking":
             # Count the same structured-output request that will be generated.
             body["response_format"] = {"type": "json_object"}
         fact["diagnostics"].update(model.apply_output_budget(body, timeout_s=timeout_s))
         fact["diagnostics"]["request_sent"] = None
-        response = httpx.post(
-            endpoint, json=body, timeout=timeout_s, headers=model_auth_headers()
-        )
+        response = httpx.post(endpoint, json=body, timeout=timeout_s, headers=model_auth_headers())
         fact["diagnostics"].update(request_sent=True, http_status=response.status_code)
         response.raise_for_status()
         payload = response.json()

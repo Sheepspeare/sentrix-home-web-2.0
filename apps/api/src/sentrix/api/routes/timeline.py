@@ -17,7 +17,6 @@ from sentrix.api.deps import get_container
 from sentrix.api.routes.family import TRIGGER_INGEST, run_family_graph_for_scope
 from sentrix.api.routes.identity import _confirmed_person_events
 from sentrix.api.routes.insights import run_insights_for_scope
-from sentrix.api.routes.media import build_import_assets, refresh_memory_graph
 from sentrix.api.schemas.family import FamilyRunResponse
 from sentrix.api.schemas.operations import OperationCancellationResponse
 from sentrix.api.schemas.timeline import (
@@ -63,6 +62,7 @@ from sentrix.application.memories.read_timeline import (
 )
 from sentrix.application.memories.summarize_event import SummarizeEvent
 from sentrix.bootstrap.container import Container
+from sentrix.bootstrap.import_wiring import build_import_assets, refresh_memory_graph
 from sentrix.domain.media.progress import OperationCancelled
 
 log = logging.getLogger("sentrix.api.timeline")
@@ -504,7 +504,7 @@ def _execute_pipeline(
 
             graph_started = time.perf_counter()
             with stage_timings.measure("memory_graph"):
-                graph = refresh_memory_graph(container, request.scope_id)
+                graph = refresh_memory_graph(container, request.scope_id) if request.graph_enabled else None
             timings["memory_graph"] = round(time.perf_counter() - graph_started, 3)
             timings["causal_graph"] = graph.causal_seconds if graph is not None else 0.0
 
@@ -542,6 +542,7 @@ def _execute_pipeline(
                 scope_id=graph.scope_id,
                 node_count=graph.node_count,
                 edge_count=graph.edge_count,
+                graph_structure_seconds=timings["memory_graph"],
                 causal_candidate_pairs=graph.causal_candidate_pairs,
                 causal_edges=graph.causal_edges,
                 causal_status=graph.causal_status,

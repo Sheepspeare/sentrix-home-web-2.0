@@ -55,8 +55,13 @@ SENTRIX_DEPLOYMENT_PROFILE=mac ./scripts/deploy/start_legacy_mac.sh
 确认 API 8191 已启动后，在另一个终端运行：
 
 ```bash
-make web-dev        # http://localhost:4274/
+make web-dev        # https://localhost:4274/
 ```
+
+“问一句”的语音输入首次需安装更新后的 Python 依赖并运行 `make speech-prepare`。
+SenseVoice-Small / sherpa-onnx 在本机 API 启动时加载，后续请求复用；
+浏览器录音发送到本机后端，音频不落盘、不使用云端 ASR。
+资源准备和 HTTPS 要求见[语音输入运行手册](docs/runbooks/assistant-speech.md)。
 
 该目标默认代理到 `http://127.0.0.1:8191`，并启用已有的本地用户模式，无需运行 8210
 控制面；账号登录、管理台与反馈功能需要控制面。完整 Mac 启动脚本已启动 API 时，
@@ -108,6 +113,56 @@ PHOTOBENCH_QA_CONCURRENCY=4 ...
 153 不设 profile（默认 `server`）；158 只需在启动时设
 `SENTRIX_DEPLOYMENT_PROFILE=mac`，再补齐上面这些部署项。
 
+### llama.cpp 启动参数（缓存/端侧速度已验证）
+
+> 2026-11-12/13 的 487 题实测配置；模型路径按部署位置替换。
+> 这组参数只影响缓存复用与 prefill，不改变模型权重或答案本身。
+
+**153（server，RTX 3090 24GB）**
+
+```bash
+/home/asus/llama.cpp/build/bin/llama-server \
+  -m /home/asus/models/llama/qwen3.5/qwen35-q4km.gguf \
+  --mmproj /home/asus/models/llama/qwen3.5/qwen35-mmproj-f16.gguf \
+  --alias qwen35-q4km --host 0.0.0.0 --port 8100 \
+  --n-gpu-layers 999 --ctx-size 65536 --parallel 4 \
+  --metrics --reasoning off \
+  --cache-ram 12288 --ctx-checkpoints 8 --checkpoint-min-step 256 \
+  --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 \
+  --ubatch-size 2048
+```
+
+**158 Mac mini（16GB，单用户）**
+
+```bash
+/opt/homebrew/bin/llama-server \
+  -m /Users/saas/GitHub/Sentrix-Home-Web/models/llama/qwen35-q4km.gguf \
+  --mmproj /Users/saas/GitHub/Sentrix-Home-Web/models/llama/qwen35-mmproj-f16.gguf \
+  --alias qwen35-q4km --host 0.0.0.0 --port 8100 \
+  --n-gpu-layers 999 --ctx-size 65536 --parallel 4 \
+  --metrics --reasoning off \
+  --cache-ram 2048 --ctx-checkpoints 8 --checkpoint-min-step 256 \
+  --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0
+# --ubatch-size 2048 在 Metal 上复测后再加
+```
+
+参数含义：
+
+- `--cache-ram`（MiB，默认 8192；0 关闭，-1 不限）：主机内存里的 prompt 缓存总预算，
+  保存槽位状态（KV、循环状态、checkpoint）供后续请求恢复前缀。153 用 12288；
+  Mac 16GB 用 2048，避免 OOM。
+- `--ctx-checkpoints`（每槽个数，默认 32）：Qwen3.5 是混合线性注意力，循环状态不能
+  任意截断，回到较早位置必须有 checkpoint；实测 8 已足够。
+- `--checkpoint-min-step`（token，默认 8192）：checkpoint 的最小间隔；调到 256 才能
+  让 1–3k token 的短对话在末尾附近找到可恢复点。
+- `--ctx-size/--parallel`：`--ctx-size` 是总窗口，`--parallel 4` 时每槽 16384 token。
+- `--ubatch-size 2048`：只影响 prefill 的物理批大小；153 实测冷 prefill +4.7%，
+  decode 与缓存命中不变。
+- `--flash-attn on`、`--cache-type-k/v q8_0`：KV 用 8-bit 量化，显存约为 f16 的一半，
+  实测对 decode/质量影响在噪声内。
+- API 侧建议 `SENTRIX_VLM_SLOTS=1`（不 pin，交给服务端 LCP）；只有需要确定性槽位
+  隔离时才设为与 `--parallel` 一致。
+
 ---
 
 ## 目录
@@ -126,7 +181,11 @@ PhotoBench资源采集工具的固定版本、平台来源及安装核对见[资
 
 记忆构建沿用 2.0 原有资产/观察/事件/实体/事实/向量流水线，不引入旧版记忆生成器。可插拔的 `BuildMemoryGraph` 从这些标准端口构建事件、上下文、同视频关键帧时序、对象/关系枢纽、互选视觉近邻和 `rules_vlm` 因果边；`RetrieveGraph` 按问题类型有界拓展，原回答提示词和生成器不变。图效果的参考边从节点来源字段重建，不能把构图边自身当真值；详见 `docs/refactor/hpq-causal-deviations.md`。当前观察没有 bbox，因果规则仍使用 hpq 的 label-only 回退。
 
+资料库的媒体详情页可删除源图片或视频。删除视频时会一并删除派生关键帧及其独占观察、事件、事实、图边和索引；仍有其他媒体证据的共享记忆保留。SQLite 删除与外部清理任务同事务提交，随后清理受控媒体文件和 Qdrant 镜像。数据目录外的导入源文件会保留；外部清理失败会在页面提示，可点“重试外部清理”或调用 `POST /api/v1/assets/deletion-cleanup/retry`。资料库“删除记录”可查看最近 50 条及文件、向量镜像清理状态；`GET /api/v1/assets/deletions?scope_id=<相册ID>&limit=50` 返回同一份记录（最多 200 条）。此操作不可撤销。
+
 ---
+
+记忆修正入口位于主前端：事件详情的“修正事件”、媒体详情的“修正媒体记忆”、实体详情的“修正实体”，人物与关系沿用现有编辑入口。保存后同步确认身份快照、图谱和受影响的词法/文本向量索引；“记忆修正记录与同步状态”可查看前后内容、同步错误并重试。新观察/事件/实体修正使用 revision 防止覆盖其他用户的新版本，权威修改和审计任务同事务落库；既有身份/关系入口在写入前持久登记任务，保留原接口响应。同步失败保留修改和任务，不冒称全部完成。修正不会重新抽帧或重新调用观察模型。
 
 ## 改动前检查（最低要求）
 
@@ -145,6 +204,11 @@ make ci
 
 PhotoBench 运行结果在 `apps/photobench/results/<run_id>/`，页面在 8772。
 QA 数据集在 `apps/photobench/datasets/`。
+
+本机双场景（主相册手动上传/AI 记忆对话 + `album3-max-video10` 487QA）启动与验收见
+[`local-mac-upload-and-487qa.md`](docs/runbooks/local-mac-upload-and-487qa.md)。该工作副本使用
+`scripts/deploy/start_local_two_workflows_mac.sh`，评测素材目录和结果目录由本机忽略文件
+`data/local-mac.env` 指定，不会写入 Git。
 
 ---
 
