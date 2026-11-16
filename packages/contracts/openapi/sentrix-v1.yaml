@@ -4618,6 +4618,14 @@ components:
           - type: string
           - type: 'null'
           title: Updated At
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - id
@@ -5217,6 +5225,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/FamilyMembershipPayload'
           - type: 'null'
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5366,6 +5382,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/FamilyPortraitPayload'
           - type: 'null'
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5504,6 +5528,14 @@ components:
             $ref: '#/components/schemas/FamilyRelationshipPayload'
           type: array
           title: Relationships
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5568,6 +5600,14 @@ components:
             $ref: '#/components/schemas/FamilyRelationshipPayload'
           type: array
           title: Retracted
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -7086,6 +7126,14 @@ components:
             type: string
           type: array
           title: Aliases
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - entity
