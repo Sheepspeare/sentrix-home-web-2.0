@@ -669,7 +669,7 @@ class Container:
         from sentrix.infrastructure.media.upload_cleanup import reconcile_uploads
 
         return reconcile_uploads(
-            media_dir=self.settings.media_dir,
+            storage=self.media_storage,
             staging_dir=self.media_storage.staging_dir,
             jobs=self.import_jobs,
             grace_s=self.settings.upload_cleanup_grace_s,

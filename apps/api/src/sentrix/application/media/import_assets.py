@@ -1,7 +1,7 @@
 """导入用例：把一次上传变成 Asset + 地点 + 视觉向量 + Observation + 事件 + 词法投影。
 
-业务规则（都来自 1.0 的既有行为）：
-- 内容 SHA-256 去重，**按 scope 隔离**，不跨相册去重
+导入规则：
+- 资产记录按 scope + SHA256 去重；不同相册分别建记录，原始媒体文件按内容共享
 - 去重命中时不重复落盘
 - 拍摄时间与 GPS 来自 EXIF，抽不到就留空，**不阻断导入**
 
@@ -123,7 +123,7 @@ class ImportRequest:
     file_name: str
     content_type: str | None
     # 接收阶段已确认并持久化的类型；优先于扩展名/MIME 推断。
-    media_type: MediaType | None = None
+    media_type: MediaType | None = field(default=None, kw_only=True)
     content: bytes = b""
     # ``True`` 只完成资产落盘/登记，把关键帧与记忆构建留给显式流水线阶段。
     # 默认 False，保证既有单张导入与 ``POST /imports`` 的外部行为不变。
@@ -375,7 +375,14 @@ class ImportAssets:
             )
 
         asset_id = request.asset_id or _new_id("asset")
-        if request.source_path is None:
+        shared_file = self._assets.find_file_by_hash(content_sha256)
+        if shared_file is not None and Path(shared_file).is_file():
+            if _sha256_file(Path(shared_file)) != content_sha256:
+                raise ValueError("stored media content does not match its SHA256")
+            stored_path = self._storage.copy_from_path(asset_id, request.file_name, Path(shared_file))
+            if request.source_move and request.source_path is not None and request.source_path != stored_path:
+                self._storage.delete_assets((), (str(request.source_path),))
+        elif request.source_path is None:
             stored_path = self._storage.store(asset_id, request.file_name, request.content)
         elif request.source_move:
             stored_path = self._storage.move_from_path(asset_id, request.file_name, request.source_path)
@@ -429,7 +436,7 @@ class ImportAssets:
 
             declared_mime = mimetypes.guess_type(request.file_name)[0]
         mime_type = (
-            audio_mime_type(request.file_name, declared_mime)
+            audio_mime_type(request.file_name, request.content_type)
             if media_type is MediaType.AUDIO
             else declared_mime
         )

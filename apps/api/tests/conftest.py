@@ -245,6 +245,14 @@ def fake_embedding_startup(monkeypatch):
     monkeypatch.setattr(
         "sentrix.infrastructure.models.legacy.LegacyEmbeddingHealthProbe.smoke_test", lambda self: (True, "")
     )
+    # 执行器还会在每次领取作业时读 available；离线契约测试也须隔离这一探测。
+    monkeypatch.setattr(
+        "sentrix.infrastructure.models.wemm.WeMMSidecarEmbedder.available", property(lambda self: True)
+    )
+    monkeypatch.setattr(
+        "sentrix.infrastructure.models.legacy.LegacyEmbeddingHealthProbe.available",
+        property(lambda self: True),
+    )
     monkeypatch.setattr(
         "sentrix.infrastructure.models.generation_health.ModelGenerationHealth.check", lambda self: (True, "")
     )
@@ -280,7 +288,7 @@ def isolated_app(settings, fake_embedding_startup):
         text_embedder=fake_embedder,
         # 嵌入可用性也必须换掉：真实现会去打 8102 侧车，而契约测试不该依赖它。
         embedding_health=FakeEmbeddingHealth(),
-        model_health=SimpleNamespace(check=lambda: (True, "")),
+        model_health=SimpleNamespace(check=lambda: (True, ""), describe=lambda: {"models_ok": True}),
         vlm_observer=FakeVlmObserver(),
         chat_model=FakeChatModel(),
         face_detector=FakeFaceDetector(),

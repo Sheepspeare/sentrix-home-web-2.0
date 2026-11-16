@@ -328,7 +328,9 @@ async def upload_media(
             media = declared
 
         asset_id = f"asset_{uuid.uuid4().hex[:12]}"
-        final_path = container.media_storage.move_from_path(asset_id, file_name, staging_path)
+        final_path = await run_in_threadpool(
+            container.media_storage.move_from_path, asset_id, file_name, staging_path
+        )
         now = datetime.now(UTC)
         job = ImportJob(
             id=f"job_{uuid.uuid4().hex[:16]}",
@@ -364,14 +366,14 @@ async def upload_media(
         accepted = True
         if not created and stored.asset_id != asset_id:
             # 重试的新副本不是权威原件，删掉；返回第一次接收的作业。
-            final_path.unlink(missing_ok=True)
+            await run_in_threadpool(container.media_storage.delete_assets, (), (str(final_path),))
         return UploadAcceptedResponse(job_id=stored.id, asset_id=stored.asset_id, status="accepted")
     finally:
         if not accepted:
             await run_in_threadpool(container.import_jobs.release_upload, reservation)
             staging_path.unlink(missing_ok=True)
             if final_path is not None:
-                final_path.unlink(missing_ok=True)
+                await run_in_threadpool(container.media_storage.delete_assets, (), (str(final_path),))
 
 
 def schedule_video_job(container: Container, job_id: str) -> None:

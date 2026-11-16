@@ -1481,7 +1481,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ImportBatchRequest'
+              $ref: '#/components/schemas/AssetImportRequest'
         required: true
       responses:
         '201':
@@ -1501,7 +1501,6 @@ paths:
       tags:
       - timeline
       summary: Process Album Pipeline
-      description: 同步执行关键帧、记忆构建和图构建，并返回逐阶段耗时。
       operationId: process_album_pipeline_api_v1_pipeline_process_post
       requestBody:
         content:
@@ -1516,6 +1515,89 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PipelineProcessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/pipeline/finalize:
+    post:
+      tags:
+      - timeline
+      summary: Finalize Album Pipeline
+      description: Explicit recovery after the original request has stopped; source
+        inference is never repeated.
+      operationId: finalize_album_pipeline_api_v1_pipeline_finalize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineProcessRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineProcessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/pipeline/recover:
+    post:
+      tags:
+      - timeline
+      summary: Recover Album Pipeline
+      description: Explicit recovery after the owning product process has stopped;
+        preserve completed sources.
+      operationId: recover_album_pipeline_api_v1_pipeline_recover_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineProcessRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineProcessResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/pipeline/operations/{operation_id}:
+    get:
+      tags:
+      - timeline
+      summary: Pipeline Receipt
+      operationId: pipeline_receipt_api_v1_pipeline_operations__operation_id__get
+      parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Operation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Pipeline Receipt Api V1 Pipeline Operations  Operation
+                  Id  Get
         '422':
           description: Validation Error
           content:
@@ -3204,6 +3286,33 @@ components:
       - failures
       title: AssetImportBatchResponse
       description: 资产导入阶段响应：只落盘/登记，不包含关键帧、记忆或图构建。
+    AssetImportRequest:
+      properties:
+        directory:
+          type: string
+          maxLength: 4096
+          minLength: 1
+          title: Directory
+        scope_id:
+          type: string
+          title: Scope Id
+          default: home-default
+        limit:
+          type: integer
+          minimum: 1.0
+          title: Limit
+          default: 200
+        operation_id:
+          anyOf:
+          - type: string
+            pattern: ^[A-Za-z0-9_-]{1,96}$
+          - type: 'null'
+          title: Operation Id
+      type: object
+      required:
+      - directory
+      title: AssetImportRequest
+      description: 资产登记不执行模型推理，允许一次登记完整目录。
     AssetListResponse:
       properties:
         items:
@@ -6500,8 +6609,14 @@ components:
           items:
             type: string
           type: array
-          maxItems: 1000
           title: Asset Ids
+        operation_id:
+          anyOf:
+          - type: string
+            maxLength: 128
+            minLength: 1
+          - type: 'null'
+          title: Operation Id
         graph_enabled:
           type: boolean
           title: Graph Enabled
@@ -6513,6 +6628,16 @@ components:
       description: 显式流水线请求。``asset_ids`` 的顺序是语义提交顺序。
     PipelineProcessResponse:
       properties:
+        operation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operation Id
+        resumed_asset_ids:
+          items:
+            type: string
+          type: array
+          title: Resumed Asset Ids
         scope_id:
           type: string
           title: Scope Id

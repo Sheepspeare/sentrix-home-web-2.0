@@ -871,7 +871,10 @@ def test_a_third_search_is_refused_after_one_retry(env):
     run_turn.run(turn_id)
 
     assert [name for name, _ in toolbox.calls] == ["search_memories", "search_memories"]
-    refusals = [event for _seq, _attempt, event in turns.events_after(turn_id, 0) if event.status.value == "denied"]
+    refusals = [
+        event for _seq, _attempt, event in turns.events_after(turn_id, 0)
+        if event.status.value == "denied"
+    ]
     assert refusals and "检索额度" in refusals[0].text
 
 

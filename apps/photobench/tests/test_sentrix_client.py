@@ -162,7 +162,10 @@ def test_split_import_and_pipeline_use_the_explicit_endpoints():
     )
     assert http.calls[1][:3] == (
         f"{BASE}/api/v1/pipeline/process",
-        {"scope_id": "s1", "asset_ids": ["a1", "a2"], "operation_id": http.calls[1][1]["operation_id"], "graph_enabled": True},
+        {
+            "scope_id": "s1", "asset_ids": ["a1", "a2"],
+            "operation_id": http.calls[1][1]["operation_id"], "graph_enabled": True,
+        },
         "POST",
     )
     assert len(http.calls[1][1]["operation_id"]) == 32

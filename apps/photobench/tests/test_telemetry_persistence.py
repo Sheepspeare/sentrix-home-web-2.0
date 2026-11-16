@@ -40,7 +40,7 @@ def test_sampling_and_publishing_never_copy_or_persist_question_traces(history_e
     state = RunState({**_running(), "items": [UncopyableTrace()]}, run_id="r")
     state.persist = lambda **kwargs: pytest.fail("telemetry requested a full checkpoint")
     sample = execution._sample_writer(state)
-    for index in range(100):
+    for _index in range(100):
         sample({"index": 0, "temperature_c": 50})
     execution._publish_partial_gpu_metrics(state, {"samples_count": 100})
     assert len(writer.gpu_samples) == (100 if history_enabled else 0)

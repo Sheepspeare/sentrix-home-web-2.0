@@ -236,13 +236,13 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | 端口 | 定义 | 方法摘要 | 当前实现 |
 |---|---|---|---|
 | `OperationControl` | `domain/media/ports.py` | `start/request_cancel/check/finish`，有界登记与真实退出确认 | `InProcessOperationControl` |
-| `AssetRepository` | `domain/media/ports.py:71` | `add/get/list_by_scope/find_by_hash/update_status` | `SqliteAssetRepository` |
+| `AssetRepository` | `domain/media/ports.py` | `add/get/list_by_scope/find_by_hash/find_file_by_hash/update_status` | `SqliteAssetRepository` |
 | `MediaDeletionRepository` | `domain/media/ports.py` | `delete_asset/pending_cleanup/mark_cleanup/was_deleted/list_deletions` | `SqliteMediaDeletionRepository` |
 | `ObservationRepository` | `:89` | `add/get/list_by_asset/list_scope/enrich/latest_ocr_text/latest_people_snapshot` | `SqliteObservationRepository` |
 | `VlmObserver` | `:184` | `model_id`、`observe(path) -> ObservationSemantics \| None` | `OpenAIVlmObserver` |
 | `PhotoInspector` | `:201` | `model_id`、`inspect(path, question, faces, target_person, crop)` | `OpenAIPhotoInspector` |
 | `AssetObserver` | `:242` | `prepare/commit/observe` | `ObserveAsset`（application） |
-| `MediaStorage` | `:264` | `store/read/path_for` | `FileSystemMediaStorage` |
+| `MediaStorage` | `domain/media/ports.py` | `store/move_from_path/copy_from_path/read/read_asset/delete_assets/cleanup_orphans` | `FileSystemMediaStorage` |
 | `MetadataReader` | `:272` | `read(path) -> (time, gps, camera)` | `PillowMetadataReader` |
 | `PreviewEncoder` | `:278` | `encode_jpeg/crop_jpeg` | `PillowPreviewEncoder` |
 | `VideoMetadataReader` | `:297` | `read(path) -> VideoMetadata` | `FfprobeVideoMetadataReader` |
@@ -1414,3 +1414,12 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 持久执行尝试（attempt_no>0）的取消检查以 TurnRepository 的 cancel_requested 为准；
 不依赖已在重启时丢失、或在上次尝试收尾时移除的进程内操作登记。
 旧的未采用持久尝试编号的调用路径继续使用 OperationControl。
+
+
+### 2026-11-16 跨相册原始媒体文件共享
+
+`AssetRepository.find_file_by_hash` 返回可复用原件路径或 `None`，不复用相册记录和处理结果。
+`MediaStorage` 的写入方法在同一实例内按 SHA256 共享内容，资产路径及原名保持；受管原件不可原地改写。
+`delete_assets` 只解除对应引用，最后引用消失后回收内容；`cleanup_orphans` 在宽限期后清理孤儿。
+外部源文件独立，上传配额按实际文件身份计一次。新实现及离线真实文件验证见
+[共享媒体存储](../runbooks/shared-media-storage.md)。该能力默认生效，无新配置、HTTP 或评分契约。

@@ -191,6 +191,15 @@ class SqliteAssetRepository:
                 (status.value, asset_id),
             )
 
+    def find_file_by_hash(self, content_sha256: str) -> str | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT path FROM assets WHERE content_sha256 = ? AND parent_asset_id IS NULL"
+                " ORDER BY created_at, id LIMIT 1",
+                (content_sha256,),
+            ).fetchone()
+        return str(row["path"]) if row else None
+
 
 _OBSERVATION_COLUMNS = (
     "id, scope_id, asset_id, source_type, captured_at, confidence, caption, place, activity,"

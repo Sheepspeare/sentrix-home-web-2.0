@@ -19,9 +19,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from sentrix.api.routes import corrections as correction_routes
 from sentrix.application.identity.person_directory import EntityPersonDirectory
 from sentrix.domain.identity.models import PENDING_CLUSTER_NAME
-from sentrix.api.routes import corrections as correction_routes
 
 NOW = "2026-09-23T10:00:00+00:00"
 
