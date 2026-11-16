@@ -1911,3 +1911,101 @@ def test_debug_trace_is_off_by_default(env):
     trace = turns.get(turn_id).trace
     assert trace["include_debug"] is False
     assert trace["debug_calls"] == []
+
+
+@pytest.mark.parametrize("delivery_ok", [True, False])
+def test_final_answer_records_own_duration_before_judge(env, monkeypatch, delivery_ok):
+    """交付成功与拒绝均记录自身时长，后续核验耗时单独保存。"""
+    from importlib import import_module
+    from types import SimpleNamespace
+
+    clock = SimpleNamespace(value=100.0)
+    module = import_module("sentrix.application.assistant.run_turn")
+    monkeypatch.setattr(module, "time", SimpleNamespace(perf_counter=lambda: clock.value))
+
+    class TimedModel(ScriptedModel):
+        def complete(self, messages, tools):
+            clock.value += 0.9
+            return super().complete(messages, tools)
+
+    class TimedToolbox(StubToolbox):
+        def deliver(self, *args, **kwargs):
+            clock.value += 0.125
+            return super().deliver(*args, **kwargs)
+
+    _conversations, turns, conversation, _db = env
+    model = TimedModel(
+        [
+            tool_call("search_memories", "c1", query="海边"),
+            final_call("这是你要的两张海边照片。", "photo_1", "photo_2"),
+        ]
+    )
+    delivery = (
+        DELIVER_OK
+        if delivery_ok
+        else ToolOutcome(
+            observation={"failure_reason": "bad_handle"},
+            model_visible={"error": "bad_handle"},
+            failure_reason="bad_handle",
+        )
+    )
+    toolbox = TimedToolbox({"search_memories": SEARCH_OK, FINAL_ANSWER_TOOL: delivery})
+    run_turn = build(env, model, toolbox)
+    turn_id = run_turn.start(
+        TurnRequest(conversation_id=conversation.id, question=QUESTION, include_debug=True)
+    ).id
+    run_turn.run(turn_id)
+
+    events = [event for _, _, event in turns.events_after(turn_id, 0)]
+    terminal_tools = [
+        event
+        for event in events
+        if event.kind in {"tool_result", "tool_error"} and event.payload.get("tool") == FINAL_ANSWER_TOOL
+    ]
+    assert len(terminal_tools) == 1
+    event = terminal_tools[0]
+    assert event.kind == ("tool_result" if delivery_ok else "tool_error")
+    assert event.payload["duration_ms"] == 125.0
+    assert event.payload["arguments"]["selected_image_handles"] == ["photo_1", "photo_2"]
+    assert len(model.calls) == 2
+    assert len(model.judge_calls) == 1
+    trace = turns.get(turn_id).trace
+    judge = next(call for call in trace["model_calls"] if call["call_type"] == "faithfulness_judge")
+    assert judge["duration_ms"] == 900.0
+
+
+def test_bad_final_arguments_preserve_raw_and_duration_then_continue(env, monkeypatch):
+    """坏参数仍可重试，失败节点保留无效JSON原文和实测耗时。"""
+    from importlib import import_module
+    from types import SimpleNamespace
+
+    module = import_module("sentrix.application.assistant.run_turn")
+    monkeypatch.setattr(module, "time", SimpleNamespace(perf_counter=lambda: 100.0))
+    _conversations, turns, conversation, _db = env
+    broken = ModelReply(
+        finish_reason="tool_calls",
+        tool_calls=(ToolCall(call_id="bad_final", name=FINAL_ANSWER_TOOL, arguments_json="{broken"),),
+    )
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="海边"),
+            broken,
+            final_call("这是你要的照片。", "photo_1", "photo_2"),
+        ]
+    )
+    run_turn = build(env, model, StubToolbox({"search_memories": SEARCH_OK, FINAL_ANSWER_TOOL: DELIVER_OK}))
+    turn_id = start(run_turn, conversation)
+    run_turn.run(turn_id)
+
+    events = [event for _, _, event in turns.events_after(turn_id, 0)]
+    errors = [
+        event
+        for event in events
+        if event.kind == "tool_error" and event.payload.get("step_id") == "bad_final"
+    ]
+    assert len(errors) == 1
+    assert errors[0].payload["arguments"] == {"_raw": "{broken"}
+    assert errors[0].payload["duration_ms"] == 0.0
+    assert errors[0].payload["result"]["failure_reason"] == "bad_arguments"
+    assert len(model.calls) == 3
+    assert turns.get(turn_id).status == TurnStatus.COMPLETE

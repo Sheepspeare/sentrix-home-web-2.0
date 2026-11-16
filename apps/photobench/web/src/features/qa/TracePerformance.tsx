@@ -25,12 +25,12 @@ export function TimingSegments({ title, segments, total }: { title: string; segm
   </section>;
 }
 
-export function ModelPerformanceDetails({ detail, call }: { detail?: RunItemDetail; call: Dict }) {
+export function ModelPerformanceDetails({ detail, call, tools }: { detail?: RunItemDetail; call: Dict; tools?: Dict[] }) {
   const observation = callObservation(call);
-  const timing = detail ? callAgentLoopTiming(detail, call) : null;
+  const timing = detail ? callAgentLoopTiming(detail, call, tools) : null;
   const incompleteToolTiming = timing?.tools.some(tool => toolDurationMs(tool) == null);
   return <section className="trace-call-performance">
-    {detail && timing && !incompleteToolTiming ? <TimingSegments title="本步耗时 · 模型与关联工具" total={timing.totalMs} segments={callLatencySegments(detail, call)} /> : null}
+    {detail && timing && !incompleteToolTiming ? <TimingSegments title="本步耗时 · 模型与关联工具" total={timing.totalMs} segments={callLatencySegments(detail, call, tools)} /> : null}
     {incompleteToolTiming ? <p className="muted small">关联工具的耗时未完整记录，本步合计未知。</p> : null}
     <div className="call-purpose-grid">
       <span><small>用途</small><b>{callTypeDescription(call)}</b></span>

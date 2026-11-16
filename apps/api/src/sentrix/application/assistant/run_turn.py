@@ -1352,6 +1352,7 @@ class RunTurn:
         返回 ``None`` 表示这一轮的答案被拦下（调用方把提醒写进对话后继续循环）。
         """
         state = session.state
+        started = time.perf_counter()
         try:
             arguments = call.parse()
         except ToolArgumentError:
@@ -1363,6 +1364,18 @@ class RunTurn:
                     status="error",
                     failure_reason="bad_arguments",
                 )
+            )
+            self._tool_event(
+                session,
+                call,
+                ProgressStatus.DENIED,
+                "收尾动作参数无法解析。",
+                "tool_error",
+                extra={
+                    "arguments": _call_arguments(call),
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "result": {"failure_reason": "bad_arguments"},
+                },
             )
             self._publish(
                 session,
@@ -1422,7 +1435,11 @@ class RunTurn:
             # ``bad_handle``）」全在这一格里。实测代价：2026-10-15 那轮 50 道题
             # 「正文里列了 handles 却没交付」**无法逐题定性**，只能靠工具调用序列
             # 反推。``_run_tool`` 一直是全记的，这里不该是例外。
-            extra={"arguments": _call_arguments(call), "result": _tool_result_shape(outcome)},
+            extra={
+                "arguments": _call_arguments(call),
+                "result": _tool_result_shape(outcome),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            },
         )
         # 交付失败**不打断作答**：图交不出去是这一轮的缺口，不是这一轮不能回答。1.0 也是
         # 这样——``_normalize_selected_image_handles`` 把认不出来的 handle 直接丢掉，

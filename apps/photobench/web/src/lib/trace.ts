@@ -313,9 +313,10 @@ export function normalizedToolCallIndex(item: unknown, trace: unknown, _traceInd
   const traceObj = dict(trace);
   const calls = itemCallMetrics(item);
   if (traceObj.parent_call_id) {
-    const index = calls.findIndex(call => call.call_id === traceObj.parent_call_id &&
+    const matches = calls.map((call, index) => ({ call, index })).filter(({ call }) =>
+      call.call_id === traceObj.parent_call_id &&
       conversationTurnNumber(call.conversation_turn) === conversationTurnNumber(traceObj.conversation_turn));
-    return index >= 0 ? index : null;
+    return matches.length === 1 ? matches[0].index : null;
   }
   const parentStepId = traceObj.parent_step_id;
   const parentIndex = callIndexForStep(item, parentStepId, traceObj.conversation_turn);
@@ -377,16 +378,16 @@ export function toolLatencySegments(trace: unknown): ToolLatencySegment[] {
 }
 
 /** 1.0 `:1573-1591` —— 工具耗时优先取已存 `agent_loop_timing.tool_ms`，否则累加各工具。 */
-export function callAgentLoopTiming(item: unknown, call: unknown): AgentLoopTiming {
+export function callAgentLoopTiming(item: unknown, call: unknown, boundTools?: Dict[]): AgentLoopTiming {
   const c = dict(call);
   // **`duration_ms` 才是后端写进 `model_call_metrics` 的字段名**（`run_turn.py` 的
   // `session.model_calls.append({... "duration_ms": ...})`）。此前只读 `total_ms`，
   // 于是每一次模型调用的耗时都是 null → `totalMs` 为 null → 整条延迟时间线是空的，
   // 而页面上「每一步骤的时间」的位置还在。`total_ms` 留着是为了兼容 1.0 的旧存档。
-  const modelMs = finiteMetric(c.total_ms ?? c.duration_ms);
+  const modelMs = finiteMetric(c.duration_ms ?? c.total_ms);
   const validModelMs = modelMs != null ? modelMs : null;
   const saved = dict(c.agent_loop_timing);
-  const tools = toolsForGroupedCall(item, call);
+  const tools = boundTools ?? toolsForGroupedCall(item, call);
   const toolMs = finiteMetric(saved.tool_ms) != null
     ? Number(saved.tool_ms)
     : tools.reduce((sum, trace) => sum + (toolDurationMs(trace) || 0), 0);
@@ -406,8 +407,8 @@ export function callAgentLoopTiming(item: unknown, call: unknown): AgentLoopTimi
 }
 
 /** 1.0 `:1592-1607` —— 单次调用拆 ttft / 生成 / 各工具；差额归「Agent 编排」。 */
-export function callLatencySegments(item: unknown, call: unknown): LatencySegment[] {
-  const timing = callAgentLoopTiming(item, call);
+export function callLatencySegments(item: unknown, call: unknown, boundTools?: Dict[]): LatencySegment[] {
+  const timing = callAgentLoopTiming(item, call, boundTools);
   const segments: LatencySegment[] = [];
   if (timing.ttftMs != null && timing.ttftMs > 0) {
     segments.push({ kind: "ttft", label: "TTFT", ms: timing.ttftMs });
