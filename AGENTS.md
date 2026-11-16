@@ -10,4 +10,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-16 | 主线/原件共享已集成；轨迹节点和圆角页签已验证，100仅发布界面 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 主线/原件共享已集成；100两端轨迹界面已发布重启，产品代码待发布 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
