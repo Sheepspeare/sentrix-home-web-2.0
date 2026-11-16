@@ -373,13 +373,10 @@ def _build_importer(
         place_indexer=IndexAssetPlace(
             resolver=container.place_resolver, places=container.asset_place_repository
         ),
-        observer=(
-            ObserveAsset(
-                observer=container.vlm_observer,
-                observations=container.observation_repository,
-            )
-            if observe
-            else None
+        observer=ObserveAsset(
+            observer=container.vlm_observer if observe else None,
+            observations=container.observation_repository,
+            storage=container.media_storage,
         ),
         event_assigner=lambda observation: _event_id(assigner, observation),
         event_attacher=lambda event_id, observation: container.event_repository.attach(

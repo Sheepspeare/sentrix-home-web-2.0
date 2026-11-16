@@ -184,7 +184,9 @@ FINAL_ANSWER = ToolSpec(
             "selected_image_handles": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": f"当前结果集中要展示的照片 handle，最多 {MAX_DELIVERED_PHOTOS} 张；不展示填 []。",
+                "description": (
+                    f"当前结果集中要展示的照片 handle，最多 {MAX_DELIVERED_PHOTOS} 张；不展示填 []。"
+                ),
                 "maxItems": MAX_DELIVERED_PHOTOS,
             },
         },
@@ -417,12 +419,34 @@ READ_PHOTO_TEXT = ToolSpec(
 )
 
 
+SOURCE_TEXT_PAGE_CHARS = 1600
+
+READ_SOURCE_TEXT = ToolSpec(
+    name="read_source_text",
+    brief="读取文本候选原文，长文按 next_offset 续读。",
+    description=(
+        "读取当前检索结果中 media_kind=text 的资料原文。使用预览给出的 asset_handle。"
+        "返回正文片段和 next_offset。还有下一段时，用同一 handle 和 next_offset 续读。"
+    ),
+    parameters=_object_schema(
+        {
+            "asset_handle": {"type": "string", "description": "当前检索预览中的文本资料 handle。"},
+            "offset": {"type": "integer", "minimum": 0, "description": "从第几个字符读取，默认从 0 开始。"},
+        },
+        ["asset_handle"],
+    ),
+    satisfies=(EvidenceType.SOURCE_TEXT,),
+    required=("asset_handle",),
+)
+
+
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     SEARCH_MEMORIES,
     QUERY_MEMORY_FACTS,
     QUERY_PHOTO_PEOPLE,
     INSPECT_PHOTO,
     READ_PHOTO_TEXT,
+    READ_SOURCE_TEXT,
     GET_RESULT_PAGE,
     GET_PERSON_PROFILE,
     FINAL_ANSWER,

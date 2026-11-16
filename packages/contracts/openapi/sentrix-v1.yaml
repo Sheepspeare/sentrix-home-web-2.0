@@ -3237,6 +3237,11 @@ components:
           - type: number
           - type: 'null'
           title: Source Timestamp Sec
+        external_source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Source Id
       type: object
       required:
       - id
@@ -3375,6 +3380,18 @@ components:
           type: string
           title: Scope Id
           default: home-default
+        external_source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Source Id
+          description: 文本来源在当前 scope 内的稳定 ID
+        source_timestamp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Timestamp
+          description: 文本来源的 ISO 8601 日期时间，可带偏移
       type: object
       required:
       - file

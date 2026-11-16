@@ -73,6 +73,10 @@ def audio_mime_type(file_name: str, declared: str | None) -> str:
 class AssetRepository(Protocol):
     def add(self, asset: Asset) -> None: ...
 
+    def get_or_add_text_source(self, asset: Asset) -> tuple[Asset, bool]:
+        """Return the canonical text asset and whether this call inserted it."""
+        ...
+
     def get(self, asset_id: str) -> Asset | None: ...
 
     def get_many(self, asset_ids: Sequence[str]) -> dict[str, Asset]:
@@ -142,6 +146,8 @@ class ObservationRepository(Protocol):
     def list_by_asset(self, asset_id: str) -> Sequence[Observation]: ...
 
     def list_scope(self, scope_id: str, *, limit: int) -> Sequence[Observation]: ...
+
+    def has_source_text(self, scope_id: str) -> bool: ...
 
     def enrich(self, observation_id: str, *, semantics: ObservationSemantics) -> Observation: ...
 
@@ -227,6 +233,7 @@ class ObservationSemantics:
     # 事实。用户裁决④选了「按 1.0 原样：模型自报」，这个字段就是那条来源。
     facts: tuple[ObservationFact, ...] = ()
     confidence: float = 0.0
+    source_text: str = ""
 
 
 class VlmObserver(Protocol):
@@ -335,6 +342,10 @@ class MediaStorage(Protocol):
     def staging_dir(self) -> Path: ...
 
     def read(self, asset_id: str) -> bytes: ...
+
+    def path_for(self, asset: Asset) -> Path:
+        """Return the registered original path for this asset."""
+        ...
 
     def read_asset(self, asset: Asset) -> bytes: ...
 

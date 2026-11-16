@@ -99,8 +99,7 @@ scope 的键只能是 event / time / place / person；能从问题确定的事�
 
 只声明回答问题所必需的最小证据集合，不要把检索步骤本身当成答案证据。规则：
 - goal 用简体中文并保留完整语义（英文 goal 会让检索与中文描述失配）。
-- 关于相册的真问题就声明 photo_set + delivered_photo（成对、不计额度）；
-  只有与相册无关的闲聊或写作请求才不声明。
+{source_rule}
 - 问已确认人物是谁、家庭角色、人物档案，或问人与人的关系时声明 person_profile——照片本身没有关系信息。
 - 只有全相册级统计（共几张、多少次、哪些媒体类型）才声明 structured_fact；单张的时间、地点在 preview 里。
 - 只有 preview 摘要不足、且问画面可见属性（颜色、服饰、动作、物体、建筑）时才声明 visual_observation。
@@ -113,6 +112,16 @@ scope 的键只能是 event / time / place / person；能从问题确定的事�
 - 每条 requirement 都必须能由注册表中的工具直接获得。
 
 不要调用工具，不要输出 SQL，不要直接回答用户。"""
+
+_PHOTO_SOURCE_RULE = (
+    "- 关于相册的真问题就声明 photo_set + delivered_photo（成对、不计额度）；\n"
+    "  只有与相册无关的闲聊或写作请求才不声明。"
+)
+_MIXED_SOURCE_RULE = (
+    "- 当前范围含文本资料。邮件或文档中的内容用 source_text，保留原文的名字、编号和检索词。\n"
+    "  以照片作答时声明 photo_set 和 delivered_photo。纯文本问题无需这两项。\n"
+    "  同时需要正文与图像时，分别声明对应证据。"
+)
 
 # 1.0 ``goal_planner.py:85-103`` 的 ``_TYPE_MAP``：小模型常写的近义词 → 注册表里的类型。
 # 1.0 的九类在 S3 收窄成三类，于是别名也一并映射到这三类（1.0 也是这么做的：它把所有
@@ -144,6 +153,7 @@ _TYPE_ALIASES: Mapping[str, str] = {
     # ``invalid_planner_action`` 并重规划——`_TYPE_ALIASES` 的注释写着「认不出来的别名
     # 保持原样，交给校验去报」，这三条正是那种情况。
     "text": EvidenceType.VISIBLE_TEXT.value,
+    "source_text": EvidenceType.SOURCE_TEXT.value,
     "ocr": EvidenceType.VISIBLE_TEXT.value,
     "price": EvidenceType.VISIBLE_TEXT.value,
     "visible_text": EvidenceType.VISIBLE_TEXT.value,
@@ -160,19 +170,23 @@ _ANGLE_PLACEHOLDER = re.compile(r"<[^>]*>")
 _UNKNOWN_SCOPE_VALUES = frozenset({"未知", "unknown", "n/a", "na", "none", "null", "-"})
 
 
-def planner_evidence_types() -> tuple[str, ...]:
+def planner_evidence_types(*, has_source_text: bool = False) -> tuple[str, ...]:
     """给提示词用的证据类型清单。1.0 ``evidence_contract.planner_evidence_types`` 同形：
     稳定顺序，集合本身是唯一事实来源。"""
-    return tuple(sorted(item.value for item in EvidenceType))
+    types = (item.value for item in EvidenceType if has_source_text or item is not EvidenceType.SOURCE_TEXT)
+    return tuple(sorted(types))
 
 
-def build_prompt() -> str:
+def build_prompt(*, has_source_text: bool = False) -> str:
     """规划提示词的最终形态（把注册表渲染进去）。1.0 ``goal_planner.py:113`` 同形。"""
-    evidence_lines = "\n".join(f"- {item}" for item in planner_evidence_types())
-    return _DECLARATION_PROMPT.format(evidence_types=evidence_lines)
+    evidence_types = planner_evidence_types(has_source_text=has_source_text)
+    return _DECLARATION_PROMPT.format(
+        evidence_types="\n".join(f"- {item}" for item in evidence_types),
+        source_rule=_MIXED_SOURCE_RULE if has_source_text else _PHOTO_SOURCE_RULE,
+    )
 
 
-def planner_response_format() -> dict[str, Any]:
+def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
     """规划器的 JSON Schema。
 
     llama.cpp 的 schema 语法对 ``pattern`` / ``minLength`` 支持不稳定：复杂 schema 会直接
@@ -196,7 +210,10 @@ def planner_response_format() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "id": string,
-            "evidence_type": {"type": "string", "enum": list(planner_evidence_types())},
+            "evidence_type": {
+                "type": "string",
+                "enum": list(planner_evidence_types(has_source_text=has_source_text)),
+            },
             "description": string,
             "predicate": string,
             "value_type": {"type": "string", "enum": [item.value for item in RequirementValueType]},

@@ -83,6 +83,7 @@ def build_run_turn(container: Container) -> RunTurn:
             events=container.event_repository,
             asset_places=container.asset_place_repository,
         ),
+        observations=container.observation_repository,
         profile=replace(
             DEFAULT_PROFILE,
             wall_time_s=container.settings.agent_wall_time_s,

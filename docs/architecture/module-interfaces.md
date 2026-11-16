@@ -228,9 +228,9 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | 端口 | 定义 | 方法摘要 | 当前实现 |
 |---|---|---|---|
 | `OperationControl` | `domain/media/ports.py` | `start/request_cancel/check/finish`，有界登记与真实退出确认 | `InProcessOperationControl` |
-| `AssetRepository` | `domain/media/ports.py:71` | `add/get/list_by_scope/find_by_hash/update_status` | `SqliteAssetRepository` |
+| `AssetRepository` | `domain/media/ports.py` | `add/get/list_by_scope/find_by_hash/update_status/get_or_add_text_source` | `SqliteAssetRepository` |
 | `MediaDeletionRepository` | `domain/media/ports.py` | `delete_asset/pending_cleanup/mark_cleanup/was_deleted/list_deletions` | `SqliteMediaDeletionRepository` |
-| `ObservationRepository` | `:89` | `add/get/list_by_asset/list_scope/enrich/latest_ocr_text/latest_people_snapshot` | `SqliteObservationRepository` |
+| `ObservationRepository` | `domain/media/ports.py` | `add/get/list_by_asset/list_scope/enrich/latest_ocr_text/latest_people_snapshot/has_source_text` | `SqliteObservationRepository` |
 | `VlmObserver` | `:184` | `model_id`、`observe(path) -> ObservationSemantics \| None` | `OpenAIVlmObserver` |
 | `PhotoInspector` | `:201` | `model_id`、`inspect(path, question, faces, target_person, crop)` | `OpenAIPhotoInspector` |
 | `AssetObserver` | `:242` | `prepare/commit/observe` | `ObserveAsset`（application） |
@@ -252,6 +252,9 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 - `VideoTranscoder` 返回 `None` 表示“已是 H.264，无需转码”，不是失败。
 - `VideoKeyframeExtractor.extract` 失败必须抛；半套场景不可接受。
 - `AssetObserver` 的 `prepare` 只推理不写库，`commit` 才写库；顺序反了会产生重复事件/重复簇。
+- 文本资料复用资产与观察仓储。`get_or_add_text_source` 在同一写事务中确认身份并登记资产。
+  `has_source_text` 按资料范围判断助手是否可回读正文。`MediaStorage.path_for` 返回已登记的原件路径。
+  导入及回读契约见 [文本资料适配说明](../refactor/2026-11-16-text-sources-deviations.md)。
 
 ### 3.4 Retrieval
 
