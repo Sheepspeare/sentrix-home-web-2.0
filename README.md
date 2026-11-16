@@ -55,8 +55,13 @@ SENTRIX_DEPLOYMENT_PROFILE=mac ./scripts/deploy/start_legacy_mac.sh
 确认 API 8191 已启动后，在另一个终端运行：
 
 ```bash
-make web-dev        # http://localhost:4274/
+make web-dev        # https://localhost:4274/
 ```
+
+“问一句”的语音输入首次需安装更新后的 Python 依赖并运行 `make speech-prepare`。
+SenseVoice-Small / sherpa-onnx 在本机 API 启动时加载，后续请求复用；
+浏览器录音发送到本机后端，音频不落盘、不使用云端 ASR。
+资源准备和 HTTPS 要求见[语音输入运行手册](docs/runbooks/assistant-speech.md)。
 
 该目标默认代理到 `http://127.0.0.1:8191`，并启用已有的本地用户模式，无需运行 8210
 控制面；账号登录、管理台与反馈功能需要控制面。完整 Mac 启动脚本已启动 API 时，

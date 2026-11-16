@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         default="CUDAExecutionProvider,CPUExecutionProvider", validation_alias="RETINAFACE_PROVIDERS"
     )
     data_dir: Path = Field(default=Path("data"))
+
+    @property
+    def speech_model_dir(self) -> Path:
+        return self.data_dir / "models" / "sensevoice-small"
+
     # 部署形态的**唯一开关**。只提供一组默认值，显式 env 永远优先：
     # - server：wemm / 180s / 120s
     # - mac：legacy / 600s / 180s（CPU 人脸另见 onnx_runtime 的 provider 默认）
