@@ -112,6 +112,10 @@
       "apps/photobench/web/src/features/runs/RunsTable.tsx": {
         "before": "1a93a4c54421dd062c60bc42c27ed770bbb16d4881aee9bf1c5ee28fd46210e8",
         "after": "10870199f8b1c1dbe1532088db53f3f149f718a79f6539dc64977e5c12903523"
+      },
+      "apps/photobench/src/photobench/infrastructure/config/files.py": {
+        "before": "ae28332ed09ccfb9963c93a4034a7da3d4bb57aa9decc26d1acb27fbf6189ca9",
+        "after": "a47ea78bc5edf6731386ff626896d99667a4ef004bd7f17d15b78150b87e5586"
       }
     }
   },
@@ -228,6 +232,10 @@
       "apps/photobench/web/src/features/runs/RunsTable.tsx": {
         "before": "1a93a4c54421dd062c60bc42c27ed770bbb16d4881aee9bf1c5ee28fd46210e8",
         "after": "10870199f8b1c1dbe1532088db53f3f149f718a79f6539dc64977e5c12903523"
+      },
+      "apps/photobench/src/photobench/infrastructure/config/files.py": {
+        "before": "ae28332ed09ccfb9963c93a4034a7da3d4bb57aa9decc26d1acb27fbf6189ca9",
+        "after": "a47ea78bc5edf6731386ff626896d99667a4ef004bd7f17d15b78150b87e5586"
       }
     }
   },
@@ -344,6 +352,10 @@
       "apps/photobench/web/src/features/runs/RunsTable.tsx": {
         "before": "1a93a4c54421dd062c60bc42c27ed770bbb16d4881aee9bf1c5ee28fd46210e8",
         "after": "10870199f8b1c1dbe1532088db53f3f149f718a79f6539dc64977e5c12903523"
+      },
+      "apps/photobench/src/photobench/infrastructure/config/files.py": {
+        "before": "ae28332ed09ccfb9963c93a4034a7da3d4bb57aa9decc26d1acb27fbf6189ca9",
+        "after": "a47ea78bc5edf6731386ff626896d99667a4ef004bd7f17d15b78150b87e5586"
       }
     }
   }

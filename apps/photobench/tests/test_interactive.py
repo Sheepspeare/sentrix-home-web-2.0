@@ -339,3 +339,14 @@ def test_restart_reconciles_dispatched_turn_without_sending_again(tmp_path: Path
     assert result["status"] == "ready"
     assert result["turns"][0]["turn_id"] == "already-accepted"
     assert not client.messages and not suites.work_status()["work"]
+
+
+def test_benchmark_release_identity_is_separate_from_product(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from photobench.infrastructure.config.files import read_build_revision
+
+    (tmp_path / "build-info.json").write_text('{"revision": "product"}')
+    monkeypatch.setenv("PHOTOBENCH_BUILD_REVISION", "benchmark")
+    assert read_build_revision(tmp_path) == "benchmark"
+    assert (tmp_path / "build-info.json").read_text() == '{"revision": "product"}'

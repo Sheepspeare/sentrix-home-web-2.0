@@ -1684,3 +1684,14 @@
                    <span className={"mode-badge " + modeBadgeClass(run.mode)}>{modeLabel(run.mode)}</span>
                    {run.execution_versions && <small className="muted">{run.execution_versions.length} 次执行</small>}
                  </td>
+--- a/apps/photobench/src/photobench/infrastructure/config/files.py
++++ b/apps/photobench/src/photobench/infrastructure/config/files.py
+@@ -18,6 +18,8 @@
+ 
+ def read_build_revision(repo_root: Path) -> str:
+     """A release records its committed revision at packaging time, once at boot."""
++    if revision := os.environ.get("PHOTOBENCH_BUILD_REVISION"):
++        return revision
+     try:
+         value = json.loads((repo_root / "build-info.json").read_text(encoding="utf-8"))
+         return str(value["revision"])

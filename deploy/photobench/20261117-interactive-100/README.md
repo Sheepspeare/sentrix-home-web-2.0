@@ -4,4 +4,6 @@
 
 8772源为062ebab加100-local修复；8872/8874源为a7bb484加既有报表/轨迹覆盖层。manifest逐文件记录发布前/后SHA256。发布包从本机已提交patch生成，包含相应源码及本机构建前端；配置、产品代码、题库与结果不在覆盖范围。新功能主线实现位于apps/photobench，实例适配保留原有pipeline/reuse行为。
 
-本地三组合均通过13项交互后端测试、4项页面交互测试、TypeScript与构建。部署/真实页面/结果保持回执见工作区audit/20261117-interactive-evaluation。先本地commit，再同步和重启验收，验收后push。
+本地三组合均通过14项交互后端测试、4项页面交互测试、TypeScript与构建。部署/真实页面/结果保持回执见工作区audit/20261117-interactive-evaluation。先本地commit，再同步和重启验收，验收后push。
+
+通过服务专属PHOTOBENCH_BUILD_REVISION记录测评版本，产品build-info保留。
