@@ -481,7 +481,7 @@ export function App({ initialLoading = false }: AppProps) {
           />
         )}
       </main>
-      {retest && <RetestDialog run={retest.run} question={retest.question} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onClose={() => { setRetest(null); void runs.loadRuns(1); }}/>}
+      {retest && <RetestDialog run={retest.run} question={retest.question} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onClose={() => { setRetest(null); void runs.loadRuns(1); runs.startPolling(); }}/>}
       <Lightbox target={lightbox} onClose={() => setLightbox(null)} />
     </>
   );
