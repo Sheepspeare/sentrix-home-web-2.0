@@ -211,6 +211,34 @@ def run(toolbox, name: str, **arguments: object):
     return build.execute(name, arguments, scope_id=SCOPE, now=NOW)
 
 
+def test_read_source_text_requires_a_text_handle_in_the_current_scope(toolbox):
+    build, result_sets = toolbox
+    result_sets.add(ResultSet("rs_source", SCOPE, "查询", ("asset_0",), NOW))
+    result_sets.add(ResultSet("rs_other", "other-scope", "查询", ("asset_0",), NOW))
+
+    assert (
+        run(toolbox, "read_source_text", result_set_id="rs_source", asset_handle="photo_1").failure_reason
+        == "unsupported_media_type"
+    )
+    assert (
+        run(toolbox, "read_source_text", result_set_id="rs_source", asset_handle="photo_2").failure_reason
+        == "bad_handle"
+    )
+    assert (
+        run(toolbox, "read_source_text", result_set_id="rs_other", asset_handle="photo_1").failure_reason
+        == "scope_mismatch"
+    )
+    assert (
+        build.execute(
+            "read_source_text",
+            {"result_set_id": "rs_other", "asset_handle": "photo_1"},
+            scope_id="other-scope",
+            now=NOW,
+        ).failure_reason
+        == "asset_unavailable"
+    )
+
+
 def _seed_plain_assets(db, tmp_path, count: int) -> list[str]:
     """补一批只用来“凑满两页”的普通照片。preview 只读资产表，不需要向量。"""
     assets = SqliteAssetRepository(db)

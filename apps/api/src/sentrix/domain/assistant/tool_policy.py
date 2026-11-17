@@ -72,10 +72,10 @@ class ToolPolicy:
                 action=ToolAction.DENY, code="bad_arguments", reason=f"参数不是合法 JSON：{error}"
             )
 
-        # 照片级工具的 result_set_id 由后端从本轮状态注入，模型不再填写。
+        # 读取候选的工具由后端注入本轮结果集 ID。
         # 即使非严格模式下模型额外写了一个 ID，也以当前回合状态覆盖。
         arguments = dict(arguments)
-        if call.name in {"inspect_photo", "read_photo_text", "query_photo_people"}:
+        if call.name in {"inspect_photo", "read_photo_text", "query_photo_people", "read_source_text"}:
             arguments["result_set_id"] = state.current_result_set_id or ""
 
         # **「缺」的判据是「键不在 / 是 null / 是空串」，不是「falsy」。**

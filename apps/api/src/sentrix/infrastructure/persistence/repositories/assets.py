@@ -10,6 +10,7 @@ from datetime import datetime
 
 from sentrix.domain.media.capture_time import CaptureTime, restore_capture_timezone
 from sentrix.domain.media.models import (
+    TEXT_IMPORT_SOURCE,
     Asset,
     AssetStatus,
     GpsPoint,
@@ -23,7 +24,7 @@ from sentrix.infrastructure.persistence.database import Database
 _ASSET_COLUMNS = (
     "id, scope_id, file_name, media_type, path, mime_type, size_bytes, status,"
     " content_sha256, captured_at, gps_latitude, gps_longitude, created_at, updated_at,"
-    " derived_kind, parent_asset_id, source_timestamp_sec, capture_time_json"
+    " derived_kind, parent_asset_id, source_timestamp_sec, capture_time_json, external_source_id"
 )
 
 
@@ -56,6 +57,7 @@ def _row_to_asset(row: sqlite3.Row) -> Asset:
         derived_kind=row["derived_kind"],
         parent_asset_id=row["parent_asset_id"],
         source_timestamp_sec=row["source_timestamp_sec"],
+        external_source_id=row["external_source_id"],
     )
 
 
@@ -73,28 +75,53 @@ class SqliteAssetRepository:
         读要带回派生物的血缘，写只服务非派生物。
         """
         with self._database.connect() as connection, connection:
-            connection.execute(
-                "INSERT INTO assets (id, scope_id, file_name, media_type, path, mime_type,"
-                " size_bytes, status, content_sha256, captured_at, gps_latitude, gps_longitude,"
-                " created_at, updated_at, capture_time_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    asset.id,
-                    asset.scope_id,
-                    asset.file_name,
-                    asset.media_type.value,
-                    asset.path,
-                    asset.mime_type,
-                    asset.size_bytes,
-                    asset.status.value,
-                    asset.content_sha256,
-                    asset.captured_at.isoformat() if asset.captured_at else None,
-                    asset.captured_location.latitude if asset.captured_location else None,
-                    asset.captured_location.longitude if asset.captured_location else None,
-                    asset.created_at.isoformat(),
-                    asset.updated_at.isoformat(),
-                    json.dumps(dataclasses.asdict(asset.capture_time)),
-                ),
-            )
+            self._insert(connection, asset)
+
+    def get_or_add_text_source(self, asset: Asset) -> tuple[Asset, bool]:
+        with self._database.connect() as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if asset.external_source_id is None:
+                row = connection.execute(
+                    f"SELECT {_ASSET_COLUMNS} FROM assets WHERE scope_id = ?"
+                    " AND content_sha256 = ? AND external_source_id IS NULL LIMIT 1",
+                    (asset.scope_id, asset.content_sha256),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    f"SELECT {_ASSET_COLUMNS} FROM assets WHERE scope_id = ? AND external_source_id = ?",
+                    (asset.scope_id, asset.external_source_id),
+                ).fetchone()
+            if row is not None:
+                return _row_to_asset(row), False
+            self._insert(connection, asset)
+        return asset, True
+
+    @staticmethod
+    def _insert(connection: sqlite3.Connection, asset: Asset) -> None:
+        connection.execute(
+            "INSERT INTO assets (id, scope_id, file_name, media_type, path, mime_type,"
+            " size_bytes, status, content_sha256, captured_at, gps_latitude, gps_longitude,"
+            " created_at, updated_at, capture_time_json, external_source_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                asset.id,
+                asset.scope_id,
+                asset.file_name,
+                asset.media_type.value,
+                asset.path,
+                asset.mime_type,
+                asset.size_bytes,
+                asset.status.value,
+                asset.content_sha256,
+                asset.captured_at.isoformat() if asset.captured_at else None,
+                asset.captured_location.latitude if asset.captured_location else None,
+                asset.captured_location.longitude if asset.captured_location else None,
+                asset.created_at.isoformat(),
+                asset.updated_at.isoformat(),
+                json.dumps(dataclasses.asdict(asset.capture_time)),
+                asset.external_source_id,
+            ),
+        )
 
     def get(self, asset_id: str) -> Asset | None:
         with self._database.connect() as connection:
@@ -179,7 +206,8 @@ class SqliteAssetRepository:
     def find_by_hash(self, scope_id: str, content_sha256: str) -> Asset | None:
         with self._database.connect() as connection:
             row = connection.execute(
-                f"SELECT {_ASSET_COLUMNS} FROM assets WHERE scope_id = ? AND content_sha256 = ? LIMIT 1",
+                f"SELECT {_ASSET_COLUMNS} FROM assets WHERE scope_id = ?"
+                " AND content_sha256 = ? AND external_source_id IS NULL LIMIT 1",
                 (scope_id, content_sha256),
             ).fetchone()
         return _row_to_asset(row) if row else None
@@ -195,7 +223,7 @@ class SqliteAssetRepository:
 _OBSERVATION_COLUMNS = (
     "id, scope_id, asset_id, source_type, captured_at, confidence, caption, place, activity,"
     " event_type, ocr_text, objects_json, clothing_json, people_json, facts_json, revision,"
-    " created_at, updated_at"
+    " created_at, updated_at, source_text"
 )
 
 
@@ -307,6 +335,7 @@ def row_to_observation(row: sqlite3.Row) -> Observation:
         people=people_names(row["people_json"]),
         facts=_json_facts(row["facts_json"]),
         revision=row["revision"],
+        source_text=row["source_text"],
     )
 
 
@@ -315,12 +344,14 @@ class SqliteObservationRepository:
         self._database = database
 
     def add(self, observation: Observation) -> None:
+        # 文本原件的观察 ID 由资产 ID 确定。并发重试保留第一次提交的观察。
+        conflict = " ON CONFLICT(id) DO NOTHING" if observation.source_type == TEXT_IMPORT_SOURCE else ""
         with self._database.connect() as connection, connection:
             connection.execute(
                 "INSERT INTO observations (id, scope_id, asset_id, source_type, captured_at,"
                 " confidence, caption, place, activity, event_type, ocr_text, objects_json,"
-                " clothing_json, people_json, facts_json, revision, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " clothing_json, people_json, facts_json, revision, created_at, updated_at, source_text)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)" + conflict,
                 (
                     observation.id,
                     observation.scope_id,
@@ -343,6 +374,7 @@ class SqliteObservationRepository:
                     observation.revision,
                     observation.created_at.isoformat(),
                     observation.updated_at.isoformat(),
+                    observation.source_text,
                 ),
             )
 
@@ -407,6 +439,14 @@ class SqliteObservationRepository:
             ).fetchall()
         return [row_to_observation(row) for row in rows]
 
+    def has_source_text(self, scope_id: str) -> bool:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM observations WHERE scope_id = ? AND source_text != '' LIMIT 1",
+                (scope_id,),
+            ).fetchone()
+        return row is not None
+
     def enrich(self, observation_id: str, *, semantics: ObservationSemantics) -> Observation:
         """写入 VLM 语义并把 ``revision`` 加一。
 
@@ -417,6 +457,7 @@ class SqliteObservationRepository:
             connection.execute(
                 "UPDATE observations SET caption = ?, place = ?, activity = ?, event_type = ?,"
                 " ocr_text = ?, objects_json = ?, clothing_json = ?, facts_json = ?,"
+                " source_text = COALESCE(NULLIF(source_text, ''), ?),"
                 " confidence = MAX(confidence, ?), revision = revision + 1,"
                 " updated_at = datetime('now') WHERE id = ?",
                 (
@@ -428,6 +469,7 @@ class SqliteObservationRepository:
                     json.dumps(list(semantics.objects), ensure_ascii=False),
                     json.dumps(list(semantics.clothing), ensure_ascii=False),
                     json.dumps([dataclasses.asdict(item) for item in semantics.facts], ensure_ascii=False),
+                    semantics.source_text,
                     float(semantics.confidence),
                     observation_id,
                 ),

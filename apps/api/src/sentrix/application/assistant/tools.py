@@ -42,10 +42,10 @@ from sentrix.domain.assistant.evidence_ledger import EvidenceType
 from sentrix.domain.assistant.models import Attachment
 from sentrix.domain.assistant.ports import PersonDirectory, ResultSetRepository
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetEntry
-from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS
+from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS, SOURCE_TEXT_PAGE_CHARS
 from sentrix.domain.identity.ports import FaceRepository, PersonCropRenderer
 from sentrix.domain.media.inspection import CERTAINTY_SUPPORTED
-from sentrix.domain.media.models import MediaType, Observation
+from sentrix.domain.media.models import Asset, MediaType, Observation
 from sentrix.domain.media.ports import (
     AssetRepository,
     ObservationRepository,
@@ -163,6 +163,15 @@ def _failure(reason: str, message: str) -> ToolOutcome:
     )
 
 
+def _text_source_metadata(asset: Asset) -> dict[str, str]:
+    metadata = {}
+    if asset.external_source_id is not None:
+        metadata["external_source_id"] = asset.external_source_id
+    if asset.capture_time.source == "text_source":
+        metadata["source_timestamp"] = asset.capture_time.raw
+    return metadata
+
+
 def _clamp_limit(value: Any) -> int:
     try:
         parsed = int(value)
@@ -228,6 +237,8 @@ class AssistantToolbox:
             return self._inspect_photo(arguments, scope_id=scope_id, question=question)
         if name == "read_photo_text":
             return self._read_photo_text(arguments, scope_id=scope_id)
+        if name == "read_source_text":
+            return self._read_source_text(arguments, scope_id=scope_id)
         if name == "get_person_profile":
             return self._person(arguments, scope_id=scope_id)
         if name == "query_memory_facts":
@@ -502,6 +513,19 @@ class AssistantToolbox:
         asset = self._assets.get(entry.asset_id)
         observations = self._observations.list_by_asset(entry.asset_id)
         latest = observations[0] if observations else None
+        if asset is not None and asset.media_type is MediaType.TEXT:
+            text = latest.source_text if latest else ""
+            return {
+                "handle": entry.handle,
+                "file_name": asset.file_name,
+                "media_kind": "text",
+                "source_kind": "text",
+                "level": _LEVEL_BY_EVIDENCE_CLASS.get(entry.evidence_class, ""),
+                "people_count": 0,
+                "evidence_summary": text[:_SUMMARY_TEXT_LIMIT],
+                "text_truncated": len(text) > _SUMMARY_TEXT_LIMIT,
+                **_text_source_metadata(asset),
+            }
         location = self._asset_places.get(entry.asset_id) if self._asset_places is not None else None
         row: dict[str, Any] = {
             "handle": entry.handle,
@@ -737,6 +761,9 @@ class AssistantToolbox:
             if asset is None:
                 # 向量还在、资产没了。产品硬约束第 5 条：只返回**可打开的**原图。
                 log.warning("交付的 handle 指向一个已不存在的资产，已丢弃: %s", asset_id)
+                rejected.append(handle)
+                continue
+            if asset.media_type is MediaType.TEXT:
                 rejected.append(handle)
                 continue
             attachments.append(
@@ -1107,6 +1134,44 @@ class AssistantToolbox:
                 "source": "ingestion_ocr",
                 "note": "这些字是导入时从画面里读出来并保存的。",
             },
+        )
+
+    def _read_source_text(self, arguments: Mapping[str, Any], *, scope_id: str) -> ToolOutcome:
+        result_set = self._result_sets.get(str(arguments.get("result_set_id") or ""))
+        if result_set is None:
+            return _failure("unknown_result_set", "请先检索相关文本资料。")
+        if result_set.scope_id != scope_id:
+            return _failure("scope_mismatch", "这个结果集不属于当前资料范围。")
+
+        handle = str(arguments.get("asset_handle") or "").strip()
+        asset_id = result_set.resolve(handle)
+        if asset_id is None:
+            return _failure("bad_handle", "请使用当前检索预览中返回的 handle。")
+        asset = self._assets.get(asset_id)
+        if asset is None or asset.scope_id != scope_id:
+            return _failure("asset_unavailable", "当前资料范围内已无法读取这条资料。")
+        if asset.media_type is not MediaType.TEXT:
+            return _failure("unsupported_media_type", "请选择 media_kind=text 的资料。")
+
+        observations = self._observations.list_by_asset(asset.id)
+        text = observations[0].source_text if observations else ""
+        if not text:
+            return _failure("source_text_unavailable", "这条资料没有可读取的原文。")
+        offset = arguments.get("offset", 0)
+        if type(offset) is not int or not 0 <= offset < len(text):
+            return _failure("bad_offset", "请从 0 开始，或用上一段返回的 next_offset 续读。")
+        end = min(offset + SOURCE_TEXT_PAGE_CHARS, len(text))
+        page = {
+            "asset_handle": handle,
+            "text": text[offset:end],
+            "offset": offset,
+            "next_offset": end if end < len(text) else None,
+            "total_chars": len(text),
+            **_text_source_metadata(asset),
+        }
+        return ToolOutcome(
+            observation={**page, "asset_id": asset.id, "result_set_id": result_set.id},
+            model_visible=page,
         )
 
     # ---- get_person_profile -------------------------------------------------
