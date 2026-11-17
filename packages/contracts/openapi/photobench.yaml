@@ -2382,6 +2382,24 @@ paths:
                 additionalProperties: true
                 type: object
                 title: Response Current Model Api V1 Current Model Post
+  /api/v1/current-deployed-model:
+    get:
+      tags:
+      - model-profiles
+      summary: Current Deployed Model
+      description: Query the product's actual model endpoint without changing its
+        deployment.
+      operationId: current_deployed_model_api_v1_current_deployed_model_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Current Deployed Model Api V1 Current Deployed Model
+                  Get
   /api/v1/test-model:
     post:
       tags:

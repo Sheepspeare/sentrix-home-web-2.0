@@ -36,6 +36,25 @@ class InteractiveModels:
             REASONING_TURN_TIMEOUT if reasoning else DEFAULT_TURN_TIMEOUT,
         )
 
+    def _deployed_endpoint(
+        self, connection: Mapping[str, Any], effective: Mapping[str, Any]
+    ) -> tuple[str, str]:
+        base = str(connection.get("model_base_url") or self.config.model_base_url)
+        endpoint_model = str(connection.get("endpoint_model") or "")
+        actual = str(effective.get("vlm_base_url") or "")
+        if actual:
+            if actual.rstrip("/") != base.rstrip("/"):
+                endpoint_model = ""
+            base = actual
+        return base, endpoint_model
+
+    def deployed_endpoint(self) -> tuple[str, str]:
+        """Read the endpoint used by an empty interactive model selection."""
+        observed = self.diagnostics()
+        return self._deployed_endpoint(
+            self.config.public_runtime_connection_config(), observed.get("runtime_configuration") or {}
+        )
+
     def resolve(self, payload: Mapping[str, Any], **inputs: Any) -> RunRequest:
         reasoning = payload.get("reasoning", True)
         if not isinstance(reasoning, bool):
@@ -58,11 +77,7 @@ class InteractiveModels:
         base = str(connection.get("model_base_url") or self.config.model_base_url)
         endpoint_model = str(connection.get("endpoint_model") or "")
         if not selection:
-            actual = str(effective.get("vlm_base_url") or "")
-            if actual:
-                if actual.rstrip("/") != base.rstrip("/"):
-                    endpoint_model = ""
-                base = actual
+            base, endpoint_model = self._deployed_endpoint(connection, effective)
         if selection.get("target_id"):
             _, target = self.config.resolve_vllm_target(str(selection["target_id"]))
             base = str(target.get("model_base_url") or "")

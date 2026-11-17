@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { post } from '../../api/client.ts';
+import { api, post } from '../../api/client.ts';
 import type { CurrentModelInfo, InteractiveModel } from '../../api/types.ts';
 
 export interface ModelOptions {
@@ -15,6 +15,19 @@ export function ModelSelect({ options, value, onChange, onReadyChange, disabled 
 }) {
   const choice = value.profile && value.profile !== '__current__' ? 'profile:' + value.profile : value.target_id ? 'target:' + value.target_id : value.base_url !== undefined ? 'custom' : 'current';
   const endpoint = (value.base_url || '').trim();
+  const [deployed, setDeployed] = useState<CurrentModelInfo | null>(null);
+  const [deployedError, setDeployedError] = useState('');
+  useEffect(() => {
+    if (choice !== 'current') return;
+    let disposed = false;
+    void api<CurrentModelInfo>('/current-deployed-model').then(data => {
+      if (!disposed) { setDeployed(data); setDeployedError(''); }
+    }).catch((error: Error) => {
+      if (!disposed) { setDeployed(null); setDeployedError(error.message); }
+    });
+    return () => { disposed = true; };
+  }, [choice]);
+  const deployedName = deployed?.served_model_name || deployed?.served_models?.join(' / ');
   const [discovery, setDiscovery] = useState<{ endpoint: string; models: string[]; error: string; revision: number } | null>(null);
   const [revision, setRevision] = useState(0);
   const latest = useRef({ value, onChange });
@@ -49,11 +62,12 @@ export function ModelSelect({ options, value, onChange, onReadyChange, disabled 
       else if (next === 'custom') onChange({ base_url: options.modelEndpoint, endpoint_model: '' });
       else onChange({});
     }}>
-      <option value="current">当前部署模型</option>
+      <option value="current">当前部署模型 · {deployedName || (deployedError ? '暂未获取型号' : '正在读取…')}</option>
       {options.profiles.map(p => <option key={p.id} value={'profile:' + p.id} disabled={p.available === false}>{p.label || p.id}</option>)}
       {Object.entries(options.targets).map(([id, target]) => <option key={id} value={'target:' + id}>{String(target.label || id)}</option>)}
       <option value="custom">其他模型端点</option>
     </select></label>
+    {choice === 'current' && deployedError && <p role="alert" className="error interactive-model-message">读取当前模型失败：{deployedError}</p>}
     {choice === 'custom' && <>
       <label>模型服务地址<input aria-label="问答模型地址" value={value.base_url || ''} placeholder="http://host:port/v1" disabled={disabled} onChange={e => onChange({ ...value, base_url: e.target.value, endpoint_model: '' })}/></label>
       <button className="btn ghost compact" type="button" disabled={disabled || !endpoint || !resolved} onClick={() => setRevision(n => n + 1)}>{endpoint && !resolved ? '正在获取模型…' : '↗ 获取可用模型'}</button>

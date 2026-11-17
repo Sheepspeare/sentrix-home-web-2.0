@@ -293,6 +293,10 @@ def test_live_default_model_and_product_version_are_frozen(tmp_path: Path) -> No
         {}, album_id="album-x", qa_set="", scope_id="space", mode="reuse"
     )
     assert request.model_base_url == "http://cloud:6/v1"
+    assert service.suites.interactive_models.deployed_endpoint() == (
+        request.model_base_url,
+        request.endpoint_model,
+    )
     assert request.runtime_snapshot.connection()["required_build_revision"] == "actual-product"
 
 
@@ -386,6 +390,8 @@ def test_benchmark_release_identity_is_separate_from_product(
     monkeypatch.setenv("PHOTOBENCH_BUILD_REVISION", "benchmark")
     assert read_build_revision(tmp_path) == "benchmark"
     assert (tmp_path / "build-info.json").read_text() == '{"revision": "product"}'
+
+
 def test_retest_progress_reads_live_state_and_saved_cancelled_trace(tmp_path):
     from types import SimpleNamespace
 

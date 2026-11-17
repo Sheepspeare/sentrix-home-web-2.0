@@ -17,6 +17,22 @@ function Harness() {
 beforeEach(() => { post.mockReset(); api.mockReset(); api.mockResolvedValue({ items: [] }); });
 afterEach(cleanup);
 
+it('shows the actual deployed model without changing the current selection', async () => {
+  api.mockResolvedValue({ served_model_name: 'actual-model', served_models: ['actual-model'] });
+  const onChange = vi.fn();
+  render(<ModelSelect options={options} value={{}} onChange={onChange}/>);
+  await screen.findByRole('option', { name: '当前部署模型 · actual-model' });
+  expect(api).toHaveBeenCalledWith('/current-deployed-model');
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it('shows a read error instead of inventing a deployed model name', async () => {
+  api.mockRejectedValue(new Error('连接失败'));
+  render(<ModelSelect options={options} value={{}} onChange={vi.fn()}/>);
+  await screen.findByRole('option', { name: '当前部署模型 · 暂未获取型号' });
+  expect(screen.getByRole('alert').textContent).toContain('连接失败');
+});
+
 it('only offers models returned by the endpoint and requires a choice when several are available', async () => {
   post.mockResolvedValue({ served_models: ['first', 'second'], selection_required: true });
   render(<Harness/>);
