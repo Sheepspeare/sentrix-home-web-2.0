@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -84,7 +85,10 @@ def prepare(destination):
     for app, kind in (("apps/web", "product"), ("apps/photobench/web", "photobench")):
         source = stage / "current" / app
         (source / "node_modules").symlink_to(REPO / app / "node_modules", target_is_directory=True)
-        subprocess.run(["npm", "run", "build"], cwd=source, check=True)
+        build_env = dict(os.environ)
+        if kind == "product":
+            build_env["VITE_LEGACY_LOCAL_AUTH"] = "1"
+        subprocess.run(["npm", "run", "build"], cwd=source, env=build_env, check=True)
         target = destination / "dist" / kind
         shutil.copytree(source / "dist", target)
         manifest["dist"][kind] = {
