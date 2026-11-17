@@ -1,7 +1,7 @@
 """继续本次已完成文件更新的启动阶段；先核对落盘源码与既有回执。"""
 
 from pathlib import Path
-import json, sqlite3, subprocess, time, urllib.request
+import json, sqlite3, subprocess, time, urllib.request, sys
 from preflight import SERVICES, inspect, sha
 
 BASE = Path(__file__).resolve().parent
@@ -10,21 +10,23 @@ before = json.loads((BASE / "before.json").read_text())
 intent = json.loads((BASE / "intent.json").read_text())
 assert intent["revision"] == manifest["source_revision"]
 assert not (BASE / "acceptance.json").exists()
-assert not (BASE / "resume-startup-intent.json").exists()
+finalize_only = sys.argv[1:] == ["--finalize-only"]
+assert finalize_only or not (BASE / "resume-startup-intent.json").exists()
 for port, (_, root, variant) in SERVICES.items():
     for relative, expected in manifest["variants"][variant]["files"].items():
         assert sha(Path(root) / relative) == expected["after"], (port, relative)
     assert (
         json.loads((Path(root) / "build-info.json").read_text())["revision"] == manifest["deployed_version"]
     )
-(BASE / "resume-startup-intent.json").write_text(
-    json.dumps(
-        {
-            "started_at": time.time(),
-            "reason": "WeMM dependency was already stopped before this deployment; restored existing service",
-        }
+if not finalize_only:
+    (BASE / "resume-startup-intent.json").write_text(
+        json.dumps(
+            {
+                "started_at": time.time(),
+                "reason": "WeMM dependency was already stopped before this deployment; restored existing service",
+            }
+        )
     )
-)
 
 
 def idle(snapshot):
@@ -64,16 +66,17 @@ def wait(port, path):
     raise RuntimeError(f"{port}: health did not become ready")
 
 
-print("Starting updated products", flush=True)
-for port in [8191, 8291, 8294]:
-    subprocess.run(["systemctl", "--user", "start", SERVICES[port][0]], check=True, timeout=15)
-    wait(port, "health/live")
-    print(f"{port}: ready", flush=True)
-print("Starting updated evaluation services", flush=True)
-for port in [8772, 8872, 8874]:
-    subprocess.run(["systemctl", "--user", "start", SERVICES[port][0]], check=True, timeout=15)
-    wait(port, "chat/sessions")
-    print(f"{port}: ready", flush=True)
+if not finalize_only:
+    print("Starting updated products", flush=True)
+    for port in [8191, 8291, 8294]:
+        subprocess.run(["systemctl", "--user", "start", SERVICES[port][0]], check=True, timeout=15)
+        wait(port, "health/live")
+        print(f"{port}: ready", flush=True)
+    print("Starting updated evaluation services", flush=True)
+    for port in [8772, 8872, 8874]:
+        subprocess.run(["systemctl", "--user", "start", SERVICES[port][0]], check=True, timeout=15)
+        wait(port, "chat/sessions")
+        print(f"{port}: ready", flush=True)
 
 after = inspect(manifest)
 idle(after)
@@ -112,8 +115,11 @@ for port in [8772, 8872, 8874]:
         source = Path("/var/tmp/sentrix-atm-sources-20261117") / name
         assert (source / "manifest.json").is_file(), str(source)
         target = data_root / name
-        assert not target.exists() and not target.is_symlink(), str(target)
-        target.symlink_to(source, target_is_directory=True)
+        if target.is_symlink():
+            assert target.resolve() == source.resolve(), str(target)
+        else:
+            assert not target.exists(), str(target)
+            target.symlink_to(source, target_is_directory=True)
 (BASE / "after.json").write_text(json.dumps(after, indent=2) + "\n")
 (BASE / "acceptance.json").write_text(
     json.dumps(

@@ -211,8 +211,11 @@ for port in [8772, 8872, 8874]:
         source = Path("/var/tmp/sentrix-atm-sources-20261117") / name
         assert (source / "manifest.json").is_file(), str(source)
         target = data_root / name
-        assert not target.exists() and not target.is_symlink(), str(target)
-        target.symlink_to(source, target_is_directory=True)
+        if target.is_symlink():
+            assert target.resolve() == source.resolve(), str(target)
+        else:
+            assert not target.exists(), str(target)
+            target.symlink_to(source, target_is_directory=True)
 (BASE / "after.json").write_text(json.dumps(after, indent=2) + "\n")
 (BASE / "acceptance.json").write_text(
     json.dumps(
