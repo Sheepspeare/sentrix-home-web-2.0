@@ -37,7 +37,7 @@ from photobench.domain.runs.analysis import (
 )
 
 #: 1.0 ``:6530`` 的 ``retrieval`` 子对象取的字段清单，顺序照抄。
-_RETRIEVAL_FIELDS = (
+_SOURCE_FIELDS = (
     "retrieval_source_refs",
     "answer_evidence_source_refs",
     "retrieved_source_refs",
@@ -45,6 +45,9 @@ _RETRIEVAL_FIELDS = (
     "predicted_source_refs",
     "source_metrics",
     "source_mapping_complete",
+)
+_RETRIEVAL_FIELDS = (
+    *_SOURCE_FIELDS,
     "retrieval_metrics_applicable",
     "retrieval_metrics_reason",
     "retrieval_recall",
@@ -192,6 +195,11 @@ def export_traces(
                     r for r in state.get("scoring_reviews") or [] if r.get("qa_id") == str(item.get("qa_id"))
                 ],
                 "final_trace": final_trace,
+                **(
+                    {"retrieval": {key: item.get(key) for key in _SOURCE_FIELDS}}
+                    if "source_mapping_complete" in item
+                    else {}
+                ),
                 **(
                     {"evaluation": item["evaluation"], "evaluation_result": item.get("evaluation_result")}
                     if item.get("evaluation")

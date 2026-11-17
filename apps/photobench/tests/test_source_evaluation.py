@@ -6,8 +6,28 @@ from photobench.domain.datasets.validation import validate_targets
 from photobench.domain.evaluation.contract import content_fingerprint, validate_evaluation
 from photobench.domain.evaluation.profiles import list_score
 from photobench.domain.evaluation.sources import source_metrics_for_record, source_set_metrics
+from photobench.domain.runs.exports import export_sft, export_traces
 
 adapt_qa = runpy.run_path(str(Path(__file__).parents[3] / "scripts/prepare_atm_sources.py"))["adapt_qa"]
+
+
+def test_both_exports_preserve_candidate_read_and_citation_sources():
+    source = {"source_type": "email", "source_id": "email1"}
+    item = {
+        "qa_id": "q1",
+        "source_mapping_complete": True,
+        "retrieved_source_refs": [source],
+        "read_source_refs": [source],
+        "predicted_source_refs": [],
+        "source_metrics": {"citations": {"recall": 0}},
+    }
+    state = {"items": [item]}
+    for exported in [export_traces(state)[0], export_sft(state)["items"][0]]:
+        assert exported["retrieval"]["retrieved_source_refs"] == [source]
+        assert exported["retrieval"]["read_source_refs"] == [source]
+        assert exported["retrieval"]["predicted_source_refs"] == []
+        assert exported["retrieval"]["source_metrics"] == item["source_metrics"]
+    assert "retrieval" not in export_traces({"items": [{"qa_id": "old"}]})[0]
 
 
 def test_email_id_list_uses_source_delivery_and_not_answer_text():
