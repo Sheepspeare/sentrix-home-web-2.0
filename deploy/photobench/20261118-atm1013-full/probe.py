@@ -23,7 +23,12 @@ def probe(stage):
             'failed_phase', 'fatal_error', 'started_at', 'finished_at', 'summary', 'scope_build']
     result = {k: state.get(k) for k in keys}
     result['stage'] = stage
-    result['phases'] = state.get('phases', {})
+    fields = {'status', 'progress', 'agent_completed', 'agent_total', 'judge_completed', 'judge_total',
+              'started_at', 'finished_at', 'error', 'operation_id', 'imported', 'failed', 'total'}
+    result['phases'] = {name: {k: v for k, v in phase.items() if k in fields}
+                        for name, phase in state.get('phases', {}).items() if name != 'gpu_metrics'}
+    result['deployment'] = {k: state.get('phases', {}).get('model_deploy', {}).get(k)
+                            for k in ['model_identity', 'gamma_sync']}
     result['active'] = api(port, 'active-work')['work']
     result['imports'] = api(product, 'imports/progress?scope_id=' + state['scope_id'])
     result['disk_free'] = {p: shutil.disk_usage(p).free for p in ['/home', '/var/tmp']}
