@@ -55,14 +55,24 @@ export function StartActions(props: StartActionsProps) {
           </button>
           <button className="btn warn" type="button" disabled={Boolean(props.stopping)} onClick={onStop}>停止全部</button>
         </div>
-        {runMode === "full" && (
-          <label className={`delete-scope-toggle${deleteScopeAfterRun ? " active" : ""}${locked ? " disabled" : ""}`}
-            title="只在完整链路测试结束后删除本次生成的相册，谨慎开启">
-            <input type="checkbox" checked={deleteScopeAfterRun} disabled={locked}
-              onChange={event => onDeleteScopeAfterRunChange(event.target.checked)} />
-            完成后删除相册
-          </label>
-        )}
+        <div className="start-toggle-actions">
+          {runMode !== "build" && (
+            <label className={`reasoning-mode-toggle${(props.reasoning ?? true) ? " active" : ""}${locked ? " disabled" : ""}`}
+              title="开启后放开工具与调用次数；关闭后恢复系统执行限制，适合端侧小模型。">
+              <input type="checkbox" aria-label="测评推理模式" checked={props.reasoning ?? true} disabled={locked}
+                onChange={event => props.onReasoningChange?.(event.target.checked)} />
+              开启推理模式
+            </label>
+          )}
+          {runMode === "full" && (
+            <label className={`delete-scope-toggle${deleteScopeAfterRun ? " active" : ""}${locked ? " disabled" : ""}`}
+              title="只在完整链路测试结束后删除本次生成的相册，谨慎开启">
+              <input type="checkbox" checked={deleteScopeAfterRun} disabled={locked}
+                onChange={event => onDeleteScopeAfterRunChange(event.target.checked)} />
+              完成后删除相册
+            </label>
+          )}
+        </div>
       </div>
       {reason && reason !== buttonLabel && <span className="config-help start-disabled-reason">{reason}</span>}
     </div>

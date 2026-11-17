@@ -252,18 +252,6 @@ export function ConfigSection({
             )}
             {reuse.runMode !== "build" && (
               <label className="config-checkbox-label">
-                <span>推理模式</span>
-                <span>
-                  <input type="checkbox" aria-label="测评推理模式" checked={start.reasoning ?? true}
-                    disabled={start.suiteRunning || start.hasRunning}
-                    onChange={event => start.onReasoningChange?.(event.target.checked)} />
-                  开启推理模式
-                </span>
-                <span className="config-help">默认开启：开放全工具与调用次数，默认单回合预算一小时。</span>
-              </label>
-            )}
-            {reuse.runMode !== "build" && (
-              <label className="config-checkbox-label">
                 <span>图记忆检索</span>
                 <span>
                   <input
