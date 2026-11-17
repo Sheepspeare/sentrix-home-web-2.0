@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { BASE } from "../../api/client.ts";
 import type { SourceRef } from "../../api/types.ts";
+import { fmtTimestamp } from '../../lib/format.ts';
 
 function SourceCard({ source, albumId }: { source: SourceRef; albumId: string }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState("");
   const name = String(source.source_id || source.file_name || "文档");
   const fileName = String(source.file_name || `${name}.txt`);
+  const timestamp = String(source.source_timestamp || '');
   const url = source.asset_id
     ? `${BASE}/assets/${encodeURIComponent(String(source.asset_id))}/file`
     : `${BASE}/albums/${encodeURIComponent(albumId)}/documents/${encodeURIComponent(fileName)}`;
@@ -21,7 +23,7 @@ function SourceCard({ source, albumId }: { source: SourceRef; albumId: string })
     if (event.currentTarget.open && text === null && !error) void loadText();
   }}>
     <summary>{source.source_type === "email" ? "邮件" : "文档"} · {String(source.title || name)}</summary>
-    <p>{name} {String(source.source_timestamp || "")}</p>
+    <p>{name} <time dateTime={timestamp} title={timestamp}>{fmtTimestamp(timestamp)}</time></p>
     {source.summary ? <p>{String(source.summary)}</p> : null}
     {source.excerpt ? <blockquote>{String(source.excerpt)}</blockquote> : null}
     <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{error || text || "加载原文…"}</pre>

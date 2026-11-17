@@ -1,4 +1,6 @@
-import type { InteractiveModel } from '../../api/types.ts';
+import { useEffect, useRef, useState } from 'react';
+import { post } from '../../api/client.ts';
+import type { CurrentModelInfo, InteractiveModel } from '../../api/types.ts';
 
 export interface ModelOptions {
   profiles: Array<{ id: string; available?: boolean; label?: string }>;
@@ -7,10 +9,38 @@ export interface ModelOptions {
   modelEndpoint: string;
 }
 
-export function ModelSelect({ options, value, onChange, disabled = false }: {
-  options: ModelOptions; value: InteractiveModel; onChange: (value: InteractiveModel) => void; disabled?: boolean;
+export function ModelSelect({ options, value, onChange, onReadyChange, disabled = false }: {
+  options: ModelOptions; value: InteractiveModel; onChange: (value: InteractiveModel) => void;
+  onReadyChange?: (ready: boolean) => void; disabled?: boolean;
 }) {
   const choice = value.profile && value.profile !== '__current__' ? 'profile:' + value.profile : value.target_id ? 'target:' + value.target_id : value.base_url !== undefined ? 'custom' : 'current';
+  const endpoint = (value.base_url || '').trim();
+  const [discovery, setDiscovery] = useState<{ endpoint: string; models: string[]; error: string; revision: number } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const latest = useRef({ value, onChange });
+  useEffect(() => { latest.current = { value, onChange }; }, [value, onChange]);
+  useEffect(() => {
+    if (choice !== 'custom' || !endpoint) return;
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      void post<CurrentModelInfo>('/current-model', { model_base_url: endpoint, vllm_target_id: '' }).then(data => {
+        if (disposed) return;
+        const models = data.served_models || [];
+        setDiscovery({ endpoint, models, error: models.length ? '' : '该接口未返回可用模型', revision });
+        const current = latest.current;
+        if (models.length === 1 && !current.value.endpoint_model) {
+          current.onChange({ ...current.value, endpoint_model: models[0] });
+        }
+      }).catch((error: Error) => {
+        if (!disposed) setDiscovery({ endpoint, models: [], error: error.message, revision });
+      });
+    }, 350);
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [choice, endpoint, revision]);
+  const resolved = discovery?.endpoint === endpoint && discovery.revision === revision;
+  const servedModels = resolved ? discovery.models : [];
+  const ready = choice !== 'custom' || Boolean(endpoint && servedModels.includes(value.endpoint_model || ''));
+  useEffect(() => { onReadyChange?.(ready); }, [ready, onReadyChange]);
   return <div className="interactive-model">
     <label>模型<select aria-label="问答模型" value={choice} disabled={disabled} onChange={e => {
       const next = e.target.value;
@@ -25,8 +55,14 @@ export function ModelSelect({ options, value, onChange, disabled = false }: {
       <option value="custom">其他模型端点</option>
     </select></label>
     {choice === 'custom' && <>
-      <label>模型服务地址<input aria-label="问答模型地址" value={value.base_url || ''} placeholder="http://host:port/v1" disabled={disabled} onChange={e => onChange({ ...value, base_url: e.target.value })}/></label>
-      <label>模型名（可选）<input aria-label="问答模型名" value={value.endpoint_model || ''} disabled={disabled} onChange={e => onChange({ ...value, endpoint_model: e.target.value })}/></label>
+      <label>模型服务地址<input aria-label="问答模型地址" value={value.base_url || ''} placeholder="http://host:port/v1" disabled={disabled} onChange={e => onChange({ ...value, base_url: e.target.value, endpoint_model: '' })}/></label>
+      <button className="btn ghost compact" type="button" disabled={disabled || !endpoint || !resolved} onClick={() => setRevision(n => n + 1)}>{endpoint && !resolved ? '正在获取模型…' : '↗ 获取可用模型'}</button>
+      <label>可用模型<select aria-label="问答端点模型" value={servedModels.includes(value.endpoint_model || '') ? value.endpoint_model : ''} disabled={disabled || !servedModels.length} onChange={e => onChange({ ...value, endpoint_model: e.target.value })}>
+        <option value="">{endpoint && !resolved ? '正在获取…' : servedModels.length ? '请选择模型' : '暂无可用模型'}</option>
+        {servedModels.map(model => <option key={model} value={model}>{model}</option>)}
+      </select></label>
+      {resolved && discovery.error && <p role="alert" className="error interactive-model-message">{discovery.error}</p>}
+      {resolved && servedModels.length > 1 && !ready && <p className="muted small interactive-model-message">该接口提供多个模型，请选择本次使用的模型。</p>}
     </>}
   </div>;
 }

@@ -990,6 +990,7 @@ export interface ChatSession {
   scope_id: string;
   album_id: string;
   model_name?: string;
+  endpoint_model?: string;
   model_profile?: string;
   model_identity?: Record<string, unknown>;
   model_preparation?: Record<string, unknown>;

@@ -3,7 +3,7 @@ import { api, post } from '../../api/client.ts';
 import { imageUrl } from '../../api/media.ts';
 import type { ChatSession, InteractiveModel, ManifestSummary, QaRow, RunItemDetail } from '../../api/types.ts';
 import { useQaBrowser } from '../../hooks/useQaBrowser.ts';
-import { fmtMs } from '../../lib/format.ts';
+import { fmtMs, fmtTimestamp } from '../../lib/format.ts';
 import { ModelSelect, type ModelOptions } from '../interactive/ModelSelect.tsx';
 import { GroundTruthMedia } from '../interactive/UnifiedMedia.tsx';
 import { ExecutionView } from '../interactive/ExecutionView.tsx';
@@ -20,6 +20,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
 }) {
   const [spaces, setSpaces] = useState<Space[]>([]), [bases, setBases] = useState<Base[]>([]);
   const [scope, setScope] = useState(''), [model, setModel] = useState<InteractiveModel>({});
+  const [modelReady, setModelReady] = useState(true);
   const [reasoning, setReasoning] = useState(true);
   const [sessions, setSessions] = useState<ChatSession[]>([]), [session, setSession] = useState<ChatSession | null>(null);
   const [message, setMessage] = useState(''), [error, setError] = useState(''), [sending, setSending] = useState(false);
@@ -37,7 +38,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
       const data = await api<ChatSession>(`/chat/sessions/${encodeURIComponent(id)}`);
       if (selectedId.current !== id) return;
       setConversationOpen(true); setReasoning(data.reasoning === true);
-      setSession(data); setScope(data.scope_id); setModel({ profile: data.model_profile, base_url: String(data.runtime_snapshot?.model_base_url || ''), manager_url: String(data.runtime_snapshot?.vllm_manager_url || '') }); localStorage.setItem('photobench-chat-session', id);
+      setSession(data); setScope(data.scope_id); setModel({ profile: data.model_profile, base_url: String(data.runtime_snapshot?.model_base_url || ''), manager_url: String(data.runtime_snapshot?.vllm_manager_url || ''), endpoint_model: data.endpoint_model || data.model_name }); localStorage.setItem('photobench-chat-session', id);
     } catch (e) { setError((e as Error).message); }
   };
   useEffect(() => {
@@ -75,7 +76,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
   }, [picker, browser.qaBrowserAlbum, browser.qaBrowserSet]); // oxlint-disable-line react-hooks/exhaustive-deps
   const reset = () => { selectedId.current = ''; setSession(null); setSelectedQa(null); setReasoning(true); localStorage.removeItem('photobench-chat-session'); };
   const send = (row?: QaRow) => {
-    if (sending || closing) return;
+    if (sending || closing || !modelReady) return;
     setSending(true); setError(''); setPicker(false); setConversationOpen(true);
     sendPromise.current = (async () => {
     try {
@@ -128,15 +129,15 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
         <form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(); }}>
           <textarea aria-label="聊天问题" placeholder="输入问题，支持连续追问…" maxLength={2000} value={message} disabled={ownActive || sending || closing} onChange={e => setMessage(e.target.value)}/>
           <div className="chat-composer-actions">{conversationOpen && <label><input type="checkbox" aria-label="聊天推理模式" checked={reasoning} disabled={ownActive || sending || closing} onChange={e => setReasoning(e.target.checked)}/> 开启推理模式</label>}<button className="btn ghost" type="button" disabled={!scope || ownActive || sending || busy || closing} onClick={openPicker}>从题集选题</button>
-            {ownActive ? <button type="button" className="btn ghost" onClick={() => { void post(`/chat/sessions/${encodeURIComponent(id!)}/cancel`, {}).then(() => select(id!)).catch(e => setError((e as Error).message)); }}>停止回答</button> : <button className="btn" disabled={!scope || !message.trim() || sending || busy || closing}>{sending ? '正在发送…' : '发送'}</button>}
+            {ownActive ? <button type="button" className="btn ghost" onClick={() => { void post(`/chat/sessions/${encodeURIComponent(id!)}/cancel`, {}).then(() => select(id!)).catch(e => setError((e as Error).message)); }}>停止回答</button> : <button className="btn" disabled={!scope || !message.trim() || sending || busy || closing || !modelReady}>{sending ? '正在发送…' : '发送'}</button>}
           </div>
         </form>
   </>;
   return <section className="chat-view">
     <div className="section-head"><div><h2>聊天对话</h2><p className="muted">选择相册与模型，自由提问或运行题集中的一道题。</p></div><button className="btn ghost" disabled={ownActive || sending} onClick={reset}>新建对话</button></div>
     <div className="chat-controls">
-      <label>相册<select aria-label="聊天相册" value={scope} disabled={ownActive || sending} onChange={e => { reset(); setScope(e.target.value); }}><option value="">选择相册</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name || s.id}{s.created_at ? ` · ${s.created_at.slice(0, 16)}` : ''}</option>)}</select></label>
-      <ModelSelect key={session ? session.session_id : 'new'} options={models} value={model} onChange={value => { reset(); setModel(value); }} disabled={ownActive || sending}/>
+      <label>相册<select aria-label="聊天相册" value={scope} disabled={ownActive || sending} onChange={e => { reset(); setScope(e.target.value); }}><option value="">选择相册</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name || s.id}{s.created_at ? ` · ${fmtTimestamp(s.created_at)}` : ''}</option>)}</select></label>
+      <ModelSelect key={session ? session.session_id : 'new'} options={models} value={model} onChange={value => { reset(); setModel(value); }} onReadyChange={setModelReady} disabled={ownActive || sending}/>
       {!conversationOpen && <label><span>推理模式</span><span><input type="checkbox" aria-label="聊天推理模式" checked={reasoning} disabled={ownActive || sending}
         onChange={e => setReasoning(e.target.checked)}/> 开启推理模式</span></label>}
     </div>
@@ -153,7 +154,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
       {sourceAlbum !== browser.qaBrowserAlbum && <p>请先选择与该数据集对应的相册。</p>}
       <div className="chat-qa-list">{browser.qaBrowserLoading ? <p>加载题集…</p> : browser.visibleQaBrowserItems.map(row => <button className={'chat-qa-option' + (selectedQa?.qa_id === row.qa_id ? ' selected' : '')} key={row.qa_id} onClick={() => setSelectedQa(row)}><strong>{row.qa_id}</strong> {row.question}</button>)}</div>
       {selectedQa && <div className="chat-qa-preview"><h4>{selectedQa.question}</h4>{selectedQa.conversation && <pre>{JSON.stringify(selectedQa.conversation, null, 2)}</pre>}<p>标准答案：{selectedQa.answer}</p><GroundTruthMedia item={selectedQa as RunItemDetail} albumId={browser.qaBrowserAlbum} fromDataset onOpenMedia={media => onOpenMedia({ url: imageUrl(media), name: String(media.file_name || media.media_id || '') })}/></div>}
-      {error && <p className="error" role="alert">{error}</p>}<button className="btn" disabled={!selectedQa || sourceAlbum !== browser.qaBrowserAlbum || sending || busy} onClick={() => void send(selectedQa!)}>运行此题（新对话）</button>
+      {error && <p className="error" role="alert">{error}</p>}<button className="btn" disabled={!selectedQa || sourceAlbum !== browser.qaBrowserAlbum || sending || busy || !modelReady} onClick={() => void send(selectedQa!)}>运行此题（新对话）</button>
     </InteractiveModal>}
   </section>;
 }

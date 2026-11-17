@@ -72,3 +72,6 @@
 .lightbox { z-index: 1100; }
 .interactive-modal-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; }
 .chat-composer-actions { flex-wrap: wrap; align-items: center; }
+.interactive-model-message { flex-basis: 100%; margin: 0; }
+.retest-execution { scroll-margin-top: 12px; outline: none; }
+.interactive-table time, .execution-events time { white-space: nowrap; font-variant-numeric: tabular-nums; }

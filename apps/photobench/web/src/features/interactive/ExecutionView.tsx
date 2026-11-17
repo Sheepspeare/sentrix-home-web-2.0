@@ -4,6 +4,7 @@ import { Lightbox, type LightboxTarget } from '../../components/Lightbox.tsx';
 import type { RunItemDetail } from '../../api/types.ts';
 import { DebugTracePanel } from '../qa/DebugTracePanel.tsx';
 import { CandidateMedia, DeliveredMedia } from './UnifiedMedia.tsx';
+import { fmtTimestamp } from '../../lib/format.ts';
 
 type Event = { timestamp?: unknown; text?: unknown; kind?: unknown; status?: unknown };
 export function ExecutionView({ item, albumId, modelLabel, running = false, phases }: {
@@ -23,7 +24,7 @@ export function ExecutionView({ item, albumId, modelLabel, running = false, phas
       <DeliveredMedia item={item} albumId={albumId} onOpenMedia={openMedia}/>
     </>}
     <details className="execution-event-log" open><summary>运行日志（{events.length}）</summary>
-      <div className="execution-events" aria-live="polite">{events.map((event, i) => <p key={i}><time>{String(event.timestamp || '')}</time> {String(event.text || event.kind || event.status || '')}</p>)}
+      <div className="execution-events" aria-live="polite">{events.map((event, i) => <p key={i}><time dateTime={String(event.timestamp || '')} title={`${fmtTimestamp(event.timestamp)} · ${String(event.timestamp || '')}`}>{fmtTimestamp(event.timestamp, true)}</time> {String(event.text || event.kind || event.status || '')}</p>)}
         {!events.length && <p className="muted">{running ? '等待执行事件…' : '暂无执行事件'}</p>}</div>
     </details>
     {item && <DebugTracePanel detail={item} modelLabel={modelLabel} defaultOpen/>}

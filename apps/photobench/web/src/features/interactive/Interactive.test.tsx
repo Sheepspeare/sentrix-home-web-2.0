@@ -19,12 +19,14 @@ const models = { profiles: [{ id: 'other', label: '另一个模型' }], targets:
 afterEach(cleanup);
 beforeEach(() => {
   localStorage.clear(); api.mockReset(); post.mockReset();
+  Element.prototype.scrollIntoView = vi.fn();
   api.mockImplementation((path: string) => Promise.resolve(path.startsWith('/memory-spaces')
     ? { spaces: [{ id: 'scope', name: '相册' }], reuse_bases: [{ scope_id: 'scope', album_id: 'album', ready: true }] }
     : { items: [] }));
 });
 
-it('selects Manager, configured target and named custom endpoint', () => {
+it('selects Manager, configured target and discovers a custom endpoint model', async () => {
+  post.mockResolvedValue({ served_models: ['test-model'], served_model_name: 'test-model' });
   const selected = vi.fn();
   function Harness() {
     const [value, setValue] = useState<InteractiveModel>({});
@@ -36,8 +38,31 @@ it('selects Manager, configured target and named custom endpoint', () => {
   fireEvent.change(screen.getByLabelText('问答模型'), { target: { value: 'target:cloud' } });
   expect(selected).toHaveBeenLastCalledWith({ target_id: 'cloud' });
   fireEvent.change(screen.getByLabelText('问答模型'), { target: { value: 'custom' } });
-  fireEvent.change(screen.getByLabelText('问答模型名'), { target: { value: 'test-model' } });
-  expect(selected).toHaveBeenLastCalledWith({ base_url: 'http://model/v1', endpoint_model: 'test-model' });
+  expect(screen.queryByLabelText('问答模型名')).toBeNull();
+  await waitFor(() => expect(selected).toHaveBeenLastCalledWith({ base_url: 'http://model/v1', endpoint_model: 'test-model' }));
+  expect(post).toHaveBeenCalledWith('/current-model', { model_base_url: 'http://model/v1', vllm_target_id: '' });
+});
+
+it('reloads the currently selected completed retest and brings its answer into view', async () => {
+  const created = new Date(2026, 10, 18, 1, 50, 41).toISOString();
+  const record = { run_id: 'same', model_name: 'test-model', status: 'completed', created_at: created };
+  post.mockResolvedValue({ run_id: 'same' });
+  api.mockImplementation((path: string) => Promise.resolve(path.includes('/retests?') ? { items: [record] }
+    : path.endsWith('/progress') ? { status: 'completed', model: record }
+    : path.endsWith('/items/0') ? { item: { index: 0, answer: '历史完整回答', runtime_turns: [{ index: 0, trace: [{ timestamp: created, text: '保存的事件' }] }] } }
+    : { items: [{ index: 0 }] }));
+  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={vi.fn()}/>);
+  fireEvent.click(screen.getByText('开始重测'));
+  await screen.findByText('历史完整回答');
+  expect(screen.getByText('2026-11-18 01:50:41')).toBeTruthy();
+  expect(screen.queryByText('completed')).toBeNull();
+  for (let i = 0; i < 2; i += 1) {
+    fireEvent.click(screen.getByText('查看回答与轨迹'));
+    await screen.findByText('历史完整回答');
+  }
+  expect(api.mock.calls.filter(([path]) => path === '/runs/same/items/0')).toHaveLength(3);
+  await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('dialog')).toBeTruthy();
 });
 
 it('retests only the selected question and scoring batch with a different model', async () => {
@@ -53,6 +78,28 @@ it('retests only the selected question and scoring batch with a different model'
   expect(post).toHaveBeenCalledWith('/runs/original/retest', {
     qa_id: 'q4', reasoning: true, model: { profile: 'other', base_url: 'http://model/v1', manager_url: 'http://manager' }, scoring_profile: 'atm', scoring_batch: 'batch',
   });
+});
+
+it('keeps a saved chat open while discovering its endpoint model', async () => {
+  const session = {
+    session_id: 'saved', title: '已保存的会话', scope_id: 'scope', album_id: 'album', status: 'ready',
+    model_profile: '__current__', model_name: 'served-model', endpoint_model: 'served-model',
+    runtime_snapshot: { model_base_url: 'http://saved/v1' },
+    turns: [{ index: 0, message: '以前的问题', turn_id: 't1', status: 'completed' }],
+    items: [{ answer: '以前的回答' }],
+  };
+  api.mockImplementation((path: string) => Promise.resolve(path.startsWith('/memory-spaces')
+    ? { spaces: [{ id: 'scope', name: '相册' }], reuse_bases: [] }
+    : path === '/chat/sessions/saved' ? session : { items: [session] }));
+  post.mockResolvedValue({ served_models: ['served-model'] });
+  render(<ChatView sentrixUrl="http://product" manifests={[]} models={models} busy={false} onOpenMedia={vi.fn()}/>);
+  fireEvent.click(await screen.findByText('已保存的会话'));
+  await screen.findByText('以前的回答');
+  await screen.findByRole('option', { name: 'served-model' });
+  expect(screen.getByText('以前的回答')).toBeTruthy();
+  expect(localStorage.getItem('photobench-chat-session')).toBe('saved');
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenCalledWith('/current-model', { model_base_url: 'http://saved/v1', vllm_target_id: '' });
 });
 
 it('sends free questions and continues the same conversation', async () => {
