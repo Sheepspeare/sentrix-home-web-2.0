@@ -122,7 +122,7 @@ from sentrix.infrastructure.models.legacy import (
     LegacyEmbeddingHealthProbe,
 )
 from sentrix.infrastructure.models.reranker import BgeSidecarReranker
-from sentrix.infrastructure.models.sensevoice import SenseVoiceRecognizer
+from sentrix.infrastructure.models.speech_http import HttpSpeechRecognizer
 from sentrix.infrastructure.models.visual_utility import OpenAIVisualEvidenceUtility
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
@@ -496,7 +496,7 @@ class Container:
         return cls(
             build_revision=read_build_revision(),
             settings=settings,
-            speech_recognizer=SenseVoiceRecognizer(settings.speech_model_dir),
+            speech_recognizer=HttpSpeechRecognizer(settings.speech_service_url),
             database=database,
             operation_control=InProcessOperationControl(),
             import_progress=InProcessImportProgressStore(),

@@ -59,7 +59,8 @@ make web-dev        # https://localhost:4274/
 ```
 
 “问一句”的语音输入首次需安装更新后的 Python 依赖并运行 `make speech-prepare`。
-SenseVoice-Small / sherpa-onnx 在本机 API 启动时加载，后续请求复用；
+SenseVoice-Small / sherpa-onnx 由独立共享服务启动加载，同主机用户 API 经 HTTP 复用。
+开发先在独立终端执行 `make speech-dev`，再运行 `make dev` 和 `make web-dev`。
 浏览器录音发送到本机后端，音频不落盘、不使用云端 ASR。
 资源准备和 HTTPS 要求见[语音输入运行手册](docs/runbooks/assistant-speech.md)。
 

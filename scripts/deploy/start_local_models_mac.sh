@@ -4,10 +4,12 @@
 # Ports are intentionally kept compatible with the application contract:
 #   8100  llama.cpp OpenAI-compatible VLM (qwen35-q4km + mmproj)
 #   8101  BGE-M3 text embeddings (1024d)
+#   8102  WeMM embeddings (alternative server scheme; not started by this Mac stack)
 #   8103  Chinese-CLIP ViT-L/14 image embeddings (768d)
 #   8104  BGE reranker (optional; skipped when the weights are missing)
-#   8106  Utility-MRAG Qwen3-VL-2B surrogate (optional local evidence selector)
 #   8105  Qwen3-ASR (optional; started only when a local server is configured)
+#   8106  Utility-MRAG Qwen3-VL-2B surrogate (optional local evidence selector)
+#   8107  shared SenseVoice-Small microphone ASR
 #   8191  Sentrix API (legacy embedding scheme)
 set -euo pipefail
 
@@ -54,6 +56,19 @@ wait_http() {
   done
   return 1
 }
+
+# Host-owned service. Missing weights fail before startup; preparation is explicit.
+# Only this deployment entry starts it; individual API launchers never do.
+if ! port_in_use 8107; then
+  SENTRIX_DATA_DIR="$DATA_DIR" nohup .venv/bin/python -m scripts.maintenance.sensevoice_sidecar \
+    > logs/sensevoice.log 2>&1 < /dev/null &
+fi
+wait_http "http://127.0.0.1:8107/health" 120 || {
+  echo "SenseVoice 未就绪，请先 make speech-prepare；查看 logs/sensevoice.log" >&2
+  exit 1
+}
+curl -fsS --max-time 2 http://127.0.0.1:8107/health | .venv/bin/python -c \
+  'import json,sys; h=json.load(sys.stdin); assert h.get("service")=="sentrix-sensevoice" and h.get("available") is True, "8107 is not a ready SenseVoice service"'
 
 if ! port_in_use "$VLM_PORT"; then
   # 权重只在真的要拉起进程时才必须存在：模型已在跑时，这里只是一个重启入口。

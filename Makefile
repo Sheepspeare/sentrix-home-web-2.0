@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: speech-prepare help install lint format format-check typecheck arch photobench-check test test-unit test-contract test-integration test-real ci-real coverage check-docs web-check ci dev photobench-dev web-dev install-services start stop restart status
+.PHONY: speech-dev speech-prepare help install lint format format-check typecheck arch photobench-check test test-unit test-contract test-integration test-real ci-real coverage check-docs web-check ci dev photobench-dev web-dev install-services start stop restart status
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-18s %s\n", $$1, $$2}'
@@ -139,7 +139,10 @@ dev photobench-dev: export SENTRIX_DEPLOYMENT_PROFILE ?= $(if $(filter Darwin,$(
 speech-prepare: ## 准备本机后端 SenseVoice-Small 模型（首次下载，之后校验复用）
 	$(PY) scripts/prepare_speech_model.py
 
-dev: ## 起 2.0 API（8191），启动时加载语音模型
+speech-dev: ## 独立启动共享 SenseVoice 服务（8106），本地权重需先准备
+	$(PY) -m scripts.maintenance.sensevoice_sidecar
+
+dev: ## 起 2.0 API（8191），连接共享语音服务
 	$(PY) -m uvicorn --factory sentrix.main:create_app --host 0.0.0.0 --port 8191 --app-dir apps/api/src
 
 # PhotoBench 的入口也是工厂（`photobench.main` 没有模块级 app：那会让任何 import 带上
