@@ -1,5 +1,24 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18｜ATM1013两轮全链路已启动并接入精确监控
+
+按用户授权，100的8872 Qwen3.5-4B Q4_K_M与8874 qwen3.7-plus并行运行。均为atm-bench1013题、full新scope/新记忆、reasoning=true、graph_enabled=true、QA并发4、单题等待3660秒；统一冻结ATM native_v2/v5及豆包2.1 Lite Judge，GT图片/元数据关闭。Qwen正常结束并验收1013答卷、评分及两导出后，8874接doubao-seed-2.1-lite；豆包尚未启动。
+
+|阶段|精确run ID|现阶段|
+|---|---|---|
+|Q4_K_M / 8872|20261118-043111-2026.11.17-atm-sources-addresses-current-e53f3c|running / photo_import|
+|Qwen3.7 Plus / 8874|20261118-043128-2026.11.17-atm-sources-addresses-current-7fcbea|running / photo_import|
+
+两端实际型号发现、冻结1013/SHA、共同评分提示词一致、全11034份材料路径预检通过。新scope各含run时间，model_deploy均done，原答卷未复用。导入最新processed分别7663/1970，失败0（仅启动快照，后续读精确run）。Q4权重SHA及Q4量化、4×16K、Q4_OK短生成通过；仅恢复既定GPU1服务并刷新8291容量探测。云端推理声明128K；系统reasoning开关与原生模型thinking分别记录，实际QA轨迹待进入答题后复核。
+
+资源准备：六份离线部署DB冷备压缩并解压SHA一致，释放10.55GiB；原始冷备路径各附.db.archive.json可恢复映射。首次系统Python缺file_digest在首文件读阶段失败，无写入；改业务Python3.12完成。8874历史results迁至/home/realmagic/xy/experiments/atm1013-20261118/cloud-results，159文件/2117301466字节SHA逐份一致，原路径保留软链接，空闲重启8874；历史数据保持。未变更8772/8191。
+
+本机ops先语法检查与commit（27d250c/da5c55b/73d2c3c/516894c/c1346a6），再传100；五份远端脚本SHA与已提交本机一致，实际运行验收通过。业务源码仍d44e834+100-reasoning-context，本轮仅实验运行准备与专属模型unit覆盖；单次prepare/launch禁止重放。代码推送状态以审计delivery.json为准。
+
+wakecodex本地listener健康；Q4 wait 5342e16f-9ed6-47c5-a3a7-03c415cade8a、Qwen wait b8a0d160-bad2-4c64-b6bc-71cbf90aa009，均在任务前注册，回到主对话01a1e782-4348-7b70-8dc5-aec2d8e20c82。本机watcher PID43440/43441每60秒读取精确提交快照与worker，终态/worker异常/型号变化/磁盘低于1.5GiB/两小时无进度/连续三次探测失败写事件并唤醒。token仅存本机私有目录。
+
+接手先读audit/20261118-atm1013-three-model-full/README.md、state.json及对应事件/latest。异常按用户授权定位修复并保留已完成答卷和分数续跑；修复续跑前注册新wait。Qwen验收后先注册豆包新wait，再建独立full新scope；三轮完整验收、比较及监控收尾仍待执行，不重复POST。当前按事件监控等待，未完成测评不报最终成绩。
+
 ## 2026-11-18｜1013题全集与三模型全链路测评交接
 
 默认题集atm-bench已替换为完整1013题，博物馆题首答案ID日期0904→0905，其他1012题保持；主集相册2026.11.17-atm-sources-addresses及名称不变。先本机数据提交6476d88后发布100共同题包，8772/8872/8874真实API均为1013题、预检0错误，六图逐端18次访问通过。发布资产见deploy/photobench/20261118-atm-main-default，工作区完整证据audit/20261118-atm-museum-qa-correction/replacement/。旧发布脚本已消费，不重放。
