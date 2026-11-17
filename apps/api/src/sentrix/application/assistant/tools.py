@@ -86,6 +86,20 @@ _LEVEL_BY_EVIDENCE_CLASS: Mapping[str, str] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class ToolLimits:
+    """模型可见结果的长度上限。local 等于今天的常量；cloud 可放大。"""
+
+    summary_text_chars: int = _SUMMARY_TEXT_LIMIT
+    summary_ocr_chars: int = _SUMMARY_OCR_LIMIT
+    summary_list_items: int = _SUMMARY_LIST_LIMIT
+    speech_segments: int = 12
+    speech_chars: int = 1000
+    read_text_chars: int = 1600
+    read_text_lines: int = 8
+    read_text_line_chars: int = 150
+
+
 #: 「合影」的判据：**这张照片上有两个人以上**。1.0 判的是「caption/activity 里出现了
 #: 「合影」两个字」——一条硬编码的题型关键词，而它服务的是 487 道评测题里的 **1 道**
 #: （「一共拍了几张不同人数的合影」）。人数据已经在了（人脸绑定 + 观察快照），按数据判
@@ -106,7 +120,7 @@ def _group_photo_rows(preview: Sequence[Mapping[str, Any]]) -> list[Mapping[str,
     ]
 
 
-def _observation_summary(observation: Observation | None) -> str:
+def _observation_summary(observation: Observation | None, *, limits: ToolLimits | None = None) -> str:
     """一条观察压成给模型看的一句话。分段顺序照 1.0，用 2.0 现成的列。
 
     ``caption → activity → place → objects[:8] → clothing[:8] → 文字：…``
@@ -119,6 +133,7 @@ def _observation_summary(observation: Observation | None) -> str:
     """
     if observation is None:
         return ""
+    limit = limits or ToolLimits()
     parts: list[str] = []
     for value in (observation.caption, observation.activity, observation.place):
         text = (value or "").strip()
@@ -131,11 +146,11 @@ def _observation_summary(observation: Observation | None) -> str:
             if text and text not in labels:
                 labels.append(text)
         if labels:
-            parts.append("、".join(labels[:_SUMMARY_LIST_LIMIT]))
+            parts.append("、".join(labels[: limit.summary_list_items]))
     ocr = (observation.ocr_text or "").strip()
     if ocr:
-        parts.append(f"文字：{ocr[:_SUMMARY_OCR_LIMIT]}")
-    return "；".join(parts)[:_SUMMARY_TEXT_LIMIT]
+        parts.append(f"文字：{ocr[: limit.summary_ocr_chars]}")
+    return "；".join(parts)[: limit.summary_text_chars]
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +210,9 @@ class AssistantToolbox:
         person_crops: PersonCropRenderer,
         asset_places: AssetPlaceRepository | None = None,
         events: EventRepository | None = None,
+        limits: ToolLimits | None = None,
     ) -> None:
+        self._limits = limits or ToolLimits()
         self._retrieval = retrieval
         self._assets = assets
         self._result_sets = result_sets
@@ -570,7 +587,7 @@ class AssistantToolbox:
             # ——「里面有谁」「有几个人」「一共拍了几张不同人数的合影」——而这几个问题
             # 此前只能靠逐张 ``query_photo_people`` 或 ``inspect_photo`` 去凑。
             "people_count": self._people_count(entry.asset_id),
-            "evidence_summary": _observation_summary(latest),
+            "evidence_summary": _observation_summary(latest, limits=self._limits),
             **self._speech_preview(asset),
         }
         # 全未知的子字段只保留“未知”信号，不发送空壳；有真实来源/坐标/行政区时原样保留。
@@ -637,7 +654,7 @@ class AssistantToolbox:
                         {
                             "start_sec": start_sec,
                             "end_sec": end_sec,
-                            "text": text[:1000],
+                            "text": text[: self._limits.speech_chars],
                             "speaker": str(segment.get("speaker") or ""),
                         }
                     )
@@ -648,13 +665,13 @@ class AssistantToolbox:
                         {
                             "scene_start_sec": scene.source_start_sec,
                             "scene_end_sec": scene.source_end_sec,
-                            "text": transcript[:1000],
+                            "text": transcript[: self._limits.speech_chars],
                         }
                     )
         if not evidence:
             return {}
         return {
-            "speech_evidence": evidence[:12],
+            "speech_evidence": evidence[: self._limits.speech_segments],
             "speech_evidence_note": (
                 "语音证据来自视频 ASR 转写；关键帧仅显示与该帧时间戳重叠的语音片段。"
                 "可直接用于回答说话内容，不要改用图片 OCR。"
@@ -1126,9 +1143,10 @@ class AssistantToolbox:
             },
             model_visible={
                 "asset_handle": handle,
-                "full_text": text[:1600],
+                "full_text": text[: self._limits.read_text_chars],
                 "text_regions": [
-                    {"text": line[:150], "source": "ingestion_ocr"} for line in text.splitlines()[:8]
+                    {"text": line[: self._limits.read_text_line_chars], "source": "ingestion_ocr"}
+                    for line in text.splitlines()[: self._limits.read_text_lines]
                 ],
                 "certainty": CERTAINTY_SUPPORTED,
                 "source": "ingestion_ocr",

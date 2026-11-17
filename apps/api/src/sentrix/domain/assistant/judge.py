@@ -120,10 +120,10 @@ class JudgeVerdict:
         return "；".join(parts) + "。请核对工具观察后重新给出回答。"
 
 
-def _clip(text: str) -> str:
+def _clip(text: str, *, max_chars: int = TRANSCRIPT_MESSAGE_CHARS) -> str:
     squashed = _WHITESPACE.sub(" ", text).strip()
-    if len(squashed) > TRANSCRIPT_MESSAGE_CHARS:
-        return squashed[:TRANSCRIPT_MESSAGE_CHARS] + "…(截断)"
+    if len(squashed) > max_chars:
+        return squashed[:max_chars] + "…(截断)"
     return squashed
 
 
@@ -163,16 +163,19 @@ def build_user_prompt(
     query: str,
     answer: str,
     transcript: Sequence[Mapping[str, str]] = (),
+    transcript_limit: int = TRANSCRIPT_LIMIT,
+    message_chars: int = TRANSCRIPT_MESSAGE_CHARS,
 ) -> str:
     """评审的 user 消息。
 
-    1.0 的取舍：**完整轨迹优先**。``messages`` 拿得到时用最近 8 条原文（每条截 900 字），
+    1.0 的取舍：**完整轨迹优先**。``messages`` 拿得到时用最近 N 条原文（每条截 M 字），
     因为压缩投影会丢掉工具返回里的 ``captured_at`` 等字段，评审会因此把「依据拍摄时间
     答对的年份」误判成编造（1.0 ``judge.py:127-147`` 的注释）。
     """
+    limit = max(1, int(transcript_limit))
     lines = [
-        f"{str(item.get('role') or '?')}: {_clip(str(item.get('content') or ''))}"
-        for item in transcript[-TRANSCRIPT_LIMIT:]
+        f"{str(item.get('role') or '?')}: {_clip(str(item.get('content') or ''), max_chars=message_chars)}"
+        for item in transcript[-limit:]
         if str(item.get("content") or "").strip()
     ]
     return (
@@ -209,10 +212,26 @@ class JudgeCall:
     messages: tuple[Mapping[str, str], ...] = field(default_factory=tuple)
 
 
-def build_messages(*, query: str, answer: str, transcript: Sequence[Mapping[str, str]] = ()) -> JudgeCall:
+def build_messages(
+    *,
+    query: str,
+    answer: str,
+    transcript: Sequence[Mapping[str, str]] = (),
+    transcript_limit: int = TRANSCRIPT_LIMIT,
+    message_chars: int = TRANSCRIPT_MESSAGE_CHARS,
+) -> JudgeCall:
     return JudgeCall(
         messages=(
             {"role": "system", "content": JUDGE_SYSTEM},
-            {"role": "user", "content": build_user_prompt(query=query, answer=answer, transcript=transcript)},
+            {
+                "role": "user",
+                "content": build_user_prompt(
+                    query=query,
+                    answer=answer,
+                    transcript=transcript,
+                    transcript_limit=transcript_limit,
+                    message_chars=message_chars,
+                ),
+            },
         )
     )

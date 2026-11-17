@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     # 数据根、模型/侧车地址、judge 配置不归它管。
     deployment_profile: Literal["server", "mac"] = "server"
 
+    # ---- 云端 LLM 接入（2026-11-17） ------------------------------------------
+    # local = 当前行为：探测端点模型名、单端点、所有 LLM 角色共用。
+    # cloud = 读 llm_config_path 的 JSON，按 chat/vision 角色显式指定模型与端点。
+    llm_profile: Literal["local", "cloud"] = "local"
+    llm_config_path: Path | None = Field(default=None, validation_alias="SENTRIX_LLM_CONFIG")
+    # 显式模型名。local 下设置后跳过 /v1/models；cloud 下作为角色未写 model 时的默认。
+    vlm_model: str = ""
+
     @field_validator("face_providers", "retinaface_providers")
     @classmethod
     def validate_provider_chain(cls, raw: str) -> str:
@@ -70,6 +78,8 @@ class Settings(BaseSettings):
             key: getattr(self, key)
             for key in (
                 "deployment_profile",
+                "llm_profile",
+                "vlm_model",
                 "vlm_base_url",
                 "utility_vlm_base_url",
                 "utility_vlm_timeout_s",
@@ -218,6 +228,10 @@ class Settings(BaseSettings):
     def model_post_init(self, _context: Any, /) -> None:  # noqa: D105
         self.data_dir = self.data_dir.expanduser().resolve()
         self.web_dist_dir = self.web_dist_dir.expanduser().resolve()
+        # **云端必须显式给配置文件。** 静默回退到「单个本地端点」会让云端部署在
+        # 启动后才以 404/空观察的形式失败，那是本模块开头点名的那类静默退化。
+        if self.llm_profile == "cloud" and self.llm_config_path is None:
+            raise ValueError("SENTRIX_LLM_PROFILE=cloud 需要 SENTRIX_LLM_CONFIG")
         # **profile 只填默认值，显式环境变量永远优先。** ``model_fields_set`` 含 env
         # 解析出来的字段；显式设了就不再覆盖。
         mac = self.deployment_profile == "mac"

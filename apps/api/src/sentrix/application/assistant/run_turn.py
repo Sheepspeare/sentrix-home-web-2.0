@@ -102,7 +102,12 @@ from sentrix.domain.assistant.ports import (
     TurnRepository,
 )
 from sentrix.domain.assistant.profile import DEFAULT_PROFILE, TurnProfile
-from sentrix.domain.assistant.request_context import acquire_slot, release_slot
+from sentrix.domain.assistant.request_context import (
+    acquire_slot,
+    release_slot,
+    reset_output_budget_override,
+    set_output_budget_override,
+)
 from sentrix.domain.assistant.task_state import ACTING, FINALIZING, TaskState, ToolCallRecord
 from sentrix.domain.assistant.tool_policy import MAX_CONSECUTIVE_FAILURES, ToolAction, ToolPolicy
 from sentrix.domain.assistant.tools import FINAL_ANSWER_TOOL, RETRIEVAL_TOOLS, TOOLS_BY_NAME, ToolSpec
@@ -503,7 +508,9 @@ def _round_trip_spans(messages: Sequence[ChatMessage]) -> list[tuple[int, int]]:
     return spans
 
 
-def _drop_oldest_tool_round_trip(messages: Sequence[ChatMessage]) -> list[ChatMessage] | None:
+def _drop_oldest_tool_round_trip(
+    messages: Sequence[ChatMessage], *, protect_latest_preview: bool = True
+) -> list[ChatMessage] | None:
     """丢掉**除最新检索/翻页预览外**最老的一整轮工具往返；没有可丢的返回 ``None``。
 
     **保护对象：最新的一次 ``search_memories`` / ``get_result_page`` 往返。**
@@ -522,18 +529,21 @@ def _drop_oldest_tool_round_trip(messages: Sequence[ChatMessage]) -> list[ChatMe
         return None
     # 最新的一轮获胜：同一回合里可能既有 search 又有 page，保护最后出现的那一轮。
     protected_start: int | None = None
-    for start, _end in spans:
-        names = {call.name for call in messages[start].tool_calls}
-        if names & _PROTECTED_PREVIEW_TOOLS:
-            protected_start = start
+    if protect_latest_preview:
+        for start, _end in spans:
+            names = {call.name for call in messages[start].tool_calls}
+            if names & _PROTECTED_PREVIEW_TOOLS:
+                protected_start = start
     for start, end in spans:
-        if start == protected_start:
+        if protect_latest_preview and start == protected_start:
             continue
         return list(messages[:start]) + list(messages[end:])
     return None
 
 
-def _compact_latest_preview_round_trip(messages: Sequence[ChatMessage]) -> list[ChatMessage] | None:
+def _compact_latest_preview_round_trip(
+    messages: Sequence[ChatMessage], *, max_level: int = 4
+) -> list[ChatMessage] | None:
     """Compact the newest protected preview while preserving handles, times, and speech."""
     protected = None
     for start, end in _round_trip_spans(messages):
@@ -557,7 +567,7 @@ def _compact_latest_preview_round_trip(messages: Sequence[ChatMessage]) -> list[
             level = int(payload.get("_context_compaction_level") or 0)
         except (TypeError, ValueError):
             level = 0
-        if level >= 4:
+        if level >= max_level:
             return None
         compacted = dict(payload)
         rows = []
@@ -747,6 +757,8 @@ class _Session:
     best_coverage: float = -1.0
     # 连续几轮「一条有用的结果都没拿到」。见 ``_converse`` 的护栏。
     stalled_rounds: int = 0
+    # 输出被 max_tokens 切断后，只提高一次输出预算重试（云端）。
+    output_boost_tried: bool = False
     # **正文工具调用的纠正只给一次。** 再犯说明模型这一轮压不住这个格式，
     # 那就按 ``PARSE_FAILURE`` 收尾，而不是把同一句提醒反复喂进去换几次一样的输出。
     corrected_textual_tool_call: bool = False
@@ -798,9 +810,17 @@ class RunTurn:
         # 规划是一次模型调用，与主循环同一个端点（1.0 也是同一个 ``chat_fn``）。
         self._planner = GoalPlanner(model)
         # L2 语义评审：与主循环同一个端点（1.0 也是同一个 chat_fn）。
-        self._judge = FaithfulnessJudge(model)
+        self._judge = FaithfulnessJudge(
+            model,
+            transcript_messages=profile.judge_transcript_messages,
+            message_chars=profile.judge_message_chars,
+        )
         # L3 claim-level 核验：默认开启；``SENTRIX_CLAIM_VERIFIER=0`` 可整体退回旧 L2。
-        self._claim_verifier = ClaimVerifier(model)
+        self._claim_verifier = ClaimVerifier(
+            model,
+            max_facts=profile.claim_max_facts,
+            value_limit=profile.claim_value_limit,
+        )
         self._use_claim_verifier = os.getenv("SENTRIX_CLAIM_VERIFIER", "1") != "0"
         # llama.cpp 的槽位数（``--parallel``）。Mac 单槽无需 pin，交给服务端默认槽位。
         self._slots = max(1, int(os.getenv("SENTRIX_VLM_SLOTS", "1")))
@@ -815,6 +835,33 @@ class RunTurn:
             return
         if self._operation_control is not None:
             self._operation_control.check("turn:" + turn_id)
+
+    def _history_messages(self, conversation_id: str, record: TurnRecord) -> list[ChatMessage]:
+        """本回合可见的历史消息：local 固定 8 条，cloud 按字符预算从最新往回取。
+
+        当前回合的用户消息由调用方单独追加，这里排除，避免重复。
+        """
+        limit = max(
+            1,
+            self._profile.history_candidate_messages,
+            self._profile.history_messages,
+        )
+        messages = [
+            message
+            for message in self._conversations.history_for_prompt(conversation_id, limit)
+            if message.turn_id != record.id
+        ]
+        if self._profile.history_char_budget <= 0:
+            return messages[-self._profile.history_messages :]
+        selected: list[ChatMessage] = []
+        total = 0
+        for message in reversed(messages):
+            size = len(message.content)
+            if selected and total + size > self._profile.history_char_budget:
+                break
+            selected.append(message)
+            total += size
+        return list(reversed(selected))
 
     # ---- 建回合 -------------------------------------------------------------
 
@@ -944,10 +991,7 @@ class RunTurn:
                 )
                 history = "\n".join(
                     f"{message.role.value}: {message.content}"
-                    for message in self._conversations.history_for_prompt(
-                        record.conversation_id, HISTORY_LIMIT
-                    )
-                    if message.turn_id != record.id
+                    for message in self._history_messages(record.conversation_id, record)
                 )
                 planned = self._planner.declare(
                     record.question,
@@ -1207,40 +1251,65 @@ class RunTurn:
             except PromptTooLongError as error:
                 if state.profile.strict_model_step_budget:
                     return self._model_error_stop(session, error)
-                # 提示词撑爆了窗口。**先压历史再试一次**——这是它区别于别的模型服务
-                # 故障的地方：真因在调用方这一侧，压缩就解决得了。
-                #
-                # **一直丢到装得下为止**，不是丢一轮就重试。一次工具往返可能只占几百
-                # token，而超出的量可能上千——丢一轮不够时原先的实现直接收尾，把一次
-                # 「压缩就能救回来」的回合判成了模型故障。每次丢一整轮，所以这个循环
-                # 的步数上界就是历史里的往返数。
-                while True:
-                    compacted = _drop_oldest_tool_round_trip(messages)
-                    if compacted is None:
-                        compacted = _compact_latest_preview_round_trip(messages)
-                    if compacted is None:
-                        log.warning("提示词超预算，历史与最新检索结果都已无法安全压缩: %s", error)
-                        return self._model_error_stop(session, error)
-                    messages = compacted
-                    self._publish(
-                        session,
-                        state.emit(
-                            ProgressStage.RECOVERING,
-                            ProgressStatus.RUNNING,
-                            "上下文太满，正在压缩早先的工具往返…",
-                            kind="guard",
-                            payload={"code": "prompt_too_long"},
-                        ),
-                    )
+                if error.diagnostics.get("recovery") == "increase_output" and not session.output_boost_tried:
+                    # 云端窗口装得下，问题只是输出预算不够；提高一次预算重试，
+                    # 不删历史。仍然截断就收尾，避免无限放大。
+                    session.output_boost_tried = True
+                    current_budget = int(error.diagnostics.get("output_budget_tokens") or 0)
+                    token = set_output_budget_override(max(4096, current_budget * 2))
                     try:
                         reply = self._complete_recorded(session, messages, specs)
-                        break
-                    except PromptTooLongError:
-                        continue
-                    except OperationCancelled:
-                        raise
-                    except Exception as retry_error:
+                    except PromptTooLongError as retry_error:
                         return self._model_error_stop(session, retry_error)
+                    finally:
+                        reset_output_budget_override(token)
+                else:
+                    # 提示词撑爆了窗口。**先压历史再试一次**——这是它区别于别的模型服务
+                    # 故障的地方：真因在调用方这一侧，压缩就解决得了。
+                    #
+                    # **一直丢到装得下为止**，不是丢一轮就重试。一次工具往返可能只占几百
+                    # token，而超出的量可能上千——丢一轮不够时原先的实现直接收尾，把一次
+                    # 「压缩就能救回来」的回合判成了模型故障。每次丢一整轮，所以这个循环
+                    # 的步数上界就是历史里的往返数。
+                    while True:
+                        compacted = _drop_oldest_tool_round_trip(
+                            messages,
+                            protect_latest_preview=self._profile.compaction_protect_latest_preview,
+                        )
+                        if compacted is None and self._profile.compaction_preview_rewrite:
+                            compacted = _compact_latest_preview_round_trip(
+                                messages, max_level=self._profile.compaction_max_preview_level
+                            )
+                        if compacted is None:
+                            log.warning(
+                                "提示词超预算，历史与最新检索结果都已无法安全压缩"
+                                "（compaction_mode=%s preview_rewrite=%s）: %s",
+                                self._profile.compaction_mode,
+                                self._profile.compaction_preview_rewrite,
+                                error,
+                            )
+                            error.diagnostics["error_category"] = "context_compaction_exhausted"
+                            return self._model_error_stop(session, error)
+                        messages = compacted
+                        self._publish(
+                            session,
+                            state.emit(
+                                ProgressStage.RECOVERING,
+                                ProgressStatus.RUNNING,
+                                "上下文太满，正在压缩早先的工具往返…",
+                                kind="guard",
+                                payload={"code": "prompt_too_long"},
+                            ),
+                        )
+                        try:
+                            reply = self._complete_recorded(session, messages, specs)
+                            break
+                        except PromptTooLongError:
+                            continue
+                        except OperationCancelled:
+                            raise
+                        except Exception as retry_error:
+                            return self._model_error_stop(session, retry_error)
             except OperationCancelled:
                 raise
             except Exception as error:
@@ -2115,10 +2184,7 @@ class RunTurn:
         """
         system = MIXED_SOURCE_SYSTEM_PROMPT if has_source_text else SYSTEM_PROMPT
         messages = [ChatMessage(ChatRole.SYSTEM, system)]
-        for message in self._conversations.history_for_prompt(record.conversation_id, HISTORY_LIMIT):
-            if message.turn_id == record.id:
-                # 本回合的用户消息刚写进去，下面会单独加，别重复。
-                continue
+        for message in self._history_messages(record.conversation_id, record):
             messages.append(ChatMessage(message.role, message.content))
         messages.append(ChatMessage(ChatRole.USER, record.question))
         return messages
