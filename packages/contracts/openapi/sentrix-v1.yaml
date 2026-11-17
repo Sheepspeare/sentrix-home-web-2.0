@@ -7791,7 +7791,7 @@ components:
         reasoning:
           type: boolean
           title: Reasoning
-          description: 是否用推理模式参数执行本轮（更多证据工具与步数，默认关闭）
+          description: 是否开启推理模式（全工具、不限步骤和工具次数、至少3600秒墙钟，产品默认关闭）
           default: false
       type: object
       required:

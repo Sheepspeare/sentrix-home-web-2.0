@@ -217,7 +217,7 @@ def test_ask_is_two_calls_and_the_turn_poll_uses_the_plural_path():
     assert conversation_call[1] == {"scope_id": "s1", "title": "q1"}
     assert turn_call[0] == f"{BASE}/api/v1/assistant/conversations/conv_1/turns"
     # 默认不发 include_debug：只有评测侧明确要求时才把完整 prompt 带回来。
-    assert turn_call[1] == {"message": "海边有谁？"}
+    assert turn_call[1] == {"message": "海边有谁？", "reasoning": True}
     assert poll_call[0] == f"{BASE}/api/v1/assistant/turns/turn_1"
     assert poll_call[2] == "GET"
 
@@ -228,7 +228,7 @@ def test_start_turn_can_request_the_full_debug_trace():
 
     client.start_turn(conversation_id="conv_1", message="海边有谁？", include_debug=True)
 
-    assert http.calls[0][1] == {"message": "海边有谁？", "include_debug": True}
+    assert http.calls[0][1] == {"message": "海边有谁？", "include_debug": True, "reasoning": True}
 
 
 def test_start_turn_can_disable_graph_retrieval_for_a_paired_baseline_run():
@@ -236,7 +236,13 @@ def test_start_turn_can_disable_graph_retrieval_for_a_paired_baseline_run():
 
     client.start_turn(conversation_id="conv_1", message="海边有谁？", graph_enabled=False)
 
-    assert http.calls[0][1] == {"message": "海边有谁？", "graph_enabled": False}
+    assert http.calls[0][1] == {"message": "海边有谁？", "graph_enabled": False, "reasoning": True}
+
+
+def test_start_turn_explicitly_disables_reasoning():
+    client, http = _client({"turns": {"turn_id": "turn_1", "status": "pending"}})
+    client.start_turn(conversation_id="conv_1", message="hello", reasoning=False)
+    assert http.calls[0][1] == {"message": "hello", "reasoning": False}
 
 
 def test_relationship_batch_sends_the_explicit_name_mapping():

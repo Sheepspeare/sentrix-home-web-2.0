@@ -18,6 +18,7 @@ export function RetestDialog({ run, question, models, busy, onClose, onSelectRun
   onClose: () => void; onSelectRun: (id: string) => void;
 }) {
   const [model, setModel] = useState<InteractiveModel>({});
+  const [reasoning, setReasoning] = useState(true);
   const [history, setHistory] = useState<Run[]>([]);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
@@ -30,7 +31,7 @@ export function RetestDialog({ run, question, models, busy, onClose, onSelectRun
     setStarting(true); setError('');
     try {
       const result = await post<{ run_id: string }>(`/runs/${encodeURIComponent(run.run_id!)}/retest`, {
-        qa_id: question.qa_id, model,
+        qa_id: question.qa_id, model, reasoning,
         scoring_profile: run.selected_scoring_profile || undefined,
         scoring_batch: run.selected_scoring_batch || undefined,
       });
@@ -43,6 +44,8 @@ export function RetestDialog({ run, question, models, busy, onClose, onSelectRun
     <p>第 {Number(question.index) + 1} 题 · {question.qa_id}</p><p>{String(question.display_question || question.question || '')}</p>
     <p className="muted small">复用原相册；多轮题从第一轮开始。评分沿用当前所选批次，原答卷及总分保留。</p>
     <ModelSelect options={models} value={model} onChange={setModel} disabled={starting}/>
+    <label><input type="checkbox" aria-label="重测推理模式" checked={reasoning} disabled={starting}
+      onChange={e => setReasoning(e.target.checked)}/> 开启推理模式（默认开启）</label>
     {error && <p role="alert" className="error">{error}</p>}
     <button className="btn" disabled={busy || starting} onClick={() => void start()}>{starting ? '正在启动…' : busy ? '等待当前任务结束' : '开始重测'}</button>
     <h4>比较记录</h4>

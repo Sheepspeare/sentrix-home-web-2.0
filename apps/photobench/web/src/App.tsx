@@ -144,6 +144,7 @@ export function App({ initialLoading = false }: AppProps) {
   }, [selectedAlbum]);
   const [deleteScopeAfterRun, setDeleteScopeAfterRun] = useState(false);
   const [graphEnabled, setGraphEnabled] = useState(true);
+  const [reasoning, setReasoning] = useState(true);
   const [graphBaselineRunId, setGraphBaselineRunId] = useState("");
   const [suiteRunning, setSuiteRunning] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxTarget | null>(null);
@@ -287,6 +288,7 @@ export function App({ initialLoading = false }: AppProps) {
             : "",
         endpoint_model: selectedModels.has("__current__") ? modelApi.selectedEndpointModel : "",
         graph_enabled: graphEnabled,
+        reasoning,
         graph_baseline_run_id: graphEnabled ? graphBaselineRunId.trim() || undefined : undefined,
         delete_scope_after_run: reuseApi.runMode === "full" ? deleteScopeAfterRun : false,
       });
@@ -420,6 +422,8 @@ export function App({ initialLoading = false }: AppProps) {
                 deleteScopeAfterRun,
                 onDeleteScopeAfterRunChange: setDeleteScopeAfterRun,
                 graphEnabled,
+                reasoning,
+                onReasoningChange: setReasoning,
                 onGraphEnabledChange: setGraphEnabled,
                 graphBaselineRunId,
                 onGraphBaselineRunIdChange: setGraphBaselineRunId,

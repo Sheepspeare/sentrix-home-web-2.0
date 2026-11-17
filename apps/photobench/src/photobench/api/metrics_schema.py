@@ -99,6 +99,7 @@ class WorkStatusResponse(BaseModel):
 
 class RunMetricsResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
+    reasoning: bool | None = None
     retest_context: dict[str, Any] | None = None
     read_revision: str | None = None
     history_mode: str | None = None

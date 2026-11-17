@@ -98,6 +98,7 @@ class ChatService:
             "runtime_snapshot": snapshot.connection(),
             "build_revision": snapshot.build_revision,
             "turn_timeout": request.turn_timeout,
+            "reasoning": request.reasoning,
         }
         if payload.get("qa_id"):
             album_id, qa_set = str(payload.get("album_id") or ""), str(payload.get("qa_set") or "")
@@ -141,6 +142,17 @@ class ChatService:
                 raise InvalidRequestError("请等待当前回答结束")
             if session.get("status") == "outcome_unknown":
                 raise InvalidRequestError("上次请求的执行状态尚未确认，请先刷新记录")
+            reasoning = payload.get("reasoning")
+            if reasoning is None:
+                reasoning = session.get("reasoning") is True
+            if not isinstance(reasoning, bool):
+                raise InvalidRequestError("reasoning must be a boolean")
+            if reasoning != (session.get("reasoning") is True):
+                session["turn_timeout"] = self.suites.interactive_models.turn_timeout(reasoning)
+            session["reasoning"] = reasoning
+            session["runtime_snapshot"].setdefault("execution_budgets", {}).update(
+                reasoning=reasoning, turn_timeout=session["turn_timeout"]
+            )
             self._launch(session, [message])
         return session
 
@@ -156,6 +168,8 @@ class ChatService:
             endpoint_model=session["endpoint_model"],
             sentrix_url=session["runtime_snapshot"]["sentrix_url"],
             switch_model=True,
+            reasoning=session.get("reasoning") is True,
+            turn_timeout=int(session.get("turn_timeout") or 900),
             runtime_snapshot=RunRuntimeSnapshot(
                 json.dumps(session["runtime_snapshot"]), session["build_revision"]
             ),
@@ -232,7 +246,10 @@ class ChatService:
                 message = session["pending_messages"][0]
                 self._patch(session_id, dispatching_message=message, status="running")
                 started = client.start_turn(
-                    conversation_id=session["conversation_id"], message=message, include_debug=True
+                    conversation_id=session["conversation_id"],
+                    message=message,
+                    include_debug=True,
+                    reasoning=session.get("reasoning") is True,
                 )
                 record = self._register_turn(session_id, message, str(started["turn_id"]))
                 self._await(session_id, record, client, cancel)
@@ -261,6 +278,7 @@ class ChatService:
                     "turn_id": turn_id,
                     "message": message,
                     "status": "pending",
+                    "reasoning": s.get("reasoning") is True,
                     "started_at": now_iso(),
                 }
             )

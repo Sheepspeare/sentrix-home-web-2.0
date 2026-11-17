@@ -57,7 +57,7 @@ class TurnExecutor:
         self,
         *,
         turns,
-        run_turn_factory: Callable[[], object],
+        run_turn_factory: Callable[[bool], object],
         broker,
         dependencies_ready: Callable[[], tuple[bool, str]],
         operation_control=None,
@@ -167,7 +167,7 @@ class TurnExecutor:
                 return
             if self._result_sets is not None:
                 self._result_sets.purge_other_attempts(turn_id, record.attempt_no)
-            runner = self._run_turn_factory()
+            runner = self._run_turn_factory(record.trace.get("reasoning") is True)
             with turn_attempt(turn_id, record.attempt_no):
                 runner.run(
                     turn_id,

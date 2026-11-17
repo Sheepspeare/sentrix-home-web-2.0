@@ -48,3 +48,39 @@ def test_retest_http_passes_model_and_batch(monkeypatch: pytest.MonkeyPatch, cli
     assert response.status_code == 202
     assert calls[0][0] == "original" and calls[0][1]["model"]["profile"] == "other"
     assert calls[0][1]["scoring_batch"] == "batch"
+
+
+@pytest.mark.parametrize(
+    "path,inputs",
+    [
+        ("/api/v1/chat/sessions", {"scope_id": "space"}),
+        ("/api/v1/chat/sessions/chat-one/turns", {"message": "hello"}),
+        ("/api/v1/runs/original/retest", {"qa_id": "one"}),
+    ],
+)
+def test_reasoning_http_rejects_non_boolean(client: TestClient, path, inputs) -> None:
+    assert client.post(path, json={**inputs, "reasoning": "false"}).status_code == 422
+
+
+def test_reasoning_http_default_and_explicit_false(monkeypatch, client: TestClient) -> None:
+    calls = []
+
+    def create(payload):
+        calls.append(payload)
+        return {"session_id": "chat-one", "scope_id": "space", "status": "ready", "turns": []}
+
+    monkeypatch.setattr(client.app.state.container.chat, "create_chat", create)
+    assert (
+        client.post("/api/v1/chat/sessions", json={"scope_id": "space", "reasoning": False}).status_code
+        == 202
+    )
+    assert calls[-1]["reasoning"] is False
+    spec = client.app.openapi()
+    assert spec["components"]["schemas"]["ChatCreateRequest"]["properties"]["reasoning"]["default"] is True
+    assert spec["components"]["schemas"]["RetestRequest"]["properties"]["reasoning"]["default"] is True
+    assert (
+        spec["paths"]["/api/v1/runs"]["post"]["requestBody"]["content"]["application/json"]["schema"][
+            "properties"
+        ]["reasoning"]["default"]
+        is True
+    )

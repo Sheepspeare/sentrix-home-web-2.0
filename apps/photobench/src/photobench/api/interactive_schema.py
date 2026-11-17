@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 
 class ModelSelection(BaseModel):
@@ -15,6 +15,7 @@ class ModelSelection(BaseModel):
 
 class RetestRequest(BaseModel):
     qa_id: str = Field(min_length=1)
+    reasoning: StrictBool = Field(default=True, description="是否开启推理模式，默认开启")
     model: ModelSelection | None = None
     scoring_profile: str = ""
     scoring_batch: str = ""
@@ -27,6 +28,7 @@ class RetestResponse(BaseModel):
 
 class ChatCreateRequest(BaseModel):
     scope_id: str = Field(min_length=1)
+    reasoning: StrictBool = Field(default=True, description="是否开启推理模式，默认开启")
     model: ModelSelection | None = None
     message: str = Field(default="", max_length=2000)
     album_id: str = ""
@@ -36,6 +38,7 @@ class ChatCreateRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    reasoning: StrictBool | None = Field(default=None, description="本轮推理模式；省略时沿用会话设置")
 
 
 class ChatSessionResponse(BaseModel):
@@ -43,6 +46,7 @@ class ChatSessionResponse(BaseModel):
     session_id: str
     scope_id: str
     status: str
+    reasoning: bool | None = None
     source: dict[str, Any] | None = None
     turns: list[dict[str, Any]]
     items: list[dict[str, Any]] | None = None

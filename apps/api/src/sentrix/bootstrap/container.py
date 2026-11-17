@@ -763,7 +763,7 @@ class Container:
             workers = int(self.model_profile.agent["turn_workers"])
         return TurnExecutor(
             turns=self.turn_repository,
-            run_turn_factory=lambda: build_run_turn(self),
+            run_turn_factory=lambda reasoning: build_run_turn(self, reasoning=reasoning),
             broker=self.turn_event_broker,
             dependencies_ready=self.dependencies_ready,
             operation_control=self.operation_control,

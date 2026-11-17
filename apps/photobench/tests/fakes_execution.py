@@ -218,6 +218,7 @@ class FakeSentrixClient:
         conversation_id: str,
         message: str,
         include_debug: bool = False,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         self._record(
@@ -225,6 +226,7 @@ class FakeSentrixClient:
             conversation_id=conversation_id,
             message=message,
             include_debug=include_debug,
+            reasoning=reasoning,
             timeout=timeout,
         )
         self._turn_seq += 1

@@ -400,6 +400,7 @@ export interface Run {
   model_name?: string | null;
   endpoint_model?: string;
   graph_enabled?: boolean;
+  reasoning?: boolean | null;
   graph_baseline_run_id?: string | null;
   model_identity?: Record<string, unknown> | null;
   execution_budgets?: Record<string, unknown> | null;
@@ -983,8 +984,9 @@ export interface ChatSession {
   model_preparation?: Record<string, unknown>;
   runtime_snapshot?: Record<string, unknown>;
   status: string;
+  reasoning?: boolean | null;
   error?: string;
   source?: { album_id: string; qa_set: string; row: QaRow; definition_sha256: string } | null;
-  turns?: Array<{ index: number; message: string; turn_id: string; status: string }>;
+  turns?: Array<{ index: number; message: string; turn_id: string; status: string; reasoning?: boolean }>;
   items?: RunItemDetail[];
 }

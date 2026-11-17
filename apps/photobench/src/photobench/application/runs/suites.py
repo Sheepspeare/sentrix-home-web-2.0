@@ -50,6 +50,8 @@ from photobench.application.run_execution.gpu_sampler import GpuSampler
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
 from photobench.application.run_execution.profile_scoring import prepare_batches
 from photobench.application.run_execution.service import (
+    DEFAULT_TURN_TIMEOUT,
+    REASONING_TURN_TIMEOUT,
     JudgeSettings,
     RunExecution,
     RunRequest,
@@ -314,6 +316,9 @@ class RunSuites:
         graph_enabled = payload.get("graph_enabled", True)
         if not isinstance(graph_enabled, bool):
             raise InvalidRequestError("graph_enabled must be a boolean")
+        reasoning = payload.get("reasoning", True)
+        if not isinstance(reasoning, bool):
+            raise InvalidRequestError("reasoning must be a boolean")
         graph_baseline_run_id = str(payload.get("graph_baseline_run_id") or "").strip()
         model_base_url = normalize_model_base_url(str(payload.get("model_base_url") or ""))
         manager_url = normalize_service_url(str(payload.get("vllm_manager_url") or ""))
@@ -393,7 +398,10 @@ class RunSuites:
                         payload.get("qa_concurrency", self._budget_defaults.get("qa_concurrency", 0))
                     ),
                     judge_backpressure=payload.get("judge_backpressure", True) is not False,
-                    turn_timeout=int(payload.get("turn_timeout") or 900),
+                    turn_timeout=int(
+                        payload.get("turn_timeout")
+                        or (REASONING_TURN_TIMEOUT if reasoning else DEFAULT_TURN_TIMEOUT)
+                    ),
                     # 整册导入在 Mac/CPU 上可能远超默认 2h；允许按 run 放宽客户端超时。
                     import_timeout=int(
                         payload.get("import_timeout") or self._budget_defaults.get("import_timeout") or 0
@@ -410,6 +418,7 @@ class RunSuites:
                     scoring_configs=configs,
                     evaluation_options=scoring_options(payload.get("evaluation_options")),
                     graph_enabled=graph_enabled,
+                    reasoning=reasoning,
                     graph_baseline_run_id=graph_baseline_run_id if graph_enabled else "",
                     judge_prompts={
                         "answer_quality": deps.judge.answer_quality_prompt,
@@ -451,6 +460,7 @@ class RunSuites:
             "qa_set": qa_set,
             "mode": mode,
             "graph_enabled": graph_enabled,
+            "reasoning": reasoning,
             # 回显复用的那个 scope（1.0 ``start_suite`` 的响应形状）。full 模式为 None。
             "existing_scope_id": existing_scope_id or None,
             "current_model_snapshot": None,
@@ -772,6 +782,8 @@ class RunSuites:
             evaluation_options=scoring_options(saved.get("evaluation_options")),
             graph_enabled=saved.get("graph_enabled") is not False,
             graph_baseline_run_id=str(saved.get("graph_baseline_run_id") or ""),
+            reasoning=saved.get("reasoning") is True,
+            turn_timeout=DEFAULT_TURN_TIMEOUT,
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
             evidence_judge_enabled=bool(saved.get("evidence_judge_enabled")),
@@ -1960,6 +1972,12 @@ class RunSuites:
                     }
                     sampler.start()
                     self._sleep(2)
+                    replay_timeout = int(
+                        (state.get("execution_budgets") or {}).get("turn_timeout")
+                        or (
+                            REASONING_TURN_TIMEOUT if state.get("reasoning") is True else DEFAULT_TURN_TIMEOUT
+                        )
+                    )
                     for item in state.get("items") or []:
                         if cancel_event.is_set():
                             raise RunCancelledError("memory profile cancelled")
@@ -1988,12 +2006,15 @@ class RunSuites:
                                 if cancel_event.is_set():
                                     raise RunCancelledError("memory profile cancelled")
                                 started = self._sentrix.start_turn(
-                                    conversation_id=conversation_id, message=message, timeout=300
+                                    conversation_id=conversation_id,
+                                    message=message,
+                                    reasoning=state.get("reasoning") is True,
+                                    timeout=300,
                                 )
                                 _await_turn(
                                     self._sentrix,
                                     str(started.get("turn_id") or ""),
-                                    900,
+                                    replay_timeout,
                                     self._sleep,
                                     cancel_event,
                                     record,

@@ -53,7 +53,8 @@ def saved_run() -> dict[str, Any]:
     }
 
 
-def test_retest_is_one_frozen_question_with_no_inherited_answers(tmp_path: Path) -> None:
+@pytest.mark.parametrize("options,enabled", [({}, True), ({"reasoning": False}, False)])
+def test_retest_is_one_frozen_question_with_no_inherited_answers(tmp_path: Path, options, enabled) -> None:
     saved = saved_run()
     before = copy.deepcopy(saved)
     requests = []
@@ -67,6 +68,7 @@ def test_retest_is_one_frozen_question_with_no_inherited_answers(tmp_path: Path)
         "original",
         {
             "qa_id": "b",
+            **options,
             "model": {
                 "profile": "other",
                 "base_url": "http://models:1/v1",
@@ -77,6 +79,8 @@ def test_retest_is_one_frozen_question_with_no_inherited_answers(tmp_path: Path)
     request = requests[0]
     assert request.scope_id == "space" and request.mode == "reuse"
     assert request.model_profile == "other" and request.switch_model
+    assert request.reasoning is enabled
+    assert request.turn_timeout == (3660 if enabled else 900)
     assert request.prior_items == () and request.resume_context is None
     assert request.frozen_qa_snapshot["rows"] == [saved["qa_snapshot"]["rows"][1]]
     assert request.frozen_qa_snapshot["definition_sha256"] == qa_fingerprint(
@@ -196,9 +200,39 @@ def test_free_chat_continues_and_survives_new_reader(tmp_path: Path) -> None:
     assert len(result["items"]) == 2
     assert [m["conversation_id"] for m in client.messages] == ["conversation-1"] * 2
     assert all(m["include_debug"] for m in client.messages)
+    assert all(m["reasoning"] is True for m in client.messages)
+    assert all(r.reasoning is True and r.turn_timeout == 3660 for r in requests)
     assert result["source"] is None and len(requests) == 2
     assert FileChatStore(tmp_path / "chat").load_session(key)["turns"] == result["turns"]
     assert suites.work_status()["cleanup_status"] == "stopped"
+
+
+def test_chat_can_toggle_reasoning_per_turn_and_keeps_previous_modes(tmp_path: Path) -> None:
+    service, _, client, requests = chat_service(tmp_path)
+    first = service.create_chat({"scope_id": "space", "message": "one"})
+    key = first["session_id"]
+    assert wait_chat(service, key)["reasoning"] is True
+    service.send_chat(key, {"message": "two", "reasoning": False})
+    assert wait_chat(service, key)["reasoning"] is False
+    service.send_chat(key, {"message": "three"})
+    result = wait_chat(service, key)
+    assert [m["reasoning"] for m in client.messages] == [True, False, False]
+    assert [t["reasoning"] for t in result["turns"]] == [True, False, False]
+    assert [r.turn_timeout for r in requests] == [3660, 900, 900]
+    assert result["runtime_snapshot"]["execution_budgets"]["reasoning"] is False
+
+
+def test_new_chat_can_disable_reasoning_and_legacy_chat_preserves_mode(tmp_path: Path) -> None:
+    service, _, client, requests = chat_service(tmp_path)
+    first = service.create_chat({"scope_id": "space", "message": "one", "reasoning": False})
+    key = first["session_id"]
+    result = wait_chat(service, key)
+    assert result["reasoning"] is False and requests[0].turn_timeout == 900
+    del result["reasoning"]
+    service.store.save_session(result)
+    service.send_chat(key, {"message": "old session"})
+    wait_chat(service, key)
+    assert [m["reasoning"] for m in client.messages] == [False, False]
 
 
 def test_question_chat_freezes_gt_and_sends_only_user_messages(tmp_path: Path) -> None:
@@ -339,6 +373,7 @@ def test_restart_reconciles_dispatched_turn_without_sending_again(tmp_path: Path
     result = wait_chat(service, session["session_id"])
     assert result["status"] == "ready"
     assert result["turns"][0]["turn_id"] == "already-accepted"
+    assert result["turns"][0]["reasoning"] is True
     assert not client.messages and not suites.work_status()["work"]
 
 

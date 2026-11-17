@@ -141,6 +141,13 @@ class SqliteTurnRepository:
                         connection.commit()
                         if str(existing["question"]) != record.question:
                             raise TurnIdempotencyConflict("idempotency key reused for a different question")
+                        existing_trace = json.loads(existing["trace_json"] or "{}")
+                        if (existing_trace.get("reasoning") is True) != (
+                            record.trace.get("reasoning") is True
+                        ):
+                            raise TurnIdempotencyConflict(
+                                "idempotency key reused for a different reasoning mode"
+                            )
                         return _row_to_turn(existing), False
                 connection.execute(
                     "INSERT INTO agent_turns"

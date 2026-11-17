@@ -158,6 +158,7 @@ class SentrixClient(Protocol):
         message: str,
         include_debug: bool = False,
         graph_enabled: bool = True,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         """``POST /api/v1/assistant/conversations/{cid}/turns``，返回 ``{turn_id, status}``。
@@ -170,6 +171,7 @@ class SentrixClient(Protocol):
         不打开，产品对话就不会把那几十 KB 的提示词写进 ``agent_turns``。
 
         ``graph_enabled=False`` 用于最终媒体召回率对照 run；默认不发送关闭标记。
+        ``reasoning`` 始终显式发送，测评默认开启；历史任务恢复传入原模式。
         """
         ...
 

@@ -449,9 +449,14 @@ def test_cancelled_unscheduled_qa_is_not_reported_as_a_completed_agent_or_judge(
     assert state.data["items"][0]["execution_status"] == "scheduled"
 
 
-def test_the_chain_runs_every_phase_in_order_and_completes():
+@pytest.mark.parametrize("reasoning", [True, False])
+def test_the_chain_runs_every_phase_in_order_and_completes(reasoning):
     execution, _client, writer, _lifecycle, _albums = _execution()
-    state = execution.execute(_request())
+    state = execution.execute(_request(reasoning=reasoning))
+    assert state["reasoning"] is reasoning
+    turns = [args for name, args in _client.calls if name == "start_turn"]
+    assert turns and all(args["reasoning"] is reasoning for args in turns)
+    assert state["items"][0]["runtime_turns"][0]["reasoning"] is reasoning
     phases = state["phases"]
     # S9b-3 补上遥测聚合的两个收尾相位（1.0 ``:2356`` 的 ``all_phases`` 末两项）。
     assert list(phases) == [

@@ -1844,7 +1844,7 @@ def test_include_debug_persists_the_switch_before_the_turn_runs(env):
         TurnRequest(conversation_id=conversation.id, question=QUESTION, include_debug=True)
     ).id
 
-    assert turns.get(turn_id).trace == {"include_debug": True, "graph_enabled": True}
+    assert turns.get(turn_id).trace == {"include_debug": True, "graph_enabled": True, "reasoning": False}
 
 
 def test_include_debug_records_planner_agent_and_judge_with_exact_messages(env):

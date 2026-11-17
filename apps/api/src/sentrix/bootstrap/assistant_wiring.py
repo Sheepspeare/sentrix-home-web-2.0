@@ -129,6 +129,18 @@ def _tool_limits(container: Container) -> ToolLimits:
 
 
 def build_run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
+    profile = _turn_profile(container)
+    if reasoning:
+        profile = replace(
+            profile,
+            name=REASONING_PROFILE.name,
+            max_steps=REASONING_PROFILE.max_steps,
+            max_tool_calls=REASONING_PROFILE.max_tool_calls,
+            max_search_calls=REASONING_PROFILE.max_search_calls,
+            max_page_calls=REASONING_PROFILE.max_page_calls,
+            max_inspections=REASONING_PROFILE.max_inspections,
+            wall_time_s=max(profile.wall_time_s, REASONING_PROFILE.wall_time_s),
+        )
     return RunTurn(
         model=container.chat_model,
         operation_control=container.operation_control,
@@ -152,7 +164,7 @@ def build_run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
             limits=_tool_limits(container),
         ),
         observations=container.observation_repository,
-        profile=REASONING_PROFILE if reasoning else _turn_profile(container),
+        profile=profile,
         use_all_tools=reasoning,
     )
 

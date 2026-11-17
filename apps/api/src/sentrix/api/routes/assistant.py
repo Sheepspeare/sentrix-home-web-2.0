@@ -219,6 +219,7 @@ def start_turn(
                 question=payload.message,
                 include_debug=payload.include_debug,
                 graph_enabled=payload.graph_enabled,
+                reasoning=payload.reasoning,
                 idempotency_key=idempotency_key.strip(),
             )
         )

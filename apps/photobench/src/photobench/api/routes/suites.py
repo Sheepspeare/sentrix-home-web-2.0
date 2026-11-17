@@ -39,7 +39,34 @@ def list_retests(request: Request, run_id: str, qa_id: str = "") -> dict[str, An
     return get_container(request).run_suites.list_retests(run_id, qa_id)
 
 
-@router.post("/runs", status_code=202)
+@router.post(
+    "/runs",
+    status_code=202,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "reasoning": {
+                                "type": "boolean",
+                                "default": True,
+                                "description": "是否开启推理模式；开放全工具与调用次数，默认开启",
+                            },
+                            "turn_timeout": {
+                                "type": "integer",
+                                "description": "单回合等待秒数；推理模式默认3660，关闭时默认900",
+                            },
+                        },
+                        "additionalProperties": True,
+                    }
+                }
+            },
+        }
+    },
+)
 async def start_suite(request: Request) -> dict[str, Any]:
     """``POST /api/runs``（1.0 ``:7854`` 分支 → ``start_suite`` ``:7306``）。"""
     payload = await json_body(request)

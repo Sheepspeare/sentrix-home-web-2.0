@@ -154,6 +154,19 @@ describe("ConfigSection 工作模式切换（可见性 + 可选项）", () => {
 });
 
 describe("ConfigSection 启动按钮", () => {
+  it("默认开启推理模式，支持关闭且运行时锁定", () => {
+    const props = makeProps("full", vi.fn());
+    props.start.onReasoningChange = vi.fn();
+    const { rerender } = render(<ConfigSection {...props} />);
+    expect((screen.getByLabelText("测评推理模式") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByLabelText("测评推理模式"));
+    expect(props.start.onReasoningChange).toHaveBeenCalledWith(false);
+    rerender(<ConfigSection {...props} start={{ ...props.start, reasoning: false, hasRunning: true }} />);
+    const checkbox = screen.getByLabelText("测评推理模式") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(checkbox.disabled).toBe(true);
+  });
+
   it("条件不满足时禁用并给出 1.0 的原因文案；满足时可点", () => {
     const { rerender } = render(<ConfigSection {...makeProps("full", vi.fn())} />);
     // selectedModels={reg1}、端点与管理器都在 → 可启动。

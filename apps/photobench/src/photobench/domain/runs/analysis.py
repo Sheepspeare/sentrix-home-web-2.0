@@ -1896,6 +1896,7 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
             "model_name",
             "endpoint_model",
             "graph_enabled",
+            "reasoning",
             "graph_baseline_run_id",
             "model_identity",
             "execution_budgets",

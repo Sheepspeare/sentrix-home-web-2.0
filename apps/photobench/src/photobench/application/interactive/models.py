@@ -10,7 +10,12 @@ from photobench.application.config.service import (
     normalize_model_base_url,
     normalize_service_url,
 )
-from photobench.application.run_execution.service import RunRequest, freeze_runtime_request
+from photobench.application.run_execution.service import (
+    DEFAULT_TURN_TIMEOUT,
+    REASONING_TURN_TIMEOUT,
+    RunRequest,
+    freeze_runtime_request,
+)
 from photobench.domain.errors import InvalidRequestError
 
 
@@ -25,7 +30,16 @@ class InteractiveModels:
         self.config, self.revision, self.budgets = config, revision, budgets
         self.diagnostics = diagnostics
 
+    def turn_timeout(self, reasoning: bool) -> int:
+        return max(
+            int(self.budgets.get("turn_timeout") or DEFAULT_TURN_TIMEOUT),
+            REASONING_TURN_TIMEOUT if reasoning else DEFAULT_TURN_TIMEOUT,
+        )
+
     def resolve(self, payload: Mapping[str, Any], **inputs: Any) -> RunRequest:
+        reasoning = payload.get("reasoning", True)
+        if not isinstance(reasoning, bool):
+            raise InvalidRequestError("reasoning must be a boolean")
         selection = payload.get("model") or {}
         if not isinstance(selection, dict):
             raise InvalidRequestError("model must be an object")
@@ -76,6 +90,7 @@ class InteractiveModels:
             endpoint_model=endpoint_model,
             switch_model=True,
             qa_concurrency=1,
-            turn_timeout=int(self.budgets.get("turn_timeout") or 900),
+            reasoning=reasoning,
+            turn_timeout=self.turn_timeout(reasoning),
         )
         return freeze_runtime_request(request, connection, self.revision)

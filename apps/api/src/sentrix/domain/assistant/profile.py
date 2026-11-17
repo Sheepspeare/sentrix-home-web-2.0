@@ -22,7 +22,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class TurnProfile:
     name: str
-    #: ``None`` = 不限制轮数/调用次数（cloud profile）。
+    #: ``None`` = 不限制轮数/调用次数（cloud / reasoning profile）。
     max_steps: int | None
     max_tool_calls: int | None
     max_search_calls: int | None
@@ -125,17 +125,15 @@ CLOUD_PROFILE = TurnProfile(
 )
 
 
-#: 推理模式：全工具 + 24 步 / 8 工具 / 4 检索 / 2 翻页 / 3 精读，墙钟 1200s。
-#: 默认 profile 为小模型收敛压低了视觉工具与步数；这一档不压，代价是更慢。
-#: **它不是“难题模式”**，而是“多看视觉证据”的高成本档；默认不启用，
-#: 由前端开关按回合选择。
+#: 推理模式：开放全工具及调用次数，保留一小时墙钟预算。
+#: 装配时仅覆盖执行额度，历史、评审与压缩配置沿用当前模型 profile。
 REASONING_PROFILE = TurnProfile(
     name="reasoning",
-    max_steps=24,
-    max_tool_calls=8,
-    max_search_calls=4,
-    max_page_calls=2,
-    max_inspections=3,
-    wall_time_s=1200.0,
+    max_steps=None,
+    max_tool_calls=None,
+    max_search_calls=None,
+    max_page_calls=None,
+    max_inspections=None,
+    wall_time_s=3600.0,
     final_reserve_s=10.0,
 )

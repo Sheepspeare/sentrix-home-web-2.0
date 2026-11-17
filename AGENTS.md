@@ -10,4 +10,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 100三产品/三测评已发布b2030e1；邮件通路/共享ASR验收通过，完整邮件测评待实施 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 测评默认推理开关及持久执行已本机验证，待发布；100仍b2030e1，完整邮件测评待实施 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

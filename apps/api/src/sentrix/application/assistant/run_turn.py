@@ -400,6 +400,7 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
             if event.kind == "guard"
         ],
         "budget": {
+            "profile": state.profile.name,
             "model_steps": state.model_steps,
             "tool_round_trips": state.tool_round_trips,
             "search_calls": state.search_calls,
@@ -408,6 +409,10 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
             "max_steps": state.profile.max_steps,
             "strict_model_step_budget": state.profile.strict_model_step_budget,
             "max_tool_calls": state.profile.max_tool_calls,
+            "max_search_calls": state.profile.max_search_calls,
+            "max_page_calls": state.profile.max_page_calls,
+            "max_inspections": state.profile.max_inspections,
+            "wall_time_s": state.profile.wall_time_s,
         },
         "delivered": [item.asset_id for item in session.delivered.items],
         "answer_coverage": session.best_coverage,
@@ -442,6 +447,8 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
         # 按发生顺序排列（planner → agent → judge），每条都带当时的 messages 与
         # ``tools``，以及模型原始 content / thought / tool_calls。
         "include_debug": session.include_debug,
+        "reasoning": session.reasoning,
+        "graph_enabled": session.graph_enabled,
         "debug_calls": [dict(call) for call in session.debug_calls],
         "claim_reviews": [dict(item) for item in session.claim_reviews],
     }
@@ -710,6 +717,7 @@ class TurnRequest:
     #: 收进 ``TurnRecord.trace["debug_calls"]``。默认关闭——产品对话不为它付体积。
     include_debug: bool = False
     graph_enabled: bool = True
+    reasoning: bool = False
     #: 同一会话内的幂等键；重复提交返回已有回合，不重复提问。
     idempotency_key: str = ""
 
@@ -776,6 +784,7 @@ class _Session:
     #: 混在一起会把体积带进 ``model_call_metrics`` 这个逐题投影里。
     include_debug: bool = False
     graph_enabled: bool = True
+    reasoning: bool = False
     has_source_text: bool = False
     debug_calls: list[dict[str, Any]] = field(default_factory=list)
     #: 最近一次「需求 ↔ 事实」的绑定结果。只读投影，不改变账本状态；
@@ -900,6 +909,7 @@ class RunTurn:
             trace={
                 **({"include_debug": True} if request.include_debug else {}),
                 "graph_enabled": request.graph_enabled,
+                "reasoning": request.reasoning,
             },
             idempotency_key=request.idempotency_key,
         )
@@ -922,6 +932,7 @@ class RunTurn:
     def fail_start(self, turn_id: str) -> None:
         """Record a worker startup failure; no model request has been issued."""
         try:
+            record = self._turns.get(turn_id)
             self._turns.finish(
                 turn_id,
                 status=TurnStatus.FAILED.value,
@@ -930,7 +941,7 @@ class RunTurn:
                 attachments=(),
                 requirements=(),
                 retrieved_candidates=(),
-                trace={"worker_error": "worker_start_failed"},
+                trace={**(record.trace if record else {}), "worker_error": "worker_start_failed"},
                 updated_at=datetime.now(UTC),
             )
         finally:
@@ -977,6 +988,7 @@ class RunTurn:
             attempt_no=attempt_no or 1,
             include_debug=bool(record.trace.get("include_debug")),
             graph_enabled=record.trace.get("graph_enabled") is not False,
+            reasoning=record.trace.get("reasoning") is True,
         )
 
         # 政策拒答那条出口**不经过规划**，所以 ``planned`` 可能从头到尾没被赋值。

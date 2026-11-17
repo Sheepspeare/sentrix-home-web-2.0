@@ -705,6 +705,12 @@ AI辅助分析复用Judge的provider思考开关策略（豆包thinking.disabled
 重评分仅覆盖回答质量和任务行为，证据统一标记not_applicable，原证据保留在history；
 原run终态及执行相位保持，错误分析新报告读取当前评分，历史报告仍可追溯。
 
+测评推理模式（2026-11-17）：新 full/reuse、重测和聊天请求默认 `reasoning=true`，
+显式 `false` 采用普通模式；聊天后续消息可切换，省略/null 继承会话设置。
+产品回合将模式存入 trace，持久执行器据此装配全工具和无次数上限的预算，墙钟至少一小时；
+其余模型角色与上下文配置保留。历史续跑/内存画像重放继承原模式，缺字段按原普通模式。
+接口、存储和验证说明见 `docs/refactor/2026-11-17-evaluation-reasoning.md`。
+
 #### 4.12.2 换推理后端
 
 实现 `InferenceProvider` + `LifecycleProvider` + `TelemetryProvider`，替换：

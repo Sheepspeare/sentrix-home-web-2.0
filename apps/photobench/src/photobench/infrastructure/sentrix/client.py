@@ -301,15 +301,16 @@ class HttpxSentrixClient:
         message: str,
         include_debug: bool = False,
         graph_enabled: bool = True,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         """``POST /api/v1/assistant/conversations/{cid}/turns``（``assistant.py:202``）。
 
-        请求体只有 ``message``、``include_debug`` 与可选的 ``graph_enabled``：``StartTurnRequest`` 里的
+        请求体包含 ``message``、``reasoning`` 及调试/图检索开关：``StartTurnRequest`` 里的
         ``conversation_id`` **被路由忽略**（``assistant.py:213`` 的注释写明路径参数才是
         权威），所以这里也不发它——发一个会被忽略的字段只会让下一个人以为它有用。
         """
-        payload: dict[str, Any] = {"message": message}
+        payload: dict[str, Any] = {"message": message, "reasoning": reasoning}
         if include_debug:
             # 只在需要时发这个键：老版主 API 不认识它也不会因为多一个字段而变，但
             # 「默认请求体长什么样」保持原样更省解释成本。

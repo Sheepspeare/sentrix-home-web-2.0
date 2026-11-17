@@ -86,6 +86,21 @@ paths:
                 type: object
                 additionalProperties: true
                 title: Response Start Suite Api V1 Runs Post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reasoning:
+                  type: boolean
+                  default: true
+                  description: 是否开启推理模式；开放全工具与调用次数，默认开启
+                turn_timeout:
+                  type: integer
+                  description: 单回合等待秒数；推理模式默认3660，关闭时默认900
+              additionalProperties: true
     get:
       tags:
       - runs
@@ -3239,6 +3254,11 @@ components:
           type: string
           minLength: 1
           title: Scope Id
+        reasoning:
+          type: boolean
+          title: Reasoning
+          description: 是否开启推理模式，默认开启
+          default: true
         model:
           anyOf:
           - $ref: '#/components/schemas/ModelSelection'
@@ -3271,6 +3291,12 @@ components:
           maxLength: 2000
           minLength: 1
           title: Message
+        reasoning:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Reasoning
+          description: 本轮推理模式；省略时沿用会话设置
       type: object
       required:
       - message
@@ -3286,6 +3312,11 @@ components:
         status:
           type: string
           title: Status
+        reasoning:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Reasoning
         source:
           anyOf:
           - additionalProperties: true
@@ -4156,6 +4187,11 @@ components:
           type: string
           minLength: 1
           title: Qa Id
+        reasoning:
+          type: boolean
+          title: Reasoning
+          description: 是否开启推理模式，默认开启
+          default: true
         model:
           anyOf:
           - $ref: '#/components/schemas/ModelSelection'
@@ -4330,6 +4366,11 @@ components:
       title: RunItemsResponse
     RunMetricsResponse:
       properties:
+        reasoning:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Reasoning
         retest_context:
           anyOf:
           - additionalProperties: true

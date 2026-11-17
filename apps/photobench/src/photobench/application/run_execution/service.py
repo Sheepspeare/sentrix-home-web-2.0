@@ -115,6 +115,9 @@ PIPELINE_FAILED_STATUSES = frozenset({"failed"})
 
 #: 2.0 的 ``TurnStatus``（``domain/assistant/models.py:40``）里非终态的两种。
 TURN_PENDING_STATUSES = frozenset({"pending", "running"})
+DEFAULT_TURN_TIMEOUT = 900
+#: 推理模式的一小时执行预算，另留一分钟接收终态。
+REASONING_TURN_TIMEOUT = 3660
 #: 单次轮询请求的超时不能与整条回合等待上限混为一谈。Mac 上做视频视觉取证时，
 #: Sentrix 的轮询端点偶尔会被同一进程里的重计算拖到 30 秒以上；原先沿用
 #: ``SentrixClient.get_turn`` 的 30 秒默认值，会把一个随后已经落库的回合误记成
@@ -254,10 +257,12 @@ class RunRequest:
     pipeline_timeout: int = 86400
     recover_pipeline: bool = False
     recovery_asset_ids: tuple[str, ...] = ()
-    turn_timeout: int = 900
+    turn_timeout: int = REASONING_TURN_TIMEOUT
     qa_concurrency: int = 0
     #: 是否启用图记忆检索；关闭时仍保留同一相册和同一 QA 流程，用于最终媒体指标对照。
     graph_enabled: bool = True
+    #: 推理模式开放全工具与调用次数；历史续跑需显式继承原值。
+    reasoning: bool = True
     #: 有图 run 可填写对应的无图完整 run，用于配对最终媒体召回率。
     graph_baseline_run_id: str = ""
     judge_backpressure: bool = True
@@ -311,6 +316,7 @@ def freeze_runtime_request(
             "turn_timeout": request.turn_timeout,
             "qa_concurrency": request.qa_concurrency,
             "judge_backpressure": request.judge_backpressure,
+            "reasoning": request.reasoning,
         },
         required_build_revision=connection.get("product_build_revision")
         or (revision if revision != "development" else None),
@@ -748,6 +754,7 @@ class RunExecution:
             "album_name": manifest.get("album_name"),
             "model_profile": request.model_profile,
             "graph_enabled": request.graph_enabled,
+            "reasoning": request.reasoning,
             "graph_baseline_run_id": request.graph_baseline_run_id or None,
             "model_name": None,
             "endpoint_model": request.endpoint_model or None,
@@ -2611,6 +2618,7 @@ class RunExecution:
                     conversation_id=conversation_id,
                     message=message,
                     include_debug=True,
+                    reasoning=request.reasoning,
                     **({"graph_enabled": False} if not request.graph_enabled else {}),
                     timeout=300,
                 )
@@ -2628,6 +2636,7 @@ class RunExecution:
                         "conversation_id": conversation_id,
                         "context_turn_count": turn_index,
                         "message": message,
+                        "reasoning": request.reasoning,
                         "turn_id": turn_id,
                         "status": polled.get("status"),
                         "answer": str(last_result.get("answer") or ""),

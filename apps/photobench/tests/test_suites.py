@@ -314,6 +314,32 @@ def test_graph_switch_rejects_non_boolean(tmp_path: Path):
         _suites(tmp_path).start_suite(_payload(graph_enabled="false"))
 
 
+@pytest.mark.parametrize(
+    "options,enabled,timeout",
+    [
+        ({}, True, 3660),
+        ({"reasoning": False}, False, 900),
+        ({"reasoning": True, "turn_timeout": 42}, True, 42),
+    ],
+)
+def test_reasoning_default_and_override_are_frozen_in_run(tmp_path, options, enabled, timeout):
+    captured = []
+    suites = _suites(tmp_path, new_execution=lambda r: captured.append(r) or FakeExecution(r))
+    result = suites.start_suite(_payload(**options))
+    request = captured[0]
+    assert result["reasoning"] is request.reasoning is enabled
+    assert request.turn_timeout == timeout
+    budgets = request.runtime_snapshot.connection()["execution_budgets"]
+    assert budgets["reasoning"] is enabled and budgets["turn_timeout"] == timeout
+    assert _wait_until(lambda: not suites.work_status()["work"])
+
+
+@pytest.mark.parametrize("invalid", ["false", 0, None])
+def test_reasoning_rejects_non_boolean(tmp_path, invalid):
+    with pytest.raises(InvalidRequestError, match="reasoning must be a boolean"):
+        _suites(tmp_path).start_suite(_payload(reasoning=invalid))
+
+
 # ---- 取消 -----------------------------------------------------------------
 
 
@@ -597,20 +623,48 @@ def test_memory_profile_requires_a_manager_and_known_runs(tmp_path: Path):
     assert "model manager" in str(excinfo.value)
 
 
-def test_memory_profile_replays_questions_without_touching_the_answers(tmp_path: Path):
+@pytest.mark.parametrize(
+    "options,enabled,timeout",
+    [
+        ({}, False, 900),
+        ({"reasoning": False}, False, 900),
+        ({"reasoning": True, "execution_budgets": {"turn_timeout": 4000}}, True, 4000),
+    ],
+)
+def test_memory_profile_replays_questions_without_touching_the_answers(
+    tmp_path: Path, monkeypatch, options, enabled, timeout
+):
     """``items_sha256_before/after`` 相等是这条不变量的机械证据（1.0 ``:5175``）。
 
     **区分力**：一个顺手把重放答案写回 items 的实现会让两个哈希不同——那时
     ``items_integrity_ok`` 是 False，而这正是界面上要看到的那件事。
     """
-    state = _judged_state()
+    import photobench.application.runs.suites as suites_module
+
+    state = {**_judged_state(), **options}
+    calls, waits = [], []
+    client = _FakeSentrix()
+    monkeypatch.setattr(
+        client,
+        "start_turn",
+        lambda **kwargs: calls.append(kwargs) or {"turn_id": "turn_1", "status": "running"},
+    )
+    original_await = suites_module._await_turn
+
+    def await_turn(*args, **kwargs):
+        waits.append(args[2])
+        return original_await(*args, **kwargs)
+
+    monkeypatch.setattr(suites_module, "_await_turn", await_turn)
     store = FakeRunStore({"run-1": state})
     writer = FakeResultWriter()
-    suites = _suites(tmp_path, store=store, writer=writer)
+    suites = _suites(tmp_path, store=store, writer=writer, sentrix=client)
     result = suites.start_memory_profile({"run_ids": ["run-1"], "vllm_manager_url": "http://manager:8500"})
     assert result["status"] == "running"
     assert _wait_until(lambda: (state.get("memory_profile") or {}).get("status") == "completed")
     record = state["memory_profile"]
+    assert calls and all(call["reasoning"] is enabled for call in calls)
+    assert waits and all(value == timeout for value in waits)
     assert record["items_integrity_ok"] is True
     assert record["answers_persisted"] is False
     # 内存画像这条路径仍然不换模型（1.0 的 bind-runtime 在 2.0 是「重启 2.0」，
@@ -869,10 +923,30 @@ def test_resume_inherits_topology_and_budgets_instead_of_current_configuration(t
         assert request.runtime_snapshot.connection()["embedding"] == saved["runtime_snapshot"]["embedding"]
         assert (request.import_timeout, request.qa_concurrency, request.turn_timeout) == (86400, 2, 700)
         assert request.pipeline_timeout == 43200
+        assert request.reasoning is False
         assert request.snapshot_source == "resumed_run"
         assert request.runtime_snapshot.connection()["required_build_revision"] == "original-product-release"
     finally:
         gate.set()
+
+
+def test_resume_preserves_saved_reasoning_mode(tmp_path):
+    saved = _cancelled_state()
+    saved["reasoning"] = True
+    saved["runtime_snapshot"] = {
+        "sentrix_url": "http://original:8291",
+        "model_base_url": "http://original:8106/v1",
+        "execution_budgets": {"reasoning": True, "turn_timeout": 3660},
+    }
+    captured = []
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda r: captured.append(r) or FakeExecution(r),
+    )
+    suites.resume_run("run-1")
+    assert captured[0].reasoning is True and captured[0].turn_timeout == 3660
+    assert _wait_until(lambda: not suites.work_status()["work"])
 
 
 def test_build_does_not_select_qa_even_when_manifest_has_qa(tmp_path):
