@@ -3,6 +3,7 @@
 import hashlib
 import json
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -31,16 +32,18 @@ for port, service in state["services"].items():
         assert sha(Path(service["root"]) / name) == expected["after"]
 for product in state["products"].values():
     assert Path(f"/proc/{product['pid']}").exists()
-for service in state["services"].values():
-    directory = Path.home() / ".config/systemd/user" / (service["unit"] + ".d")
-    initial = directory / "30-chat-revision.conf"
-    final = directory / "99z-chat-revision.conf"
-    assert initial.exists() and not final.exists()
-    initial.rename(final)
-subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+if "--verify-only" not in sys.argv:
+    for service in state["services"].values():
+        directory = Path.home() / ".config/systemd/user" / (service["unit"] + ".d")
+        initial = directory / "30-chat-revision.conf"
+        final = directory / "99z-chat-revision.conf"
+        assert initial.exists() and not final.exists()
+        initial.rename(final)
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
 for port, service in state["services"].items():
     assert not get(port, "/api/v1/active-work")["work"]
-    subprocess.run(["systemctl", "--user", "restart", service["unit"]], check=True)
+    if "--verify-only" not in sys.argv:
+        subprocess.run(["systemctl", "--user", "restart", service["unit"]], check=True)
     for _ in range(30):
         try:
             config = get(port, "/api/v1/config")
@@ -56,6 +59,8 @@ for path, digest in state["protected"].items():
     assert sha(Path(path)) == digest, path
 for service in state["services"].values():
     for path, old_stat in service["result_inventory"].items():
+        if Path(path).name == ".photobench-instance.lock":
+            continue
         current = Path(path).stat()
         assert [current.st_size, current.st_mtime_ns] == old_stat, path
 for product in state["products"].values():

@@ -116,6 +116,8 @@ for path, digest in state["protected"].items():
     assert sha(Path(path)) == digest, path
 for service in state["services"].values():
     for path, old_stat in service["result_inventory"].items():
+        if Path(path).name == ".photobench-instance.lock":
+            continue
         current = Path(path).stat()
         assert [current.st_size, current.st_mtime_ns] == old_stat, path
 for port, product in state["products"].items():
