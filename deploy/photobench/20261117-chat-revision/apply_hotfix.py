@@ -92,7 +92,7 @@ for root in roots:
 version_file = PACKAGE / "version.env"
 version_file.write_text(f"PHOTOBENCH_BUILD_REVISION={MANIFEST['deployed_version']}\n")
 for service in state["services"].values():
-    dropin = Path.home() / ".config/systemd/user" / (service["unit"] + ".d") / "30-chat-revision.conf"
+    dropin = Path.home() / ".config/systemd/user" / (service["unit"] + ".d") / "99z-chat-revision.conf"
     assert not dropin.exists(), dropin
     dropin.parent.mkdir(parents=True, exist_ok=True)
     dropin.write_text(f"[Service]\nEnvironmentFile={version_file}\n")
