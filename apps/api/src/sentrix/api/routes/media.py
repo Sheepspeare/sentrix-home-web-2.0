@@ -17,13 +17,23 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from sentrix.api.deps import get_container
+from sentrix.api.errors import ConflictError, NotFoundError
 from sentrix.api.schemas.import_jobs import UploadAcceptedResponse
-from sentrix.api.schemas.media import AssetListResponse, AssetSummary, ImportResponse
+from sentrix.api.schemas.media import (
+    AssetListResponse,
+    AssetSummary,
+    DeleteAssetResponse,
+    ImportResponse,
+    MediaCleanupRetryResponse,
+    MediaDeletionHistoryResponse,
+    MediaDeletionRecordResponse,
+)
+from sentrix.application.media.delete_asset import DeleteAsset
 from sentrix.application.media.import_assets import ImportRequest, StagedImport
 from sentrix.bootstrap.container import Container
 from sentrix.bootstrap.import_wiring import (
@@ -79,9 +89,7 @@ def _cached_image_response(
             )
     except OSError:
         pass
-    payload = container.preview_encoder.encode_jpeg(
-        source, max_dimension=max_dimension, quality=quality
-    )
+    payload = container.preview_encoder.encode_jpeg(source, max_dimension=max_dimension, quality=quality)
     try:
         temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
         temporary.write_bytes(payload)
@@ -116,6 +124,7 @@ def to_summary(asset: Asset, place: str = "") -> AssetSummary:
         derived_kind=asset.derived_kind,
         parent_asset_id=asset.parent_asset_id,
         source_timestamp_sec=asset.source_timestamp_sec,
+        external_source_id=asset.external_source_id,
     )
 
 
@@ -123,6 +132,8 @@ def to_summary(asset: Asset, place: str = "") -> AssetSummary:
 async def import_media(
     file: UploadFile = File(...),
     scope_id: str = Form("home-default"),
+    external_source_id: str | None = Form(None, description="文本来源在当前 scope 内的稳定 ID"),
+    source_timestamp: str | None = Form(None, description="文本来源的 ISO 8601 日期时间，可带偏移"),
     container: Container = Depends(get_container),
 ) -> ImportResponse:
     content = await file.read()
@@ -135,6 +146,8 @@ async def import_media(
         content_type=file.content_type,
         content=content,
         defer_processing=False,
+        external_source_id=external_source_id,
+        source_timestamp=source_timestamp,
     )
     media_type = MediaType.from_upload(request.content_type, request.file_name)
     if media_type is MediaType.VIDEO:
@@ -194,8 +207,11 @@ async def import_media(
         )
 
     use_case = build_import_assets(container, observe=False)
-    result = use_case.execute(request)
-    refresh_memory_graph(container, scope_id)
+    if media_type is MediaType.TEXT:
+        result = await run_in_threadpool(use_case.execute, request)
+    else:
+        result = use_case.execute(request)
+        refresh_memory_graph(container, scope_id)
     return ImportResponse(
         asset_id=result.asset_id,
         observation_id=result.observation_id,
@@ -350,20 +366,14 @@ async def upload_media(
                 quota_bytes=settings.upload_quota_bytes,
             )
         except IdempotencyConflict as error:
-            raise HTTPException(
-                status_code=409, detail="同一幂等键已用于不同内容"
-            ) from error
+            raise HTTPException(status_code=409, detail="同一幂等键已用于不同内容") from error
         except UploadQuotaExceeded as error:
-            raise HTTPException(
-                status_code=507, detail="存储配额不足，暂停接收新上传"
-            ) from error
+            raise HTTPException(status_code=507, detail="存储配额不足，暂停接收新上传") from error
         accepted = True
         if not created and stored.asset_id != asset_id:
             # 重试的新副本不是权威原件，删掉；返回第一次接收的作业。
             final_path.unlink(missing_ok=True)
-        return UploadAcceptedResponse(
-            job_id=stored.id, asset_id=stored.asset_id, status="accepted"
-        )
+        return UploadAcceptedResponse(job_id=stored.id, asset_id=stored.asset_id, status="accepted")
     finally:
         if not accepted:
             await run_in_threadpool(container.import_jobs.release_upload, reservation)
@@ -900,8 +910,6 @@ def _job_progress(container: Container, job_id: str) -> float:
     return round(weighted_progress / sum(weights.values()), 4)
 
 
-
-
 @router.get("/assets")
 def list_assets(
     # 默认与空串都表示**全部相册**：1.0 的 `list_assets(scope_id=None)` 是 `if scope_id:`
@@ -932,13 +940,26 @@ def list_assets(
     places = container.asset_place_repository.get_many([asset.id for asset in assets])
     return AssetListResponse(
         items=[
-            to_summary(asset, places[asset.id].display() if asset.id in places else "")
-            for asset in assets
+            to_summary(asset, places[asset.id].display() if asset.id in places else "") for asset in assets
         ],
         total=total,
         offset=max(0, offset),
         limit=size,
         counts=counts,
+    )
+
+
+@router.get("/assets/deletions", response_model=MediaDeletionHistoryResponse)
+def list_media_deletions(
+    scope_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    container: Container = Depends(get_container),
+) -> MediaDeletionHistoryResponse:
+    records = DeleteAsset(
+        container.media_deletion, container.media_storage, container.vector_index
+    ).list_records(scope_id=scope_id or None, limit=limit)
+    return MediaDeletionHistoryResponse(
+        items=[MediaDeletionRecordResponse.model_validate(item, from_attributes=True) for item in records]
     )
 
 
@@ -990,6 +1011,15 @@ def deliver_asset(asset_id: str, *, original: bool, container: Container) -> Res
     path = Path(asset.path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="media file missing on disk")
+    if asset.media_type is MediaType.TEXT:
+        if not original:
+            raise HTTPException(status_code=404, detail="image preview is not available for text sources")
+        return FileResponse(
+            path,
+            media_type=asset.mime_type or "application/octet-stream",
+            filename=asset.file_name,
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
     if original:
         return FileResponse(path, media_type=asset.mime_type or "application/octet-stream")
     return _cached_image_response(
@@ -1090,3 +1120,23 @@ def get_asset_preview(asset_id: str, container: Container = Depends(get_containe
     if asset is not None:
         return deliver_media(asset, container)
     return deliver_asset(asset_id, original=False, container=container)
+
+
+@router.delete("/assets/{asset_id}", response_model=DeleteAssetResponse)
+def delete_asset(asset_id: str, container: Container = Depends(get_container)) -> DeleteAssetResponse:
+    use_case = DeleteAsset(container.media_deletion, container.media_storage, container.vector_index)
+    try:
+        result = use_case.execute(asset_id)
+    except ValueError as error:
+        raise ConflictError(str(error)) from error
+    if result is None:
+        raise NotFoundError("asset not found")
+    return DeleteAssetResponse(
+        asset_id=result.asset_id, deleted=result.deleted, warnings=list(result.warnings)
+    )
+
+
+@router.post("/assets/deletion-cleanup/retry", response_model=MediaCleanupRetryResponse)
+def retry_media_cleanup(container: Container = Depends(get_container)) -> MediaCleanupRetryResponse:
+    warnings = DeleteAsset(container.media_deletion, container.media_storage, container.vector_index).retry()
+    return MediaCleanupRetryResponse(warnings=list(warnings))

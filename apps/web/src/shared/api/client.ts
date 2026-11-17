@@ -18,6 +18,7 @@ export interface AssetSummary {
   parent_asset_id?: string | null;
   /** 派生关键帧在源视频里的秒数；用它把 `<video>` 定位到命中帧。 */
   source_timestamp_sec?: number | null;
+  external_source_id?: string | null;
   /**
    * 后端**目前不返回**。若将来 `/assets` 带上它，资料库就能按相册聚合；
    * 现在消费方必须按「可能为空」处理，不能把它当成一册一个值。
@@ -39,6 +40,29 @@ export interface AssetPageOptions {
   mediaType?: string;
   sort?: "captured" | "created";
   order?: "asc" | "desc";
+}
+
+export interface MediaDeletionRecord {
+  asset_id: string;
+  scope_id: string;
+  file_name: string;
+  media_type: string;
+  deleted_at: string;
+  asset_count: number;
+  files_done: boolean;
+  vectors_done: boolean;
+  attempts: number;
+  last_error: string;
+}
+
+export async function listMediaDeletions(scopeId: string): Promise<MediaDeletionRecord[]> {
+  const params = new URLSearchParams({ scope_id: scopeId, limit: "50" });
+  const response = await request<{ items: MediaDeletionRecord[] }>(`/assets/deletions?${params}`);
+  return response.items;
+}
+
+export function retryMediaCleanup(): Promise<{ warnings: string[] }> {
+  return request<{ warnings: string[] }>("/assets/deletion-cleanup/retry", { method: "POST" });
 }
 
 /** 资料库分页。筛选、排序与计数都由后端覆盖完整范围。 */
@@ -108,7 +132,7 @@ function parseApiError(raw: string): ApiErrorBody | null {
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers = new Headers(init?.headers);
   if (!SAFE_METHODS.has(method)) {
@@ -658,7 +682,19 @@ export interface PersonDetailResponse {
   clusters: FaceClusterSummary[];
 }
 
-export interface RenamePersonResponse {
+export interface MemorySyncResult {
+  sync_status: "synced" | "pending";
+  sync_error: string;
+}
+
+export async function retryMemoryCorrections(scopeId: string): Promise<{ error: string }> {
+  return request<{ error: string }>(
+    `/memories/corrections/retry?scope_id=${encodeURIComponent(scopeId)}`,
+    { method: "POST" },
+  );
+}
+
+export interface RenamePersonResponse extends MemorySyncResult {
   entity: PersonPayload;
   aliases: string[];
 }
@@ -792,8 +828,8 @@ export async function setEntityProperty(
   entityId: string,
   propertyKey: string,
   value: unknown,
-): Promise<void> {
-  await request(
+): Promise<EntityPropertyWriteResponse> {
+  return request<EntityPropertyWriteResponse>(
     `/entities/${encodeURIComponent(entityId)}/properties/${encodeURIComponent(propertyKey)}`,
     {
       method: "PUT",
@@ -1308,23 +1344,23 @@ export interface FamilyGraph {
 }
 
 /** 写路由统一包了 `{ok: true, …}`，不是裸对象——照 1.0 的 `{"ok": True, …}`。 */
-interface FamilyMembershipResponse {
+export interface FamilyMembershipResponse extends MemorySyncResult {
   ok: boolean;
   membership: FamilyMembership | null;
 }
 
-interface FamilyPortraitResponse {
+export interface FamilyPortraitResponse extends MemorySyncResult {
   ok: boolean;
   portrait: FamilyPortrait | null;
 }
 
-interface FamilyRelationshipResponse {
+export interface FamilyRelationshipResponse extends MemorySyncResult {
   ok: boolean;
   relationships: FamilyRelationship[];
 }
 
 /** 撤回返回的是**撤回之后**的行（`state = "retracted"`），键名是 `retracted`。 */
-interface FamilyRetractResponse {
+export interface FamilyRetractResponse extends MemorySyncResult {
   ok: boolean;
   retracted: FamilyRelationship[];
 }
@@ -1349,8 +1385,8 @@ export async function setFamilyMembership(
   personId: string,
   scopeId: string,
   membership: FamilyMembershipValue,
-): Promise<FamilyMembership | null> {
-  const body = await request<FamilyMembershipResponse>(
+): Promise<FamilyMembershipResponse> {
+  return request<FamilyMembershipResponse>(
     `/family-graph/people/${encodeURIComponent(personId)}/membership`,
     {
       method: "PATCH",
@@ -1358,7 +1394,6 @@ export async function setFamilyMembership(
       body: JSON.stringify({ scope_id: scopeId, membership }),
     },
   );
-  return body.membership;
 }
 
 /** 手写一段家庭画像。**与人物画像那套不是一张表**，不要串到别的端点上。 */
@@ -1366,8 +1401,8 @@ export async function setFamilyPortrait(
   personId: string,
   scopeId: string,
   portraitText: string,
-): Promise<FamilyPortrait | null> {
-  const body = await request<FamilyPortraitResponse>(
+): Promise<FamilyPortraitResponse> {
+  return request<FamilyPortraitResponse>(
     `/family-graph/people/${encodeURIComponent(personId)}/portrait`,
     {
       method: "PATCH",
@@ -1375,7 +1410,6 @@ export async function setFamilyPortrait(
       body: JSON.stringify({ scope_id: scopeId, portrait_text: portraitText }),
     },
   );
-  return body.portrait;
 }
 
 /** 建一对亲属边。后端一次落**两行**（正行 + 反行），所以回来的是列表。 */
@@ -1385,8 +1419,8 @@ export async function putFamilyRelationship(input: {
   predicate: string;
   objectEntityId: string;
   inversePredicate: string;
-}): Promise<FamilyRelationship[]> {
-  const body = await request<FamilyRelationshipResponse>("/family-graph/relationships", {
+}): Promise<FamilyRelationshipResponse> {
+  return request<FamilyRelationshipResponse>("/family-graph/relationships", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1397,7 +1431,6 @@ export async function putFamilyRelationship(input: {
       inverse_predicate: input.inversePredicate,
     }),
   });
-  return body.relationships;
 }
 
 /**
@@ -1410,8 +1443,8 @@ export async function deleteFamilyRelationship(input: {
   scopeId: string;
   subjectEntityId: string;
   objectEntityId: string;
-}): Promise<FamilyRelationship[]> {
-  const body = await request<FamilyRetractResponse>("/family-graph/relationships", {
+}): Promise<FamilyRetractResponse> {
+  return request<FamilyRetractResponse>("/family-graph/relationships", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1420,7 +1453,6 @@ export async function deleteFamilyRelationship(input: {
       object_entity_id: input.objectEntityId,
     }),
   });
-  return body.retracted;
 }
 
 /** 把若干 scope 并成一张图。**响应没有 `ok` 键**，1.0 直接返回仓储那个 dict。 */
@@ -1713,6 +1745,8 @@ export interface EntityPropertyPayload {
   created_at: string | null;
   updated_at: string | null;
 }
+
+export interface EntityPropertyWriteResponse extends EntityPropertyPayload, MemorySyncResult {}
 
 export interface EntityDetailFactPayload {
   id: string;
@@ -2044,4 +2078,23 @@ export async function listClientEvents(
     throw new ApiError(response.status, parseApiError(raw), raw);
   }
   return (await response.json()) as ClientEventPage;
+}
+
+
+export interface SpeechStatus {
+  available: boolean;
+  message: string;
+}
+
+export function getSpeechStatus(signal: AbortSignal): Promise<SpeechStatus> {
+  return request<SpeechStatus>("/assistant/speech/status", { signal });
+}
+
+export function transcribeSpeech(pcm: ArrayBuffer, sampleRate: number, signal: AbortSignal): Promise<{ text: string }> {
+  return request<{ text: string }>(`/assistant/speech/transcribe?sample_rate=${sampleRate}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: pcm,
+    signal,
+  });
 }

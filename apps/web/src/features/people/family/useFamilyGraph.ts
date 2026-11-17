@@ -10,7 +10,7 @@
  * `setState("loading")`：后者是一次多余的级联渲染，也踩 oxlint 的 set-state-in-effect。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getFamilyGraph,
@@ -63,17 +63,19 @@ export function useFamilyGraph(scopeId: string): UseFamilyGraph {
   const [token, setToken] = useState(0);
   const requestKey = `${scopeId}\u0000${token}`;
   // 落地的是「哪一次请求的结果」，不是一个裸数据——这样「正在加载」不用写 state 就能推出来。
+  const latestLoad = useRef(0);
   const [result, setResult] = useState<{ key: string; data: FamilyGraphData } | null>(null);
 
   useEffect(() => {
+    const load = ++latestLoad.current;
     let cancelled = false;
     const key = `${scopeId}\u0000${token}`;
     getFamilyGraph(scopeId)
       .then((graph) => {
-        if (!cancelled) setResult({ key, data: toData(graph) });
+        if (!cancelled && load === latestLoad.current) setResult({ key, data: toData(graph) });
       })
       .catch((cause: unknown) => {
-        if (cancelled) return;
+        if (cancelled || load !== latestLoad.current) return;
         setResult((previous) => ({
           key,
           data: { ...(previous?.data ?? INITIAL), state: "error", error: describeReviewError(cause) },
@@ -87,10 +89,13 @@ export function useFamilyGraph(scopeId: string): UseFamilyGraph {
   const reload = useCallback(() => setToken((current) => current + 1), []);
 
   const refresh = useCallback(async () => {
+    const load = ++latestLoad.current;
     const key = `${scopeId}\u0000${token}`;
     try {
-      setResult({ key, data: toData(await getFamilyGraph(scopeId)) });
+      const graph = await getFamilyGraph(scopeId);
+      if (load === latestLoad.current) setResult({ key, data: toData(graph) });
     } catch (cause: unknown) {
+      if (load !== latestLoad.current) return;
       setResult((previous) => ({
         key,
         data: { ...(previous?.data ?? INITIAL), state: "error", error: describeReviewError(cause) },

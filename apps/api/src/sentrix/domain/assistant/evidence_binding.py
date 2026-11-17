@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement, RequirementValueType
+from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement, EvidenceType, RequirementValueType
 from sentrix.domain.assistant.task_state import TaskState, ToolCallRecord
 
 _CONTROL_KEYS = frozenset({"event", "time", "place", "person"})
@@ -268,11 +268,12 @@ def _inspection_facts(record: ToolCallRecord) -> list[Fact]:
 
 
 def _text_facts(record: ToolCallRecord) -> list[Fact]:
-    full_text = _text(record.model_visible.get("full_text"))
+    source_document = record.tool == "read_source_text"
+    full_text = _text(record.model_visible.get("text" if source_document else "full_text"))
     return (
         [
             Fact(
-                fact_type="visible_text",
+                fact_type="source_text" if source_document else "visible_text",
                 value_type=RequirementValueType.DESCRIPTION,
                 value=full_text,
                 provenance=record.call_id,
@@ -339,7 +340,7 @@ def facts_from_state(state: TaskState) -> tuple[Fact, ...]:
             facts.extend(_structured_fact(record))
         elif record.tool == "inspect_photo":
             facts.extend(_inspection_facts(record))
-        elif record.tool == "read_photo_text":
+        elif record.tool in {"read_photo_text", "read_source_text"}:
             facts.extend(_text_facts(record))
         elif record.tool == "query_photo_people":
             facts.extend(_people_facts(record))
@@ -377,7 +378,20 @@ def bind_requirement(requirement: EvidenceRequirement, facts: Sequence[Fact]) ->
             BindingVerdict.UNKNOWN,
             "requirement 没有声明 value_type",
         )
-    typed = [fact for fact in facts if fact.value_type is requirement.value_type]
+    if requirement.evidence_type is EvidenceType.SOURCE_TEXT:
+        source_calls = tuple(fact.provenance for fact in facts if fact.fact_type == "source_text")
+        return RequirementBinding(
+            requirement.id,
+            BindingVerdict.UNKNOWN,
+            "正文已读取，具体答案需结合原文核验" if source_calls else "尚未读取正文",
+            source_calls,
+            requirement.value_type.value,
+        )
+    typed = [
+        fact
+        for fact in facts
+        if fact.value_type is requirement.value_type and fact.fact_type != "source_text"
+    ]
     if requirement.value_type is RequirementValueType.MEDIA_SET:
         typed = [fact for fact in typed if isinstance(fact.value, (list, tuple, set)) and len(fact.value) > 0]
     if not typed:

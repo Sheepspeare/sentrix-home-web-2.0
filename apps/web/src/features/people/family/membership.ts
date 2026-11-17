@@ -107,7 +107,7 @@ const KINSHIP_SYNONYMS: Readonly<Record<string, string>> = {
 
 export function canonicalKinship(label: string): string {
   const clean = label.trim();
-  return KINSHIP_SYNONYMS[clean] ?? clean;
+  return Object.hasOwn(KINSHIP_SYNONYMS, clean) ? KINSHIP_SYNONYMS[clean] : clean;
 }
 
 /** 朋友。同上：词表留全，布局只用 membership 判行。 */
@@ -197,7 +197,9 @@ export function suggestReverse(role: string): string {
 
 /** 一个称谓的问题；空串不算错（只是还没填），返回 `null`。 */
 export function relationLabelError(label: string): string | null {
-  return label.trim().length > MAX_RELATION_LABEL_LENGTH ? `称谓不能超过 ${MAX_RELATION_LABEL_LENGTH} 个字` : null;
+  const clean = label.trim();
+  if (/\p{C}/u.test(clean)) return "称谓不能包含控制字符";
+  return Array.from(clean).length > MAX_RELATION_LABEL_LENGTH ? `称谓不能超过 ${MAX_RELATION_LABEL_LENGTH} 个字` : null;
 }
 
 /**
@@ -210,7 +212,7 @@ export function relationLabelError(label: string): string | null {
 export function myRoleOptions(role: string): readonly string[] {
   if (role === "哥哥" || role === "姐姐") return ["弟弟", "妹妹"];
   if (role === "弟弟" || role === "妹妹") return ["哥哥", "姐姐"];
-  return RELATION_INVERSES[role] ?? [];
+  return Object.hasOwn(RELATION_INVERSES, role) ? RELATION_INVERSES[role] : [];
 }
 
 /**

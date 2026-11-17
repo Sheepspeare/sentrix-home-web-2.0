@@ -80,6 +80,7 @@ def compose_text(observation: Observation) -> str:
         part
         for part in (
             observation.caption,
+            observation.source_text,
             observation.activity,
             observation.place,
             observation.ocr_text,
@@ -98,14 +99,16 @@ class IndexObservationText:
         self._embedder = embedder
         self._vectors = vectors
 
-    def index(self, observation: Observation, event_id: str | None) -> TextIndexOutcome:
+    def index(
+        self, observation: Observation, event_id: str | None, *, force: bool = False
+    ) -> TextIndexOutcome:
         text = compose_text(observation)
         if not text:
             # 1.0 拼完可能得到空串（一条什么都没观察到的观察）。空串不该去打一次
             # sidecar——那是一次注定拿到零向量的往返。
             return TextIndexOutcome(indexed=False, reason="empty_text")
 
-        if self._already_indexed(observation):
+        if not force and self._already_indexed(observation):
             return TextIndexOutcome(indexed=True, reason="already_indexed")
 
         vector = self._embedder.embed_query(text)

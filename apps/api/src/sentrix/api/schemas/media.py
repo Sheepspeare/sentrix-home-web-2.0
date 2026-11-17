@@ -48,6 +48,7 @@ class AssetSummary(BaseModel):
     derived_kind: str | None = None
     parent_asset_id: str | None = None
     source_timestamp_sec: float | None = None
+    external_source_id: str | None = None
 
 
 class AssetListResponse(BaseModel):
@@ -58,3 +59,30 @@ class AssetListResponse(BaseModel):
     limit: int = 200
     # 当前相册范围各媒体类型的真实计数（含 all）。
     counts: dict[str, int] = {}
+
+
+class DeleteAssetResponse(BaseModel):
+    asset_id: str
+    deleted: bool
+    warnings: list[str]
+
+
+class MediaDeletionRecordResponse(BaseModel):
+    asset_id: str
+    scope_id: str
+    file_name: str
+    media_type: str
+    deleted_at: str
+    asset_count: int
+    files_done: bool
+    vectors_done: bool
+    attempts: int
+    last_error: str
+
+
+class MediaDeletionHistoryResponse(BaseModel):
+    items: list[MediaDeletionRecordResponse]
+
+
+class MediaCleanupRetryResponse(BaseModel):
+    warnings: list[str]

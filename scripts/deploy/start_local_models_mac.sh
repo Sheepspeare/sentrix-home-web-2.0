@@ -4,9 +4,12 @@
 # Ports are intentionally kept compatible with the application contract:
 #   8100  llama.cpp OpenAI-compatible VLM (qwen35-q4km + mmproj)
 #   8101  BGE-M3 text embeddings (1024d)
+#   8102  WeMM embeddings (alternative server scheme; not started by this Mac stack)
 #   8103  Chinese-CLIP ViT-L/14 image embeddings (768d)
 #   8104  BGE reranker (optional; skipped when the weights are missing)
 #   8105  Qwen3-ASR (optional; started only when a local server is configured)
+#   8106  Utility-MRAG Qwen3-VL-2B surrogate (optional local evidence selector)
+#   8107  shared SenseVoice-Small microphone ASR
 #   8191  Sentrix API (legacy embedding scheme)
 set -euo pipefail
 
@@ -16,11 +19,16 @@ mkdir -p logs data/model-runtime
 
 DATA_DIR="${SENTRIX_DATA_DIR:-$PROJ/data}"
 export SENTRIX_DEPLOYMENT_PROFILE="${SENTRIX_DEPLOYMENT_PROFILE:-mac}"
+export SENTRIX_EXPERIENCE_MODE="${SENTRIX_EXPERIENCE_MODE:-true}"
 VLM_PORT="${SENTRIX_VLM_PORT:-8100}"
 BGE_PORT="${SENTRIX_BGE_PORT:-8101}"
 CLIP_PORT="${SENTRIX_LEGACY_CLIP_PORT:-8103}"
 RERANK_PORT="${SENTRIX_BGE_RERANK_PORT:-8104}"
+UTILITY_VLM_PORT="${SENTRIX_UTILITY_VLM_PORT:-8106}"
 RERANK_MODEL_DIR="${SENTRIX_BGE_RERANKER_MODEL_PATH:-$PROJ/data/models/bge-reranker-v2-m3}"
+UTILITY_VLM_MODEL="${SENTRIX_UTILITY_VLM_MODEL:-$PROJ/data/models/qwen3-vl-2b-surrogate/Qwen3VL-2B-Instruct-Q4_K_M.gguf}"
+UTILITY_VLM_MMPROJ="${SENTRIX_UTILITY_VLM_MMPROJ:-$PROJ/data/models/qwen3-vl-2b-surrogate/mmproj-Qwen3VL-2B-Instruct-F16.gguf}"
+ENABLE_UTILITY_VLM="${SENTRIX_ENABLE_UTILITY_VLM:-1}"
 API_PORT="${SENTRIX_API_PORT:-8191}"
 ASR_PORT="${SENTRIX_QWEN_ASR_PORT:-8105}"
 VLM_MODEL="${SENTRIX_VLM_MODEL:-$PROJ/data/models/qwen35-q4km/qwen35-q4km.gguf}"
@@ -146,13 +154,65 @@ else
   echo "跳过 BGE Reranker（默认关闭）"
 fi
 
+# Utility-MRAG selector is an independent, optional VLM.  It is intentionally
+# not the production 8100 model: utility scoring makes one multimodal request
+# per image candidate.  Missing files degrade to ordinary graph ordering.
+UTILITY_URL=""
+if [ "$ENABLE_UTILITY_VLM" = "1" ] && [ -f "$UTILITY_VLM_MODEL" ] && [ -f "$UTILITY_VLM_MMPROJ" ]; then
+  if ! port_in_use "$UTILITY_VLM_PORT"; then
+    echo "启动 Utility-MRAG surrogate :$UTILITY_VLM_PORT"
+    nohup llama-server \
+      --model "$UTILITY_VLM_MODEL" \
+      --mmproj "$UTILITY_VLM_MMPROJ" \
+      --alias qwen3-vl-2b-surrogate \
+      --host 127.0.0.1 \
+      --port "$UTILITY_VLM_PORT" \
+      --ctx-size "${SENTRIX_UTILITY_VLM_CTX_SIZE:-8192}" \
+      --parallel "${SENTRIX_UTILITY_VLM_PARALLEL:-2}" \
+      --n-gpu-layers "${SENTRIX_UTILITY_VLM_GPU_LAYERS:-999}" \
+      --image-min-tokens 512 \
+      --reasoning off \
+      > logs/utility-vlm.log 2>&1 < /dev/null &
+  fi
+  wait_http "http://127.0.0.1:$UTILITY_VLM_PORT/v1/models" 180 || {
+    echo "Utility-MRAG surrogate 未就绪，日志：" >&2
+    tail -60 logs/utility-vlm.log >&2
+    exit 1
+  }
+  UTILITY_URL="http://127.0.0.1:$UTILITY_VLM_PORT/v1"
+else
+  echo "跳过 Utility-MRAG surrogate（权重缺失或 SENTRIX_ENABLE_UTILITY_VLM != 1）"
+fi
+
+# SenseVoice follows the shared model stack's port reuse / nohup / health flow.
+if ! port_in_use 8107; then
+  if [ ! -f "$DATA_DIR/models/sensevoice-small/model.int8.onnx" ] || \
+     [ ! -f "$DATA_DIR/models/sensevoice-small/tokens.txt" ]; then
+    echo "SenseVoice 本地权重缺失：$DATA_DIR/models/sensevoice-small" >&2
+    echo "请先运行 .venv/bin/python scripts/deploy/prepare_sensevoice.py 准备权重" >&2
+    exit 1
+  fi
+  echo "启动 SenseVoice-Small (sherpa-onnx) :8107"
+  SENTRIX_DATA_DIR="$DATA_DIR" nohup scripts/deploy/start_sensevoice.sh \
+    > logs/sensevoice.log 2>&1 < /dev/null &
+fi
+wait_http "http://127.0.0.1:8107/health" 120 || {
+  echo "SenseVoice 未就绪；请检查本地权重与 logs/sensevoice.log" >&2
+  tail -60 logs/sensevoice.log >&2
+  exit 1
+}
+curl -fsS --max-time 2 http://127.0.0.1:8107/health | .venv/bin/python -c \
+  'import json,sys; h=json.load(sys.stdin); assert h.get("service")=="sentrix-sensevoice" and h.get("available") is True, "8107 is not a ready SenseVoice service"'
+
 if ! port_in_use "$API_PORT"; then
   echo "启动 Sentrix API :$API_PORT"
   env \
     SENTRIX_EMBEDDING_SCHEME=legacy \
+    SENTRIX_EXPERIENCE_MODE="$SENTRIX_EXPERIENCE_MODE" \
     SENTRIX_LEGACY_CLIP_URL="http://127.0.0.1:$CLIP_PORT" \
     SENTRIX_TEXT_EMBEDDER_URL="http://127.0.0.1:$BGE_PORT" \
     SENTRIX_RERANKER_URL="$RERANK_URL" \
+    SENTRIX_UTILITY_VLM_BASE_URL="$UTILITY_URL" \
     SENTRIX_VLM_BASE_URL="http://127.0.0.1:$VLM_PORT/v1" \
     SENTRIX_DATA_DIR="$DATA_DIR" \
     nohup .venv/bin/python -m uvicorn --factory sentrix.main:create_app \

@@ -24,6 +24,7 @@ import {
   mergePeople,
   rejectFaceCluster,
   renamePerson,
+  retryMemoryCorrections,
   sendPortraitFeedback,
   setEntityProperty,
   setFamilyMembership,
@@ -31,6 +32,7 @@ import {
   type FamilyMembershipValue,
   type FamilyPerson,
   type FamilyRelationship,
+  type MemorySyncResult,
   type PortraitRevision,
 } from "../../../shared/api/client";
 import { newOperationId, reportClientEvent } from "../../../shared/clientEvents";
@@ -48,7 +50,8 @@ import {
 } from "./membership";
 import { PersonAvatar } from "./PersonAvatar";
 import { RelationEditor } from "./RelationEditor";
-import { findNamesake } from "./sameName";
+import { findNamesakes } from "./sameName";
+import { usePeopleWrites } from "./usePeopleWrites";
 import { SameNameDialog } from "./SameNameDialog";
 
 const LIKE = "像他";
@@ -62,13 +65,23 @@ interface Props {
   readonly onChanged: () => Promise<void>;
   /** 图上拖拽落到人身上时预选的对方；普通点开是 null。 */
   readonly relateTarget?: string | null;
+  readonly relateAttempt?: number;
+  readonly mergeConfirmation?: MergeConfirmation | null;
+  readonly onMergeConfirmation?: (confirmation: MergeConfirmation | null) => void;
   /** 当前这个人被并进了别人：详情要跟过去，而不是停在一个已不存在的人上。 */
   readonly onRedirect?: (personId: string) => void;
 }
 
+export interface MergeConfirmation {
+  readonly personId: string;
+  readonly name: string;
+  readonly role: string | null;
+}
+
 /** 正在问「是同一个人吗？」的那一次改名 / 确认。 */
 interface NamesakePrompt {
-  readonly namesake: FamilyPerson;
+  readonly candidates: readonly FamilyPerson[];
+  readonly role: string | null;
   readonly name: string;
   readonly mode: "rename" | "confirm";
 }
@@ -80,10 +93,18 @@ export function PersonDetail({
   onClose,
   onChanged,
   relateTarget = null,
+  relateAttempt = 0,
+  mergeConfirmation = null,
+  onMergeConfirmation,
   onRedirect,
 }: Props) {
   const pending = isPendingPerson(person);
   const [busy, setBusy] = useState(false);
+  const active = useRef(false);
+  const [syncResult, setSyncResult] = useState<MemorySyncResult | null>(null);
+  const [syncRetrying, setSyncRetrying] = useState(false);
+  const { pending: pendingWrites, write } = usePeopleWrites();
+  const feedbackKey = "feedback:" + person.id;
   const [error, setError] = useState<string | null>(null);
   // 未命名的人不把占位文案「未确认姓名人物」预填进输入框——那句话不是名字。
   const savedName = isNamed(person) ? personDisplayName(person) : "";
@@ -92,11 +113,12 @@ export function PersonDetail({
   const [rejecting, setRejecting] = useState(false);
   const [prompt, setPrompt] = useState<NamesakePrompt | null>(null);
   const [portrait, setPortrait] = useState<PortraitRevision | null | undefined>(undefined);
-  const [aliases, setAliases] = useState<string[]>(person.aliases);
+  const [aliasUpdate, setAliasUpdate] = useState<{ base: string[]; value: string[] } | null>(null);
+  const aliases = aliasUpdate?.base === person.aliases ? aliasUpdate.value : person.aliases;
   const [aliasesOpen, setAliasesOpen] = useState(false);
   const [aliasText, setAliasText] = useState("");
   // 打开编辑时的原文：取消（按钮或 Esc）就回到它，不把半截输入留在框里。
-  const aliasOriginal = useRef("");
+  const aliasOriginal = useRef<string[]>([]);
   const aliasInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -119,17 +141,39 @@ export function PersonDetail({
   }, [aliasesOpen]);
 
   async function run(action: () => Promise<unknown>): Promise<boolean> {
+    if (active.current) return false;
+    active.current = true;
     setBusy(true);
     setError(null);
+    setSyncResult(null);
     try {
-      await action();
+      const result = await action();
+      if (result && typeof result === "object" && "sync_status" in result
+        && (result.sync_status === "synced" || result.sync_status === "pending")) {
+        setSyncResult(result as MemorySyncResult);
+      }
       await onChanged();
       return true;
     } catch (cause) {
       setError(describeReviewError(cause));
       return false;
     } finally {
+      active.current = false;
       setBusy(false);
+    }
+  }
+
+  async function syncMemories() {
+    if (syncRetrying || active.current) return;
+    setSyncRetrying(true);
+    try {
+      const { error: syncError } = await retryMemoryCorrections(person.scope_id);
+      setSyncResult({ sync_status: syncError ? "pending" : "synced", sync_error: syncError });
+      if (!syncError) await onChanged();
+    } catch (cause) {
+      setSyncResult({ sync_status: "pending", sync_error: describeReviewError(cause) });
+    } finally {
+      setSyncRetrying(false);
     }
   }
 
@@ -137,7 +181,9 @@ export function PersonDetail({
 
   async function rename(next: string) {
     const result = await renamePerson(person.id, next);
-    setAliases(result.aliases);
+    setName(result.entity.canonical_name);
+    setAliasUpdate({ base: person.aliases, value: result.aliases });
+    return result;
   }
 
   /**
@@ -145,19 +191,15 @@ export function PersonDetail({
    * 没有事件参与者，问答与按人找照片都看不到他（2026-11-11 「王王」就是这么丢的）。
    * 走 `POST /people/batch-confirm` 的单件形式。
    */
-  async function confirm(next: string, mergeSameName: boolean): Promise<string | null> {
+  async function confirm(personId: string, next: string, role: string | null): Promise<string> {
     const result = await batchConfirmPeople([
-      {
-        person_id: person.id,
-        name: next,
-        family_role: familyRole === "" ? null : familyRole,
-        merge_same_name: mergeSameName,
-      },
+      { person_id: personId, name: next, family_role: role, merge_same_name: false },
     ]);
     const failure = result.failed[0];
     if (failure !== undefined) throw new Error(failure.error);
     const outcome = result.confirmed[0];
-    return outcome !== undefined && outcome.entity_id !== person.id ? outcome.entity_id : null;
+    if (outcome === undefined) throw new Error("身份确认没有返回结果");
+    return outcome.entity_id;
   }
 
   function reportConfirm(result: "started" | "ok" | "failed") {
@@ -175,92 +217,133 @@ export function PersonDetail({
   function submitName(event?: FormEvent) {
     event?.preventDefault();
     const next = name.trim();
-    if (busy || next === "" || (!pending && next === savedName)) return;
-    const namesake = findNamesake(person, next, people);
-    if (namesake !== null) {
-      setPrompt({ namesake, name: next, mode: pending ? "confirm" : "rename" });
+    if (active.current || prompt !== null || mergeConfirmation !== null || next === "" || (!pending && next === savedName)) return;
+    const candidates = findNamesakes(person, next, people);
+    const role = familyRole || null;
+    if (candidates.length > 0) {
+      setPrompt({ candidates, name: next, mode: pending ? "confirm" : "rename", role });
       return;
     }
     if (pending) {
       reportConfirm("started");
-      let mergedInto: string | null = null;
+      let confirmedId = person.id;
       void run(async () => {
-        mergedInto = await confirm(next, true);
+        confirmedId = await confirm(person.id, next, role);
+        setName(next);
       }).then((ok) => {
         reportConfirm(ok ? "ok" : "failed");
-        if (ok && mergedInto !== null) onRedirect?.(mergedInto);
+        if (ok && confirmedId !== person.id) onRedirect?.(confirmedId);
       });
     } else {
       void run(() => rename(next));
     }
   }
 
-  /**
-   * 「是同一个人」：保留谁按 `defaultMergeTarget`（有名 > 已确认 > 出现多）。保留下来的
-   * 人若仍待确认（两个都是未确认的面孔），合并后再按这个名字确认一次。
-   */
-  async function mergeWithNamesake(current: NamesakePrompt) {
-    const keptId = defaultMergeTarget([person, current.namesake]);
-    const sourceId = keptId === person.id ? current.namesake.id : person.id;
-    const kept = keptId === person.id ? person : current.namesake;
-    await mergePeople(keptId, [sourceId], current.name);
-    if (current.mode === "confirm" && isPendingPerson(kept)) {
-      const result = await batchConfirmPeople([
-        { person_id: keptId, name: current.name, family_role: familyRole === "" ? null : familyRole },
-      ]);
-      const failure = result.failed[0];
-      if (failure !== undefined) throw new Error(failure.error);
+  async function mergeWithNamesake(current: NamesakePrompt, candidate: FamilyPerson) {
+    const keptId = defaultMergeTarget([person, candidate]);
+    const sourceId = keptId === person.id ? candidate.id : person.id;
+    active.current = true;
+    setBusy(true);
+    try {
+      const { entity } = await mergePeople(keptId, [sourceId], current.name);
+      setPrompt(null);
+      if (entity.id === person.id) {
+        setName(entity.canonical_name);
+        setAliasUpdate({ base: person.aliases, value: entity.aliases });
+      }
+      let confirmedId = entity.id;
+      const recovery = { personId: entity.id, name: current.name, role: current.role };
+      if (current.mode === "confirm" && entity.status === "pending") {
+        try {
+          confirmedId = await confirm(entity.id, current.name, current.role);
+        } catch {
+          onMergeConfirmation?.(recovery);
+          await onChanged();
+          return;
+        }
+      }
+      await onChanged();
+      if (confirmedId !== person.id) onRedirect?.(confirmedId);
+    } finally {
+      active.current = false;
+      setBusy(false);
     }
-    setPrompt(null);
-    await onChanged();
-    if (keptId !== person.id) onRedirect?.(keptId);
   }
 
-  /** 「不是，只是同名」：照常改名 / 确认，并告诉后端不要做同名并入。 */
   async function keepApart(current: NamesakePrompt) {
-    if (current.mode === "confirm") {
-      reportConfirm("started");
-      await confirm(current.name, false);
-      reportConfirm("ok");
-    } else {
-      await rename(current.name);
+    active.current = true;
+    setBusy(true);
+    try {
+      if (current.mode === "confirm") {
+        reportConfirm("started");
+        try {
+          await confirm(person.id, current.name, current.role);
+          setName(current.name);
+          reportConfirm("ok");
+        } catch (cause) {
+          reportConfirm("failed");
+          throw cause;
+        }
+      } else {
+        const result = await rename(current.name);
+        setSyncResult(result);
+      }
+      setPrompt(null);
+      await onChanged();
+    } finally {
+      active.current = false;
+      setBusy(false);
     }
-    setPrompt(null);
-    await onChanged();
+  }
+
+  function retryConfirmation(recovery: MergeConfirmation) {
+    void run(async () => {
+      const confirmedId = await confirm(recovery.personId, recovery.name, recovery.role);
+      setName(recovery.name);
+      onMergeConfirmation?.(null);
+      if (confirmedId !== person.id) onRedirect?.(confirmedId);
+    });
   }
 
   // ---- 别名 ------------------------------------------------------------------------
 
   function openAliases() {
-    aliasOriginal.current = aliases.join("、");
-    setAliasText(aliasOriginal.current);
+    aliasOriginal.current = [...aliases];
+    setAliasText(aliases.join("、"));
     setAliasesOpen(true);
   }
 
   function cancelAliases() {
-    setAliasText(aliasOriginal.current);
+    setAliasText(aliasOriginal.current.join("、"));
     setAliasesOpen(false);
   }
 
   function saveAliases(event?: FormEvent) {
     event?.preventDefault();
     if (busy) return;
-    const next = splitAliases(aliasText);
+    const original = new Set(aliasOriginal.current);
+    const current = new Set(aliases);
+    const next = [...new Set([
+      ...splitAliases(aliasText).filter((alias) => current.has(alias) || !original.has(alias)),
+      ...aliases.filter((alias) => !original.has(alias)),
+    ])];
     void run(async () => {
       // `PATCH /people/{id}/name` 只收 name；别名是通用实体属性，走属性写入。
-      await setEntityProperty(person.id, "aliases", next);
-      setAliases(next);
+      const result = await setEntityProperty(person.id, "aliases", next);
+      setAliasUpdate({ base: person.aliases, value: next });
       setAliasesOpen(false);
+      return result;
     });
   }
 
   // ---- 介绍 / 整理 -------------------------------------------------------------------
 
   function sendFeedback(verdict: string) {
-    void run(async () => {
-      await sendPortraitFeedback(person.id, verdict);
-      // 反馈写在服务端那一版上，重新取一遍才看到它的 feedback 字段。
-      setPortrait(await getPersonPortrait(person.id));
+    void write(feedbackKey, async () => {
+      await run(async () => {
+        await sendPortraitFeedback(person.id, verdict);
+        setPortrait(await getPersonPortrait(person.id));
+      });
     });
   }
 
@@ -273,7 +356,7 @@ export function PersonDetail({
       const detail = await getPerson(person.id);
       const cluster = detail.clusters.find((item) => item.status !== "rejected");
       if (cluster === undefined) throw new Error("这个人物没有可移除的人脸分组");
-      await rejectFaceCluster(cluster.id);
+      return rejectFaceCluster(cluster.id);
     });
     setRejecting(false);
     if (ok) onClose();
@@ -305,9 +388,26 @@ export function PersonDetail({
         </p>
       )}
 
+      {syncResult === null ? null : (
+        <div className={"memory-sync-feedback is-" + syncResult.sync_status} role="status">
+          <span>{syncResult.sync_status === "synced"
+            ? "修改已保存，关联记忆、图谱与检索索引已同步。"
+            : "修改已保存，但关联数据待同步。" + (syncResult.sync_error ? " " + syncResult.sync_error : "")}</span>
+          {syncResult.sync_status === "pending" ? (
+            <button type="button" className="button ghost small" disabled={busy || syncRetrying}
+              onClick={() => void syncMemories()}>重试同步</button>
+          ) : null}
+        </div>
+      )}
       <section className="detail-section">
         <h3>身份</h3>
-        <form className="detail-form" onSubmit={submitName}>
+        {mergeConfirmation !== null && pending ? (
+          <div role="status">
+            <p>人物已合并，身份待确认。可以重试确认「{mergeConfirmation.name}」。</p>
+            <button type="button" className="button primary small" disabled={busy}
+              onClick={() => retryConfirmation(mergeConfirmation)}>重试确认身份</button>
+          </div>
+        ) : <form className="detail-form" onSubmit={submitName}>
           {pending ? (
             <p className="detail-empty">这是系统从照片里整理出的面孔，确认后才会进入问答和按人找照片。</p>
           ) : null}
@@ -354,7 +454,7 @@ export function PersonDetail({
             )}
           </div>
           <small className="detail-hint">与已有的人同名时，会先问你是不是同一个人。</small>
-        </form>
+        </form>}
 
         <div className="detail-field">
           别名
@@ -401,6 +501,7 @@ export function PersonDetail({
       </section>
 
       <RelationEditor
+        key={relateAttempt}
         person={person}
         people={people}
         relationships={relationships}
@@ -441,7 +542,7 @@ export function PersonDetail({
                 type="button"
                 className={currentFeedback === verdict ? "button primary small" : "button ghost small"}
                 aria-pressed={currentFeedback === verdict}
-                disabled={busy}
+                disabled={busy || pendingWrites.has(feedbackKey)}
                 onClick={() => sendFeedback(verdict)}
               >
                 {verdict}
@@ -465,6 +566,17 @@ export function PersonDetail({
           </ul>
         )}
       </section>
+
+      {!pending ? (
+        <section className="detail-section person-memory-sync" aria-label="关联记忆修正">
+          <h3>关联记忆</h3>
+          <p className="detail-empty">按当前人物信息同步关联记忆、图谱与检索索引。</p>
+          <button type="button" className="button primary small" disabled={busy || syncRetrying}
+            onClick={() => void syncMemories()}>
+            {syncRetrying ? "正在同步关联记忆…" : "修正并同步关联记忆"}
+          </button>
+        </section>
+      ) : null}
 
       {pending || person.hidden ? (
         <section className="detail-section detail-tidy">
@@ -496,9 +608,10 @@ export function PersonDetail({
       {prompt === null ? null : (
         <SameNameDialog
           person={person}
-          namesake={prompt.namesake}
+          candidates={prompt.candidates}
+          familyRole={prompt.role}
           name={prompt.name}
-          onMerge={() => mergeWithNamesake(prompt)}
+          onMerge={(candidate) => mergeWithNamesake(prompt, candidate)}
           onKeepApart={() => keepApart(prompt)}
           onCancel={() => setPrompt(null)}
         />

@@ -14,7 +14,7 @@
  * 就要动那条门禁；查询参数同样能刷新保持、能后退、能分享，代价为零。
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { newOperationId, reportClientEvent } from "../../shared/clientEvents";
 import { useSearchParams } from "react-router";
@@ -25,10 +25,11 @@ import { useScope } from "../../app/ScopeProvider";
 import { FamilyGraphView } from "./family/FamilyGraphView";
 import { FamilyRoster } from "./family/FamilyRoster";
 import { confirmedRelationships } from "./family/graphLayout";
-import { PersonDetail } from "./family/PersonDetail";
+import { PersonDetail, type MergeConfirmation } from "./family/PersonDetail";
 import { personDisplayName } from "./family/membership";
 import { splitByTier } from "./family/strangers";
 import { useFamilyGraph } from "./family/useFamilyGraph";
+import { PeopleWritesContext, usePeopleWriteState } from "./family/usePeopleWrites";
 
 /**
  * 两个 tab：人物 / 关系。原「人物介绍」tab 已取消（2026-11-12）：它用另一套分层（核心 /
@@ -46,7 +47,10 @@ export function PeoplePage() {
   const { state, people, relationships, error, refresh } = useFamilyGraph(scopeId);
   const [view, setView] = useState<View>("roster");
   const [searchParams, setSearchParams] = useSearchParams();
-  const [relateTo, setRelateTo] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ subject: string; target: string; attempt: number } | null>(null);
+  const dropSequence = useRef(0);
+  const [confirmation, setConfirmation] = useState<MergeConfirmation | null>(null);
+  const writes = usePeopleWriteState();
 
   /**
    * **一条关系在库里是两行**（正向 + 反向）。后端 `set_relationship` 一次写两行，
@@ -87,7 +91,9 @@ export function PeoplePage() {
         entityId: personId,
       });
     }
-    setRelateTo(relate);
+    setDrop(personId !== null && relate !== null
+      ? { subject: personId, target: relate, attempt: ++dropSequence.current }
+      : null);
     const next = new URLSearchParams(window.location.search);
     if (personId === null) next.delete("person");
     else next.set("person", personId);
@@ -95,9 +101,10 @@ export function PeoplePage() {
   }
 
   const banner = state === "error" ? error : null;
+  const selectedDrop = drop?.subject === selectedId ? drop : null;
 
   return (
-    <>
+    <PeopleWritesContext.Provider value={writes}>
       <PageHeader
         kicker="家庭人物"
         title="人物与关系"
@@ -166,7 +173,13 @@ export function PeoplePage() {
           person={selected}
           people={people}
           relationships={relationships}
-          relateTarget={relateTo}
+          relateTarget={selectedDrop?.target}
+          relateAttempt={selectedDrop?.attempt}
+          mergeConfirmation={confirmation?.personId === selected.id ? confirmation : null}
+          onMergeConfirmation={(next) => {
+            setConfirmation(next);
+            if (next !== null && next.personId !== selected.id) selectPerson(next.personId);
+          }}
           onClose={() => selectPerson(null)}
           onChanged={refresh}
           onRedirect={(id) => selectPerson(id)}
@@ -177,6 +190,6 @@ export function PeoplePage() {
       <span className="sr-only" aria-live="polite">
         {selected === null ? "" : `已打开 ${personDisplayName(selected)} 的详情`}
       </span>
-    </>
+    </PeopleWritesContext.Provider>
   );
 }

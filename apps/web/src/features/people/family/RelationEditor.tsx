@@ -19,9 +19,8 @@ import {
   type FamilyPerson,
   type FamilyRelationship,
 } from "../../../shared/api/client";
-import { confirmedRelationships } from "./graphLayout";
+import { confirmedRelationships, dedupeRelationships } from "./graphLayout";
 import {
-  MAX_RELATION_LABEL_LENGTH,
   myRoleOptions,
   personDisplayName,
   relationFromSelf,
@@ -31,6 +30,7 @@ import {
 } from "./membership";
 import { PersonAvatar } from "./PersonAvatar";
 import { PersonPicker } from "./PersonPicker";
+import { relationshipWriteKey, usePeopleWrites } from "./usePeopleWrites";
 
 interface Props {
   readonly person: FamilyPerson;
@@ -48,6 +48,7 @@ interface Props {
 export function RelationEditor({ person, people, relationships, busy, run, relateTarget = null, header = null }: Props) {
   const [targetId, setTargetId] = useState<string | null>(relateTarget);
   const labels = useRelationLabels();
+  const { pending, write } = usePeopleWrites();
   const suggestions = useMemo(
     () => relationLabelSuggestions(confirmedRelationships(relationships).flatMap((edge) => [edge.predicate, edge.inverse_predicate])),
     [relationships],
@@ -65,26 +66,34 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
   const edges = confirmedRelationships(relationships)
     .filter((edge) => edge.subject_entity_id === person.id || edge.object_entity_id === person.id)
     .map((edge) => ({ edge, ...relationFromSelf(edge, person.id) }));
-  const existing = target === undefined ? undefined : edges.find((item) => item.otherId === target.id);
-
+  const existing = target === undefined ? undefined : dedupeRelationships(relationships.filter((edge) =>
+    edge.scope_id === person.scope_id &&
+    ((edge.subject_entity_id === person.id && edge.object_entity_id === target.id)
+    || (edge.object_entity_id === person.id && edge.subject_entity_id === target.id)),
+  ))[0];
+  const existingRole = existing === undefined ? null : relationFromSelf(existing, person.id).otherRole;
+  const targetKey = target === undefined ? null : relationshipWriteKey(person.scope_id, person.id, target.id);
+  const saving = busy || (targetKey !== null && pending.has(targetKey));
   const ready = target !== undefined && labels.ready;
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!ready || target === undefined) return;
-    // 「对方是我的 role」= subject 对方 · predicate role · object 我；反向即「我是对方的 myRole」。
-    void run(() =>
-      putFamilyRelationship({
-        scopeId: person.scope_id,
-        subjectEntityId: target.id,
-        predicate: labels.cleanRole,
-        objectEntityId: person.id,
-        inversePredicate: labels.cleanReverse,
-      }),
-    ).then((ok) => {
-      if (!ok) return;
-      labels.reset();
-      setTargetId(null);
+    if (saving || !ready || target === undefined || targetKey === null) return;
+    // 「对方是我的 role」：subject 对方，object 我。
+    void write(targetKey, async () => {
+      const ok = await run(() =>
+        putFamilyRelationship({
+          scopeId: person.scope_id,
+          subjectEntityId: target.id,
+          predicate: labels.cleanRole,
+          objectEntityId: person.id,
+          inversePredicate: labels.cleanReverse,
+        }),
+      );
+      if (ok) {
+        labels.reset();
+        setTargetId(null);
+      }
     });
   }
 
@@ -98,6 +107,7 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
         <ul className="detail-relations">
           {edges.map(({ edge, otherId, otherRole }) => {
             const other = people.find((item) => item.id === otherId);
+            const key = relationshipWriteKey(person.scope_id, edge.subject_entity_id, edge.object_entity_id);
             return (
               <li key={`${edge.subject_entity_id}-${edge.object_entity_id}`}>
                 {other === undefined ? null : <PersonAvatar person={other} size="sm" />}
@@ -107,16 +117,16 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
                 <button
                   type="button"
                   className="text-button"
-                  disabled={busy}
+                  disabled={busy || pending.has(key)}
                   aria-label={`删除关系：${nameOf(otherId)} 是 ${selfName} 的${otherRole}`}
                   onClick={() =>
-                    void run(() =>
-                      deleteFamilyRelationship({
+                    void write(key, async () => {
+                      await run(() => deleteFamilyRelationship({
                         scopeId: person.scope_id,
                         subjectEntityId: edge.subject_entity_id,
                         objectEntityId: edge.object_entity_id,
-                      }),
-                    )
+                      }));
+                    })
                   }
                 >
                   删除
@@ -138,22 +148,23 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
             selectedId={target?.id ?? null}
             onSelect={(item) => setTargetId(item.id)}
             label="对方"
-            disabled={busy}
+            disabled={saving}
           />
           <RelationLabelFields
             labels={labels}
             otherName={target === undefined ? "对方" : personDisplayName(target)}
             selfName={selfName}
             suggestions={suggestions}
-            disabled={busy}
+            disabled={saving}
           />
-          {existing === undefined ? null : (
+          {existingRole === null || target === undefined ? null : (
             <p className="detail-warning">
-              将替换现有关系：{personDisplayName(target as FamilyPerson)} 是 {selfName} 的{existing.otherRole}
+              将替换现有关系：{personDisplayName(target)} 是 {selfName} 的{existingRole}
+              {edges.some((edge) => edge.otherId === target.id) ? "" : "（系统推断）"}
             </p>
           )}
-          <button type="submit" className="button primary small" disabled={busy || !ready}>
-            建立关系
+          <button type="submit" className="button primary small" disabled={saving || !ready}>
+            {existingRole === null ? "建立关系" : "替换关系"}
           </button>
         </form>
       )}
@@ -237,7 +248,6 @@ export function RelationLabelFields({
           aria-label="关系称谓"
           list={listId}
           value={labels.role}
-          maxLength={MAX_RELATION_LABEL_LENGTH + 4}
           placeholder="自己写，如 爸爸、同事、干妈"
           disabled={disabled}
           onChange={(event) => labels.setRole(event.target.value)}
@@ -255,7 +265,6 @@ export function RelationLabelFields({
         <input
           aria-label="反向称谓"
           value={labels.reverse}
-          maxLength={MAX_RELATION_LABEL_LENGTH + 4}
           placeholder="反过来怎么称呼"
           disabled={disabled}
           onChange={(event) => labels.setReverse(event.target.value)}

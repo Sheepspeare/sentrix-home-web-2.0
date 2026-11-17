@@ -30,8 +30,10 @@ import {
   deleteFamilyRelationship,
   faceInstanceCropUrl,
   putFamilyRelationship,
+  retryMemoryCorrections,
   type FamilyPerson,
   type FamilyRelationship,
+  type MemorySyncResult,
 } from "../../../shared/api/client";
 import { EmptyState } from "../../../shared/ui/EmptyState";
 import { describeReviewError } from "../reviewErrors";
@@ -57,6 +59,7 @@ import {
   relationLabelSuggestions,
 } from "./membership";
 import { RelationLabelFields, useRelationLabels } from "./RelationEditor";
+import { relationshipWriteKey, usePeopleWrites } from "./usePeopleWrites";
 
 /** 命中另一个节点的半径：比节点本身松一点，拖拽时不必精确压中圆心。 */
 const DROP_RADIUS = NODE_RADIUS * 1.8;
@@ -84,10 +87,12 @@ interface EdgeSelection {
   readonly object: string;
   readonly predicate: string;
   readonly inverse_predicate: string;
+  readonly scopeId: string;
 }
 
 interface DragState {
   mode: "pan" | "move" | "relate";
+  pointerId: number;
   fromId: string | null;
   startX: number;
   startY: number;
@@ -137,7 +142,6 @@ export function FamilyGraphView({
   // 变换与布局放 ref：原生事件处理里要读最新值，而它们不该触发重渲染。
   const transformRef = useRef({ k: 1, x: 0, y: 0 });
   const dragRef = useRef<DragState | null>(null);
-  const relatePreviewRef = useRef(relatePreview);
   const dragPosRef = useRef(dragPos);
   const onSelectRef = useRef(onSelect);
   const onRelateRef = useRef(onRelate);
@@ -171,6 +175,7 @@ export function FamilyGraphView({
     [edges, focusId],
   );
   const layoutRef = useRef(layout);
+  const peopleRef = useRef(people);
   const sizeRef = useRef(size);
   const positionOf = (id: string): LayoutPoint | undefined =>
     dragPos !== null && dragPos.id === id ? dragPos : layout.get(id);
@@ -178,8 +183,8 @@ export function FamilyGraphView({
   // 同步「处理函数要读的最新值」。在 effect 里写而不是渲染期写。
   useEffect(() => {
     layoutRef.current = layout;
+    peopleRef.current = people;
     sizeRef.current = size;
-    relatePreviewRef.current = relatePreview;
     dragPosRef.current = dragPos;
     onSelectRef.current = onSelect;
     onRelateRef.current = onRelate;
@@ -266,9 +271,16 @@ export function FamilyGraphView({
 
   // 平移 / 摆位置 / 拖拽建关系。挂 window 而不是挂 SVG：指针移出边界后事件还能继续。
   useEffect(() => {
+    function relatedTarget(fromId: string, world: LayoutPoint): string | null {
+      const scope = peopleRef.current.find((person) => person.id === fromId)?.scope_id;
+      if (!scope) return null;
+      const candidate = nearestNodeId(layoutRef.current, world, fromId, DROP_RADIUS);
+      if (candidate === null) return null;
+      return peopleRef.current.find((person) => person.id === candidate)?.scope_id === scope ? candidate : null;
+    }
     function handleMove(event: PointerEvent) {
       const drag = dragRef.current;
-      if (drag === null) return;
+      if (drag === null || drag.pointerId !== event.pointerId) return;
       if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > DRAG_THRESHOLD) drag.moved = true;
       if (drag.mode === "pan") {
         const current = transformRef.current;
@@ -292,13 +304,14 @@ export function FamilyGraphView({
         from: drag.fromId,
         x: world.x,
         y: world.y,
-        target: nearestNodeId(layoutRef.current, world, drag.fromId, DROP_RADIUS),
+        target: relatedTarget(drag.fromId, world),
       });
     }
-    function handleUp() {
+    function handleUp(event: PointerEvent) {
       const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
-      if (drag === null || drag.mode === "pan" || drag.fromId === null) return;
+      if (drag.mode === "pan" || drag.fromId === null) return;
       const fromId = drag.fromId;
       if (drag.mode === "move") {
         const dropped = dragPosRef.current;
@@ -313,25 +326,33 @@ export function FamilyGraphView({
         }
         return;
       }
-      const preview = relatePreviewRef.current;
       setRelatePreview(null);
-      if (preview !== null && preview.target !== null && preview.target !== fromId) {
-        onRelateRef.current(fromId, preview.target);
-      }
+      if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= DRAG_THRESHOLD) return;
+      const target = relatedTarget(fromId, clientToWorld(event.clientX, event.clientY));
+      if (target !== null) onRelateRef.current(fromId, target);
+    }
+    function handleCancel(event: PointerEvent) {
+      if (dragRef.current?.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setRelatePreview(null);
+      setDragPos(null);
     }
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleCancel);
     return () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleCancel);
     };
   }, [applyTransform, clientToWorld]);
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
+    if (event.button !== 0 || dragRef.current !== null) return;
     const target = event.target as Element;
     const handle = target.closest("[data-relate-handle]");
     const node = target.closest("[data-node-id]");
-    const base = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false };
+    const base = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false };
     if (handle !== null) {
       event.stopPropagation();
       dragRef.current = { ...base, mode: "relate", fromId: handle.getAttribute("data-relate-handle") };
@@ -351,17 +372,6 @@ export function FamilyGraphView({
     setMode("focus");
   }
 
-  // 编辑要写回的 scope 以**那条关系行自己的 scope_id** 为准：合并过相册时整张图跨多个
-  // scope，拿入参 scope 会写错册。
-  const selectedRow =
-    selectedEdge === null
-      ? undefined
-      : relationships.find(
-          (row) =>
-            row.subject_entity_id === selectedEdge.subject &&
-            row.object_entity_id === selectedEdge.object &&
-            row.predicate === selectedEdge.predicate,
-        );
   const nameOf = (id: string): string => {
     const person = people.find((item) => item.id === id);
     return person === undefined ? id : personDisplayName(person);
@@ -479,7 +489,14 @@ export function FamilyGraphView({
                   style={{ cursor: "pointer" }}
                   onClick={(event) => {
                     event.stopPropagation();
+                    const row = confirmedRows.find((item) =>
+                      item.subject_entity_id === edge.subject_entity_id &&
+                      item.object_entity_id === edge.object_entity_id &&
+                      item.predicate === edge.predicate &&
+                      item.inverse_predicate === edge.inverse_predicate);
+                    if (row === undefined) return;
                     setSelectedEdge({
+                      scopeId: row.scope_id,
                       subject: edge.subject_entity_id,
                       object: edge.object_entity_id,
                       predicate: edge.predicate,
@@ -587,7 +604,6 @@ export function FamilyGraphView({
         <EdgeEditor
           key={`${selectedEdge.subject}-${selectedEdge.object}-${selectedEdge.predicate}`}
           edge={selectedEdge}
-          scopeId={selectedRow?.scope_id ?? ""}
           subjectName={nameOf(selectedEdge.subject)}
           objectName={nameOf(selectedEdge.object)}
           suggestions={relationLabelSuggestions(edges.flatMap((item) => [item.predicate, item.inverse_predicate]))}
@@ -608,7 +624,6 @@ export function FamilyGraphView({
  */
 function EdgeEditor({
   edge,
-  scopeId,
   subjectName,
   objectName,
   suggestions,
@@ -616,7 +631,6 @@ function EdgeEditor({
   onClose,
 }: {
   edge: EdgeSelection;
-  scopeId: string;
   subjectName: string;
   objectName: string;
   suggestions: readonly string[];
@@ -625,47 +639,38 @@ function EdgeEditor({
 }) {
   // 「subject 是 object 的 predicate」：subject 是对方、object 是「我」，与详情里建关系同一种说法。
   const labels = useRelationLabels({ role: edge.predicate, reverse: edge.inverse_predicate });
-  const [busy, setBusy] = useState(false);
+  const scopeId = edge.scopeId;
+  const { pending, write } = usePeopleWrites();
+  const key = relationshipWriteKey(scopeId, edge.subject, edge.object);
+  const busy = pending.has(key);
   const [error, setError] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<MemorySyncResult | null>(null);
+  const readOnly = busy || syncResult !== null;
 
-  async function save() {
-    if (!labels.ready || scopeId === "") return;
-    setBusy(true);
-    setError(null);
-    try {
-      await putFamilyRelationship({
-        scopeId,
-        subjectEntityId: edge.subject,
-        predicate: labels.cleanRole,
-        objectEntityId: edge.object,
-        inversePredicate: labels.cleanReverse,
-      });
-      await onChanged();
-      onClose();
-    } catch (cause) {
-      setError(describeReviewError(cause));
-    } finally {
-      setBusy(false);
-    }
+  function submit(action: () => Promise<MemorySyncResult>) {
+    if (scopeId === "" || readOnly) return;
+    void write(key, async () => {
+      setError(null);
+      try {
+        setSyncResult(await action());
+        await onChanged();
+      } catch (cause) {
+        setError(describeReviewError(cause));
+      }
+    });
   }
 
-  async function remove() {
-    if (scopeId === "") return;
-    setBusy(true);
-    setError(null);
-    try {
-      await deleteFamilyRelationship({
-        scopeId,
-        subjectEntityId: edge.subject,
-        objectEntityId: edge.object,
-      });
-      await onChanged();
-      onClose();
-    } catch (cause) {
-      setError(describeReviewError(cause));
-    } finally {
-      setBusy(false);
-    }
+  function retrySync() {
+    void write(key, async () => {
+      setError(null);
+      try {
+        const { error: syncError } = await retryMemoryCorrections(scopeId);
+        setSyncResult({ sync_status: syncError ? "pending" : "synced", sync_error: syncError });
+        if (!syncError) await onChanged();
+      } catch (cause) {
+        setError(describeReviewError(cause));
+      }
+    });
   }
 
   return (
@@ -678,27 +683,47 @@ function EdgeEditor({
         otherName={subjectName}
         selfName={objectName}
         suggestions={suggestions}
-        disabled={busy}
+        disabled={readOnly}
       />
       <button
         type="button"
         className="button primary small"
-        disabled={busy || !labels.ready || scopeId === ""}
-        onClick={() => void save()}
+        disabled={readOnly || !labels.ready || scopeId === ""}
+        onClick={() => {
+          if (!labels.ready) return;
+          submit(() => putFamilyRelationship({
+            scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
+            predicate: labels.cleanRole, inversePredicate: labels.cleanReverse,
+          }));
+        }}
       >
         保存关系
       </button>
       <button
         type="button"
         className="button ghost small"
-        disabled={busy || scopeId === ""}
-        onClick={() => void remove()}
+        disabled={readOnly || scopeId === ""}
+        onClick={() => submit(() => deleteFamilyRelationship({
+          scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
+        }))}
       >
         删除关系
       </button>
       <button type="button" className="button ghost small" disabled={busy} onClick={onClose}>
-        取消
+        {syncResult === null ? "取消" : "完成"}
       </button>
+      {syncResult === null ? null : (
+        <div className={`memory-sync-feedback is-${syncResult.sync_status}`} role="status" aria-live="polite">
+          <span>{syncResult.sync_status === "synced"
+            ? "关系已保存，图谱与检索索引已同步。"
+            : `关系已保存，但关联数据待同步${syncResult.sync_error ? `：${syncResult.sync_error}` : "。"}`}</span>
+          {syncResult.sync_status === "pending" ? (
+            <button type="button" className="button ghost small" disabled={busy} onClick={retrySync}>
+              {busy ? "正在重试…" : "重试同步"}
+            </button>
+          ) : null}
+        </div>
+      )}
       {error === null ? null : (
         <p className="error" role="alert">
           {error}

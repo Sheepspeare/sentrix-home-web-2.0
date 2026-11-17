@@ -15,15 +15,15 @@ export function normalizeName(name: string): string {
 
 /**
  * 同一相册里名字或别名等于 `name` 的另一个人。多个时优先已确认的、再优先出现多的——
- * 那最可能是用户心里「已经有的那位」。没有则 `null`。
+ * 本名优先于别名，保留全部候选供用户选择。
  */
-export function findNamesake(
+export function findNamesakes(
   person: FamilyPerson,
   name: string,
   people: readonly FamilyPerson[],
-): FamilyPerson | null {
+): FamilyPerson[] {
   const needle = normalizeName(name);
-  if (needle === "") return null;
+  if (needle === "") return [];
   const matches = people.filter((other) => {
     if (other.id === person.id || other.scope_id !== person.scope_id) return false;
     if (isNamed(other) && normalizeName(personDisplayName(other)) === needle) return true;
@@ -32,9 +32,10 @@ export function findNamesake(
   matches.sort((a, b) => {
     const confirmed = Number(!isPendingPerson(b)) - Number(!isPendingPerson(a));
     if (confirmed !== 0) return confirmed;
-    return b.appearance_count - a.appearance_count;
+    const aliasMatch = Number(namesakeMatchesAlias(a, name)) - Number(namesakeMatchesAlias(b, name));
+    return aliasMatch || b.appearance_count - a.appearance_count || a.id.localeCompare(b.id);
   });
-  return matches[0] ?? null;
+  return matches;
 }
 
 /** 命中的是对方的本名还是别名：确认框里要说清楚「这是谁的什么」。 */

@@ -127,6 +127,7 @@ class StubToolbox:
         scope_id: str,
         now: datetime,
         question: str = "",
+        graph_enabled: bool = True,
     ) -> ToolOutcome:
         # ``question`` 是 `inspect_photo` 要的（1.0 ``tools.py:2162-2165`` 拿它找裁剪目标）,
         # 与 ``__init__`` 那三件一样：**凡是 ``RunTurn`` 会传给真实 toolbox 的形参，
@@ -400,7 +401,7 @@ def test_progress_events_are_persisted_in_order(env):
 
     result = run_turn.run(turn_id)
 
-    events = turns.events_after(turn_id, 0)
+    events = [event for _, _, event in turns.events_after(turn_id, 0)]
     assert [event.step_index for event in events] == list(range(1, len(events) + 1))
     assert events[0].kind == "plan"
     assert [event.payload["requirements"][0]["status"] for event in events[:1]] == ["open"]
@@ -420,7 +421,7 @@ def test_the_emitted_events_match_what_was_persisted(env):
 
     run_turn.run(turn_id, emit=emitted.append)
 
-    persisted = turns.events_after(turn_id, 0)
+    persisted = [event for _, _, event in turns.events_after(turn_id, 0)]
     assert [(event.step_index, event.text) for event in emitted] == [
         (event.step_index, event.text) for event in persisted
     ]
@@ -630,7 +631,7 @@ def test_a_hard_block_is_visible_in_the_trace(env):
 
     run_turn.run(turn_id)
 
-    hard = [event for event in turns.events_after(turn_id, 0) if (event.payload or {}).get("hard")]
+    hard = [event for _, _, event in turns.events_after(turn_id, 0) if (event.payload or {}).get("hard")]
     assert hard, "硬拦必须留下一条可归因的事件"
     assert hard[0].payload["code"] == "internal_id_leak"
     assert hard[0].kind == "guard"
@@ -695,9 +696,8 @@ def test_an_unattempted_requirement_earns_one_reminder(env):
 
     run_turn.run(turn_id)
 
-    assert reminder_count(model, "还有声明的证据需求尚未尝试：") == 1
-    nudged = [call for call in model.calls if any("尚未尝试" in m.content for m in call)]
-    assert any("read_photo_text" in message.content for call in nudged for message in call)
+    assert reminder_count(model, "尚有必要内容未核对：") == 1
+    nudged = [call for call in model.calls if any("尚有必要内容未核对：" in m.content for m in call)]
     assert any("visible_text" in message.content for call in nudged for message in call)
 
 
@@ -853,12 +853,14 @@ def test_an_attempted_but_unmet_requirement_says_attempt_failed(env):
 # ---- 收敛与预算 --------------------------------------------------------------
 
 
-def test_a_second_search_is_refused_and_the_model_is_told_to_page(env):
+def test_a_third_search_is_refused_after_one_retry(env):
+    """冻结工具集下允许一次重试（共 2 次检索）；第 3 次被 ToolPolicy 拒绝，不再引导翻页。"""
     _conversations, turns, conversation, _db = env
     model = ScriptedModel(
         [
             tool_call("search_memories", "c1", query="海边"),
             tool_call("search_memories", "c2", query="海边2"),
+            tool_call("search_memories", "c3", query="海边3"),
             final("这是你要的照片。"),
         ]
     )
@@ -868,9 +870,9 @@ def test_a_second_search_is_refused_and_the_model_is_told_to_page(env):
 
     run_turn.run(turn_id)
 
-    assert [name for name, _ in toolbox.calls] == ["search_memories"]
-    refusals = [event for event in turns.events_after(turn_id, 0) if event.status.value == "denied"]
-    assert refusals and "get_result_page" in refusals[0].text
+    assert [name for name, _ in toolbox.calls] == ["search_memories", "search_memories"]
+    refusals = [event for _seq, _attempt, event in turns.events_after(turn_id, 0) if event.status.value == "denied"]
+    assert refusals and "检索额度" in refusals[0].text
 
 
 def test_a_model_stuck_on_failing_tools_is_told_to_answer(env):
@@ -1202,7 +1204,7 @@ def test_an_unexpected_exception_still_produces_a_named_reason(env):
     """
 
     class Exploding(StubToolbox):
-        def execute(self, name, arguments, *, scope_id, now):  # type: ignore[override]
+        def execute(self, name, arguments, *, scope_id, now, question="", graph_enabled=True):  # type: ignore[override]
             raise ValueError("工具内部炸了")
 
     _conversations, turns, conversation, _db = env
@@ -1502,7 +1504,9 @@ def test_an_unfaithful_answer_is_pushed_back_once_then_released(env):
     # 没有它，「评审放行的答案」与「评审通过的答案」在轨迹上完全一样，
     # 而评测与排查要区分的正是这两者。
     released = [
-        event for event in _turns.events_after(turn_id, 0) if event.payload.get("code") == "l2_soft_release"
+        event
+        for _, _, event in _turns.events_after(turn_id, 0)
+        if event.payload.get("code") == "l2_soft_release"
     ]
     assert len(released) == 1
     assert released[0].kind == "judge"
@@ -1549,7 +1553,9 @@ def test_an_unfaithful_answer_is_released_when_the_judge_spent_the_last_step(env
     # 放行的同时还必须有那条标：没有它，「评审放行的答案」与「评审通过的答案」在轨迹
     # 上完全一样，而评测与排查要区分的正是这两者。
     released = [
-        event for event in _turns.events_after(turn_id, 0) if event.payload.get("code") == "l2_soft_release"
+        event
+        for _, _, event in _turns.events_after(turn_id, 0)
+        if event.payload.get("code") == "l2_soft_release"
     ]
     assert len(released) == 1
     assert released[0].payload["possibly_fabricated"] is True
@@ -1674,7 +1680,9 @@ def test_a_faithful_answer_carries_no_soft_release_label(env):
 
     assert len(model.judge_calls) == 1, "评审该被调用一次"
     assert not [
-        event for event in turns.events_after(turn_id, 0) if event.payload.get("code") == "l2_soft_release"
+        event
+        for _, _, event in turns.events_after(turn_id, 0)
+        if event.payload.get("code") == "l2_soft_release"
     ]
 
 
@@ -1697,7 +1705,9 @@ def test_a_style_only_problem_does_not_earn_the_label(env):
 
     assert result.answer == "相册里有 2 张海边的照片。", "风格问题不该让回答被退回重写"
     assert not [
-        event for event in turns.events_after(turn_id, 0) if event.payload.get("code") == "l2_soft_release"
+        event
+        for _, _, event in turns.events_after(turn_id, 0)
+        if event.payload.get("code") == "l2_soft_release"
     ]
 
 
@@ -1831,7 +1841,7 @@ def test_include_debug_persists_the_switch_before_the_turn_runs(env):
         TurnRequest(conversation_id=conversation.id, question=QUESTION, include_debug=True)
     ).id
 
-    assert turns.get(turn_id).trace == {"include_debug": True}
+    assert turns.get(turn_id).trace == {"include_debug": True, "graph_enabled": True}
 
 
 def test_include_debug_records_planner_agent_and_judge_with_exact_messages(env):

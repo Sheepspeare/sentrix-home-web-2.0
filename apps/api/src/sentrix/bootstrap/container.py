@@ -17,14 +17,17 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sentrix.application.identity.person_directory import EntityPersonDirectory
+from sentrix.bootstrap.model_roles import ModelProfile, load_model_profile
 from sentrix.config import Settings
 from sentrix.domain.assistant.ports import (
     ChatModel,
     ConversationRepository,
     PersonDirectory,
     ResultSetRepository,
+    SpeechRecognizer,
     TurnEventBroker,
     TurnRepository,
 )
@@ -50,6 +53,7 @@ from sentrix.domain.media.ports import (
     AudioRepository,
     AudioTranscriber,
     CaptureTimeResolver,
+    MediaDeletionRepository,
     MediaStorage,
     MetadataReader,
     ObservationRepository,
@@ -69,6 +73,7 @@ from sentrix.domain.memories.ports import (
     EventParticipantRepository,
     EventRepository,
     FactRepository,
+    MemoryCorrectionRepository,
     MemoryGraphRepository,
 )
 from sentrix.domain.memories.rotation import RotationRepository
@@ -84,11 +89,16 @@ from sentrix.domain.retrieval.ports import (
     VectorIndex,
     VectorRepository,
     VisualEmbedder,
+    VisualEvidenceUtility,
 )
 from sentrix.domain.spaces.ports import SpaceRepository
-from sentrix.infrastructure.assistant.chat_client import OpenAIChatModel
+from sentrix.infrastructure.assistant.chat_client import MAX_ANSWER_TOKENS, ModelBudget, OpenAIChatModel
 from sentrix.infrastructure.assistant.events import InProcessTurnEventBroker
-from sentrix.infrastructure.assistant.model_endpoint import ServedModel, probe_context_tokens
+from sentrix.infrastructure.assistant.model_endpoint import (
+    FixedModelName,
+    ServedModel,
+    probe_context_tokens,
+)
 from sentrix.infrastructure.build import read_build_revision
 from sentrix.infrastructure.media.audio_metadata import FfprobeAudioMetadataReader
 from sentrix.infrastructure.media.audio_transcription import QwenAudioTranscriber
@@ -107,7 +117,7 @@ from sentrix.infrastructure.media.storage import FileSystemMediaStorage
 from sentrix.infrastructure.media.video_keyframes import FfmpegVideoKeyframeExtractor
 from sentrix.infrastructure.media.video_metadata import FfprobeVideoMetadataReader
 from sentrix.infrastructure.media.video_transcode import FfmpegVideoTranscoder
-from sentrix.infrastructure.media.vlm_observer import OpenAIVlmObserver
+from sentrix.infrastructure.media.vlm_observer import IMAGE_MAX_SIDE, OpenAIVlmObserver
 from sentrix.infrastructure.memories.causal_judge import OpenAICausalJudge
 from sentrix.infrastructure.models.face_adapter import FaceAdapter
 from sentrix.infrastructure.models.face_detector import RetinaFaceTiledDetector
@@ -118,6 +128,8 @@ from sentrix.infrastructure.models.legacy import (
     LegacyEmbeddingHealthProbe,
 )
 from sentrix.infrastructure.models.reranker import BgeSidecarReranker
+from sentrix.infrastructure.models.speech_http import HttpSpeechRecognizer
+from sentrix.infrastructure.models.visual_utility import OpenAIVisualEvidenceUtility
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.repositories.appearance import SqliteAppearanceRepository
@@ -130,12 +142,14 @@ from sentrix.infrastructure.persistence.repositories.audio import SqliteAudioRep
 from sentrix.infrastructure.persistence.repositories.conversations import (
     SqliteConversationRepository,
 )
+from sentrix.infrastructure.persistence.repositories.corrections import SqliteMemoryCorrections
 from sentrix.infrastructure.persistence.repositories.entities import SqliteEntityRepository
 from sentrix.infrastructure.persistence.repositories.events import SqliteEventRepository
 from sentrix.infrastructure.persistence.repositories.faces import SqliteFaceRepository
 from sentrix.infrastructure.persistence.repositories.facts import SqliteFactRepository
 from sentrix.infrastructure.persistence.repositories.family import SqliteFamilyGraphRepository
 from sentrix.infrastructure.persistence.repositories.import_jobs import SqliteImportJobRepository
+from sentrix.infrastructure.persistence.repositories.media_deletion import SqliteMediaDeletionRepository
 from sentrix.infrastructure.persistence.repositories.memory_graph import SqliteMemoryGraphRepository
 from sentrix.infrastructure.persistence.repositories.memory_rotation import SqliteRotationRepository
 from sentrix.infrastructure.persistence.repositories.moments import SqliteMomentRepository
@@ -197,9 +211,7 @@ class RecoveringEmbeddingHealth:
         self._lock = threading.Lock()
         self._available = initially_available
         self._error = "" if initially_available else error
-        self._next_check = clock() + (
-            success_ttl_s if initially_available else failure_ttl_s
-        )
+        self._next_check = clock() + (success_ttl_s if initially_available else failure_ttl_s)
 
     def _refresh(self) -> None:
         with self._lock:
@@ -212,9 +224,7 @@ class RecoveringEmbeddingHealth:
                 ok, error = False, f"{type(exc).__name__}: {exc}"
             self._available = ok
             self._error = "" if ok else (error or "embedding smoke test failed")
-            self._next_check = now + (
-                self._success_ttl_s if ok else self._failure_ttl_s
-            )
+            self._next_check = now + (self._success_ttl_s if ok else self._failure_ttl_s)
 
     @property
     def available(self) -> bool:
@@ -234,15 +244,14 @@ class RecoveringEmbeddingHealth:
         with self._lock:
             self._available = ok
             self._error = "" if ok else (error or "embedding smoke test failed")
-            self._next_check = now + (
-                self._success_ttl_s if ok else self._failure_ttl_s
-            )
+            self._next_check = now + (self._success_ttl_s if ok else self._failure_ttl_s)
         return ok, self._error
 
 
 @dataclass(frozen=True)
 class Container:
     settings: Settings
+    speech_recognizer: SpeechRecognizer
 
     # 例外：共享连接工厂，不是任何一个端口的实现（多个仓储共用同一个连接来源），
     # 且 database_healthy() 直接需要它。domain 里没有「数据库池」这个概念可依。
@@ -284,6 +293,7 @@ class Container:
     # 重排是**可选增强**：``SENTRIX_RERANKER_URL`` 为空时它是 ``None``，检索走
     # 纯 RRF 顺序。声明成端口而不是具体类，与其余模型入口同一条口径。
     reranker: Reranker | None
+    visual_evidence_utility: VisualEvidenceUtility | None
     # 嵌入能力的**可用性**（与上面两槽是同一个实例，但声明成另一个端口）。
     # 分开的理由写在 ``EmbeddingHealthProbe`` 上：能力回答「怎么嵌」，状态回答
     # 「此刻还嵌不嵌得动」——2026-10-10 那轮侧车全程不在，检索照常返回、静默降级，
@@ -306,6 +316,8 @@ class Container:
     # 结构化记忆图是由标准记忆端口派生出的可重建投影。它与冻结的 adjacency
     # 通道分开，检索侧只通过 ``MemoryGraphRepository`` 做有限 hop 拓展。
     memory_graph: MemoryGraphRepository
+    memory_corrections: MemoryCorrectionRepository
+    media_deletion: MediaDeletionRepository
     causal_judge: CausalJudge
     # 词法投影的写侧与读侧由同一个 SQLite 适配器实现（它是同一张投影表的两个方向），
     # 这里按两个端口分别声明：调用方在类型上就看得出自己只需要其中一侧。
@@ -365,6 +377,8 @@ class Container:
     # 两半合起来才构成完整的 SSE 语义（见 domain/assistant/ports.py 的 TurnEventBroker）。
     turn_event_broker: TurnEventBroker
     build_revision: str = "development"
+    #: cloud profile 的角色/限制配置；local 为 None。
+    model_profile: ModelProfile | None = None
 
     @classmethod
     def build(cls, settings: Settings) -> Container:
@@ -390,22 +404,105 @@ class Container:
         # 词法投影的 geo/time/file 锚点取自 asset 与 asset_places（不是 observation），
         # 所以写侧要先把这两个仓储拿在手上。
         lexical = SqliteLexicalIndex(database, observations, assets=assets, places=asset_places)
-        # 对话与视觉是**同一个端点**（8100），所以共用同一个探测。分两个实例会让同一个
-        # 进程里存两份可能不一致的答案，还要多探一轮。
-        served_model = ServedModel(
-            settings.vlm_base_url,
-            # MLX media prefill can delay metadata on the same server. Discovery
-            # must honor the configured wait, while staying within both clients'
-            # deadlines because dialogue and vision share this resolver.
-            timeout_s=min(settings.chat_timeout_s, settings.vlm_timeout_s),
-            generation_profile=settings.vlm_generation_profile,
-            exact_output_budget=settings.vlm_exact_output_budget,
-            context_tokens=settings.vlm_context_tokens,
-        )
-        # 单个并发槽的上下文窗口——**问端点**，理由与上面那个模型名同一条：窗口是
-        # **部署事实**，配置里那个 6144 是照部署的某一次实测抄的，部署一改它就过期。
-        # 读不到才退回配置值（那说明端点没在正常服务，此时保守值不添乱）。
-        served_context = probe_context_tokens(settings.vlm_base_url)
+        # 对话与视觉默认是**同一个端点**（8100）；cloud profile 下拆成两个角色。
+        model_profile: ModelProfile | None = None
+        chat_payload: dict[str, Any] = {
+            "allow_id_slot": True,
+            "allow_chat_template_kwargs": True,
+            "supports_tools": True,
+            "supports_json_schema": True,
+            "supports_json_object": True,
+        }
+        vision_payload: dict[str, Any] = dict(chat_payload)
+        chat_retry: dict[str, Any] = {}
+        chat_api_key = ""
+        vision_api_key = ""
+        vision_max_side: int | None = IMAGE_MAX_SIDE
+        vision_max_tokens = MAX_ANSWER_TOKENS
+        vision_json_mode = settings.vlm_generation_profile == "qwen35_nonthinking"
+        vision_generation: dict[str, Any] | None = None
+        if settings.llm_profile == "cloud":
+            assert settings.llm_config_path is not None
+            model_profile = load_model_profile(
+                settings.llm_config_path,
+                default_base_url=settings.vlm_base_url,
+                default_model=settings.vlm_model,
+            )
+            chat_role = model_profile.roles["chat"]
+            vision_role = model_profile.roles["vision"]
+            chat_base_url = chat_role.base_url
+            vision_base_url = vision_role.base_url or chat_role.base_url
+            chat_api_key = chat_role.api_key
+            vision_api_key = vision_role.api_key
+            chat_served: ServedModel | FixedModelName = FixedModelName(
+                chat_base_url,
+                chat_role.model,
+                context_tokens=chat_role.context_tokens,
+                generation_profile="cloud",
+            )
+            vision_served: ServedModel | FixedModelName = FixedModelName(
+                vision_base_url,
+                vision_role.model,
+                context_tokens=vision_role.context_tokens,
+                generation_profile="cloud",
+            )
+            chat_payload.update(dict(chat_role.payload))
+            chat_payload.setdefault("allow_id_slot", False)
+            chat_payload.setdefault("allow_chat_template_kwargs", False)
+            vision_payload.update(dict(vision_role.payload))
+            vision_payload.setdefault("allow_id_slot", False)
+            vision_payload.setdefault("allow_chat_template_kwargs", False)
+            chat_retry = {"max_attempts": 3, **dict(chat_role.retry)}
+            chat_timeout = chat_role.timeout_s
+            vision_timeout = vision_role.timeout_s
+            chat_budget = ModelBudget(
+                context_tokens=chat_role.context_tokens,
+                max_output_tokens=chat_role.max_output_tokens,
+                safety_tokens=256,
+                min_usable_output_tokens=256,
+                compaction_ratio=0.95,
+                tokens_per_char=0.68,
+                tools_tokens_per_char=0.48,
+                enforce_soft_limit=False,
+            )
+            raw_max_side = model_profile.vision.get("image_max_side", IMAGE_MAX_SIDE)
+            vision_max_side = None if raw_max_side in (None, 0, "0", "") else int(raw_max_side)
+            vision_max_tokens = vision_role.max_output_tokens
+            vision_json_mode = bool(vision_payload.get("supports_json_object", True))
+            vision_generation = {
+                key: vision_payload[key]
+                for key in ("temperature", "top_p", "presence_penalty", "frequency_penalty")
+                if key in vision_payload
+            }
+        else:
+            chat_base_url = settings.vlm_base_url
+            vision_base_url = settings.vlm_base_url
+            if settings.vlm_model:
+                served_model: ServedModel | FixedModelName = FixedModelName(
+                    settings.vlm_base_url,
+                    settings.vlm_model,
+                    context_tokens=settings.vlm_context_tokens,
+                    generation_profile=settings.vlm_generation_profile,
+                )
+            else:
+                served_model = ServedModel(
+                    settings.vlm_base_url,
+                    # MLX media prefill can delay metadata on the same server. Discovery
+                    # must honor the configured wait, while staying within both clients'
+                    # deadlines because dialogue and vision share this resolver.
+                    timeout_s=min(settings.chat_timeout_s, settings.vlm_timeout_s),
+                    generation_profile=settings.vlm_generation_profile,
+                    exact_output_budget=settings.vlm_exact_output_budget,
+                    context_tokens=settings.vlm_context_tokens,
+                )
+            served_context = probe_context_tokens(settings.vlm_base_url)
+            chat_served = served_model
+            vision_served = served_model
+            chat_timeout = settings.chat_timeout_s
+            vision_timeout = settings.vlm_timeout_s
+            chat_budget = ModelBudget(
+                context_tokens=served_context or settings.vlm_context_tokens,
+            )
         # **嵌入方案是整方案原子切换**（``scheme.SCHEMES``）。默认 wemm；legacy 是
         # 16 GB Mac mini 的回退（chinese-clip 768d + bge-m3 1024d）。两个分支都只
         # 构造 HTTP 客户端，API 进程不 import torch。
@@ -437,12 +534,8 @@ class Container:
             raise RuntimeError(
                 "体验实例必须固定 SENTRIX_EMBEDDING_SCHEME=legacy（BGE-M3 1024 + Chinese-CLIP 768）"
             )
-        if settings.experience_mode and (
-            visual_embedder.dimension != 768 or text_embedder.dimension != 1024
-        ):
-            raise RuntimeError(
-                "体验实例嵌入维度不符：视觉必须是 768，文本必须是 1024"
-            )
+        if settings.experience_mode and (visual_embedder.dimension != 768 or text_embedder.dimension != 1024):
+            raise RuntimeError("体验实例嵌入维度不符：视觉必须是 768，文本必须是 1024")
         smoke_ok, smoke_error = embedding_health.smoke_test()
         if not smoke_ok and not settings.experience_mode:
             raise RuntimeError(
@@ -479,12 +572,23 @@ class Container:
             f"{reranker.model_id} @ {reranker_url}" if reranker else "关闭",
             settings.rerank_top_k,
         )
+        utility_url = settings.utility_vlm_base_url.strip()
+        utility_model = (
+            ServedModel(utility_url, timeout_s=settings.utility_vlm_timeout_s) if utility_url else None
+        )
+        utility = (
+            OpenAIVisualEvidenceUtility(utility_url, utility_model, timeout_s=settings.utility_vlm_timeout_s)
+            if utility_model is not None
+            else None
+        )
         # 家庭图谱仓储被两个消费方用：容器自己的字段，以及人物目录——目录要靠它回答
         # 「这个人的归属与关系」（S7c）。拿在手上传两次，而不是就地 new 两个实例。
         family = SqliteFamilyGraphRepository(database, entities)
         return cls(
             build_revision=read_build_revision(),
+            model_profile=model_profile,
             settings=settings,
+            speech_recognizer=HttpSpeechRecognizer(settings.speech_service_url),
             database=database,
             operation_control=InProcessOperationControl(),
             import_progress=InProcessImportProgressStore(),
@@ -532,9 +636,13 @@ class Container:
             ),
             text_embedder=text_embedder,
             reranker=reranker,
+            visual_evidence_utility=utility,
             embedding_health=embedding_health,
             model_health=ModelGenerationHealth(
-                settings.vlm_base_url, served_model.current
+                chat_base_url,
+                chat_served.current,
+                api_key=chat_api_key,
+                max_tokens=8 if settings.llm_profile == "cloud" else 1,
             ),
             place_resolver=OfflinePlaceResolver(
                 admin=PyGeoCNAdminResolver(),
@@ -546,8 +654,16 @@ class Container:
             event_participant_repository=SqliteEventParticipantRepository(database),
             fact_repository=SqliteFactRepository(database),
             memory_graph=SqliteMemoryGraphRepository(database),
+            memory_corrections=SqliteMemoryCorrections(database),
+            media_deletion=SqliteMediaDeletionRepository(database),
             causal_judge=OpenAICausalJudge(
-                settings.vlm_base_url, served_model, timeout_s=settings.vlm_timeout_s
+                chat_base_url,
+                chat_served,
+                timeout_s=chat_timeout,
+                api_key=chat_api_key,
+                max_tokens=int(model_profile.memory.get("causal_max_tokens", 768))
+                if model_profile is not None
+                else 768,
             ),
             lexical_index=lexical,
             lexical_search=lexical,
@@ -561,9 +677,15 @@ class Container:
             ),
             appearance_repository=SqliteAppearanceRepository(database),
             person_vision=OpenAIPersonVision(
-                settings.vlm_base_url,
-                served_model,
-                timeout_s=settings.vlm_timeout_s,
+                vision_base_url,
+                vision_served,
+                timeout_s=vision_timeout,
+                api_key=vision_api_key,
+                max_side=vision_max_side,
+                max_tokens=vision_max_tokens,
+                json_mode=vision_json_mode,
+                allow_id_slot=bool(vision_payload.get("allow_id_slot", True)),
+                generation_parameters=vision_generation,
             ),
             person_crop_renderer=PillowPersonCropRenderer(),
             person_preview_renderer=PillowPersonPreviewRenderer(),
@@ -573,21 +695,37 @@ class Container:
             person_merge_repository=SqlitePersonMergeRepository(database),
             portrait_repository=SqlitePortraitRepository(database),
             chat_model=OpenAIChatModel(
-                settings.vlm_base_url,
-                served_model,
-                timeout_s=settings.chat_timeout_s,
+                chat_base_url,
+                chat_served,
+                timeout_s=chat_timeout,
                 # 端点自报的窗口优先；它没报（探测失败）才用配置值。
-                context_tokens=served_context or settings.vlm_context_tokens,
+                context_tokens=chat_budget.context_tokens,
+                api_key=chat_api_key,
+                budget=chat_budget,
+                payload_config=chat_payload,
+                retry=chat_retry,
             ),
             vlm_observer=OpenAIVlmObserver(
-                settings.vlm_base_url,
-                served_model,
-                timeout_s=settings.vlm_timeout_s,
+                vision_base_url,
+                vision_served,
+                timeout_s=vision_timeout,
+                api_key=vision_api_key,
+                max_side=vision_max_side,
+                max_tokens=vision_max_tokens,
+                json_mode=vision_json_mode,
+                allow_id_slot=bool(vision_payload.get("allow_id_slot", True)),
+                generation_parameters=vision_generation,
             ),
             photo_inspector=OpenAIPhotoInspector(
-                settings.vlm_base_url,
-                served_model,
-                timeout_s=settings.vlm_timeout_s,
+                vision_base_url,
+                vision_served,
+                timeout_s=vision_timeout,
+                api_key=vision_api_key,
+                max_side=vision_max_side,
+                max_tokens=vision_max_tokens,
+                json_mode=vision_json_mode,
+                allow_id_slot=bool(vision_payload.get("allow_id_slot", True)),
+                generation_parameters=vision_generation,
             ),
             conversation_repository=SqliteConversationRepository(database),
             turn_repository=SqliteTurnRepository(database),
@@ -612,6 +750,9 @@ class Container:
         from sentrix.bootstrap.assistant_wiring import build_run_turn
         from sentrix.infrastructure.assistant.turn_executor import TurnExecutor
 
+        workers = self.settings.agent_turn_workers
+        if self.model_profile is not None and "turn_workers" in self.model_profile.agent:
+            workers = int(self.model_profile.agent["turn_workers"])
         return TurnExecutor(
             turns=self.turn_repository,
             run_turn_factory=lambda: build_run_turn(self),
@@ -619,16 +760,17 @@ class Container:
             dependencies_ready=self.dependencies_ready,
             operation_control=self.operation_control,
             result_sets=self.result_set_repository,
+            max_workers=workers,
         )
 
     def build_import_executor(self):
         """消费上传接口创建的持久作业，包括独立本地 API 实例。"""
+        from sentrix.application.media.import_executor import ImportJobExecutor
         from sentrix.bootstrap.import_wiring import (
             build_import_assets,
             build_media_postprocess,
             build_video_job_processor,
         )
-        from sentrix.infrastructure.media.import_executor import ImportJobExecutor
 
         return ImportJobExecutor(
             settings=self.settings,
