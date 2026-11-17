@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 spec = importlib.util.spec_from_file_location(
-    "prepare_speech_model", Path(__file__).resolve().parents[4] / "scripts/prepare_speech_model.py"
+    "prepare_speech_model", Path(__file__).resolve().parents[4] / "scripts/deploy/prepare_sensevoice.py"
 )
 assert spec and spec.loader
 prepare = importlib.util.module_from_spec(spec)

@@ -10,4 +10,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 单题重测/聊天已发布1008772/8872/8874，92a82c0；真实验收通过，推送回执见审计 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 本机合入psh/a5daf519（含main28ba9e6）；邮件/云端/共享ASR已集成，100保持现役，验证见交接 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

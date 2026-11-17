@@ -225,6 +225,7 @@ class Asset:
     parent_asset_id: str | None = None
     source_timestamp_sec: float | None = None
     capture_time: CaptureTime = CaptureTime()
+    external_source_id: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.media_type, MediaType):
@@ -238,6 +239,8 @@ MODEL_FACT_CONFIDENCE = 0.65
 
 # 1.0 ``model_clients.py`` 的提示词原文：``facts 最多8项``。
 MODEL_FACT_LIMIT = 8
+
+TEXT_IMPORT_SOURCE = "text_import"
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +301,7 @@ class Observation:
     # 那两个纯规则就只能靠字符串约定去取字段了。
     facts: tuple[ObservationFact, ...] = ()
     revision: int = 1
+    source_text: str = ""
 
     def __post_init__(self) -> None:
         if self.revision < 1:
@@ -306,4 +310,4 @@ class Observation:
     @property
     def has_semantics(self) -> bool:
         """VLM 语义是否已经落上。1.0 用「caption 非空」当这个判据。"""
-        return bool(self.caption or self.place or self.activity or self.event_type)
+        return bool(self.caption or self.place or self.activity or self.event_type or self.source_text)

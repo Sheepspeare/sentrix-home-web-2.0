@@ -15,7 +15,7 @@ from typing import Any
 
 from sentrix.config import load_settings
 
-LOCK_PATH = Path(__file__).with_name("speech-model.lock.json")
+LOCK_PATH = Path(__file__).with_name("sensevoice-model.lock.json")
 
 
 def sha256(path: Path) -> str:

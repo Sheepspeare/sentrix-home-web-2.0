@@ -18,6 +18,7 @@ export interface AssetSummary {
   parent_asset_id?: string | null;
   /** 派生关键帧在源视频里的秒数；用它把 `<video>` 定位到命中帧。 */
   source_timestamp_sec?: number | null;
+  external_source_id?: string | null;
   /**
    * 后端**目前不返回**。若将来 `/assets` 带上它，资料库就能按相册聚合；
    * 现在消费方必须按「可能为空」处理，不能把它当成一册一个值。
@@ -506,13 +507,16 @@ export async function startTurn(
   conversationId: string,
   message: string,
   idempotencyKey = "",
+  reasoning = false,
 ): Promise<{ turn_id: string; conversation_id: string; status: string }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (idempotencyKey !== "") headers["Idempotency-Key"] = idempotencyKey;
   return request(`/assistant/conversations/${conversationId}/turns`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message }),
+    // ``reasoning`` 是**按回合**的选择：默认 false，后端据此决定用普通 profile
+    // 还是推理 profile；不建议把它做成会话级状态，用户可能只想让某一问想久一点。
+    body: JSON.stringify({ message, reasoning }),
   });
 }
 

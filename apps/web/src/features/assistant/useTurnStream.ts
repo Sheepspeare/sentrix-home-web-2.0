@@ -25,7 +25,7 @@ export interface TurnStream {
   /** 用户已请求停止；服务端会在安全检查点收尾。 */
   cancelled: boolean;
   /** 返回建回合请求是否已被服务端接受，不等待回答完成。 */
-  ask: (conversationId: string, message: string) => Promise<boolean>;
+  ask: (conversationId: string, message: string, reasoning?: boolean) => Promise<boolean>;
   cancel: () => Promise<void>;
 }
 
@@ -69,7 +69,7 @@ export function useTurnStream(): TurnStream {
   useEffect(() => close, [close]);
 
   const ask = useCallback(
-    async (conversationId: string, message: string) => {
+    async (conversationId: string, message: string, reasoning = false) => {
       close();
       finishedRef.current = false;
       cancelRequestedRef.current = false;
@@ -95,7 +95,7 @@ export function useTurnStream(): TurnStream {
 
       let activeTurnId: string;
       try {
-        const started = await startTurn(conversationId, message, idempotencyKey);
+        const started = await startTurn(conversationId, message, idempotencyKey, reasoning);
         activeTurnId = started.turn_id;
         setTurnId(activeTurnId);
         void reportClientEvent({

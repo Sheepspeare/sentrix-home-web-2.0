@@ -3395,6 +3395,11 @@ components:
           - type: number
           - type: 'null'
           title: Source Timestamp Sec
+        external_source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Source Id
       type: object
       required:
       - id
@@ -3533,6 +3538,18 @@ components:
           type: string
           title: Scope Id
           default: home-default
+        external_source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Source Id
+          description: 文本来源在当前 scope 内的稳定 ID
+        source_timestamp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Timestamp
+          description: 文本来源的 ISO 8601 日期时间，可带偏移
       type: object
       required:
       - file
@@ -7771,6 +7788,11 @@ components:
           title: Graph Enabled
           description: 是否启用图记忆拓展检索；评测对照 run 可关闭
           default: true
+        reasoning:
+          type: boolean
+          title: Reasoning
+          description: 是否用推理模式参数执行本轮（更多证据工具与步数，默认关闭）
+          default: false
       type: object
       required:
       - message

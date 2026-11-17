@@ -22,9 +22,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class TurnProfile:
     name: str
-    max_steps: int
-    max_tool_calls: int
-    max_search_calls: int
+    #: ``None`` = 不限制轮数/调用次数（cloud profile）。
+    max_steps: int | None
+    max_tool_calls: int | None
+    max_search_calls: int | None
     #: 一轮里最多翻几次页（``get_result_page``）。**1.0 没有这条上限。**
     #
     # 生产固定「检索 = 页宽 = 6」（``MAX_SEARCH_LIMIT`` / ``result_set.PAGE_SIZE``）：
@@ -38,7 +39,7 @@ class TurnProfile:
     # 拿不到「已经到底了」这个信号，一直翻到步数耗尽。一次翻页是一个工具往返、一个模型步。
     #
     # 与 ``max_search_calls`` 并列而不是合并：那是「检索几次」，这是「同一份检索看几页」。
-    max_page_calls: int
+    max_page_calls: int | None
     # 一轮里最多几次「精读」（``ToolSpec.cost_class == EXPENSIVE``）。1.0
     # ``budget_manager.py:17`` 的 ``max_inspections = 1``。
     #
@@ -47,10 +48,27 @@ class TurnProfile:
     # 约束是「一轮总共只能精读一张图一次」，不是「每个工具各一次」。
     # 1.0 的工具描述里那句「同一张图最多复核一次，不要反复检查同一张」的**执行机构**
     # 就是它；少了它，那句话只是一句劝告。
-    max_inspections: int
+    max_inspections: int | None
     wall_time_s: float
     final_reserve_s: float
     strict_model_step_budget: bool = False
+
+    # ---- 历史 / 评审输入预算（2026-11-17） -------------------------------------
+    history_messages: int = 8
+    history_candidate_messages: int = 8
+    #: 0 = 不按字符裁剪（local 的固定条数行为）。
+    history_char_budget: int = 0
+    judge_transcript_messages: int = 8
+    judge_message_chars: int = 900
+    claim_max_facts: int = 12
+    claim_value_limit: int = 20
+
+    # ---- 工具往返压缩策略 -------------------------------------------------------
+    # legacy = 丢最老往返 + 改写最新 preview；drop_only = 只丢最老往返。
+    compaction_mode: str = "legacy"
+    compaction_preview_rewrite: bool = True
+    compaction_protect_latest_preview: bool = True
+    compaction_max_preview_level: int = 4
 
 
 # goal_driven_candidate：1.0 的生产默认 profile。
@@ -78,5 +96,46 @@ DEFAULT_PROFILE = TurnProfile(
     # 后者是工具描述里那句劝告，两者不是一回事。
     max_inspections=3,
     wall_time_s=180.0,
+    final_reserve_s=10.0,
+)
+
+
+#: 云端 profile：轮数与调用次数完全不限；墙钟保留 3600s 防挂死；行为阀仍沿用
+#: ``ToolPolicy`` 的 ``MAX_CONSECUTIVE_FAILURES`` / 重复回放。提示词、工具契约与
+#: 门禁逻辑与 local 完全相同，这里只放大数值预算。
+CLOUD_PROFILE = TurnProfile(
+    name="cloud_unrestricted",
+    max_steps=None,
+    max_tool_calls=None,
+    max_search_calls=None,
+    max_page_calls=None,
+    max_inspections=None,
+    wall_time_s=3600.0,
+    final_reserve_s=10.0,
+    history_candidate_messages=200,
+    history_char_budget=48000,
+    judge_transcript_messages=32,
+    judge_message_chars=2000,
+    claim_max_facts=32,
+    claim_value_limit=50,
+    compaction_mode="drop_only",
+    compaction_preview_rewrite=False,
+    compaction_protect_latest_preview=True,
+    compaction_max_preview_level=0,
+)
+
+
+#: 推理模式：全工具 + 24 步 / 8 工具 / 4 检索 / 2 翻页 / 3 精读，墙钟 1200s。
+#: 默认 profile 为小模型收敛压低了视觉工具与步数；这一档不压，代价是更慢。
+#: **它不是“难题模式”**，而是“多看视觉证据”的高成本档；默认不启用，
+#: 由前端开关按回合选择。
+REASONING_PROFILE = TurnProfile(
+    name="reasoning",
+    max_steps=24,
+    max_tool_calls=8,
+    max_search_calls=4,
+    max_page_calls=2,
+    max_inspections=3,
+    wall_time_s=1200.0,
     final_reserve_s=10.0,
 )
