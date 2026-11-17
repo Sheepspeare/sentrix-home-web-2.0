@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     qwen_asr_model: str = "Qwen3-ASR"
     qwen_asr_api_key: str = ""
     qwen_asr_timeout_s: float = 300.0
+    # 模型服务端口按 8100–8106 现有分配顺延，8106 已用于图效用模型/MOSS 部署。
+    speech_service_url: str = "http://127.0.0.1:8107"
     text_embedder_url: str = "http://127.0.0.1:8101"
     # W1：检索用的统一多模态嵌入侧车（WeMM-Embedding-2B，2048 维）。与 8100 的 VLM、
     # 8101 的 bge 同一条口径——2.0 不管理模型进程的生命周期，只连它。

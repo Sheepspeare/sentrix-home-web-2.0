@@ -51,7 +51,7 @@ async def transcribe_speech(
     container: Container = Depends(get_container),
 ) -> SpeechTranscript:
     service = container.speech_recognizer
-    if not service.available:
+    if not await run_in_threadpool(lambda: service.available):
         raise SpeechUnavailable(service.load_error)
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/octet-stream":
         raise InvalidSpeechAudio("请提交 application/octet-stream 格式的 float32 PCM。")

@@ -63,10 +63,10 @@ def test_eager_load_once_reuses_model_but_isolates_streams(service):
 
 def test_missing_weights_are_visible_without_lazy_retry(tmp_path):
     recognizer = SenseVoiceRecognizer(tmp_path)
-    with pytest.raises(SpeechUnavailable, match="speech-prepare"):
+    with pytest.raises(SpeechUnavailable, match="prepare_sensevoice"):
         recognizer.load()
     assert not recognizer.available
-    with pytest.raises(SpeechUnavailable, match="speech-prepare"):
+    with pytest.raises(SpeechUnavailable, match="prepare_sensevoice"):
         recognizer.transcribe(pcm(), 16000)
 
 
