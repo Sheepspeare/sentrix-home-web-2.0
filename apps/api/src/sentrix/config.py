@@ -29,6 +29,8 @@ class Settings(BaseSettings):
         default="CUDAExecutionProvider,CPUExecutionProvider", validation_alias="RETINAFACE_PROVIDERS"
     )
     data_dir: Path = Field(default=Path("data"))
+    document_tokenizer_path: str = ""
+    document_chunk_tokens: int = Field(default=2048, ge=128)
 
     @property
     def speech_model_dir(self) -> Path:

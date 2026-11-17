@@ -239,6 +239,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/documents/import:
+    post:
+      tags:
+      - media
+      summary: Import Documents
+      operationId: import_documents_api_v1_documents_import_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_import_documents_api_v1_documents_import_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Import Documents Api V1 Documents Import Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/media/import:
     post:
       tags:
@@ -3400,6 +3427,11 @@ components:
           - type: string
           - type: 'null'
           title: External Source Id
+        source_metadata:
+          additionalProperties: true
+          type: object
+          title: Source Metadata
+          default: {}
       type: object
       required:
       - id
@@ -3422,6 +3454,38 @@ components:
         file_name:
           type: string
           title: File Name
+        media_type:
+          type: string
+          title: Media Type
+          default: ''
+        source_type:
+          type: string
+          title: Source Type
+          default: ''
+        source_id:
+          type: string
+          title: Source Id
+          default: ''
+        title:
+          type: string
+          title: Title
+          default: ''
+        source_timestamp:
+          type: string
+          title: Source Timestamp
+          default: ''
+        offset:
+          type: integer
+          title: Offset
+          default: 0
+        end_offset:
+          type: integer
+          title: End Offset
+          default: 0
+        excerpt:
+          type: string
+          title: Excerpt
+          default: ''
       type: object
       required:
       - handle
@@ -3528,6 +3592,28 @@ components:
         1.0 就是这个形状（``app.py:2226`` 的 ``confirmed`` / ``failed`` / ``count``），
 
         理由是批量确认的输入来自用户逐个点选，一件失败就把整批回滚会丢掉其余选择。'
+    Body_import_documents_api_v1_documents_import_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        scope_id:
+          type: string
+          title: Scope Id
+          default: home-default
+        format:
+          type: string
+          title: Format
+          default: auto
+        validate_only:
+          type: boolean
+          title: Validate Only
+          default: false
+      type: object
+      required:
+      - file
+      title: Body_import_documents_api_v1_documents_import_post
     Body_import_media_api_v1_media_import_post:
       properties:
         file:
@@ -3550,6 +3636,11 @@ components:
           - type: 'null'
           title: Source Timestamp
           description: 文本来源的 ISO 8601 日期时间，可带偏移
+        source_metadata:
+          type: string
+          title: Source Metadata
+          description: 文档信息或来源精确地址 JSON
+          default: '{}'
       type: object
       required:
       - file

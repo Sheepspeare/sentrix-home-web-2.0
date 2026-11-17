@@ -1,3 +1,4 @@
+import { SourceGrid, SourceMetrics } from "../interactive/SourceGrid.tsx";
 import { ProcessDiagnostics, type ProcessDiagnostic } from "./ProcessDiagnostics.tsx";
 import { ScoringReview } from "./ScoringReview.tsx";
 import { OPEN_PROFILE, ATM_PROFILE } from '../../lib/scoring.ts';
@@ -315,6 +316,12 @@ function QaItemDetail({
           )}
         </div>
         <div>
+          <h4>召回邮件/文档</h4><SourceGrid items={detail.retrieved_source_refs || []} albumId={albumId}/>
+          <h4>实际读取</h4><SourceGrid items={detail.read_source_refs || []} albumId={albumId}/>
+          <h4>最终引用</h4><SourceGrid items={(detail.attachments || detail.predicted_source_refs || []).filter(s => s.source_id)} albumId={albumId}/>
+          {detail.source_metrics && <SourceMetrics metrics={detail.source_metrics} />}
+          <h4>检索 GT 邮件/文档</h4><SourceGrid items={detail.retrieval_source_refs || []} albumId={albumId}/>
+          <h4>答案证据 GT 邮件/文档</h4><SourceGrid items={detail.answer_evidence_source_refs || []} albumId={albumId}/>
           <h4>正确答案</h4>
           <p>{esc(detail.reference_answer)}</p>
           <h4>检索 GT 媒体（{gtMedia.length}）</h4>

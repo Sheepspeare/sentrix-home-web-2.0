@@ -35,6 +35,8 @@ from photobench.infrastructure.datasets.qa_metadata import (
 #: 之所以复制而不是 import，是因为 ``photobench-isolation`` 契约禁止读 ``sentrix.*``。
 MEDIA_SUFFIXES = frozenset(
     {
+        ".txt",
+        ".md",
         ".jpg",
         ".jpeg",
         ".png",
@@ -251,13 +253,18 @@ class JsonAlbumSource:
         entries = ["manifest.json"] + ([relative_qa] if relative_qa else [])
         entries.extend(
             str(item).strip()
-            for key in ("photos", "videos")
+            for key in ("photos", "videos", "documents")
             for item in (manifest.get(key) or [])
             if str(item).strip()
         )
         entries.extend(
             str(face.get("ref_image")) for face in manifest.get("faces") or [] if face.get("ref_image")
         )
+        if manifest.get("source_protocol"):
+            entries.extend(
+                str(path.relative_to(album_dir)) for path in album_dir.glob("*/source-metadata.jsonl")
+            )
+            entries.append("media-metadata.jsonl")
         missing: list[str] = []
         file_digests: list[dict[str, Any]] = []
         for relative in sorted(set(entries)):

@@ -110,6 +110,7 @@ from sentrix.domain.media.ports import (
     VideoTranscoder,
     audio_mime_type,
 )
+from sentrix.domain.media.source_metadata import SourceMetadata
 from sentrix.domain.places.ports import AssetPlaceIndex
 from sentrix.domain.retrieval.ports import AssetVisualIndexer, LexicalIndex, PreparedVisual
 from sentrix.domain.spaces.ports import SpaceRepository
@@ -148,6 +149,7 @@ class ImportRequest:
     # 可选资料来源身份与原始 ISO 8601 时间。普通媒体仍按内容哈希去重。
     external_source_id: str | None = None
     source_timestamp: str | None = None
+    source_metadata: SourceMetadata = field(default_factory=SourceMetadata)
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +276,7 @@ class ImportAssets:
         observations: ObservationRepository,
         storage: MediaStorage,
         metadata: MetadataReader,
+        address_reader: Callable[[Path], SourceMetadata] | None = None,
         resolve_capture_time: CaptureTimeResolver | None = None,
         visual_indexer: AssetVisualIndexer | None = None,
         place_indexer: AssetPlaceIndex | None = None,
@@ -319,6 +322,7 @@ class ImportAssets:
         self._video_metadata = video_metadata
         self._video_transcoder = video_transcoder
         self._video_repository = video_repository
+        self._address_reader = address_reader
         self._audio_metadata = audio_metadata
         self._audio_repository = audio_repository
         self._event_attacher = event_attacher
@@ -472,6 +476,18 @@ class ImportAssets:
         now = self._clock()
         # 拍摄时间读不出来就保持 None，不能拿导入时刻冒充。main 的
         # ``ResolveCaptureTime`` 已负责保留原始偏移/未知时区语义，这里不再二次归一化。
+        source_metadata = request.source_metadata
+        if media_type in {MediaType.IMAGE, MediaType.VIDEO} and self._address_reader is not None:
+            embedded = self._address_reader(stored_path)
+            if (
+                embedded.precise_address
+                and source_metadata.precise_address
+                and embedded.precise_address != source_metadata.precise_address
+            ):
+                self._storage.delete_assets((), (str(stored_path),))
+                raise ValueError("嵌入地址与导入清单地址不一致")
+            if not source_metadata.precise_address:
+                source_metadata = embedded
         asset = Asset(
             id=asset_id,
             scope_id=request.scope_id,
@@ -488,6 +504,7 @@ class ImportAssets:
             created_at=now,
             updated_at=now,
             external_source_id=request.external_source_id,
+            source_metadata=source_metadata,
         )
         if media_type is MediaType.TEXT:
             try:
@@ -541,6 +558,8 @@ class ImportAssets:
             request.external_source_id is not None or request.source_timestamp is not None
         ) and asset.capture_time.raw != (request.source_timestamp or ""):
             raise TextSourceConflict("重复导入的文本资料与已有来源时间不一致")
+        if asset.media_type is MediaType.TEXT and asset.source_metadata != request.source_metadata:
+            raise TextSourceConflict("来源元数据已变化，请显式使用新版本的 external_source_id")
         if asset.media_type is MediaType.TEXT and not request.defer_processing:
             # 原件登记后若曾中断，重放用同一资产和观察补齐索引。
             return StagedImport(asset=asset, media_type=asset.media_type, deduplicated=True)
@@ -733,6 +752,12 @@ class ImportAssets:
             created_at=now,
             updated_at=now,
             source_text=source_text,
+            caption="\n".join(
+                part for part in (asset.source_metadata.title, asset.source_metadata.summary) if part
+            )
+            if is_text
+            else "",
+            place=asset.source_metadata.precise_address,
         )
         self._observations.add(observation)
         return observation

@@ -38,6 +38,13 @@ from photobench.domain.runs.analysis import (
 
 #: 1.0 ``:6530`` 的 ``retrieval`` 子对象取的字段清单，顺序照抄。
 _RETRIEVAL_FIELDS = (
+    "retrieval_source_refs",
+    "answer_evidence_source_refs",
+    "retrieved_source_refs",
+    "read_source_refs",
+    "predicted_source_refs",
+    "source_metrics",
+    "source_mapping_complete",
     "retrieval_metrics_applicable",
     "retrieval_metrics_reason",
     "retrieval_recall",

@@ -1,3 +1,4 @@
+import { SourceGrid } from "../interactive/SourceGrid.tsx";
 import { useEffect, useRef, useState } from 'react';
 import { api, post } from '../../api/client.ts';
 import { mediaRefs } from '../../api/media.ts';
@@ -127,7 +128,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
       {browser.qaBrowserError && <p role="alert">{browser.qaBrowserError}</p>}
       {sourceAlbum !== browser.qaBrowserAlbum && <p>请先选择与该数据集对应的相册。</p>}
       <div className="chat-qa-list">{browser.qaBrowserLoading ? <p>加载题集…</p> : browser.visibleQaBrowserItems.map(row => <button className={'chat-qa-option' + (selectedQa?.qa_id === row.qa_id ? ' selected' : '')} key={row.qa_id} onClick={() => setSelectedQa(row)}><strong>{row.qa_id}</strong> {row.question}</button>)}</div>
-      {selectedQa && <div className="chat-qa-preview"><h4>{selectedQa.question}</h4>{selectedQa.conversation && <pre>{JSON.stringify(selectedQa.conversation, null, 2)}</pre>}<p>标准答案：{selectedQa.answer}</p><h4>检索 GT</h4><MediaGrid items={mediaRefs(selectedQa, 'retrieval')} albumId={browser.qaBrowserAlbum} onOpenMedia={onOpenMedia}/><h4>答案证据 GT</h4><MediaGrid items={mediaRefs(selectedQa, 'answer_evidence')} albumId={browser.qaBrowserAlbum} onOpenMedia={onOpenMedia}/></div>}
+      {selectedQa && <div className="chat-qa-preview"><h4>{selectedQa.question}</h4>{selectedQa.conversation && <pre>{JSON.stringify(selectedQa.conversation, null, 2)}</pre>}<p>标准答案：{selectedQa.answer}</p><h4>检索 GT 邮件/文档</h4><SourceGrid items={selectedQa.retrieval_source_refs || []} albumId={browser.qaBrowserAlbum}/><h4>答案证据 GT 邮件/文档</h4><SourceGrid items={selectedQa.answer_evidence_source_refs || []} albumId={browser.qaBrowserAlbum}/><h4>检索 GT</h4><MediaGrid items={mediaRefs(selectedQa, 'retrieval')} albumId={browser.qaBrowserAlbum} onOpenMedia={onOpenMedia}/><h4>答案证据 GT</h4><MediaGrid items={mediaRefs(selectedQa, 'answer_evidence')} albumId={browser.qaBrowserAlbum} onOpenMedia={onOpenMedia}/></div>}
       {error && <p className="error" role="alert">{error}</p>}<button className="btn" disabled={!selectedQa || sourceAlbum !== browser.qaBrowserAlbum || sending || busy} onClick={() => void send(selectedQa!)}>运行此题（新对话）</button>
     </section></div>}
   </section>;
@@ -136,5 +137,5 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
 function ChatResult({ item, albumId, modelLabel, onOpenMedia }: {
   item: RunItemDetail; albumId: string; modelLabel: string; onOpenMedia: (target: { url: string; name: string }) => void;
 }) {
-  return <><h4>召回候选媒体</h4><MediaGrid items={toolRecallMedia(item, albumId)} albumId={albumId} onOpenMedia={onOpenMedia}/><h4>最终交付媒体</h4><MediaGrid items={itemEvidenceMedia(item, albumId)} albumId={albumId} onOpenMedia={onOpenMedia}/><DebugTracePanel detail={item} modelLabel={modelLabel}/></>;
+  return <><h4>召回邮件/文档</h4><SourceGrid items={item.retrieved_source_refs || []} albumId={albumId}/><h4>已读取邮件/文档</h4><SourceGrid items={item.read_source_refs || []} albumId={albumId}/><h4>最终引用</h4><SourceGrid items={(item.attachments || []).filter(s => s.source_id)} albumId={albumId}/><h4>召回候选媒体</h4><MediaGrid items={toolRecallMedia(item, albumId)} albumId={albumId} onOpenMedia={onOpenMedia}/><h4>最终交付媒体</h4><MediaGrid items={itemEvidenceMedia(item, albumId)} albumId={albumId} onOpenMedia={onOpenMedia}/><DebugTracePanel detail={item} modelLabel={modelLabel}/></>;
 }

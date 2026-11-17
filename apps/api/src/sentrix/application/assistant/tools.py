@@ -184,6 +184,12 @@ def _text_source_metadata(asset: Asset) -> dict[str, str]:
         metadata["external_source_id"] = asset.external_source_id
     if asset.capture_time.source == "text_source":
         metadata["source_timestamp"] = asset.capture_time.raw
+    metadata.update(
+        document_type=asset.source_metadata.document_type or "document",
+        title=asset.source_metadata.title,
+        summary=asset.source_metadata.summary,
+        source_version=asset.content_sha256,
+    )
     return metadata
 
 
@@ -335,6 +341,9 @@ class AssistantToolbox:
         query = str(arguments.get("query") or "").strip()
         if not query:
             return _failure("empty_query", "query 不能为空，请用用户问题里的实词。")
+        source_type = str(arguments.get("source_type") or "all")
+        if source_type not in {"all", "email", "document"}:
+            return _failure("invalid_source_type", "source_type 需为 all、email 或 document")
 
         result = self._retrieval.execute(
             EvidenceRequest(
@@ -342,6 +351,7 @@ class AssistantToolbox:
                 scope_id=scope_id,
                 limit=DEFAULT_SEARCH_LIMIT,
                 graph_enabled=graph_enabled,
+                source_types=(source_type,) if source_type != "all" else (),
             )
         )
         result_set = ResultSet(
@@ -536,10 +546,18 @@ class AssistantToolbox:
                 "handle": entry.handle,
                 "file_name": asset.file_name,
                 "media_kind": "text",
-                "source_kind": "text",
+                "source_kind": asset.source_metadata.document_type or "text",
                 "level": _LEVEL_BY_EVIDENCE_CLASS.get(entry.evidence_class, ""),
                 "people_count": 0,
-                "evidence_summary": text[:_SUMMARY_TEXT_LIMIT],
+                "evidence_summary": "\n".join(
+                    part
+                    for part in (
+                        asset.source_metadata.title,
+                        asset.source_metadata.summary,
+                        text[:_SUMMARY_TEXT_LIMIT],
+                    )
+                    if part
+                ),
                 "text_truncated": len(text) > _SUMMARY_TEXT_LIMIT,
                 **_text_source_metadata(asset),
             }
@@ -817,6 +835,60 @@ class AssistantToolbox:
         )
 
     # ---- query_photo_people -------------------------------------------------
+
+    def cite_sources(
+        self, citations: Sequence[Mapping[str, Any]], *, scope_id: str, reads: Sequence[Mapping[str, Any]]
+    ) -> tuple[Attachment, ...]:
+        """引用必须绑定本轮实际读取的原文范围，句柄在其所属结果集内解析。"""
+        items: list[Attachment] = []
+        seen: set[tuple[str, int, int]] = set()
+        for citation in citations[:20]:
+            set_id, handle = str(citation.get("result_set_id") or ""), str(citation.get("asset_handle") or "")
+            matching = [
+                read
+                for read in reads
+                if read.get("result_set_id") == set_id and read.get("asset_handle") == handle
+            ]
+            if not matching:
+                raise ValueError("来源引用需先使用 read_source_text 读取原文")
+            result = self._result_sets.get(set_id)
+            asset_id = result.resolve(handle) if result is not None and result.scope_id == scope_id else None
+            asset = self._assets.get(asset_id) if asset_id else None
+            if asset is None or asset.scope_id != scope_id or asset.media_type is not MediaType.TEXT:
+                raise ValueError("来源引用不属于本轮可访问的文本资料")
+            read = matching[-1]
+            offset = citation.get("offset", read["offset"])
+            end = citation.get("end_offset", int(read["offset"]) + len(str(read["text"])))
+            if (
+                type(offset) is not int
+                or type(end) is not int
+                or not any(
+                    int(r["offset"]) <= offset < end <= int(r["offset"]) + len(str(r["text"]))
+                    for r in matching
+                )
+            ):
+                raise ValueError("引用范围需位于实际读取的原文内")
+            key = (asset.id, offset, end)
+            if key in seen:
+                continue
+            seen.add(key)
+            original = self._observations.list_by_asset(asset.id)[0].source_text
+            items.append(
+                Attachment(
+                    handle=handle,
+                    asset_id=asset.id,
+                    file_name=asset.file_name,
+                    media_type="text",
+                    source_type=asset.source_metadata.document_type or "document",
+                    source_id=asset.external_source_id or asset.id,
+                    title=asset.source_metadata.title,
+                    source_timestamp=asset.capture_time.raw,
+                    offset=offset,
+                    end_offset=end,
+                    excerpt=original[offset:end],
+                )
+            )
+        return tuple(items)
 
     def _photo_people(self, arguments: Mapping[str, Any], *, scope_id: str) -> ToolOutcome:
         """一张照片自己的已确认人物 + 未确认同行者。1.0 ``tools.py:2555-2608``。
@@ -1180,6 +1252,7 @@ class AssistantToolbox:
             return _failure("bad_offset", "请从 0 开始，或用上一段返回的 next_offset 续读。")
         end = min(offset + SOURCE_TEXT_PAGE_CHARS, len(text))
         page = {
+            "result_set_id": result_set.id,
             "asset_handle": handle,
             "text": text[offset:end],
             "offset": offset,

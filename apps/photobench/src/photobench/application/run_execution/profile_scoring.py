@@ -440,7 +440,12 @@ class ProfileScoring:
                 )
             elif purpose == "list":
                 output = {
-                    **list_score(row["evaluation"]["target_media_refs"], record, self.universe),
+                    **list_score(
+                        row["evaluation"].get("target_source_refs")
+                        or row["evaluation"].get("target_media_refs"),
+                        record,
+                        self.universe,
+                    ),
                     "reason": "Jaccard",
                     "call_observations": [],
                 }

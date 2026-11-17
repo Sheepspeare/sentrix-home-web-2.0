@@ -106,7 +106,7 @@ class StubImporter:
 def album(tmp_path: Path) -> Path:
     root = tmp_path / "album"
     root.mkdir()
-    for name in ("b.jpg", "a.JPG", "c.png", "notes.txt"):
+    for name in ("b.jpg", "a.JPG", "c.png", "notes.pdf"):
         (root / name).write_bytes(b"content-" + name.encode())
     return root
 
@@ -306,7 +306,7 @@ def test_videos_are_scanned_alongside_photos(tmp_path: Path):
     """
     root = tmp_path / "album"
     root.mkdir()
-    for name in ("a.jpg", "b.mov", "c.MP4", "d.mkv", "notes.txt"):
+    for name in ("a.jpg", "b.mov", "c.MP4", "d.mkv", "notes.pdf"):
         (root / name).write_bytes(b"content-" + name.encode())
 
     importer = StubImporter()
@@ -330,7 +330,7 @@ def test_audio_is_scanned_alongside_photos_and_videos(tmp_path: Path):
     """
     root = tmp_path / "album"
     root.mkdir()
-    for name in ("a.jpg", "b.m4a", "c.MP3", "d.flac", "notes.txt"):
+    for name in ("a.jpg", "b.m4a", "c.MP3", "d.flac", "notes.pdf"):
         (root / name).write_bytes(b"content-" + name.encode())
 
     importer = StubImporter()

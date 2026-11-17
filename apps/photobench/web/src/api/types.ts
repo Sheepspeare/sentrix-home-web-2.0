@@ -21,6 +21,8 @@
 
 export type MediaType = "image" | "video";
 
+export interface SourceRef { source_type?: unknown; source_id?: unknown; asset_id?: unknown; title?: unknown; summary?: unknown; source_timestamp?: unknown; excerpt?: unknown; file_name?: unknown }
+
 /** 一处媒体引用。1.0 `mediaRefs`（`App.vue:394`）与 run item 的 `*_media_refs` 同形。 */
 export interface MediaRef {
   media_type: MediaType;
@@ -529,6 +531,13 @@ export interface RetrievalCounts {
 
 /** 一题的完整记录（`/api/v1/runs/{id}/items/{index}` 的 `item`）。 */
 export interface RunItemDetail extends RunItemSummary {
+  retrieval_source_refs?: SourceRef[];
+  answer_evidence_source_refs?: SourceRef[];
+  predicted_source_refs?: SourceRef[];
+  retrieved_source_refs?: SourceRef[];
+  read_source_refs?: SourceRef[];
+  attachments?: SourceRef[];
+  source_metrics?: Record<string, unknown>;
   conversation?: ConversationTurn[];
   conversation_id?: string;
   runtime_turns?: Array<Record<string, unknown>>;
@@ -812,6 +821,8 @@ export interface ManifestPage {
  * `application/datasets/service.py:93`）。QA 浏览页只读其中少数几列，其余原样带过。
  */
 export interface QaRow {
+  retrieval_source_refs?: SourceRef[];
+  answer_evidence_source_refs?: SourceRef[];
   qa_id?: string;
   question?: string;
   answer?: string;

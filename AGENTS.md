@@ -10,4 +10,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | 100三产品及三测评已配套发布推理模式0608d54；393后端/806前端通过，开关/版本/历史保持已验 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-17 | ATM邮件/Hard/来源地址本机实现，543后端专项与前端回归通过；待提交后同步100并smoke，验收后push | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

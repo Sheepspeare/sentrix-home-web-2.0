@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -47,10 +48,7 @@ def _row_to_turn(row: sqlite3.Row) -> TurnRecord:
         updated_at=datetime.fromisoformat(row["updated_at"]),
         answer=row["answer"],
         termination_reason=row["termination_reason"],
-        attachments=tuple(
-            Attachment(handle=item["handle"], asset_id=item["asset_id"], file_name=item["file_name"])
-            for item in attachments
-        ),
+        attachments=tuple(Attachment(**item) for item in attachments),
         requirements=tuple(json.loads(row["requirements_json"] or "[]")),
         retrieved_candidates=tuple(json.loads(row["candidates_json"] or "[]")),
         trace=dict(json.loads(row["trace_json"] or "{}")),
@@ -426,10 +424,7 @@ class SqliteTurnRepository:
     ) -> bool:
         """最终助手消息与回合终态在同一事务里提交；围栏不匹配则不写。"""
         payload = json.dumps(
-            [
-                {"handle": item.handle, "asset_id": item.asset_id, "file_name": item.file_name}
-                for item in attachments
-            ],
+            [asdict(item) for item in attachments],
             ensure_ascii=False,
         )
         ledger_payload = json.dumps([dict(item) for item in requirements], ensure_ascii=False)
@@ -499,10 +494,7 @@ class SqliteTurnRepository:
     ) -> None:
         """兼容旧入口（无围栏）；新执行器走 ``finish_with_message``。"""
         payload = json.dumps(
-            [
-                {"handle": item.handle, "asset_id": item.asset_id, "file_name": item.file_name}
-                for item in attachments
-            ],
+            [asdict(item) for item in attachments],
             ensure_ascii=False,
         )
         ledger_payload = json.dumps([dict(item) for item in requirements], ensure_ascii=False)

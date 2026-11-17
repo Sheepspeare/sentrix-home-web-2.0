@@ -70,6 +70,11 @@ from photobench.domain.deploy.ports import (
 from photobench.domain.errors import RequestOutcomeUnknownError
 from photobench.domain.evaluation.profiles import uses_readable_metadata
 from photobench.domain.evaluation.prompts import evaluation_prompts
+from photobench.domain.evaluation.sources import (
+    resolve_sources,
+    source_mapping_complete,
+    source_metrics_for_record,
+)
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter
 from photobench.domain.runs.analysis import (
@@ -173,6 +178,9 @@ _DEFAULT_SLEEP = time.sleep
 
 #: 顺带搬过来的 item 字段（1.0 ``:3379``）。这些是题库侧的标签，主链只负责带过去。
 PASSTHROUGH_FIELDS = (
+    "retrieval_source_refs",
+    "answer_evidence_source_refs",
+    "source_protocol",
     "evaluation",
     "benchmark_id",
     "source_qa_id",
@@ -2644,6 +2652,20 @@ class RunExecution:
                         "status": polled.get("status"),
                         "answer": str(last_result.get("answer") or ""),
                         "attachments": last_result.get("attachments") or [],
+                        "predicted_source_refs": resolve_sources(
+                            selected_asset_ids(last_result), assets_by_name
+                        ),
+                        "retrieved_source_refs": resolve_sources(
+                            retrieved_candidate_asset_ids(last_result), assets_by_name
+                        ),
+                        "read_source_refs": resolve_sources(
+                            [
+                                str(r["asset_id"])
+                                for r in (last_result.get("trace") or {}).get("source_reads", [])
+                            ],
+                            assets_by_name,
+                        ),
+                        "source_mapping_complete": source_mapping_complete(last_result, assets_by_name),
                         "requirements": last_result.get("requirements") or [],
                         "termination_reason": last_result.get("termination_reason") or "",
                         "error": polled.get("error") or "",
@@ -2699,6 +2721,20 @@ class RunExecution:
                 )
             # 轨迹：从**同一条事件流**投影出两条（见 ``traces_from_progress``）。
             # 读侧的 ``bind_tool_calls_to_model_rounds`` 早就在等它们了。
+            for record in turn_records:
+                record["source_metrics"] = source_metrics_for_record(row, record)
+            item.update(
+                {
+                    key: turn_records[-1][key]
+                    for key in (
+                        "predicted_source_refs",
+                        "retrieved_source_refs",
+                        "read_source_refs",
+                        "source_mapping_complete",
+                        "source_metrics",
+                    )
+                }
+            )
             tool_trace, execution_trace = traces_from_progress(turn_records)
             selected = selected_asset_ids(last_result)
             predicted_media = resolve_predicted_media(selected, assets_by_name)
@@ -2737,6 +2773,7 @@ class RunExecution:
                         for call in (turn.get("trace_bundle") or {}).get("model_calls") or []
                     ],
                     "selected_asset_ids": selected,
+                    "attachments": last_result.get("attachments") or [],
                     # **检索的排名质量**（1.0 ``image_ranking``）。读侧的
                     # ``ranking_from_item`` 会从 ``retrieved_candidate_media`` 兜底回算，
                     # 但那只对 summary 生效——**逐题详情读的是 item 上这一格**，

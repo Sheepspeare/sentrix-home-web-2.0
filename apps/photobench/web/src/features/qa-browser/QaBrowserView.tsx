@@ -121,6 +121,7 @@ export function QaBrowserView({ sentrixUrl = "", manifests = [], onOpenMedia }: 
               key={item.qa_id || idx}
               item={item}
               index={idx}
+              albumId={qa.qaBrowserAlbum}
               onOpenMedia={(url, name) => onOpenMedia?.({ url, name })}
             />
           ))}

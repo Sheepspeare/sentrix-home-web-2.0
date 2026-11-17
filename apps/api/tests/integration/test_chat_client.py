@@ -24,6 +24,7 @@ from sentrix.domain.assistant.ports import (
 )
 from sentrix.domain.assistant.tools import TOOL_SPECS, openai_tools
 from sentrix.infrastructure.assistant.chat_client import (
+    CONTEXT_SAFETY_TOKENS,
     MAX_ANSWER_TOKENS,
     PROMPT_COMPACTION_RATIO,
     TOKENS_PER_CHAR,
@@ -581,7 +582,7 @@ def test_the_output_budget_is_derived_from_the_real_window(server: str):
 
     prompt_tokens = OpenAIChatModel.estimate_prompt_tokens(messages_, TOOL_SPECS)
     sent = _Handler.received[0]["body"]["max_tokens"]
-    assert sent == min(MAX_ANSWER_TOKENS, CONTEXT_TOKENS - prompt_tokens)
+    assert sent == min(MAX_ANSWER_TOKENS, CONTEXT_TOKENS - prompt_tokens - CONTEXT_SAFETY_TOKENS)
     assert sent != min(MAX_ANSWER_TOKENS, 4400 - prompt_tokens)
 
 

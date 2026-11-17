@@ -12,6 +12,7 @@ from typing import Any
 
 from photobench.domain.evaluation.contract import media_key
 from photobench.domain.evaluation.prompts import ATM_OPEN_PROMPT, CHOICE_PROMPT, NUMBER_MATCH_PROMPT
+from photobench.domain.evaluation.sources import source_set_metrics
 from photobench.domain.runs.judge import JUDGE_PROMPT, JUDGE_PROMPT_KINDS
 
 OPEN = "photobench_open_v1"
@@ -120,12 +121,14 @@ def uses_readable_metadata(config: Mapping[str, Any]) -> bool:
 
 
 def answer_fingerprint(record: Mapping[str, Any]) -> str:
-    return digest(
-        {
-            k: record.get(k)
-            for k in ("message", "answer", "predicted_media", "media_mapping_complete", "turn_id")
-        }
-    )
+    value = {
+        k: record.get(k)
+        for k in ("message", "answer", "predicted_media", "media_mapping_complete", "turn_id")
+    }
+    for key in ("predicted_source_refs", "source_mapping_complete"):
+        if key in record:
+            value[key] = record[key]
+    return digest(value)
 
 
 def evaluation_turn(row: Mapping[str, Any]) -> int:
@@ -472,6 +475,11 @@ class MediaIndex:
 def list_score(
     target: Sequence[Mapping[str, Any]], record: Mapping[str, Any], universe: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:
+    if target and target[0].get("source_type"):
+        if record.get("source_mapping_complete") is not True:
+            raise ValueError("Source delivery mapping incomplete")
+        metrics = source_set_metrics(target, record.get("predicted_source_refs") or [])
+        return {**metrics, "score": metrics["jaccard"], "formula": "|P ∩ GT| / |P ∪ GT|"}
     prediction = record.get("predicted_media")
     if not isinstance(prediction, list) or record.get("media_mapping_complete") is not True:
         raise ValueError("Delivery record missing or media mapping incomplete")

@@ -33,6 +33,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -54,6 +55,7 @@ from sentrix.application.media.stage_timing import stage_span
 from sentrix.domain.media.models import Asset, AssetStatus
 from sentrix.domain.media.ports import AssetRepository
 from sentrix.domain.media.progress import OperationCancelled
+from sentrix.domain.media.source_metadata import SourceMetadata
 from sentrix.runtime.work import import_task
 
 log = logging.getLogger("sentrix.media.import_album")
@@ -73,7 +75,7 @@ VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".m4v", ".avi", ".mkv"})
 AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"})
 
 # 扫描的实际判据 = 图片 ∪ 视频 ∪ 音频。
-SCAN_SUFFIXES = IMAGE_SUFFIXES | VIDEO_SUFFIXES | AUDIO_SUFFIXES
+SCAN_SUFFIXES = IMAGE_SUFFIXES | VIDEO_SUFFIXES | AUDIO_SUFFIXES | frozenset({".txt", ".md"})
 
 DEFAULT_ALBUM_LIMIT = 200
 
@@ -179,6 +181,7 @@ class ImportAlbum:
     @import_task
     def execute(self, request: AlbumImportRequest) -> AlbumImportResult:
         root, paths = self._paths(request)
+        sources = self._source_records(root)
 
         self._report(stage="media_processing", total=len(paths))
         imported = deduplicated = events = lexical_terms = 0
@@ -210,7 +213,9 @@ class ImportAlbum:
                     self._report(stage="media_staging", current_file=paths[index].name)
                     stage_started = time.perf_counter()
                     try:
-                        outcome = self._importer.stage(self._request_for(request, paths[index]))
+                        outcome = self._importer.stage(
+                            self._request_for(request, paths[index], sources=sources)
+                        )
                     except OperationCancelled:
                         raise
                     except Exception as error:  # 一张失败不中断整批——整册导入是几小时的事
@@ -330,13 +335,16 @@ class ImportAlbum:
         不在这里执行。既有 ``execute`` 完整导入入口保持不变，兼容产品端原调用方。
         """
         root, paths = self._paths(request)
+        sources = self._source_records(root)
         total_started = time.perf_counter()
         imported = deduplicated = 0
         asset_ids: list[str] = []
         failures: list[AlbumFailure] = []
         for path in paths:
             try:
-                outcome = self._importer.stage(self._request_for(request, path, defer_processing=True))
+                outcome = self._importer.stage(
+                    self._request_for(request, path, defer_processing=True, sources=sources)
+                )
             except Exception as error:  # 一张坏媒体不阻断整册
                 failures.append(AlbumFailure(file_name=path.name, reason=f"{type(error).__name__}: {error}"))
                 continue
@@ -377,10 +385,18 @@ class ImportAlbum:
 
     @staticmethod
     def _request_for(
-        request: AlbumImportRequest, path: Path, *, defer_processing: bool = False
+        request: AlbumImportRequest,
+        path: Path,
+        *,
+        defer_processing: bool = False,
+        sources: dict[str, Any] | None = None,
     ) -> ImportRequest:
         """磁盘上的一张图 → 一次导入请求。整册导入没有 upload 的 content-type 可依。"""
+        source = (sources or {}).get(path.name, {})
         return ImportRequest(
+            external_source_id=source.get("external_source_id"),
+            source_timestamp=source.get("source_timestamp"),
+            source_metadata=SourceMetadata.from_dict(source),
             scope_id=request.scope_id,
             file_name=path.name,
             content_type=None,
@@ -389,6 +405,22 @@ class ImportAlbum:
             source_move=False,
             defer_processing=defer_processing,
         )
+
+    @staticmethod
+    def _source_records(root: Path) -> dict[str, Any]:
+        path = root / "source-metadata.jsonl"
+        if not path.is_file():
+            return {}
+        records: dict[str, Any] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            name = row["file_name"]
+            if name in records or Path(name).name != name:
+                raise ValueError(f"来源清单中的文件名重复或非法: {name}")
+            records[name] = row
+        return records
 
     def _summarize_events(self, event_ids: list[str]) -> int:
         """批末逐个总结。**一个事件的失败不中断整批**——与逐张那条同样的性质。

@@ -27,6 +27,7 @@ import json
 import logging
 import threading
 from collections.abc import AsyncIterator
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
@@ -86,10 +87,7 @@ def _conversation_summary(conversation: Conversation) -> ConversationSummary:
 
 
 def _attachments(record: TurnRecord) -> list[AttachmentSummary]:
-    return [
-        AttachmentSummary(handle=item.handle, asset_id=item.asset_id, file_name=item.file_name)
-        for item in record.attachments
-    ]
+    return [AttachmentSummary(**asdict(item)) for item in record.attachments]
 
 
 def _turn_summary(record: TurnRecord) -> TurnSummary:
@@ -276,10 +274,7 @@ def _complete_payload(record: TurnRecord) -> CompleteEventPayload:
         status=record.status.value,
         termination_reason=record.termination_reason,
         answer=record.answer,
-        attachments=[
-            AttachmentSummary(handle=item.handle, asset_id=item.asset_id, file_name=item.file_name)
-            for item in record.attachments
-        ],
+        attachments=[AttachmentSummary(**asdict(item)) for item in record.attachments],
         requirements=[dict(item) for item in record.requirements],
         retrieved_candidates=list(record.retrieved_candidates),
         trace=dict(record.trace),

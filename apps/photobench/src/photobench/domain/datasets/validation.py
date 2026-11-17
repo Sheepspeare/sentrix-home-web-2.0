@@ -68,6 +68,34 @@ def validate_targets(rows: Sequence[Mapping[str, Any]], manifest: Mapping[str, A
         return found
 
     def record(qa: str, value: Mapping[str, Any], prefix: str = "") -> None:
+        source_inventory = {
+            (r["source_type"], r["source_id"]) for r in manifest.get("document_source_refs", [])
+        }
+
+        def source_refs(field: str, values: Any) -> set[tuple[str, str]]:
+            found: set[tuple[str, str]] = set()
+            if not isinstance(values, list):
+                issue(qa, prefix + field, "invalid_source_refs", values, "来源引用需为列表")
+                return found
+            for ref in values:
+                if (
+                    not isinstance(ref, Mapping)
+                    or ref.get("source_type") not in {"email", "document"}
+                    or not isinstance(ref.get("source_id"), str)
+                    or not ref["source_id"].strip()
+                ):
+                    issue(qa, prefix + field, "invalid_source_ref", ref, "需明确 email/document 类型及来源ID")
+                    continue
+                key = (ref["source_type"], ref["source_id"])
+                if "document_source_refs" in manifest and key not in source_inventory:
+                    issue(qa, prefix + field, "unknown_source_id", ref, "来源ID不在文档清单中")
+                found.add(key)
+            return found
+
+        for purpose in ("retrieval", "answer_evidence"):
+            source_field = purpose + "_source_refs"
+            if source_field in value:
+                source_refs(source_field, value[source_field])
         purposes: dict[str, set[str]] = {}
         for purpose in ("retrieval", "answer_evidence", "evidence"):
             field = purpose + "_media_refs"
@@ -89,9 +117,21 @@ def validate_targets(rows: Sequence[Mapping[str, Any]], manifest: Mapping[str, A
             issue(qa, prefix + "evaluation", "invalid_definition", definition, "评分定义必须为对象")
             definition = {}
         if definition.get("scorer") in {"media_set", "atm_list"}:
+            source_target = definition.get("target_source_refs")
+            if source_target is not None:
+                if not source_refs("evaluation.target_source_refs", source_target):
+                    issue(
+                        qa,
+                        prefix + "evaluation.target_source_refs",
+                        "missing_list_target",
+                        source_target,
+                        "来源列表答案目标不能为空",
+                    )
+            else:
+                source_target = None
             field = prefix + "evaluation.target_media_refs"
-            target = refs(qa, field, definition.get("target_media_refs"))
-            if not target:
+            target = refs(qa, field, definition.get("target_media_refs")) if source_target is None else set()
+            if not target and source_target is None:
                 issue(
                     qa,
                     field,

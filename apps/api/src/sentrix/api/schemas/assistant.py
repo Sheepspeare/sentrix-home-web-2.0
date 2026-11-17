@@ -41,6 +41,14 @@ class AttachmentSummary(BaseModel):
     handle: str
     asset_id: str
     file_name: str
+    media_type: str = ""
+    source_type: str = ""
+    source_id: str = ""
+    title: str = ""
+    source_timestamp: str = ""
+    offset: int = 0
+    end_offset: int = 0
+    excerpt: str = ""
 
 
 class TurnSummary(BaseModel):

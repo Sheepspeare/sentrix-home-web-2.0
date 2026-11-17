@@ -93,9 +93,10 @@ def _object_schema(properties: Mapping[str, Any], required: Sequence[str]) -> Ma
 
 SEARCH_MEMORIES = ToolSpec(
     name="search_memories",
-    brief="按内容词检索照片或视频，返回画面描述及视频语音转写预览。",
+    brief="按内容词检索照片、视频、邮件或文档，返回资料预览。",
     description=(
-        "按内容词检索家庭照片或视频（人/物/场景/衣着/颜色/地点特征/语音内容）。"
+        "按内容词检索照片、视频、邮件或文档（人/物/场景/地点/语音/正文内容）。"
+        "source_type 可限定 email 或 document；混合图文用 all。文本预览包含标题、摘要和来源ID。"
         "返回一个结果集摘要，其中 preview 是排在最前的几张。"
         "每条 preview 自带 captured_at（拍摄时间）/ place（**拍摄地的行政区划**，"
         "形如「河北省石家庄市正定县 · 正定北门里村附近」，由照片的 GPS 反解而来；"
@@ -126,6 +127,11 @@ SEARCH_MEMORIES = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            "source_type": {
+                "type": "string",
+                "enum": ["all", "email", "document"],
+                "description": "限定来源类型；混合图文题用 all。默认 all。",
+            },
             "query": {
                 "type": "string",
                 "description": "检索用的内容词，例如 海边、桥、猫、红色。用用户问题里的实词，不要写整句。",
@@ -136,8 +142,9 @@ SEARCH_MEMORIES = ToolSpec(
     satisfies=(EvidenceType.PHOTO_SET, EvidenceType.SPOKEN_CONTENT),
     required=("query",),
     free_description=(
-        f"按内容词检索家庭照片（人/物/场景/衣着/颜色/地点特征），返回结果集摘要与最多 "
+        f"按内容词检索照片、视频、邮件或文档，返回结果集摘要与最多 "
         f"{_SEARCH_LIMIT} 条 preview。"
+        "source_type 可限定 email 或 document，混合题用 all；文本返回标题、摘要、来源ID与正文预览。"
         "每条 preview 带 captured_at（拍摄时间）、place（拍摄地的行政区划，由 GPS 反解；无 GPS 时为空）、"
         "people（已确认人物）、people_count（照片上一共几个人）、media_kind（image/video）、"
         "source_kind（photo 是照片，video_keyframe 是视频抽帧）、level（exact/strong/approximate）、"
@@ -207,6 +214,18 @@ FINAL_ANSWER = ToolSpec(
                 "type": "string",
                 "description": "给用户的中文回答。",
             },
+            "source_citations": {
+                "type": "array",
+                "maxItems": 20,
+                "description": (
+                    "引用已由 read_source_text 读取的邮件/文档；"
+                    "填写该次读取的 result_set_id 和 asset_handle。邮件 ID 列表也通过这里交付。"
+                ),
+                "items": _object_schema(
+                    {"result_set_id": {"type": "string"}, "asset_handle": {"type": "string"}},
+                    ["result_set_id", "asset_handle"],
+                ),
+            },
             "selected_image_handles": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -235,6 +254,7 @@ FINAL_ANSWER = ToolSpec(
         "给出最终回答并结束本轮。answer 是要说给用户的中文回答；"
         "要展示的照片在同一次调用里填进 selected_image_handles"
         "（来自当前结果集的 handle，例如 photo_1，最多 6 张）。不展示照片就填空数组。"
+        "邮件/文档先 read_source_text，再在 source_citations 引用 result_set_id 和 asset_handle。"
     ),
 )
 

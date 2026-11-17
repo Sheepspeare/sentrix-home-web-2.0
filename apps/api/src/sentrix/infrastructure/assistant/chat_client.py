@@ -424,7 +424,17 @@ class OpenAIChatModel:
             handles = arguments.get("selected_image_handles") if isinstance(arguments, dict) else None
             valid = (
                 isinstance(arguments, dict)
-                and set(arguments) == {"answer", "selected_image_handles"}
+                and {"answer", "selected_image_handles"}
+                <= set(arguments)
+                <= {"answer", "selected_image_handles", "source_citations"}
+                and isinstance(arguments.get("source_citations", []), list)
+                and len(arguments.get("source_citations", [])) <= 20
+                and all(
+                    isinstance(c, dict)
+                    and set(c) == {"result_set_id", "asset_handle"}
+                    and all(isinstance(v, str) for v in c.values())
+                    for c in arguments.get("source_citations", [])
+                )
                 and isinstance(arguments["answer"], str)
                 and isinstance(handles, list)
                 and all(isinstance(handle, str) for handle in handles)

@@ -495,6 +495,15 @@ export function AssistantPanel({
                 <ul className="assistant-photos">
                   {exchange.attachments.map((photo) => (
                     <li key={photo.handle}>
+                      {photo.media_type === "text" ? (
+                        <details>
+                          <summary>{photo.title || photo.source_id || photo.file_name}</summary>
+                          <p>{photo.source_type === "email" ? "邮件" : "文档"} · {photo.source_id} · {photo.source_timestamp}</p>
+                          <blockquote style={{ whiteSpace: "pre-wrap" }}>{photo.excerpt}</blockquote>
+                          <a href={deliveredPhotoUrl(photo.asset_id, photo.file_name)} target="_blank" rel="noreferrer">查看完整原文</a>
+                        </details>
+                      ) : (
+                        <>
                       {/* **点图片是放大**，不是新标签打开原文件——后者遇到 HEIC
                           或不认识的 MIME 会被浏览器直接下载。 */}
                       <button
@@ -513,6 +522,8 @@ export function AssistantPanel({
                           loading="lazy"
                         />
                       </button>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>

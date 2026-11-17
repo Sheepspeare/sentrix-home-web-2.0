@@ -19,6 +19,7 @@ export interface AssetSummary {
   /** 派生关键帧在源视频里的秒数；用它把 `<video>` 定位到命中帧。 */
   source_timestamp_sec?: number | null;
   external_source_id?: string | null;
+  source_metadata?: { document_type?: string; title?: string; summary?: string; precise_address?: string; address_source?: string };
   /**
    * 后端**目前不返回**。若将来 `/assets` 带上它，资料库就能按相册聚合；
    * 现在消费方必须按「可能为空」处理，不能把它当成一册一个值。
@@ -386,6 +387,12 @@ export interface AssistantAttachment {
   handle: string;
   asset_id: string;
   file_name: string;
+  media_type?: string;
+  source_type?: string;
+  source_id?: string;
+  title?: string;
+  source_timestamp?: string;
+  excerpt?: string;
 }
 
 export interface AssistantRequirement {
@@ -1047,6 +1054,12 @@ export interface ImportResponse {
  * 用 multipart：`file` 是文件本身、`scope_id` 是表单字段。**不要手写 Content-Type**——
  * 浏览器要给 multipart 带上 boundary，手写会把 boundary 弄丢。
  */
+export async function importDocumentPackage(file: File, scopeId: string): Promise<{total: number; failed: number; items: unknown[]}> {
+  const form = new FormData();
+  form.append("file", file); form.append("scope_id", scopeId || "home-default");
+  return request("/documents/import", {method: "POST", body: form});
+}
+
 export async function importAsset(file: File, scopeId: string): Promise<ImportResponse> {
   const form = new FormData();
   form.append("file", file);

@@ -23,11 +23,13 @@ import { imageUrl, inferMediaType, mediaKey, mediaRefs } from "../../api/media.t
 import type { ConversationTurn, MediaRef, QaRow } from "../../api/types.ts";
 import { isDirectEvidence } from "../../lib/evidence.ts";
 import { qaActionBadge, qaAnswerabilityLabel, qaReferenceLabel, qaTypeLabel } from "../../lib/qaBrowser.ts";
+import { SourceGrid } from "../interactive/SourceGrid.tsx";
 
 export interface QaReviewCardProps {
   item: QaRow;
   /** 列表下标：用于序号 `01` 与 `qa-<n>` 回退（1.0 `:3705` / `:3715`）。 */
   index: number;
+  albumId?: string;
   /** 点击 GT 图片时打开 lightbox（1.0 `:3740` 写根级 `lightbox`）。 */
   onOpenMedia?: (url: string, name: string) => void;
 }
@@ -74,7 +76,7 @@ function mediaFileName(media: MediaRef): string {
   return media.media_id.split("/").pop() || "";
 }
 
-export function QaReviewCard({ item, index, onOpenMedia }: QaReviewCardProps) {
+export function QaReviewCard({ item, index, albumId = "", onOpenMedia }: QaReviewCardProps) {
   const turns = qaConversationTurns(item);
   const evidence = qaEvidenceRefs(item);
   const hasVideo = qaHasVideoEvidence(item);
@@ -197,6 +199,10 @@ export function QaReviewCard({ item, index, onOpenMedia }: QaReviewCardProps) {
       </div>
 
       <div className="qa-review-foot">
+        {!!item.retrieval_source_refs?.length && <section>
+          <h4>邮件 / 文档标准证据</h4>
+          <SourceGrid items={item.retrieval_source_refs} albumId={albumId} />
+        </section>}
         {claims.length ? (
           <details className="qa-detail-block">
             <summary>

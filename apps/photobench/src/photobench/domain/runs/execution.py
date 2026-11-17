@@ -196,7 +196,7 @@ def album_media_entries(manifest: dict[str, Any]) -> list[str]:
     """1.0 ``:1587``：manifest 里 photo 在前、video 在后，去重保序。"""
     entries: list[str] = []
     seen: set[str] = set()
-    for key in ("photos", "videos"):
+    for key in ("photos", "videos", "documents"):
         for item in manifest.get(key) or []:
             relative = str(item).strip()
             if relative and relative not in seen:
@@ -360,6 +360,8 @@ def resolve_predicted_media(
                     media["media_url"] = source_asset["media_url"]
                 resolved.append(media)
                 continue
+        if asset.get("media_type") == "text":
+            continue
         media_type = infer_media_type(file_name, asset.get("media_type") or asset.get("asset_type"))
         media = {
             "asset_id": str(asset_id),

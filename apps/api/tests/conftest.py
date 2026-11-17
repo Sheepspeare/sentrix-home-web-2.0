@@ -274,6 +274,16 @@ def isolated_app(settings, fake_embedding_startup):
     ``chat_model`` 也是假件：``/api/v1/imports`` 的批末事件总结会调它
     （见 ``FakeChatModel``）。
     """
+    # 假嵌入器也配套离线 tokenizer，长文分块契约无需连接真实侧车。
+    from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+
+    alphabet = pre_tokenizers.ByteLevel.alphabet()
+    tokenizer = Tokenizer(models.BPE(vocab={char: index for index, char in enumerate(alphabet)}, merges=[]))
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tokenizer.decoder = decoders.ByteLevel()
+    tokenizer_path = settings.data_dir / "test-tokenizer.json"
+    tokenizer.save(str(tokenizer_path))
+    settings.document_tokenizer_path = str(tokenizer_path)
     app = create_app(settings)
     # W1 之后图像与文本是**同一个嵌入器**（同一个 2048 维空间），真实现也是这么装的
     # ——容器里 visual / text 两槽指向同一个实例。所以这里也用同一个假件顶两个槽。

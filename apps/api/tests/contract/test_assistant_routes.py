@@ -380,7 +380,13 @@ def test_assistant_can_read_past_the_email_preview_and_answer(isolated_app):
             assert last_page["next_offset"] is None
             assert first_page["text"] + last_page["text"] == text
             answer = last_page["text"].rsplit("Booking reference: ", 1)[1].strip()
-            return tool_call("final_answer", "final", answer=answer, selected_image_handles=[])
+            return tool_call(
+                "final_answer",
+                "final",
+                answer=answer,
+                selected_image_handles=[],
+                source_citations=[{"result_set_id": last_page["result_set_id"], "asset_handle": handle}],
+            )
 
     container = dataclasses.replace(
         isolated_app.state.container,
@@ -407,7 +413,11 @@ def test_assistant_can_read_past_the_email_preview_and_answer(isolated_app):
 
     assert record["status"] == "complete", record
     assert record["result"]["answer"] == "NW-70245"
-    assert record["result"]["attachments"] == []
+    assert len(record["result"]["attachments"]) == 1
+    citation = record["result"]["attachments"][0]
+    assert citation["source_id"] == "woodpecker-mail"
+    assert citation["media_type"] == "text"
+    assert "NW-70245" in citation["excerpt"]
     assert record["result"]["requirements"][0]["satisfied_by"] == ["read-first", "read-rest"]
 
 

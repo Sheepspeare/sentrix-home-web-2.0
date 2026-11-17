@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from photobench.domain.evaluation.sources import resolve_sources
 from photobench.domain.runs.execution import (
     agent2_trace_from,
     debug_steps_from,
@@ -55,4 +56,9 @@ def turn_item(
         "predicted_media": resolve_predicted_media(selected_asset_ids(result), assets),
         "retrieved_candidate_media": resolve_predicted_media(retrieved_candidate_asset_ids(result), assets),
         "attachments": result.get("attachments") or [],
+        "predicted_source_refs": resolve_sources(selected_asset_ids(result), assets),
+        "retrieved_source_refs": resolve_sources(retrieved_candidate_asset_ids(result), assets),
+        "read_source_refs": resolve_sources(
+            [str(r["asset_id"]) for r in bundle.get("source_reads", [])], assets
+        ),
     }

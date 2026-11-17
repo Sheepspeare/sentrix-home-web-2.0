@@ -10,6 +10,7 @@ import {
   type ImportProgress,
 } from "../../shared/api/client";
 import { useUploads } from "./UploadsProvider";
+import { DocumentImport } from "./DocumentImport";
 const ACTIVE_JOB_STATUSES = new Set([
   "accepted",
   "queued",
@@ -307,6 +308,7 @@ export function ImportsPage() {
         <article><span>已完成</span><b>{completedCount}</b></article>
         <article><span>需要处理</span><b>{problemCount}</b></article>
       </div>
+      <DocumentImport scopeId={scopeId} onImported={() => void refreshJobs()} />
       <section className="import-layout">
       <div>
         <section
