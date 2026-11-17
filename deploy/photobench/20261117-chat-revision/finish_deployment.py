@@ -31,7 +31,7 @@ for port, service in state["services"].items():
         assert sha(Path(service["root"]) / name) == expected["after"]
 for product in state["products"].values():
     assert Path(f"/proc/{product['pid']}").exists()
-for port, service in state["services"].items():
+for service in state["services"].values():
     directory = Path.home() / ".config/systemd/user" / (service["unit"] + ".d")
     initial = directory / "30-chat-revision.conf"
     final = directory / "99z-chat-revision.conf"
