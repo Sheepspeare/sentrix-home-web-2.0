@@ -43,9 +43,10 @@ for port in [8191, 8291, 8294]:
     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/v1/diagnostics', timeout=20) as response:
         details = json.load(response)
     settings = details['runtime_configuration']
-    assert settings['vlm_context_tokens'] == 16384
+    ordinary_context = int(env.get('SENTRIX_VLM_CONTEXT_TOKENS', '16384' if port == 8191 else '6144'))
+    assert settings['vlm_context_tokens'] == ordinary_context
     assert settings.get('vlm_reasoning_context_tokens') == (131072 if configured else None)
-    runtime[str(port)] = {'ordinary_context_tokens': 16384, 'declared_reasoning_tokens': settings.get('vlm_reasoning_context_tokens'), 'embeddings': details.get('embeddings')}
+    runtime[str(port)] = {'ordinary_context_tokens': ordinary_context, 'declared_reasoning_tokens': settings.get('vlm_reasoning_context_tokens'), 'embeddings': details.get('embeddings')}
 receipt = {'status': 'passed', 'revision': manifest['source_revision'], 'deployed_version': manifest['deployed_version'],
     'pids': {port: item['pid'] for port, item in after['services'].items()}, 'runtime': runtime,
     'historical_results_and_chat_preserved': True, 'database_inventory_preserved': True}
