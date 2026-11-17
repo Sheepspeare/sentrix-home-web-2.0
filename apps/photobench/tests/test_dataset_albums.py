@@ -191,3 +191,27 @@ def test_build_integrity_without_qa_still_hashes_media_and_face_seeds(tmp_path):
     assert integrity["qa_sha256"] is None
     assert integrity["files_checked"] == 4
     assert integrity["missing_files"] == []
+
+
+def test_selected_question_isolated_from_other_invalid_gt(tmp_path: Path):
+    source = _source(tmp_path)
+    path = tmp_path / "album-x/qa/one.jsonl"
+    with path.open("a") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "qa_id": "bad",
+                    "question": "other",
+                    "answer": "other",
+                    "retrieval_media_refs": [{"media_type": "image", "media_id": "missing.jpg"}],
+                }
+            )
+            + "\n"
+        )
+    assert source.qa_question("album-x", "qa-1", "q1")["expected_action"] == "answer"
+    with pytest.raises(ValueError):
+        source.qa_question("album-x", "qa-1", "bad")
+    with pytest.raises(ValueError):
+        source.qa_rows("album-x", "qa-1")
+    with pytest.raises(KeyError):
+        source.qa_question("album-x", "qa-1", "missing")

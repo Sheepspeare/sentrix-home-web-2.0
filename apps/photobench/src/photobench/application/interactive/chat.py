@@ -103,17 +103,16 @@ class ChatService:
             album_id, qa_set = str(payload.get("album_id") or ""), str(payload.get("qa_set") or "")
             if not session["album_id"] or session["album_id"] != album_id:
                 raise InvalidRequestError("题集与所选相册不对应")
-            rows = self.albums.qa_rows(album_id, qa_set)
-            matches = [r for r in rows if str(r.get("qa_id")) == str(payload["qa_id"])]
-            if len(matches) != 1:
-                raise InvalidRequestError("题目不存在")
+            try:
+                row = self.albums.qa_question(album_id, qa_set, str(payload["qa_id"]))
+            except KeyError as exc:
+                raise InvalidRequestError("题目不存在") from exc
             session["source"] = {
                 "album_id": album_id,
                 "qa_set": qa_set,
-                "row": copy.deepcopy(matches[0]),
-                "definition_sha256": qa_fingerprint([matches[0]]),
+                "row": copy.deepcopy(row),
+                "definition_sha256": qa_fingerprint([row]),
             }
-            row = matches[0]
             messages = [str(t.get("message") or "").strip() for t in row.get("conversation") or []] or [
                 str(row["question"])
             ]

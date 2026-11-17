@@ -136,7 +136,7 @@
  @router.post("/runs", status_code=202)
 --- /dev/null
 +++ b/apps/photobench/src/photobench/application/interactive/chat.py
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,347 @@
 +"""Persistent chat provenance and serial product turns, sharing model preparation with retests."""
 +
 +from __future__ import annotations
@@ -242,17 +242,16 @@
 +            album_id, qa_set = str(payload.get("album_id") or ""), str(payload.get("qa_set") or "")
 +            if not session["album_id"] or session["album_id"] != album_id:
 +                raise InvalidRequestError("题集与所选相册不对应")
-+            rows = self.albums.qa_rows(album_id, qa_set)
-+            matches = [r for r in rows if str(r.get("qa_id")) == str(payload["qa_id"])]
-+            if len(matches) != 1:
-+                raise InvalidRequestError("题目不存在")
++            try:
++                row = self.albums.qa_question(album_id, qa_set, str(payload["qa_id"]))
++            except KeyError as exc:
++                raise InvalidRequestError("题目不存在") from exc
 +            session["source"] = {
 +                "album_id": album_id,
 +                "qa_set": qa_set,
-+                "row": copy.deepcopy(matches[0]),
-+                "definition_sha256": qa_fingerprint([matches[0]]),
++                "row": copy.deepcopy(row),
++                "definition_sha256": qa_fingerprint([row]),
 +            }
-+            row = matches[0]
 +            messages = [str(t.get("message") or "").strip() for t in row.get("conversation") or []] or [
 +                str(row["question"])
 +            ]
@@ -1047,6 +1046,19 @@
 +        "retrieved_candidate_media": resolve_predicted_media(retrieved_candidate_asset_ids(result), assets),
 +        "attachments": result.get("attachments") or [],
 +    }
+--- a/apps/photobench/src/photobench/domain/datasets/ports.py
++++ b/apps/photobench/src/photobench/domain/datasets/ports.py
+@@ -60,6 +60,10 @@
+         """
+         ...
+ 
++    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
++        """Load and validate one selected question with dataset defaults and version checks."""
++        ...
++
+     def gt_metadata_snapshot(self, album_id: str) -> dict[str, Any]:
+         """Load versioned Judge-only capture context; absence is recorded explicitly."""
+         ...
 --- a/apps/photobench/src/photobench/domain/runs/analysis.py
 +++ b/apps/photobench/src/photobench/domain/runs/analysis.py
 @@ -1885,6 +1885,7 @@
@@ -1141,6 +1153,45 @@
 +                temporary.replace(path)
 +            finally:
 +                temporary.unlink(missing_ok=True)
+--- a/apps/photobench/src/photobench/infrastructure/config/files.py
++++ b/apps/photobench/src/photobench/infrastructure/config/files.py
+@@ -18,6 +18,8 @@
+ 
+ def read_build_revision(repo_root: Path) -> str:
+     """A release records its committed revision at packaging time, once at boot."""
++    if revision := os.environ.get("PHOTOBENCH_BUILD_REVISION"):
++        return revision
+     try:
+         value = json.loads((repo_root / "build-info.json").read_text(encoding="utf-8"))
+         return str(value["revision"])
+--- a/apps/photobench/src/photobench/infrastructure/datasets/albums.py
++++ b/apps/photobench/src/photobench/infrastructure/datasets/albums.py
+@@ -166,6 +166,15 @@
+         return value
+ 
+     def qa_rows(self, album_id: str, qa_set: str) -> list[dict[str, Any]]:
++        return self._qa_rows(album_id, qa_set)
++
++    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
++        rows = self._qa_rows(album_id, qa_set, qa_id=qa_id)
++        if len(rows) != 1:
++            raise KeyError(qa_id)
++        return rows[0]
++
++    def _qa_rows(self, album_id: str, qa_set: str, *, qa_id: str | None = None) -> list[dict[str, Any]]:
+         manifest = self.manifest(album_id)
+         relative = (manifest.get("qa_sets") or {}).get(qa_set)
+         if not relative:
+@@ -188,6 +197,9 @@
+                 raise ValueError("QA IDs must be present and unique")
+             if definition.get("qa_sha256") != sha256_file(path):
+                 raise ValueError("versioned QA file fingerprint mismatch")
++        if qa_id is not None:
++            rows = [row for row in rows if str(row.get("qa_id")) == qa_id]
++        if definition.get("schema_version") in {"2.0", "3.0"}:
+             for row in rows:
+                 if definition.get("schema_version") == "3.0" and (
+                     not row.get("ability_taxonomy_version")
 --- a/apps/photobench/src/photobench/infrastructure/sentrix/client.py
 +++ b/apps/photobench/src/photobench/infrastructure/sentrix/client.py
 @@ -61,6 +61,20 @@
@@ -1512,7 +1563,7 @@
 +  return rows.map(value => {
 +    const row = value as Record<string, unknown>;
 +    return row.max_score === 2 && typeof row.scored_mean === 'number' ? `${row.scored_mean.toFixed(2)} / 2` : typeof row.total_score === 'number' ? `${(row.total_score * 100).toFixed(1)}%` : '待评分';
-+  }).join(' / ') || '未评分';
++  }).join(' / ') || (typeof run.summary?.answer_quality_mean === 'number' ? `${run.summary.answer_quality_mean.toFixed(2)} / 2` : '未评分');
 +}
 +
 +export function RetestDialog({ run, question, models, busy, onClose, onSelectRun }: {
@@ -1666,14 +1717,3 @@
                    <span className={"mode-badge " + modeBadgeClass(run.mode)}>{modeLabel(run.mode)}</span>
                    {run.execution_versions && <small className="muted">{run.execution_versions.length} 次执行</small>}
                  </td>
---- a/apps/photobench/src/photobench/infrastructure/config/files.py
-+++ b/apps/photobench/src/photobench/infrastructure/config/files.py
-@@ -18,6 +18,8 @@
- 
- def read_build_revision(repo_root: Path) -> str:
-     """A release records its committed revision at packaging time, once at boot."""
-+    if revision := os.environ.get("PHOTOBENCH_BUILD_REVISION"):
-+        return revision
-     try:
-         value = json.loads((repo_root / "build-info.json").read_text(encoding="utf-8"))
-         return str(value["revision"])

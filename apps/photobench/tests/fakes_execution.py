@@ -441,6 +441,9 @@ class FakeAlbums:
         self.calls.append(("qa_rows", qa_set))
         return [dict(row) for row in self.rows]
 
+    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
+        return next(row for row in self.qa_rows(album_id, qa_set) if str(row.get("qa_id")) == qa_id)
+
     def gt_metadata_snapshot(self, album_id: str) -> dict[str, Any]:
         from photobench.domain.evaluation.gt_context import empty_context
 

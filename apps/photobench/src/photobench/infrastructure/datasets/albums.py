@@ -166,6 +166,15 @@ class JsonAlbumSource:
         return value
 
     def qa_rows(self, album_id: str, qa_set: str) -> list[dict[str, Any]]:
+        return self._qa_rows(album_id, qa_set)
+
+    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
+        rows = self._qa_rows(album_id, qa_set, qa_id=qa_id)
+        if len(rows) != 1:
+            raise KeyError(qa_id)
+        return rows[0]
+
+    def _qa_rows(self, album_id: str, qa_set: str, *, qa_id: str | None = None) -> list[dict[str, Any]]:
         manifest = self.manifest(album_id)
         relative = (manifest.get("qa_sets") or {}).get(qa_set)
         if not relative:
@@ -188,6 +197,9 @@ class JsonAlbumSource:
                 raise ValueError("QA IDs must be present and unique")
             if definition.get("qa_sha256") != sha256_file(path):
                 raise ValueError("versioned QA file fingerprint mismatch")
+        if qa_id is not None:
+            rows = [row for row in rows if str(row.get("qa_id")) == qa_id]
+        if definition.get("schema_version") in {"2.0", "3.0"}:
             for row in rows:
                 if definition.get("schema_version") == "3.0" and (
                     not row.get("ability_taxonomy_version")

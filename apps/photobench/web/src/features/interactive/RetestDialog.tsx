@@ -10,7 +10,7 @@ function scoringLabel(run: Run): string {
   return rows.map(value => {
     const row = value as Record<string, unknown>;
     return row.max_score === 2 && typeof row.scored_mean === 'number' ? `${row.scored_mean.toFixed(2)} / 2` : typeof row.total_score === 'number' ? `${(row.total_score * 100).toFixed(1)}%` : '待评分';
-  }).join(' / ') || '未评分';
+  }).join(' / ') || (typeof run.summary?.answer_quality_mean === 'number' ? `${run.summary.answer_quality_mean.toFixed(2)} / 2` : '未评分');
 }
 
 export function RetestDialog({ run, question, models, busy, onClose, onSelectRun }: {
