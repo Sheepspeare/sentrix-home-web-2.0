@@ -213,7 +213,9 @@ class SpeechRecognitionFailed(DomainError):
 
 
 class SpeechRecognizer(Protocol):
-    """助手语音输入，不写入媒体库。启动时 load，关闭时 close，请求不得懒加载。
+    """助手语音输入，不写入媒体库。
+
+    load 在本地实现加载模型、HTTP 实现探测服务；close 只释放当前实现拥有的资源。
 
     transcribe 接受单声道 little-endian float32 PCM（8–192 kHz、0.2–60 秒）。
     无语音返回空串；非法输入、不可用、忙碌、推理失败分别抛上面的领域错误。

@@ -44,7 +44,10 @@ class SenseVoiceRecognizer:
                 model = self._model_dir / "model.int8.onnx"
                 tokens = self._model_dir / "tokens.txt"
                 if not model.is_file() or not tokens.is_file():
-                    raise FileNotFoundError("请先在仓库根运行 make speech-prepare，再重启后端。")
+                    raise FileNotFoundError(
+                        "请先运行 .venv/bin/python scripts/deploy/prepare_sensevoice.py "
+                        "准备权重，再启动共享服务。"
+                    )
                 import sherpa_onnx
 
                 self._recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
