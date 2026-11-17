@@ -1386,7 +1386,7 @@
  }
 --- /dev/null
 +++ b/apps/photobench/web/src/features/chat/ChatView.tsx
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,136 @@
 +import { useEffect, useRef, useState } from 'react';
 +import { api, post } from '../../api/client.ts';
 +import { mediaRefs } from '../../api/media.ts';
@@ -1454,7 +1454,7 @@
 +    return () => { disposed = true; window.clearInterval(timer); };
 +  }, [id, status]); // oxlint-disable-line react-hooks/exhaustive-deps
 +  useEffect(() => {
-+    if (picker && browser.qaBrowserAlbum && browser.qaBrowserSet) void browser.loadQaBrowser();
++    if (picker && browser.qaBrowserAlbum && browser.qaBrowserOptions.includes(browser.qaBrowserSet)) void browser.loadQaBrowser();
 +  }, [picker, browser.qaBrowserAlbum, browser.qaBrowserSet]); // oxlint-disable-line react-hooks/exhaustive-deps
 +  const reset = () => { selectedId.current = ''; setSession(null); setSelectedQa(null); localStorage.removeItem('photobench-chat-session'); };
 +  const send = async (row?: QaRow) => {
@@ -1472,6 +1472,14 @@
 +  };
 +  const sourceAlbum = bases.find(b => b.scope_id === scope)?.album_id;
 +  const source = session?.source;
++  const openPicker = () => {
++    const album = sourceAlbum || browser.qaBrowserAlbum;
++    const sets = manifests.find(m => m.album_id === album)?.qa_sets || browser.qaBrowserOptions;
++    const preferred = source?.album_id === album ? source.qa_set : browser.qaBrowserSet;
++    browser.setQaBrowserAlbum(album);
++    browser.setQaBrowserSet(sets.includes(preferred) ? preferred : sets[0] || '');
++    setSelectedQa(null); setPicker(true);
++  };
 +  const ownActive = Boolean(session && active(session.status));
 +  return <section className="chat-view">
 +    <div className="section-head"><div><h2>聊天对话</h2><p className="muted">选择相册与模型，自由提问或运行题集中的一道题。</p></div><button className="btn ghost" disabled={ownActive || sending} onClick={reset}>新建对话</button></div>
@@ -1492,7 +1500,7 @@
 +        })}{!session && <p className="chat-empty">输入问题开始对话，也可以从题集中选择一道题。</p>}</div>
 +        <form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(); }}>
 +          <textarea aria-label="聊天问题" placeholder="输入问题，支持连续追问…" maxLength={2000} value={message} disabled={ownActive || sending} onChange={e => setMessage(e.target.value)}/>
-+          <div className="chat-composer-actions"><button className="btn ghost" type="button" disabled={!scope || ownActive || sending || busy} onClick={() => { setPicker(true); if (sourceAlbum) browser.setQaBrowserAlbum(sourceAlbum); }}>从题集选题</button>
++          <div className="chat-composer-actions"><button className="btn ghost" type="button" disabled={!scope || ownActive || sending || busy} onClick={openPicker}>从题集选题</button>
 +            {ownActive ? <button type="button" className="btn ghost" onClick={() => { void post(`/chat/sessions/${encodeURIComponent(id!)}/cancel`, {}).then(() => select(id!)).catch(e => setError((e as Error).message)); }}>停止回答</button> : <button className="btn" disabled={!scope || !message.trim() || sending || busy}>{sending ? '正在发送…' : '发送'}</button>}
 +          </div>
 +        </form>

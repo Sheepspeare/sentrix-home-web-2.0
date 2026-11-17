@@ -95,7 +95,7 @@
       },
       "apps/photobench/web/src/features/chat/ChatView.tsx": {
         "before": null,
-        "after": "eda31c6fa5830814686af94ed10a85cbf39217341a6989a7237bfe83b06021ad"
+        "after": "276f42da166162a0fe1a536c092d04be0cf73f84197008965e941da59ba5c9ef"
       },
       "apps/photobench/web/src/features/interactive/MediaGrid.tsx": {
         "before": null,
@@ -223,7 +223,7 @@
       },
       "apps/photobench/web/src/features/chat/ChatView.tsx": {
         "before": null,
-        "after": "eda31c6fa5830814686af94ed10a85cbf39217341a6989a7237bfe83b06021ad"
+        "after": "276f42da166162a0fe1a536c092d04be0cf73f84197008965e941da59ba5c9ef"
       },
       "apps/photobench/web/src/features/interactive/MediaGrid.tsx": {
         "before": null,
@@ -351,7 +351,7 @@
       },
       "apps/photobench/web/src/features/chat/ChatView.tsx": {
         "before": null,
-        "after": "eda31c6fa5830814686af94ed10a85cbf39217341a6989a7237bfe83b06021ad"
+        "after": "276f42da166162a0fe1a536c092d04be0cf73f84197008965e941da59ba5c9ef"
       },
       "apps/photobench/web/src/features/interactive/MediaGrid.tsx": {
         "before": null,
