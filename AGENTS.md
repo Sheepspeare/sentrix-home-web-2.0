@@ -10,4 +10,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | 统一媒体及单题/聊天固定弹窗已本机验证，待提交后同步100三测评端 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | d2a4fb5/fc7f1a8统一媒体及单题/聊天弹窗已发布100三测评，818前端与真实取消验收通过 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
