@@ -101,6 +101,7 @@ export interface QaItemCardProps {
   onToggle: () => void;
   onOpenImage: (media: MediaLike) => void;
   onOpenJudgeInput: (detail: RunItemDetail) => void;
+  onRetest?: () => void;
   review?: ReviewDraft;
   onReviewChange?: (patch: ReviewDraft) => void;
 }
@@ -114,6 +115,7 @@ export function QaItemCard({
   modelLabel,
   activeRejudge,
   onToggle,
+  onRetest,
   onOpenImage,
   onOpenJudgeInput,
 }: QaItemCardProps) {
@@ -150,6 +152,7 @@ export function QaItemCard({
           ⌄
         </span>
       </button>
+      {onRetest && <div className="qa-retest-actions"><button className="btn ghost compact" onClick={onRetest}>重测本题 / 模型比较</button></div>}
       {open && (
         <div className="qa-expanded">
           {loading ? (

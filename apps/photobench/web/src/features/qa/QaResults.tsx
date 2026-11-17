@@ -61,6 +61,7 @@ export interface QaResultsProps {
    * 点击图片时上抛给组合层的**共享**灯箱（1.0 `:3767` 的根级元素，两个视图共用）。
    * 缺省时为无操作（与 1.0 的灯箱是根级、本切片不持有状态一致）。
    */
+  onRetest?: (summary: RunItemSummary) => void;
   onOpenMedia?: (target: { url: string; name: string }) => void;
 }
 
@@ -71,6 +72,7 @@ export function QaResults({
   reviewFor,
   onReviewChange,
   onOpenMedia,
+  onRetest,
 }: QaResultsProps) {
   const activeRejudge = activeRun?.rejudge ?? null;
   const scoreOptions = scoreChoices({evaluation_summary: activeRun?.summary?.evaluation_summary});
@@ -259,6 +261,7 @@ export function QaResults({
             albumId={albumId}
             modelLabel={modelLabel}
             activeRejudge={activeRejudge}
+            onRetest={onRetest ? () => onRetest(summary) : undefined}
             onToggle={() => void toggleQa(summary)}
             onOpenImage={openImage}
             onOpenJudgeInput={setJudgeItem}

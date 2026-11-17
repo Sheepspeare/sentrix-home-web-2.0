@@ -1885,6 +1885,7 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
         key: state.get(key)
         for key in (
             "run_id",
+            "retest_context",
             "mode",
             "scope_source",
             "scope_build",
@@ -1917,6 +1918,14 @@ def run_list_entry(state: dict[str, Any]) -> dict[str, Any]:
         )
         if state.get(key) is not None
     }
+    if state.get("retest_context"):
+        item: dict[str, Any] = next(iter(state.get("items") or []), {})
+        result["retest_summary"] = {
+            "wall_clock_ms": item.get("wall_clock_ms"),
+            "delivery_recall": item.get("retrieval_recall"),
+            "candidate_recall": item.get("candidate_retrieval_recall"),
+            "answer": item.get("answer"),
+        }
     result.update(execution_metadata(state))
     result["item_count"] = len(state.get("items") or [])
     result["summary"] = {key: summary.get(key) for key in summary_keys if summary.get(key) is not None}

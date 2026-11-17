@@ -1,5 +1,8 @@
 import { defaultScoring, scoringPayload } from './lib/scoring.ts';
-import type { ActiveWorkStatus } from "./api/types.ts";
+import "./features/interactive/interactive.css";
+import { ChatView } from "./features/chat/ChatView.tsx";
+import { RetestDialog } from "./features/interactive/RetestDialog.tsx";
+import type { ActiveWorkStatus, RunItemSummary } from "./api/types.ts";
 /**
  * PhotoBench 前端的组合层（组合根）。
  *
@@ -144,6 +147,7 @@ export function App({ initialLoading = false }: AppProps) {
   const [graphBaselineRunId, setGraphBaselineRunId] = useState("");
   const [suiteRunning, setSuiteRunning] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxTarget | null>(null);
+  const [retestQuestion, setRetestQuestion] = useState<RunItemSummary | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("runs");
   const [loading, setLoading] = useState(initialLoading);
   /** init() 是否已跑完（`loading` 的初值可被 `initialLoading=false` 关掉，不能拿它当判据）。 */
@@ -389,6 +393,8 @@ export function App({ initialLoading = false }: AppProps) {
       }
     : undefined;
 
+  const interactiveModels = { profiles: modelApi.profiles, targets: configApi.config?.vllm_targets || {}, managerUrl: modelApi.vllmManagerUrl, modelEndpoint: modelApi.modelEndpoint };
+  const selectInteractiveRun = (id: string) => { setRetestQuestion(null); setActiveView("runs"); void runs.loadRuns(1); runs.selectRun({ run_id: id }); runs.startPolling(); };
   if (loading) {
     return <Loading />;
   }
@@ -452,16 +458,18 @@ export function App({ initialLoading = false }: AppProps) {
             {/* 1.0 里逐题结果是 `RunDetail` 的 `v-else` 分支，未选中 run 时整块不存在。
                 2.0 拆成两个兄弟组件后忘了这层条件，初始状态会多出一整块
                 「QA 逐题结果 / 筛选结果 0 / 全部 0 条」的空白面板。 */}
+            {runs.activeRun?.retest_context && <div className="retest-origin">单题重测 · 原第 {Number(runs.activeRun.retest_context.source_item_index) + 1} 题 <button className="btn ghost compact" onClick={() => selectInteractiveRun(runs.activeRun!.retest_context!.source_run_id)}>返回原任务</button></div>}
             {runs.activeRun ? (
             <QaResults
               activeRun={runs.activeRun}
               qa={qa}
               resultRef={runs.runDetailRef}
               onOpenMedia={setLightbox}
+              onRetest={setRetestQuestion}
             />
             ) : null}
           </>
-        ) : activeView === "capacity" ? <CapacityReport /> : (
+        ) : activeView === "chat" ? <ChatView sentrixUrl={configApi.sentrixUrl} manifests={configApi.manifests} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onOpenMedia={setLightbox}/> : activeView === "capacity" ? <CapacityReport /> : (
           <QaBrowserView
             sentrixUrl={configApi.sentrixUrl}
             manifests={configApi.manifests}
@@ -469,6 +477,7 @@ export function App({ initialLoading = false }: AppProps) {
           />
         )}
       </main>
+      {retestQuestion && runs.activeRun && <RetestDialog run={runs.activeRun} question={retestQuestion} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onClose={() => setRetestQuestion(null)} onSelectRun={selectInteractiveRun}/>}
       <Lightbox target={lightbox} onClose={() => setLightbox(null)} />
     </>
   );

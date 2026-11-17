@@ -1,0 +1,11 @@
+"""Interactive session provenance; product turns remain the source of raw results."""
+
+from typing import Any, Protocol
+
+
+class ChatStore(Protocol):
+    def list_sessions(self) -> list[dict[str, Any]]: ...
+
+    def load_session(self, session_id: str) -> dict[str, Any]: ...
+
+    def save_session(self, session: dict[str, Any]) -> None: ...

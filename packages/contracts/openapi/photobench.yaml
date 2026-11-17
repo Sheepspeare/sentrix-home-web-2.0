@@ -3,6 +3,73 @@ info:
   title: PhotoBench
   version: 0.1.0
 paths:
+  /api/v1/runs/{run_id}/retest:
+    post:
+      tags:
+      - suites
+      summary: Start Retest
+      operationId: start_retest_api_v1_runs__run_id__retest_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetestRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetestResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/retests:
+    get:
+      tags:
+      - suites
+      summary: List Retests
+      operationId: list_retests_api_v1_runs__run_id__retests_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: qa_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Qa Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Retests Api V1 Runs  Run Id  Retests Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/runs:
     post:
       tags:
@@ -436,6 +503,132 @@ paths:
                 type: object
                 additionalProperties: true
                 title: Response Preview Scoring Api V1 Runs  Run Id  Scoring Preview
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions:
+    get:
+      tags:
+      - chat
+      summary: List Chats
+      operationId: list_chats_api_v1_chat_sessions_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response List Chats Api V1 Chat Sessions Get
+    post:
+      tags:
+      - chat
+      summary: Create Chat
+      operationId: create_chat_api_v1_chat_sessions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCreateRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}:
+    get:
+      tags:
+      - chat
+      summary: Get Chat
+      operationId: get_chat_api_v1_chat_sessions__session_id__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/turns:
+    post:
+      tags:
+      - chat
+      summary: Send Chat
+      operationId: send_chat_api_v1_chat_sessions__session_id__turns_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/cancel:
+    post:
+      tags:
+      - chat
+      summary: Cancel Chat
+      operationId: cancel_chat_api_v1_chat_sessions__session_id__cancel_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Chat Api V1 Chat Sessions  Session Id  Cancel
                   Post
         '422':
           description: Validation Error
@@ -3040,6 +3233,87 @@ components:
       - missing
       - signals
       title: CaseReference
+    ChatCreateRequest:
+      properties:
+        scope_id:
+          type: string
+          minLength: 1
+          title: Scope Id
+        model:
+          anyOf:
+          - $ref: '#/components/schemas/ModelSelection'
+          - type: 'null'
+        message:
+          type: string
+          maxLength: 2000
+          title: Message
+          default: ''
+        album_id:
+          type: string
+          title: Album Id
+          default: ''
+        qa_set:
+          type: string
+          title: Qa Set
+          default: ''
+        qa_id:
+          type: string
+          title: Qa Id
+          default: ''
+      type: object
+      required:
+      - scope_id
+      title: ChatCreateRequest
+    ChatMessageRequest:
+      properties:
+        message:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Message
+      type: object
+      required:
+      - message
+      title: ChatMessageRequest
+    ChatSessionResponse:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        scope_id:
+          type: string
+          title: Scope Id
+        status:
+          type: string
+          title: Status
+        source:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Source
+        turns:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Turns
+        items:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Items
+      additionalProperties: true
+      type: object
+      required:
+      - session_id
+      - scope_id
+      - status
+      - turns
+      title: ChatSessionResponse
     ComparisonEvidenceSide:
       properties:
         index:
@@ -3675,6 +3949,30 @@ components:
       additionalProperties: true
       type: object
       title: MemoryObservation
+    ModelSelection:
+      properties:
+        profile:
+          type: string
+          title: Profile
+          default: __current__
+        target_id:
+          type: string
+          title: Target Id
+          default: ''
+        base_url:
+          type: string
+          title: Base Url
+          default: ''
+        manager_url:
+          type: string
+          title: Manager Url
+          default: ''
+        endpoint_model:
+          type: string
+          title: Endpoint Model
+          default: ''
+      type: object
+      title: ModelSelection
     PhaseMetricsProjection:
       properties:
         agent_completed:
@@ -3852,6 +4150,42 @@ components:
       - difficulty
       - special
       title: QaTaxonomyResponse
+    RetestRequest:
+      properties:
+        qa_id:
+          type: string
+          minLength: 1
+          title: Qa Id
+        model:
+          anyOf:
+          - $ref: '#/components/schemas/ModelSelection'
+          - type: 'null'
+        scoring_profile:
+          type: string
+          title: Scoring Profile
+          default: ''
+        scoring_batch:
+          type: string
+          title: Scoring Batch
+          default: ''
+      type: object
+      required:
+      - qa_id
+      title: RetestRequest
+    RetestResponse:
+      properties:
+        run_id:
+          type: string
+          title: Run Id
+        retest_context:
+          additionalProperties: true
+          type: object
+          title: Retest Context
+      type: object
+      required:
+      - run_id
+      - retest_context
+      title: RetestResponse
     RunItemObservation:
       properties:
         display_question:
@@ -3996,6 +4330,12 @@ components:
       title: RunItemsResponse
     RunMetricsResponse:
       properties:
+        retest_context:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Retest Context
         read_revision:
           anyOf:
           - type: string

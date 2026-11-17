@@ -324,6 +324,7 @@ def export_sft(
         )
     return {
         "run_id": state.get("run_id"),
+        **({"retest_context": state["retest_context"]} if state.get("retest_context") else {}),
         "scoring_profile": state.get("selected_scoring_profile"),
         "scoring_batch": state.get("selected_scoring_batch"),
         "scoring_summary": (state.get("summary") or {}).get("selected_scoring"),

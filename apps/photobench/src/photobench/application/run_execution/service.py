@@ -247,6 +247,8 @@ class RunRequest:
     prior_items: tuple[Mapping[str, Any], ...] = ()
     repair_missing_judges: bool = False
     resume_context: Mapping[str, Any] | None = None
+    retest_context: Mapping[str, Any] | None = None
+    switch_model: bool = False
     frozen_qa_snapshot: Mapping[str, Any] | None = None
     import_timeout: int = 7200
     pipeline_timeout: int = 86400
@@ -433,6 +435,17 @@ class RunExecution:
             except Exception as exc:  # noqa: BLE001
                 state.set("cancel_vllm_stop_error", str(exc)[:300])
 
+    def prepare_interactive_model(self, request: RunRequest, cancel: threading.Event) -> dict[str, Any]:
+        """Prepare and verify a model without creating an evaluation result."""
+        state = RunState({"phases": {}})
+        state.cancel_event = cancel
+        self._state, self._request = state, request
+        self._cancel_wait(0)
+        state.phase_start("model_deploy")
+        self._phase_model_deploy(state, request)
+        self._cancel_wait(0)
+        return state.snapshot()
+
     def prepare(self, request: RunRequest) -> RunState:
         """创建并持久化 ``pending`` 状态，供后台线程开始前的读侧使用。
 
@@ -469,6 +482,7 @@ class RunExecution:
                 "sentrix_url": request.sentrix_url,
                 "model_base_url": request.model_base_url,
                 "input_integrity": None,
+                "retest_context": copy.deepcopy(request.retest_context),
                 "status": "failed",
                 "failed_phase": "initialization",
                 "telemetry_history_enabled": self.telemetry_history_enabled,
@@ -569,7 +583,8 @@ class RunExecution:
                 phase(state, request)
                 state.persist()
                 if (
-                    request.recover_pipeline and name == "pipeline_processing"
+                    request.recover_pipeline
+                    and name == "pipeline_processing"
                     and (state.get("phases") or {}).get(name, {}).get("status") != "done"
                 ):
                     raise RuntimeError("pipeline recovery is incomplete; QA has not started")
@@ -714,6 +729,7 @@ class RunExecution:
             "qa_snapshot": snapshot,
             "qa_validation": preflight,
             "resume_context": copy.deepcopy(request.resume_context),
+            "retest_context": copy.deepcopy(request.retest_context),
             "metrics_contract_version": 2,
             "build_revision": self.runtime_snapshot.build_revision
             if self.runtime_snapshot
@@ -857,7 +873,11 @@ class RunExecution:
                 live["history_enabled"] = history_enabled
                 live["statistics_mode"] = "streaming_v1"
                 apply_live_sample(
-                    live, sample, phase, label, tail=LIVE_TELEMETRY_TAIL_POINTS,
+                    live,
+                    sample,
+                    phase,
+                    label,
+                    tail=LIVE_TELEMETRY_TAIL_POINTS,
                     record_history=history_enabled,
                 )
                 if sample.get("llama_server_args") and not state.data.get("llama_server_args"):
@@ -952,7 +972,15 @@ class RunExecution:
         占位——**两个分支都要做**：没有 Manager 的「外部端点」正是 153 上的形态，
         而 2.0 的助手用哪个模型只由它自己的 ``vlm_base_url`` 决定，与有没有 Manager 无关。
         """
-        if request.mode == "reuse" or request.model_profile == "__current__" or not request.manager_url:
+        if (
+            (request.mode == "reuse" and not request.switch_model)
+            or request.model_profile == "__current__"
+            or not request.manager_url
+        ):
+            if request.switch_model and request.endpoint_model:
+                models = self.inference.list_models().get("models") or []
+                if not models or models[0] != request.endpoint_model:
+                    raise ValueError("所选模型与产品端点实际使用的模型不一致，请选择该模型的专用端点")
             state.phase_done(
                 "model_deploy",
                 {
@@ -1044,13 +1072,20 @@ class RunExecution:
                 "error": "sentrix process controller is not wired",
                 "restarted": False,
             }
-        outcome = self.sentrix_switch.ensure_endpoint(request.model_base_url)
-        if not outcome.ok:
-            raise RuntimeError(f"could not point Sentrix at {outcome.endpoint or '(none)'}: {outcome.error}")
-        result = outcome.to_state()
+        observed = self.client.diagnostics() if request.switch_model else {}
+        actual = str((observed.get("runtime_configuration") or {}).get("vlm_base_url") or "")
+        if request.switch_model and _same_model_endpoint(actual, request.model_base_url):
+            result = {"ok": True, "restarted": False, "endpoint": actual, "reason": "verified_live_endpoint"}
+        else:
+            outcome = self.sentrix_switch.ensure_endpoint(request.model_base_url)
+            if not outcome.ok:
+                raise RuntimeError(
+                    f"could not point Sentrix at {outcome.endpoint or '(none)'}: {outcome.error}"
+                )
+            result = outcome.to_state()
+            observed = self.client.diagnostics() if self.runtime_snapshot is not None else {}
         if self.runtime_snapshot is not None:
             expected = self.runtime_snapshot.connection()
-            observed = self.client.diagnostics()
             effective = observed.get("runtime_configuration")
             if not isinstance(effective, dict):
                 raise RuntimeError("Sentrix did not report effective runtime configuration")
@@ -1807,7 +1842,9 @@ class RunExecution:
         process = self.client.recover_pipeline if request.recover_pipeline else self.client.process_pipeline
         future = self._start_phase_request(
             lambda: process(
-                scope_id=scope_id, asset_ids=asset_ids, timeout=request.pipeline_timeout,
+                scope_id=scope_id,
+                asset_ids=asset_ids,
+                timeout=request.pipeline_timeout,
                 graph_enabled=request.graph_enabled,
             ),
             name="sentrix-pipeline",

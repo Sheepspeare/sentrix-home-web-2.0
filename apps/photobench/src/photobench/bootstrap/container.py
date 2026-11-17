@@ -34,6 +34,7 @@ from photobench.application.config.service import ConfigService
 from photobench.application.datasets.service import DatasetCatalog
 from photobench.application.deploy.service import SentrixModelSwitch
 from photobench.application.error_analysis.service import ErrorAnalysis
+from photobench.application.interactive.chat import ChatService
 from photobench.application.model_profiles.service import ModelProfiles
 from photobench.application.run_execution.service import (
     JudgeSettings,
@@ -47,6 +48,7 @@ from photobench.application.runs.reports import RunReports
 from photobench.application.runs.suites import RunSuites
 from photobench.application.spaces.service import MemorySpaces
 from photobench.config import Settings
+from photobench.domain.chat.ports import ChatStore
 from photobench.domain.config.ports import ConfigStore, SecretEnvStore
 from photobench.domain.datasets.ports import AlbumSource, QaMetadataSource
 from photobench.domain.deploy.ports import SentrixProcess
@@ -59,7 +61,8 @@ from photobench.domain.runtime.ports import (
     RunRuntimeSnapshot,
     RuntimeProviders,
 )
-from photobench.domain.sentrix.ports import SentrixClient
+from photobench.domain.sentrix.ports import InteractiveSentrixClient, SentrixClient
+from photobench.infrastructure.chat.store import FileChatStore
 from photobench.infrastructure.config.env import DotenvSecretStore
 from photobench.infrastructure.config.files import JsonConfigStore, read_build_revision
 from photobench.infrastructure.datasets.albums import JsonAlbumSource
@@ -124,6 +127,8 @@ class Container:
     run_suites: RunSuites
     error_analysis: ErrorAnalysis
     analysis_backend: AnalysisBackend
+    chat_store: ChatStore
+    chat: ChatService
 
     @staticmethod
     def build(settings: Settings) -> Container:
@@ -362,6 +367,21 @@ class Container:
         # 再建一个客户端只会多一份连接池与一套超时默认值。
         datasets = DatasetCatalog(albums=album_source, http=http, config=config)
         spaces = MemorySpaces(http=http, config=config, index=run_index)
+        chat_store: ChatStore = FileChatStore(
+            settings.results_root.with_name(settings.results_root.name + "-chat")
+        )
+
+        def interactive_client(url: str) -> InteractiveSentrixClient:
+            return HttpxSentrixClient(http, lambda: url)
+
+        chat = ChatService(
+            store=chat_store,
+            suites=run_suites,
+            albums=album_source,
+            spaces=spaces,
+            client_for=interactive_client,
+            execution_for=run_execution,
+        )
         return Container(
             settings=settings,
             config_store=config_store,
@@ -390,4 +410,6 @@ class Container:
             run_suites=run_suites,
             error_analysis=error_analysis,
             analysis_backend=analysis_backend,
+            chat_store=chat_store,
+            chat=chat,
         )

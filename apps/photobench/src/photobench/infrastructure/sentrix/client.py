@@ -62,6 +62,20 @@ class HttpxSentrixClient:
     def _url(self, path: str) -> str:
         return f"{self._base_url().rstrip('/')}{API_PREFIX}{path}"
 
+    def get_conversation(self, *, conversation_id: str, timeout: int = 30) -> dict[str, Any]:
+        return dict(
+            self._http.request_json(
+                self._url(f"/assistant/conversations/{_quote(conversation_id)}"), timeout=timeout
+            )
+        )
+
+    def cancel_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]:
+        return dict(
+            self._http.request_json(
+                self._url(f"/assistant/turns/{_quote(turn_id)}/cancel"), {}, "POST", timeout
+            )
+        )
+
     def diagnostics(self, *, timeout: int = 10) -> dict[str, Any]:
         body: dict[str, Any] = self._http.request_json(self._url("/diagnostics"), timeout=timeout)
         return body
@@ -213,8 +227,10 @@ class HttpxSentrixClient:
                 self._http.request_json(
                     self._url(f"/pipeline/{kind}"),
                     {
-                        "scope_id": scope_id, "asset_ids": list(asset_ids),
-                        "operation_id": operation_id, "graph_enabled": graph_enabled,
+                        "scope_id": scope_id,
+                        "asset_ids": list(asset_ids),
+                        "operation_id": operation_id,
+                        "graph_enabled": graph_enabled,
                     },
                     "POST",
                     timeout,

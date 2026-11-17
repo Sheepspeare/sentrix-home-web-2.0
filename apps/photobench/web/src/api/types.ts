@@ -426,6 +426,9 @@ export interface Run {
   /** 详情响应的可选内嵌条目；`effectiveRunSummary` 会读它（`App.vue:430`）。 */
   items?: RunItemSummary[];
   [key: string]: unknown;
+  retest_context?: RetestContext;
+  retest_summary?: { wall_clock_ms?: number; delivery_recall?: number; candidate_recall?: number; answer?: string };
+
 }
 
 /** `GET /api/runs` 的信封（`loadRuns` `App.vue:2233`）。 */
@@ -951,4 +954,37 @@ export interface ActiveWorkStatus {
   }>;
   cleanup_status: string;
   errors?: Record<string, string>;
+}
+
+/** One actual endpoint/profile, shared by retests and chat. */
+export interface InteractiveModel {
+  profile?: string;
+  target_id?: string;
+  base_url?: string;
+  manager_url?: string;
+  endpoint_model?: string;
+}
+export interface RetestContext {
+  source_run_id: string;
+  qa_id: string;
+  source_item_index: number;
+  source_scoring_batch_ids: string[];
+  source_rule_versions?: string[];
+}
+export interface ChatSession {
+  session_id: string;
+  created_at: string;
+  title: string;
+  scope_id: string;
+  album_id: string;
+  model_name?: string;
+  model_profile?: string;
+  model_identity?: Record<string, unknown>;
+  model_preparation?: Record<string, unknown>;
+  runtime_snapshot?: Record<string, unknown>;
+  status: string;
+  error?: string;
+  source?: { album_id: string; qa_set: string; row: QaRow; definition_sha256: string } | null;
+  turns?: Array<{ index: number; message: string; turn_id: string; status: string }>;
+  items?: RunItemDetail[];
 }

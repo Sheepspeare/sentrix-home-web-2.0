@@ -21,9 +21,22 @@ from fastapi import APIRouter, Request
 from starlette.concurrency import run_in_threadpool
 
 from photobench.api.deps import get_container, json_body
+from photobench.api.interactive_schema import RetestRequest, RetestResponse
 from photobench.api.metrics_schema import WorkStatusResponse
 
 router = APIRouter(tags=["suites"])
+
+
+@router.post("/runs/{run_id}/retest", status_code=202, response_model=RetestResponse)
+async def start_retest(request: Request, run_id: str, payload: RetestRequest) -> dict[str, Any]:
+    return await run_in_threadpool(
+        get_container(request).run_suites.start_retest, run_id, payload.model_dump(exclude_defaults=True)
+    )
+
+
+@router.get("/runs/{run_id}/retests")
+def list_retests(request: Request, run_id: str, qa_id: str = "") -> dict[str, Any]:
+    return get_container(request).run_suites.list_retests(run_id, qa_id)
 
 
 @router.post("/runs", status_code=202)

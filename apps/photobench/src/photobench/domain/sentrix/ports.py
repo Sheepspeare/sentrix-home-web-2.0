@@ -215,3 +215,11 @@ class CancellableOperations(Protocol):
     def cancel_operation(self, *, kind: str, operation_id: str, timeout: int = 3) -> dict[str, Any]:
         """Request/observe cooperative cancellation; transport/unknown failures propagate."""
         ...
+
+
+class InteractiveSentrixClient(SentrixClient, Protocol):
+    """Conversation reads and cooperative turn cancellation for the chat page."""
+
+    def get_conversation(self, *, conversation_id: str, timeout: int = 30) -> dict[str, Any]: ...
+
+    def cancel_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]: ...

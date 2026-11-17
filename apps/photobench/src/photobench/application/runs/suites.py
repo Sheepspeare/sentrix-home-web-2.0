@@ -45,6 +45,7 @@ from photobench.application.config.service import (
     normalize_model_base_url,
     normalize_service_url,
 )
+from photobench.application.interactive.models import InteractiveModels
 from photobench.application.run_execution.gpu_sampler import GpuSampler
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
 from photobench.application.run_execution.profile_scoring import prepare_batches
@@ -137,6 +138,9 @@ class RunSuites:
         self._index = index
         self._albums = albums
         self._config = config
+        self.interactive_models = InteractiveModels(
+            config, build_revision, self._budget_defaults, lambda: sentrix.diagnostics()
+        )
         self._sentrix = sentrix
         self._http = http
         self._new_execution = new_execution
@@ -452,6 +456,160 @@ class RunSuites:
             "current_model_snapshot": None,
         }
 
+    def frozen_questions(self, saved: Mapping[str, Any]) -> dict[str, Any]:
+        album_id, qa_set = str(saved.get("album_id") or ""), str(saved.get("qa_set") or "")
+        snapshot = saved.get("qa_snapshot")
+        if not isinstance(snapshot, dict) or "rows" not in snapshot:
+            manifest = self._albums.manifest(album_id)
+            digest = (saved.get("input_integrity") or {}).get("qa_sha256")
+            current = self._albums.integrity(album_id, manifest, qa_set)
+            if (
+                not digest
+                or digest != current.get("qa_sha256")
+                or (saved.get("input_integrity") or {}).get("task_action_policy_sha256")
+                != current.get("task_action_policy_sha256")
+            ):
+                raise InvalidRequestError("原测评缺少QA快照，且无法确认题库版本一致，不能续跑")
+            rows = self._albums.qa_rows(album_id, qa_set)
+            snapshot = {
+                "album_id": album_id,
+                "qa_set": qa_set,
+                "rows": rows,
+                "definition_sha256": qa_fingerprint(rows),
+                "source": "verified_legacy_file",
+            }
+        if snapshot.get("definition_sha256") != qa_fingerprint(snapshot["rows"]):
+            raise InvalidRequestError("原测评QA快照校验失败，不能续跑")
+        return copy.deepcopy(snapshot)
+
+    def reserve_interactive(self, key: str, cancel: threading.Event, *, recovery: bool = False) -> None:
+        with self._lock:
+            retained = self._reservations.pop(key, None) if recovery else None
+            try:
+                self._require_inactive()
+            except Exception:
+                if retained is not None:
+                    self._reservations[key] = retained
+                raise
+            self._reservations[key] = cancel
+
+    def release_interactive(self, key: str) -> None:
+        with self._lock:
+            self._reservations.pop(key, None)
+
+    def start_retest(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        self._require_inactive()
+        saved = self._store.load_state(run_id)
+        if saved.get("status") in DIRTY_STATUSES:
+            raise InvalidRequestError("请等待原任务结束后重测")
+        if str(saved.get("sentrix_url") or "").rstrip("/") != self._config.sentrix_url.rstrip("/"):
+            raise InvalidRequestError("请先将产品连接指向原测评实例")
+        scope_id = str(saved.get("scope_id") or "")
+        if not scope_id or (saved.get("scope_build") or {}).get("status") == "incomplete":
+            raise InvalidRequestError("原相册尚未完成构建")
+        connection = self._config.public_runtime_connection_config()
+        embedding = (saved.get("scope_build") or {}).get("embedding")
+        if embedding is not None and embedding != connection.get("embedding"):
+            raise InvalidRequestError("嵌入配置已变化，请使用原相册的嵌入配置")
+        snapshot = self.frozen_questions(saved)
+        qa_id = str(payload.get("qa_id") or "")
+        selected = [(i, r) for i, r in enumerate(snapshot["rows"]) if str(r.get("qa_id")) == qa_id]
+        if len(selected) != 1:
+            raise InvalidRequestError("请选择原任务中的一道题")
+        source_index, row = selected[0]
+        batch_id = str(payload.get("scoring_batch") or "")
+        profile = str(payload.get("scoring_profile") or "")
+        batches = saved.get("scoring_batches") or []
+        if batch_id:
+            selected_batches = [b for b in batches if b["batch_id"] == batch_id]
+        elif profile:
+            selected_batches = [b for b in batches if b["profile_id"] == profile][-1:]
+        else:
+            selected_batches = [
+                b for b in batches if b["batch_id"] in (saved.get("primary_scoring_batch_ids") or [])
+            ]
+            if not selected_batches and batches:
+                selected_batches = [batches[-1]]
+        if (batch_id or profile) and not selected_batches:
+            raise InvalidRequestError("所选评分批次不存在")
+        judges = {json.dumps(b["judge"], sort_keys=True) for b in selected_batches}
+        if len(judges) > 1:
+            raise InvalidRequestError("请选择同一Judge配置的评分批次")
+        primary = selected_batches[0] if selected_batches else None
+        judge = self._frozen_judge_settings(
+            primary["judge"]
+            if primary
+            else {
+                "provider_id": saved.get("judge_provider_id"),
+                "url": saved.get("judge_url"),
+                "model": saved.get("judge_model"),
+            }
+        )
+        context = {
+            "source_run_id": run_id,
+            "qa_id": qa_id,
+            "source_item_index": source_index,
+            "source_qa_definition_sha256": snapshot["definition_sha256"],
+            "source_scoring_batch_ids": [b["batch_id"] for b in selected_batches],
+            "source_rule_versions": [b.get("rule_version") for b in selected_batches],
+        }
+        single = {**snapshot, "rows": [row], "definition_sha256": qa_fingerprint([row])}
+        new_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-retest-{uuid.uuid4().hex[:8]}"
+        diagnostics = (primary or {}).get("diagnostics") or {}
+        request = self.interactive_models.resolve(
+            payload,
+            album_id=str(saved["album_id"]),
+            qa_set=str(saved["qa_set"]),
+            run_id=new_id,
+            mode="reuse",
+            scope_id=scope_id,
+            frozen_qa_snapshot=single,
+            retest_context=context,
+            graph_enabled=saved.get("graph_enabled") is not False,
+            judge_url=judge.judge_url,
+            judge_model=judge.judge_model,
+            judge_provider_id=judge.judge_provider_id,
+            judge_api_key=judge.judge_api_key,
+            judge_prompts={
+                **(saved.get("judge_prompts") or {}),
+                **{k: diagnostics[k] for k in ("task_decision", "evidence") if k in diagnostics},
+            },
+            scoring_configs={b["profile_id"]: b["config"] for b in selected_batches},
+            prior_scoring={
+                "gt_metadata_snapshot": copy.deepcopy(
+                    (primary or {}).get("gt_metadata_snapshot") or saved.get("gt_metadata_snapshot")
+                )
+            },
+            judge_use_gt_images=bool(saved.get("judge_use_gt_images")),
+            evidence_judge_enabled=bool(
+                diagnostics.get("evidence_enabled", saved.get("evidence_judge_enabled"))
+            ),
+            evaluation_options=saved.get("evaluation_options") or {},
+            evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
+        )
+        with self._lock:
+            self._require_inactive()
+            execution = self._new_execution(request)
+            execution.prepare(request)
+            self._active[new_id] = execution
+            thread = threading.Thread(
+                target=self._execute_and_release, args=(new_id, request), name=new_id, daemon=True
+            )
+            self._threads[new_id] = thread
+            thread.start()
+        return {"run_id": new_id, "retest_context": context}
+
+    def list_retests(self, run_id: str, qa_id: str) -> dict[str, Any]:
+        entries = {str(e["run_id"]): e for e in self._index.entries()}
+        entries.update({s["run_id"]: analysis.run_list_entry(s) for s in self.active_states().values()})
+        rows = [
+            e
+            for e in entries.values()
+            if (e.get("retest_context") or {}).get("source_run_id") == run_id
+            and (not qa_id or (e.get("retest_context") or {}).get("qa_id") == qa_id)
+        ]
+        return {"items": sorted(rows, key=lambda e: str(e.get("created_at") or ""), reverse=True)}
+
     # ---- resume -------------------------------------------------------------
 
     def resume_run(self, run_id: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -516,28 +674,7 @@ class RunSuites:
         except KeyError as exc:
             raise InvalidRequestError(f"manifest not found for album: {album_id}") from exc
 
-        snapshot = saved.get("qa_snapshot")
-        if not isinstance(snapshot, dict) or "rows" not in snapshot:
-            manifest = self._albums.manifest(album_id)
-            digest = (saved.get("input_integrity") or {}).get("qa_sha256")
-            current = self._albums.integrity(album_id, manifest, qa_set)
-            if (
-                not digest
-                or digest != current.get("qa_sha256")
-                or (saved.get("input_integrity") or {}).get("task_action_policy_sha256")
-                != current.get("task_action_policy_sha256")
-            ):
-                raise InvalidRequestError("原测评缺少QA快照，且无法确认题库版本一致，不能续跑")
-            rows = self._albums.qa_rows(album_id, qa_set)
-            snapshot = {
-                "album_id": album_id,
-                "qa_set": qa_set,
-                "rows": rows,
-                "definition_sha256": qa_fingerprint(rows),
-                "source": "verified_legacy_file",
-            }
-        if snapshot.get("definition_sha256") != qa_fingerprint(snapshot["rows"]):
-            raise InvalidRequestError("原测评QA快照校验失败，不能续跑")
+        snapshot = self.frozen_questions(saved)
         retry_ids = payload.get("retry_qa_ids", [])
         if (
             not isinstance(retry_ids, list)
@@ -808,7 +945,12 @@ class RunSuites:
                 for key, (thread, event) in self._auxiliary.items()
             ]
             reserved = [
-                {"id": key, "kind": "starting", "worker_alive": True, "cancel_requested": event.is_set()}
+                {
+                    "id": key,
+                    "kind": "chat" if key.startswith("chat-") else "starting",
+                    "worker_alive": True,
+                    "cancel_requested": event.is_set(),
+                }
                 for key, event in self._reservations.items()
             ]
             cleanup = [

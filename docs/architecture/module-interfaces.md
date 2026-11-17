@@ -1423,3 +1423,9 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 `delete_assets` 只解除对应引用，最后引用消失后回收内容；`cleanup_orphans` 在宽限期后清理孤儿。
 外部源文件独立，上传配额按实际文件身份计一次。新实现及离线真实文件验证见
 [共享媒体存储](../runbooks/shared-media-storage.md)。该能力默认生效，无新配置、HTTP 或评分契约。
+
+### 2026-11-17 单题重测与聊天对话
+
+`POST /runs/{id}/retest` 使用原任务冻结定义，仅选择指定 qa_id，复用 scope，显式切换所选模型，生成独立 run。`retest_context` 记录来源、源题号和评分规则；`GET /runs/{id}/retests` 返回关联记录。评分采用所选批次配置和 GT 元数据，执行使用当前产品与规则版本，原答卷和分数保留。
+
+`ChatStore` 负责独立会话文件，`InteractiveSentrixClient` 在产品客户端上增加读取会话和取消回合。`ChatService` 与 RunSuites 共用任务占用和模型准备，固定会话的相册与模型；创建、发送、读取和取消接口位于 `/chat/sessions`。题库来源只发送问题，多轮顺序执行；标准答案及 GT 留在测评侧对照。恢复时对账已接受回合，保留调用事实，不重发生成请求。回合投影复用已有媒体与完整轨迹视图。
