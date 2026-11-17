@@ -1179,6 +1179,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/assistant/speech/status:
+    get:
+      tags:
+      - assistant
+      summary: Speech Status
+      operationId: speech_status_api_v1_assistant_speech_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeechStatus'
+  /api/v1/assistant/speech/transcribe:
+    post:
+      tags:
+      - assistant
+      summary: Transcribe Speech
+      operationId: transcribe_speech_api_v1_assistant_speech_transcribe_post
+      parameters:
+      - name: sample_rate
+        in: query
+        required: true
+        schema:
+          type: integer
+          maximum: 192000
+          minimum: 8000
+          title: Sample Rate
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeechTranscript'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        description: Mono little-endian float32 PCM, normalized [-1,1], 0.2–60 seconds.
   /api/v1/memory-graph/quality:
     get:
       tags:
@@ -4586,6 +4635,14 @@ components:
           - type: string
           - type: 'null'
           title: Updated At
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - id
@@ -5185,6 +5242,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/FamilyMembershipPayload'
           - type: 'null'
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5334,6 +5399,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/FamilyPortraitPayload'
           - type: 'null'
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5472,6 +5545,14 @@ components:
             $ref: '#/components/schemas/FamilyRelationshipPayload'
           type: array
           title: Relationships
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -5536,6 +5617,14 @@ components:
             $ref: '#/components/schemas/FamilyRelationshipPayload'
           type: array
           title: Retracted
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - ok
@@ -7054,6 +7143,14 @@ components:
             type: string
           type: array
           title: Aliases
+        sync_status:
+          type: string
+          title: Sync Status
+          default: synced
+        sync_error:
+          type: string
+          title: Sync Error
+          default: ''
       type: object
       required:
       - entity
@@ -7515,6 +7612,28 @@ components:
       - text
       title: SpeechSegmentPayload
       description: 带视频时间轴的 ASR 片段。
+    SpeechStatus:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - available
+      - message
+      title: SpeechStatus
+    SpeechTranscript:
+      properties:
+        text:
+          type: string
+          title: Text
+      type: object
+      required:
+      - text
+      title: SpeechTranscript
     SplitClusterRequest:
       properties:
         face_instance_id:

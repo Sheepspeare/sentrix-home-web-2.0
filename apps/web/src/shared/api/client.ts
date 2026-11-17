@@ -2062,3 +2062,22 @@ export async function listClientEvents(
   }
   return (await response.json()) as ClientEventPage;
 }
+
+
+export interface SpeechStatus {
+  available: boolean;
+  message: string;
+}
+
+export function getSpeechStatus(signal: AbortSignal): Promise<SpeechStatus> {
+  return request<SpeechStatus>("/assistant/speech/status", { signal });
+}
+
+export function transcribeSpeech(pcm: ArrayBuffer, sampleRate: number, signal: AbortSignal): Promise<{ text: string }> {
+  return request<{ text: string }>(`/assistant/speech/transcribe?sample_rate=${sampleRate}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: pcm,
+    signal,
+  });
+}

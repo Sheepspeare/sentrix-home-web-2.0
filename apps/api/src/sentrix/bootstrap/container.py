@@ -25,6 +25,7 @@ from sentrix.domain.assistant.ports import (
     ConversationRepository,
     PersonDirectory,
     ResultSetRepository,
+    SpeechRecognizer,
     TurnEventBroker,
     TurnRepository,
 )
@@ -121,6 +122,7 @@ from sentrix.infrastructure.models.legacy import (
     LegacyEmbeddingHealthProbe,
 )
 from sentrix.infrastructure.models.reranker import BgeSidecarReranker
+from sentrix.infrastructure.models.sensevoice import SenseVoiceRecognizer
 from sentrix.infrastructure.models.visual_utility import OpenAIVisualEvidenceUtility
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
@@ -243,6 +245,7 @@ class RecoveringEmbeddingHealth:
 @dataclass(frozen=True)
 class Container:
     settings: Settings
+    speech_recognizer: SpeechRecognizer
 
     # 例外：共享连接工厂，不是任何一个端口的实现（多个仓储共用同一个连接来源），
     # 且 database_healthy() 直接需要它。domain 里没有「数据库池」这个概念可依。
@@ -493,6 +496,7 @@ class Container:
         return cls(
             build_revision=read_build_revision(),
             settings=settings,
+            speech_recognizer=SenseVoiceRecognizer(settings.speech_model_dir),
             database=database,
             operation_control=InProcessOperationControl(),
             import_progress=InProcessImportProgressStore(),
