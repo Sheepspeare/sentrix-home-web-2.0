@@ -19,7 +19,7 @@ import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
  *     `qaMediaUrl(albumId, item, media)` 连前两个参数都不读，故此处直接用 `imageUrl`，
  *     不重复实现同一个函数。
  */
-import { imageUrl, inferMediaType, mediaKey, mediaRefs } from "../../api/media.ts";
+import { albumLocalUrl, imageUrl, inferMediaType, mediaKey, mediaRefs } from "../../api/media.ts";
 import type { ConversationTurn, MediaRef, QaRow } from "../../api/types.ts";
 import { isDirectEvidence } from "../../lib/evidence.ts";
 import { qaActionBadge, qaAnswerabilityLabel, qaReferenceLabel, qaTypeLabel } from "../../lib/qaBrowser.ts";
@@ -78,7 +78,9 @@ function mediaFileName(media: MediaRef): string {
 
 export function QaReviewCard({ item, index, albumId = "", onOpenMedia }: QaReviewCardProps) {
   const turns = qaConversationTurns(item);
-  const evidence = qaEvidenceRefs(item);
+  const evidence = qaEvidenceRefs(item).map(media => item.source_protocol && albumId
+    ? { ...media, media_url: albumLocalUrl(albumId, mediaFileName(media), media.media_type) }
+    : media);
   const hasVideo = qaHasVideoEvidence(item);
   const claims = list<Record<string, unknown>>(item.answer_claims);
   const persons = list<Record<string, unknown>>(item.person_references);
