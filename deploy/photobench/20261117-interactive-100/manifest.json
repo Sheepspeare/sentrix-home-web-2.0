@@ -159,7 +159,7 @@
       },
       "apps/photobench/src/photobench/application/runs/suites.py": {
         "before": "de3830cb954896262dfb51d621cf14e93b3bc415abc00fb330ab41e604bda725",
-        "after": "3e93499129eaf74e5de45299dfa7bb9c7bbb58925bebaa86f4f69083b2b36024"
+        "after": "be95a8ed7429b8b3d945bec329d3f2bff61839cabfda0190a4e079a49fc48aa5"
       },
       "apps/photobench/src/photobench/bootstrap/container.py": {
         "before": "c1bd82f2148946c1f9df3ec33b43c2f39b6a4a65d75250df4987214484f9bd9a",
@@ -287,7 +287,7 @@
       },
       "apps/photobench/src/photobench/application/runs/suites.py": {
         "before": "19f0e587425e4baa7f88d48e9db4946cd8002e886092c71e2c8218fbee9b9d3b",
-        "after": "53d53527bd0930d8f46088f48b959fca6e83283975828fae67b63c632bcf5679"
+        "after": "0ba01c494a55bdd97e9d345996c669a4bdd900c7c0e22d1d9ab507667f8eb5ca"
       },
       "apps/photobench/src/photobench/bootstrap/container.py": {
         "before": "c1bd82f2148946c1f9df3ec33b43c2f39b6a4a65d75250df4987214484f9bd9a",

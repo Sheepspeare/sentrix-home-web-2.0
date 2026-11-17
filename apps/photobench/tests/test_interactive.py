@@ -241,6 +241,7 @@ def test_explicit_model_switch_is_not_skipped_for_reused_scope(monkeypatch: pyte
     monkeypatch.setattr(execution, "_wait_model_ready", lambda _: None)
     monkeypatch.setattr(execution, "_probe_model_endpoint", lambda *_: None)
     monkeypatch.setattr(execution, "_model_probe", lambda *_: {})
+    monkeypatch.setattr(execution.inference, "list_models", lambda: {"models": ["qwen"]})
     request = _request(mode="reuse", scope_id="space", switch_model=True, manager_url="http://manager:2")
     execution._phase_model_deploy(RunState({"phases": {}}), request)
     assert "start" in lifecycle.call_names()

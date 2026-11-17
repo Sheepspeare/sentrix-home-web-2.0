@@ -7,3 +7,5 @@
 本地三组合均通过14项交互后端测试、4项页面交互测试、TypeScript与构建。部署/真实页面/结果保持回执见工作区audit/20261117-interactive-evaluation。先本地commit，再同步和重启验收，验收后push。
 
 通过服务专属PHOTOBENCH_BUILD_REVISION记录测评版本，产品build-info保留。
+
+8872/8874使用旧版RunRequest，单题重测不传新版graph_enabled字段；8772保留图记忆选项。三组合测试从独立源码路径运行，确认实际导入各实例组合；14项分别通过。

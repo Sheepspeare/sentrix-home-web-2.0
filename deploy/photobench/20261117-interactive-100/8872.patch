@@ -699,7 +699,7 @@
          self._sentrix = sentrix
          self._http = http
          self._new_execution = new_execution
-@@ -444,6 +448,160 @@
+@@ -444,6 +448,159 @@
              "current_model_snapshot": None,
          }
  
@@ -812,7 +812,6 @@
 +            scope_id=scope_id,
 +            frozen_qa_snapshot=single,
 +            retest_context=context,
-+            graph_enabled=saved.get("graph_enabled") is not False,
 +            judge_url=judge.judge_url,
 +            judge_model=judge.judge_model,
 +            judge_provider_id=judge.judge_provider_id,
@@ -860,7 +859,7 @@
      # ---- resume -------------------------------------------------------------
  
      def resume_run(self, run_id: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
-@@ -506,28 +664,7 @@
+@@ -506,28 +663,7 @@
          except KeyError as exc:
              raise InvalidRequestError(f"manifest not found for album: {album_id}") from exc
  
@@ -890,7 +889,7 @@
          prior_items = tuple(
              item
              for item in (saved.get("items") or [])
-@@ -755,7 +892,12 @@
+@@ -755,7 +891,12 @@
                  for key, (thread, event) in self._auxiliary.items()
              ]
              reserved = [
