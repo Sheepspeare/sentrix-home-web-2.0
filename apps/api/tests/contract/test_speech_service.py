@@ -55,7 +55,7 @@ def test_host_service_loads_once_has_identity_and_rejects_busy_uploads(tmp_path)
 
 def test_missing_weights_fail_startup(tmp_path):
     with (
-        pytest.raises(SpeechUnavailable, match="speech-prepare"),
+        pytest.raises(SpeechUnavailable, match="prepare_sensevoice"),
         TestClient(create_speech_service(tmp_path)),
     ):
         pass

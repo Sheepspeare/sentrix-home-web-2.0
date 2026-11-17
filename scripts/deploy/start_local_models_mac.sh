@@ -57,19 +57,6 @@ wait_http() {
   return 1
 }
 
-# Host-owned service. Missing weights fail before startup; preparation is explicit.
-# Only this deployment entry starts it; individual API launchers never do.
-if ! port_in_use 8107; then
-  SENTRIX_DATA_DIR="$DATA_DIR" nohup .venv/bin/python -m scripts.maintenance.sensevoice_sidecar \
-    > logs/sensevoice.log 2>&1 < /dev/null &
-fi
-wait_http "http://127.0.0.1:8107/health" 120 || {
-  echo "SenseVoice 未就绪，请先 make speech-prepare；查看 logs/sensevoice.log" >&2
-  exit 1
-}
-curl -fsS --max-time 2 http://127.0.0.1:8107/health | .venv/bin/python -c \
-  'import json,sys; h=json.load(sys.stdin); assert h.get("service")=="sentrix-sensevoice" and h.get("available") is True, "8107 is not a ready SenseVoice service"'
-
 if ! port_in_use "$VLM_PORT"; then
   # 权重只在真的要拉起进程时才必须存在：模型已在跑时，这里只是一个重启入口。
   if [ ! -f "$VLM_MODEL" ] || [ ! -f "$VLM_MMPROJ" ]; then
@@ -196,6 +183,26 @@ if [ "$ENABLE_UTILITY_VLM" = "1" ] && [ -f "$UTILITY_VLM_MODEL" ] && [ -f "$UTIL
 else
   echo "跳过 Utility-MRAG surrogate（权重缺失或 SENTRIX_ENABLE_UTILITY_VLM != 1）"
 fi
+
+# SenseVoice follows the shared model stack's port reuse / nohup / health flow.
+if ! port_in_use 8107; then
+  if [ ! -f "$DATA_DIR/models/sensevoice-small/model.int8.onnx" ] || \
+     [ ! -f "$DATA_DIR/models/sensevoice-small/tokens.txt" ]; then
+    echo "SenseVoice 本地权重缺失：$DATA_DIR/models/sensevoice-small" >&2
+    echo "请先运行 .venv/bin/python scripts/deploy/prepare_sensevoice.py 准备权重" >&2
+    exit 1
+  fi
+  echo "启动 SenseVoice-Small (sherpa-onnx) :8107"
+  SENTRIX_DATA_DIR="$DATA_DIR" nohup scripts/deploy/start_sensevoice.sh \
+    > logs/sensevoice.log 2>&1 < /dev/null &
+fi
+wait_http "http://127.0.0.1:8107/health" 120 || {
+  echo "SenseVoice 未就绪；请检查本地权重与 logs/sensevoice.log" >&2
+  tail -60 logs/sensevoice.log >&2
+  exit 1
+}
+curl -fsS --max-time 2 http://127.0.0.1:8107/health | .venv/bin/python -c \
+  'import json,sys; h=json.load(sys.stdin); assert h.get("service")=="sentrix-sensevoice" and h.get("available") is True, "8107 is not a ready SenseVoice service"'
 
 if ! port_in_use "$API_PORT"; then
   echo "启动 Sentrix API :$API_PORT"

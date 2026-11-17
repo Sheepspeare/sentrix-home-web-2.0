@@ -11,16 +11,28 @@
 
 ```sh
 .venv/bin/pip install -e "apps/api[dev]"
-make speech-prepare
+.venv/bin/python scripts/deploy/prepare_sensevoice.py
 ```
 
-准备完成后，在项目根目录的三个终端分别运行：
+权重准备完成后，通过项目现有的模型栈部署入口启动：
 
 ```sh
-make speech-dev  # 主机共享服务，127.0.0.1:8107
-make dev         # 用户 API，8191
-make web-dev     # HTTPS 前端，4274
+scripts/deploy/start_local_models_mac.sh
+# 既有兼容入口也会进入同一模型栈
+# scripts/deploy/start_legacy_mac.sh
 ```
+
+脚本按既有流程检查模型端口、启动后台进程、写入 logs 并等待健康，再启动用户 API。
+SenseVoice 步骤位于图效用模型之后、API 之前，使用 sherpa-onnx，默认端口 8107。
+部署方只需单独启动 SenseVoice 时，使用同目录的模型服务启动器：
+
+```sh
+scripts/deploy/start_sensevoice.sh
+```
+
+这个启动器供模型栈以 nohup 调用，Linux 上由共享 systemd unit 调用，前台 exec
+同一个 sherpa-onnx 服务。已运行的健康服务由模型栈直接复用。开发前端另开终端运行
+`make web-dev`。独立 `make dev` 的用户 API 连接已启动的共享模型服务。
 
 准备脚本将锁定的官方模型安装到 `SENTRIX_DATA_DIR/models/sensevoice-small`，
 默认 `data/models/sensevoice-small`。部署服务可以通过启动命令的 `--model-dir` 指定已准备的目录。
@@ -28,19 +40,19 @@ make web-dev     # HTTPS 前端，4274
 CPU provider、2 个推理线程、自动语种、逆文本规范化。
 1.12.20 的浏览器 WASM 版本已移除；其 Python wheel 不适用于当前开发环境。
 
-`scripts/speech-model.lock.json` 锁定来源、压缩包和逐文件 SHA-256；
+`scripts/deploy/sensevoice-model.lock.json` 锁定来源、压缩包和逐文件 SHA-256；
 已有文件通过校验后不再下载。模型、token、许可和官方中文测试音频保存在数据目录，不提交 Git。
 离线准备可用：
 
 ```sh
-.venv/bin/python scripts/prepare_speech_model.py /path/to/official-model.tar.bz2
+.venv/bin/python scripts/deploy/prepare_sensevoice.py /path/to/official-model.tar.bz2
 ```
 
 共享服务启动时加载一次模型，每段请求创建独立识别 stream。用户 API 的
 `Container.build()` 只构造 `HttpSpeechRecognizer`，启动 `load()` 只探测 HTTP 健康，
 关闭 `close()` 只释放自己的连接池。共享服务由部署方管理，用户退出或重启后继续运行。
 服务先绑定回环端口，再装配和加载模型。同端口重复启动会先报占用错误。
-启动命令固定单进程，运行期不要用 uvicorn 的多 worker/reload 包装该工厂。
+启动命令固定单进程，部署启动统一经过 scripts/deploy/start_sensevoice.sh，运行期不要用 uvicorn 的多 worker/reload 包装该工厂。
 
 服务缺少权重或加载失败会报错并以非零状态退出。启动阶段不联网下载。
 用户 API 在服务不可用时仍可启动，语音状态明确提示，识别请求返回 503。
@@ -79,7 +91,7 @@ CPU provider、2 个推理线程、自动语种、逆文本规范化。
 sudo install -d -o sentrix-models -g sentrix-models /srv/sentrix/shared
 cd /opt/sentrix/current
 sudo -u sentrix-models env SENTRIX_DATA_DIR=/srv/sentrix/shared \
-  .venv/bin/python scripts/prepare_speech_model.py
+  .venv/bin/python scripts/deploy/prepare_sensevoice.py
 sudo install -m 0644 deploy/systemd/sentrix-sensevoice.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now sentrix-sensevoice.service

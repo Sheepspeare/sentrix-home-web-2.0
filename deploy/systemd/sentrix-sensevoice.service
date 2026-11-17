@@ -9,7 +9,7 @@ User=sentrix-models
 Group=sentrix-models
 WorkingDirectory=/opt/sentrix/current
 Environment=SENTRIX_DATA_DIR=/srv/sentrix/shared
-ExecStart=/opt/sentrix/current/.venv/bin/python -m scripts.maintenance.sensevoice_sidecar --port 8107
+ExecStart=/opt/sentrix/current/scripts/deploy/start_sensevoice.sh --port 8107
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=yes

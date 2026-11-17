@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 PIP := .venv/bin/pip
 
-.PHONY: speech-dev speech-prepare help install lint format format-check typecheck arch photobench-check test test-unit test-contract test-integration test-real ci-real coverage check-docs web-check ci dev photobench-dev web-dev install-services start stop restart status
+.PHONY: help install lint format format-check typecheck arch photobench-check test test-unit test-contract test-integration test-real ci-real coverage check-docs web-check ci dev photobench-dev web-dev install-services start stop restart status
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-18s %s\n", $$1, $$2}'
@@ -135,12 +135,6 @@ photobench-web-check: ## PhotoBench 前端门禁：同 web-check 四步
 
 # 本地两个服务必须使用一致的部署预设；只影响开发入口，显式环境/命令行值优先。
 dev photobench-dev: export SENTRIX_DEPLOYMENT_PROFILE ?= $(if $(filter Darwin,$(shell uname -s)),mac,server)
-
-speech-prepare: ## 准备本机后端 SenseVoice-Small 模型（首次下载，之后校验复用）
-	$(PY) scripts/prepare_speech_model.py
-
-speech-dev: ## 独立启动共享 SenseVoice 服务（8106），本地权重需先准备
-	$(PY) -m scripts.maintenance.sensevoice_sidecar
 
 dev: ## 起 2.0 API（8191），连接共享语音服务
 	$(PY) -m uvicorn --factory sentrix.main:create_app --host 0.0.0.0 --port 8191 --app-dir apps/api/src

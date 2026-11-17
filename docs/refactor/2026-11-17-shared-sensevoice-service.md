@@ -18,8 +18,8 @@ systemd unit 和 Mac 模型栈入口。沿用部署方管理进程、Container �
 用户进程没有模型加载回退，也没有子进程启动/停止逻辑。async 公开语音端点中的同步
 健康探测交线程池执行。浏览器接口 schema 及录音、自动发送、失败草稿保护保持兼容。
 
-部署管理员通过独立 systemd unit 管理每台主机一个 SenseVoice 服务，或开发时运行
-make speech-dev。服务启动命令先占用回环监听端口，再装配 FastAPI 与本地模型。
+部署管理员通过独立 systemd unit 管理每台主机一个 SenseVoice 服务，通过 scripts/deploy/start_sensevoice.sh 执行启动，Mac 模型栈由
+start_local_models_mac.sh 按已有端口复用、nohup、日志、健康等待流程调用。服务启动命令先占用回环监听端口，再装配 FastAPI 与本地模型。
 加载失败返回非零退出状态，systemd 按 on-failure 重启。重复同端口启动在模型加载前失败。
 命令固定单进程，没有 reload/workers；主机上所有用户 API 指向同一个服务地址。
 模型仍通过锁定 SHA 的准备脚本提前安装，生产统一准备在 /srv/sentrix/shared/models 下。
@@ -68,3 +68,16 @@ Linux systemd 文件已提供，尚未在远端主机安装；本地验证进程
 再更新用户 API 并分批重启，确保旧 API 中已加载模型的进程退出。单纯切换发行目录不会释放
 存活的旧实例。管理员独立管理共享服务，用户 API unit 无停止共享服务的依赖关系。
 回滚恢复此前 API 进程内实现并重启相应 API，内存开销恢复至每进程一份。数据无迁移。
+
+## 部署入口统一
+
+模型准备逻辑和校验锁移动到 scripts/deploy/prepare_sensevoice.py 与
+scripts/deploy/sensevoice-model.lock.json。共享 systemd 和 Mac 模型栈统一调用
+scripts/deploy/start_sensevoice.sh，由它 exec sherpa-onnx 侧车进程。
+移除此前添加的两个语音 Makefile 目标，部署文档统一使用 scripts/deploy 入口。
+真实多进程测试同样通过该 shell 启动器拉起服务，验证实际部署链路。
+
+部署入口修订验证通过了 30 项后端专项（含 3 项模型栈脚本启动/复用/错误服务拒绝），
+通过 shell 启动器的真实多进程专项通过、零 skip；资源准备脚本校验复用本地模型，
+启动脚本 bash 语法及准备脚本 strict mypy 通过。完整 Mac 模型栈以其他模型已运行的
+替身进行脚本回归，未在本机重新拉起 VLM、BGE、CLIP 等整套模型，也未在远端安装服务。

@@ -7,6 +7,6 @@ The original sherpa-onnx license is retained in LICENSE-sherpa-onnx.txt.
 Source: https://github.com/k2-fsa/sherpa-onnx/tree/v1.12.40
 
 SenseVoice-Small INT8 weights are installed separately under SENTRIX_DATA_DIR.
-Source and checksums: scripts/speech-model.lock.json.
+Source and checksums: scripts/deploy/sensevoice-model.lock.json.
 The preparation script preserves the official model bundle's LICENSE and README.
 Model license: https://github.com/FunAudioLLM/SenseVoice#license

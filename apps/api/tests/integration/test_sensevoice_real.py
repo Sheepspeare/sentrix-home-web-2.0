@@ -21,15 +21,14 @@ def native_model_dir():
 
 @pytest.mark.real_environment
 def test_host_service_shared_by_independent_user_apis(native_model_dir, tmp_path):
-    assert (native_model_dir / "model.int8.onnx").is_file(), "run make speech-prepare first"
+    assert (native_model_dir / "model.int8.onnx").is_file(), "run scripts/deploy/prepare_sensevoice.py first"
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     env = {**os.environ, "PYTHONPATH": str(Path("apps/api/src").resolve())}
     command = [
-        sys.executable,
-        "-m",
-        "scripts.maintenance.sensevoice_sidecar",
+        "bash",
+        "scripts/deploy/start_sensevoice.sh",
         "--port",
         str(port),
         "--model-dir",
