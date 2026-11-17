@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18 06:06｜100局域网不可达，已挂连接恢复监控
+
+06:03两条精确run监控同时因连续三次SSH失败触发，通知不代表测评终态。现场核100 SSH报No route to host/超时，HTTP8874超时，ARP未解析；本机192.168.0.52可连路由器及153，100实际主机/服务状态暂不可读。
+
+最后可信快照为06:00：两轮11034份材料均导入成功、失败0；Q4媒体处理1655/11034，Qwen996/11034，处理失败0；均仍pipeline_processing、尚无答卷。当前不能确认仍在运行或已停止，豆包继续等待Qwen完整验收。
+
+两条同因事件已在本轮合并处理，旧Q4 wait 5342e16f与Qwen wait b8a0d160均消费；若旧Q4通知随后到达，先读state.json，勿重复登记或重启。新连接恢复wait为0ee206e8-a68c-4528-a46b-7c2368d88d7d，本机watch_connection.py/PID60866每60秒只做SSH连通检查，SSH恢复或24小时仍不可达时通知同一主线程。旧精确run watcher已正常发事件退出。
+
+本轮无远端写入/重启/恢复请求；本机新增连接监控7aff59d已语法检查、实际不可达路径验证并commit。100不可达，本轮后续push暂待恢复后核验；已发布上游仍0f61b14。该监控仅本机运行，不向服务器传凭据。证据与精确run见audit/20261118-atm1013-three-model-full/{connectivity-incident.json,state.json,connection-watcher.json}。
+
+连接恢复后先核两run、产品pipeline/Agent、GPU、磁盘；仍运行则注册新精确wait并恢复run watcher；若失败按既定授权保留阶段成果修复续跑，禁止重放launch。Qwen完整1013答卷/评分/两导出验收后才接豆包，三轮比较与最终收尾仍待完成。
+
 ## 2026-11-18｜ATM1013两轮全链路已启动并接入精确监控
 
 按用户授权，100的8872 Qwen3.5-4B Q4_K_M与8874 qwen3.7-plus并行运行。均为atm-bench1013题、full新scope/新记忆、reasoning=true、graph_enabled=true、QA并发4、单题等待3660秒；统一冻结ATM native_v2/v5及豆包2.1 Lite Judge，GT图片/元数据关闭。Qwen正常结束并验收1013答卷、评分及两导出后，8874接doubao-seed-2.1-lite；豆包尚未启动。
