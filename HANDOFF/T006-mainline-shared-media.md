@@ -14,6 +14,7 @@
 用户可刷新后主动发送上一条问题，原失败请求没有重放。133434f推理模式仍待配套发布。
 审计：audit/20261117-chat-revision-fix/README.md；发布资产：deploy/photobench/20261117-chat-revision/。
 首轮版本覆盖顺序及锁检查已修正，只读最终验收通过；两份单次部署脚本禁止重放。
+本轮验收后已快进push至upstream/feature/photobench-evaluation，最终上游核对见审计delivery.json。
 
 
 ## 2026-11-17｜聊天跨产品升级版本校验修复
