@@ -84,3 +84,13 @@ def test_reasoning_http_default_and_explicit_false(monkeypatch, client: TestClie
         ]["reasoning"]["default"]
         is True
     )
+def test_retest_progress_http_dispatch(monkeypatch, client: TestClient) -> None:
+    progress = {
+        "run_id": "single",
+        "status": "running",
+        "item": {"runtime_turns": [{"trace": [{"text": "event"}]}]},
+    }
+    monkeypatch.setattr(client.app.state.container.run_suites, "get_retest_progress", lambda run_id: progress)
+    response = client.get("/api/v1/runs/single/progress")
+    assert response.status_code == 200
+    assert response.json() == progress

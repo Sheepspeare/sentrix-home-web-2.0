@@ -16,8 +16,8 @@ function Fold({ className, summary, children, defaultOpen = false }: {
     if (event.target === event.currentTarget) setOpen(event.currentTarget.open);
   }}><summary>{summary}</summary>{open ? children() : null}</details>;
 }
-export interface DebugTracePanelProps { detail: RunItemDetail; modelLabel?: string }
-export function DebugTracePanel({ detail, modelLabel }: DebugTracePanelProps) {
+export interface DebugTracePanelProps { detail: RunItemDetail; modelLabel?: string; defaultOpen?: boolean }
+export function DebugTracePanel({ detail, modelLabel, defaultOpen = false }: DebugTracePanelProps) {
   const raw = runtimeTurns(detail);
   const planned = conversationTurns(detail);
   const turns: Dict[] = raw.length ? raw : planned as unknown as Dict[];
@@ -27,7 +27,7 @@ export function DebugTracePanel({ detail, modelLabel }: DebugTracePanelProps) {
   const knownCalls = calls.length > 0 || Array.isArray(detail.model_call_metrics) || turns.every(isRuleRefusal);
   const shared = detail.conversation_context_mode === "shared_conversation_id" ||
     (turns.length > 1 && turns.every(turn => turn.conversation_id && turn.conversation_id === turns[0].conversation_id));
-  return <Fold className="call-node debug-trace-node" summary={<>
+  return <Fold className="call-node debug-trace-node" defaultOpen={defaultOpen} summary={<>
     <strong>对话与执行轨迹</strong>
     <span>{turns.length} 轮用户对话 · {knownCalls ? calls.length : "未记录"} 次模型调用 · {toolCount ?? "未记录"} 次工具调用</span>
     {turns.length > 1 ? <span>{shared ? "共享会话上下文" : "会话复用情况未记录"}</span> : null}

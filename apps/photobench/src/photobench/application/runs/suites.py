@@ -881,6 +881,42 @@ class RunSuites:
 
     # ---- 取消 / 删除 --------------------------------------------------------
 
+    def get_retest_progress(self, run_id: str) -> dict[str, Any]:
+        """Read the current retest projection without changing run selection or scores."""
+        state: dict[str, Any] | None
+        with self._lock:
+            execution = self._active.get(run_id)
+            if execution is not None and execution.state is not None:
+                with execution.state.lock:
+                    state = {
+                        key: copy.deepcopy(execution.state.data.get(key))
+                        for key in (
+                            "run_id",
+                            "status",
+                            "current_phase",
+                            "phases",
+                            "interactive_item",
+                            "retest_context",
+                            "model_profile",
+                            "model_name",
+                            "endpoint_model",
+                        )
+                    }
+            else:
+                state = self._state_if_exists(run_id)
+        if state is None:
+            raise KeyError(run_id)
+        if not state.get("retest_context"):
+            raise InvalidRequestError("progress view requires a single-question retest")
+        return {
+            "run_id": run_id,
+            "status": state.get("status"),
+            "current_phase": state.get("current_phase"),
+            "phases": state.get("phases") or {},
+            "item": state.get("interactive_item"),
+            "model": {key: state.get(key) for key in ("model_profile", "model_name", "endpoint_model")},
+        }
+
     def cancel_run(self, run_id: str) -> dict[str, Any]:
         """``POST /api/runs/{id}/cancel``（1.0 ``cancel_run`` ``:6879``）。"""
         with self._lock:

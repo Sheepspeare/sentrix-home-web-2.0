@@ -42,12 +42,14 @@ it('selects Manager, configured target and named custom endpoint', () => {
 
 it('retests only the selected question and scoring batch with a different model', async () => {
   post.mockResolvedValue({ run_id: 'single' });
-  const navigate = vi.fn();
-  render(<RetestDialog run={{ run_id: 'original', selected_scoring_profile: 'atm', selected_scoring_batch: 'batch' }} question={{ index: 3, qa_id: 'q4', question: '题目' }} models={models} busy={false} onClose={vi.fn()} onSelectRun={navigate}/>);
+  const close = vi.fn();
+  render(<RetestDialog run={{ run_id: 'original', selected_scoring_profile: 'atm', selected_scoring_batch: 'batch' }} question={{ index: 3, qa_id: 'q4', question: '题目' }} models={models} busy={false} onClose={close}/>);
   expect((screen.getByLabelText('重测推理模式') as HTMLInputElement).checked).toBe(true);
   fireEvent.change(screen.getByLabelText('问答模型'), { target: { value: 'profile:other' } });
   fireEvent.click(screen.getByText('开始重测'));
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith('single'));
+  await screen.findByRole('region', { name: '实时回答与轨迹' });
+  expect(close).not.toHaveBeenCalled();
+  expect(screen.getByRole('dialog')).toBeTruthy();
   expect(post).toHaveBeenCalledWith('/runs/original/retest', {
     qa_id: 'q4', reasoning: true, model: { profile: 'other', base_url: 'http://model/v1', manager_url: 'http://manager' }, scoring_profile: 'atm', scoring_batch: 'batch',
   });
@@ -80,8 +82,96 @@ it('previews GT but sends only the selected question identity', async () => {
 
 it('can disable reasoning for a new retest', async () => {
   post.mockResolvedValue({ run_id: 'plain' });
-  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={vi.fn()} onSelectRun={vi.fn()}/>);
+  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={vi.fn()}/>);
   fireEvent.click(screen.getByLabelText('重测推理模式'));
   fireEvent.click(screen.getByText('开始重测'));
   await waitFor(() => expect(post).toHaveBeenCalledWith('/runs/original/retest', expect.objectContaining({ reasoning: false })));
+});
+
+it('only closes via × and cancels a creation that is still returning its ID', async () => {
+  let resolveStart!: (value: { run_id: string }) => void;
+  post.mockImplementation((path: string) => path.endsWith('/retest')
+    ? new Promise(resolve => { resolveStart = resolve; }) : Promise.resolve({}));
+  const close = vi.fn();
+  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={close}/>);
+  fireEvent.click(screen.getByTestId('interactive-modal-backdrop'));
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('开始重测'));
+  fireEvent.click(screen.getByLabelText('关闭'));
+  expect(close).not.toHaveBeenCalled();
+  resolveStart({ run_id: 'created' });
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/runs/created/cancel', {}));
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+});
+
+it('keeps the retest open on completion and does not cancel a completed run', async () => {
+  post.mockResolvedValue({ run_id: 'done' });
+  api.mockImplementation((path: string) => Promise.resolve(path.endsWith('/progress')
+    ? { status: 'completed', item: { index: 0, final_answer: '完成回答', runtime_turns: [{ index: 0, trace: [{ text: '真实事件' }] }] } }
+    : { items: [] }));
+  const close = vi.fn();
+  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={close}/>);
+  fireEvent.click(screen.getByText('开始重测'));
+  await screen.findByText('完成回答');
+  expect(screen.getByRole('dialog')).toBeTruthy();
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText('关闭'));
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+  expect(post.mock.calls.filter(([path]) => String(path).endsWith('/cancel'))).toHaveLength(0);
+});
+
+it('shows cancellation errors and keeps the dialog open for retry', async () => {
+  post.mockImplementation((path: string) => path.endsWith('/cancel')
+    ? Promise.reject(new Error('服务暂不可用')) : Promise.resolve({ run_id: 'active' }));
+  api.mockImplementation((path: string) => Promise.resolve(path.endsWith('/progress') ? { status: 'running' } : { items: [] }));
+  const close = vi.fn();
+  render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={close}/>);
+  fireEvent.click(screen.getByText('开始重测'));
+  await screen.findByText('重测进行中…');
+  fireEvent.click(screen.getByLabelText('关闭'));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('alert').textContent).toContain('取消失败');
+  expect(close).not.toHaveBeenCalled();
+  post.mockResolvedValue({});
+  fireEvent.click(screen.getByLabelText('关闭'));
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+});
+
+it('updates running events in place without collapsing the trace panel', async () => {
+  post.mockResolvedValue({ run_id: 'live' });
+  let count = 0;
+  api.mockImplementation((path: string) => Promise.resolve(path.endsWith('/progress')
+    ? { status: ++count === 1 ? 'running' : 'completed', item: { index: 0, runtime_turns: [{ index: 0, message: '提问', trace: [{ text: count === 1 ? '检索开始' : '检索完成' }] }] } }
+    : { items: [] }));
+  const close = vi.fn();
+  const { container } = render(<RetestDialog run={{ run_id: 'original' }} question={{ index: 0, qa_id: 'q1' }} models={models} busy={false} onClose={close}/>);
+  fireEvent.click(screen.getByText('开始重测'));
+  await screen.findByText('检索开始');
+  const trace = document.querySelector('.debug-trace-node') as HTMLDetailsElement;
+  expect(trace.open).toBe(true);
+  trace.open = false; fireEvent(trace, new Event('toggle'));
+  await screen.findByText('检索完成', {}, { timeout: 3000 });
+  expect(document.querySelector('.debug-trace-node')).toBe(trace);
+  expect(trace.open).toBe(false);
+  expect(close).not.toHaveBeenCalled();
+  expect(container.childElementCount).toBe(0); // Rendered through a portal, outside the QA list.
+});
+
+it('cancels a running chat on × while backdrop and Escape keep it open', async () => {
+  post.mockImplementation((path: string) => Promise.resolve(path.endsWith('/cancel') ? {} : {
+    session_id: 'live-chat', scope_id: 'scope', status: 'running', turns: [], items: [], album_id: 'album',
+  }));
+  render(<ChatView sentrixUrl="http://product" manifests={[]} models={models} busy={false} onOpenMedia={vi.fn()}/>);
+  await screen.findByRole('option', { name: '相册' });
+  fireEvent.change(screen.getByLabelText('聊天问题'), { target: { value: '测试取消' } });
+  fireEvent.click(screen.getByText('发送'));
+  await screen.findByText('停止回答');
+  fireEvent.click(screen.getByTestId('interactive-modal-backdrop'));
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeTruthy();
+  fireEvent.click(screen.getByLabelText('关闭'));
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/chat/sessions/live-chat/cancel', {}));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(screen.getByText('打开对话与轨迹')).toBeTruthy();
 });

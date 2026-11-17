@@ -36,9 +36,9 @@ describe("QaItemCard · 工具召回图与模型使用图是两个口径", () =>
       // 故意不给 predicted_*：模型没有显式交付。
     });
 
-    expect(screen.getByText("工具召回图片（1）")).not.toBeNull();
-    expect(screen.getByText("模型使用图片（0）")).not.toBeNull();
-    expect(screen.getByText("回答依据图片为空（模型未选择交付图）")).not.toBeNull();
+    expect(screen.getByText("工具召回候选媒体（1）")).not.toBeNull();
+    expect(screen.getByText("模型交付媒体（0）")).not.toBeNull();
+    expect(screen.getByText("模型未交付媒体")).not.toBeNull();
 
     // 候选图只出现在召回区一次——若交付回退到候选，这里会变成 2。
     expect(screen.getAllByAltText("cand.jpg")).toHaveLength(1);
@@ -51,9 +51,9 @@ describe("QaItemCard · 工具召回图与模型使用图是两个口径", () =>
       predicted_media: [{ media_type: "image", media_id: "used.jpg", asset_id: "used-1", file_name: "used.jpg" }],
     });
 
-    expect(screen.getByText("工具召回图片（0）")).not.toBeNull();
+    expect(screen.getByText("工具召回候选媒体（0）")).not.toBeNull();
     expect(screen.getByText("检索未返回可识别媒体")).not.toBeNull();
-    expect(screen.getByText("模型使用图片（1）")).not.toBeNull();
+    expect(screen.getByText("模型交付媒体（1）")).not.toBeNull();
     expect(screen.getAllByAltText("used.jpg")).toHaveLength(1);
   });
 
@@ -65,8 +65,8 @@ describe("QaItemCard · 工具召回图与模型使用图是两个口径", () =>
       predicted_media: [{ media_type: "image", media_id: "used.jpg", asset_id: "used-1", file_name: "used.jpg" }],
     });
 
-    expect(screen.getByText("工具召回图片（1）")).not.toBeNull();
-    expect(screen.getByText("模型使用图片（1）")).not.toBeNull();
+    expect(screen.getByText("工具召回候选媒体（1）")).not.toBeNull();
+    expect(screen.getByText("模型交付媒体（1）")).not.toBeNull();
     expect(screen.getByAltText("cand.jpg")).not.toBeNull();
     expect(screen.getByAltText("used.jpg")).not.toBeNull();
   });
@@ -172,4 +172,36 @@ it('ATM仅展示原生题型，评测端行为诊断单独注明来源', () => {
   expect(tags.textContent).not.toContain('answerability:');
   expect(tags.textContent).toContain('native-tag');
   expect(screen.getByText('公共行为诊断（评测端）')).toBeTruthy();
+});
+
+it('混合图视频和邮件统一放左侧，右侧GT去重', () => {
+  const source = { source_type: 'email', source_id: 'email1', title: '酒店确认', asset_id: 'e1' };
+  const {container} = renderCard({ index: 0, reference_answer: '标准金额',
+    retrieved_candidate_media: [{ media_type: 'image', media_id: 'i.jpg', file_name: 'i.jpg' }, { media_type: 'video', media_id: 'v.mp4', file_name: 'v.mp4' }],
+    predicted_media: [{ media_type: 'video', media_id: 'v.mp4', file_name: 'v.mp4' }],
+    retrieved_source_refs: [source], predicted_source_refs: [source], attachments: [source],
+    retrieval_source_refs: [source], answer_evidence_source_refs: [source],
+  });
+  const left = container.querySelector('.item-body > div:first-child')!;
+  const right = container.querySelector('.qa-reference-column')!;
+  expect(within(left as HTMLElement).getByText('工具召回候选媒体（3）')).toBeTruthy();
+  expect(within(left as HTMLElement).getByText('模型交付媒体（2）')).toBeTruthy();
+  expect(left.querySelectorAll('video')).toHaveLength(2);
+  expect(within(right as HTMLElement).getByText('检索 GT 媒体（1）')).toBeTruthy();
+  expect(within(right as HTMLElement).getAllByText('邮件 · 酒店确认')).toHaveLength(1);
+  expect(right.querySelectorAll('.source-grid')).toHaveLength(1);
+  expect(screen.queryByText('检索 GT 邮件/文档')).toBeNull();
+  expect(screen.queryByText('答案证据 GT 邮件/文档')).toBeNull();
+});
+
+it('只在题目展开后显示并排的重测和Judge按钮', () => {
+  const props = { summary: { index: 0 }, detail: { index: 0 }, loading: false, albumId: 'a', modelLabel: 'm',
+    activeRejudge: null, onToggle: () => {}, onOpenImage: () => {}, onOpenJudgeInput: () => {}, onRetest: () => {} };
+  const { rerender } = render(<QaItemCard {...props} open={false}/>);
+  expect(screen.queryByRole('button', { name: /重测本题/ })).toBeNull();
+  rerender(<QaItemCard {...props} open/>);
+  const retest = screen.getByRole('button', { name: /重测本题/ });
+  const judge = screen.getByRole('button', { name: /JUDGE 模型输入/ });
+  expect(retest.parentElement).toBe(judge.parentElement);
+  expect(retest.className).toBe(judge.className);
 });

@@ -386,3 +386,38 @@ def test_benchmark_release_identity_is_separate_from_product(
     monkeypatch.setenv("PHOTOBENCH_BUILD_REVISION", "benchmark")
     assert read_build_revision(tmp_path) == "benchmark"
     assert (tmp_path / "build-info.json").read_text() == '{"revision": "product"}'
+def test_retest_progress_reads_live_state_and_saved_cancelled_trace(tmp_path):
+    from types import SimpleNamespace
+
+    from photobench.application.run_execution.state import RunState
+
+    original = saved_run()
+    live = RunState(
+        {
+            "run_id": "single",
+            "status": "running",
+            "retest_context": {"source_run_id": "original"},
+            "interactive_item": {"runtime_turns": [{"index": 0, "trace": [{"text": "search started"}]}]},
+            "model_name": "actual-model",
+            "phases": {"qa_eval": {"status": "running"}},
+        }
+    )
+    store = FakeRunStore({"original": original})
+    suites = _suites(tmp_path, store=store)
+    suites._active["single"] = SimpleNamespace(state=live)
+    progress = suites.get_retest_progress("single")
+    assert progress["status"] == "running"
+    assert progress["model"]["model_name"] == "actual-model"
+    progress["item"]["runtime_turns"].clear()
+    assert len(live.data["interactive_item"]["runtime_turns"]) == 1
+    live.set("status", "cancelled")
+    store.states["single"] = live.data
+    del suites._active["single"]
+    saved = suites.get_retest_progress("single")
+    assert saved["status"] == "cancelled"
+    assert saved["item"]["runtime_turns"][0]["trace"] == [{"text": "search started"}]
+    assert original == saved_run()
+    with pytest.raises(InvalidRequestError):
+        suites.get_retest_progress("original")
+    with pytest.raises(KeyError):
+        suites.get_retest_progress("missing")

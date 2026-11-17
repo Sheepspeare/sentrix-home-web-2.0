@@ -2,7 +2,7 @@ import { defaultScoring, scoringPayload } from './lib/scoring.ts';
 import "./features/interactive/interactive.css";
 import { ChatView } from "./features/chat/ChatView.tsx";
 import { RetestDialog } from "./features/interactive/RetestDialog.tsx";
-import type { ActiveWorkStatus, RunItemSummary } from "./api/types.ts";
+import type { ActiveWorkStatus, Run, RunItemSummary } from "./api/types.ts";
 /**
  * PhotoBench 前端的组合层（组合根）。
  *
@@ -148,7 +148,7 @@ export function App({ initialLoading = false }: AppProps) {
   const [graphBaselineRunId, setGraphBaselineRunId] = useState("");
   const [suiteRunning, setSuiteRunning] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxTarget | null>(null);
-  const [retestQuestion, setRetestQuestion] = useState<RunItemSummary | null>(null);
+  const [retest, setRetest] = useState<{ run: Run; question: RunItemSummary } | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("runs");
   const [loading, setLoading] = useState(initialLoading);
   /** init() 是否已跑完（`loading` 的初值可被 `initialLoading=false` 关掉，不能拿它当判据）。 */
@@ -396,7 +396,7 @@ export function App({ initialLoading = false }: AppProps) {
     : undefined;
 
   const interactiveModels = { profiles: modelApi.profiles, targets: configApi.config?.vllm_targets || {}, managerUrl: modelApi.vllmManagerUrl, modelEndpoint: modelApi.modelEndpoint };
-  const selectInteractiveRun = (id: string) => { setRetestQuestion(null); setActiveView("runs"); void runs.loadRuns(1); runs.selectRun({ run_id: id }); runs.startPolling(); };
+  const selectInteractiveRun = (id: string) => { setActiveView("runs"); void runs.loadRuns(1); runs.selectRun({ run_id: id }); runs.startPolling(); };
   if (loading) {
     return <Loading />;
   }
@@ -469,7 +469,7 @@ export function App({ initialLoading = false }: AppProps) {
               qa={qa}
               resultRef={runs.runDetailRef}
               onOpenMedia={setLightbox}
-              onRetest={setRetestQuestion}
+              onRetest={question => { if (runs.activeRun) setRetest({ run: runs.activeRun, question }); }}
             />
             ) : null}
           </>
@@ -481,7 +481,7 @@ export function App({ initialLoading = false }: AppProps) {
           />
         )}
       </main>
-      {retestQuestion && runs.activeRun && <RetestDialog run={runs.activeRun} question={retestQuestion} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onClose={() => setRetestQuestion(null)} onSelectRun={selectInteractiveRun}/>}
+      {retest && <RetestDialog run={retest.run} question={retest.question} models={interactiveModels} busy={workBusy || runs.hasRunning || suiteRunning} onClose={() => { setRetest(null); void runs.loadRuns(1); }}/>}
       <Lightbox target={lightbox} onClose={() => setLightbox(null)} />
     </>
   );

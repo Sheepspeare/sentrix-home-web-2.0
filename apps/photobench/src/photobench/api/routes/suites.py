@@ -73,6 +73,11 @@ async def start_suite(request: Request) -> dict[str, Any]:
     return await run_in_threadpool(get_container(request).run_suites.start_suite, payload)
 
 
+@router.get("/runs/{run_id}/progress")
+def get_retest_progress(request: Request, run_id: str) -> dict[str, Any]:
+    return get_container(request).run_suites.get_retest_progress(run_id)
+
+
 @router.post("/runs/{run_id}/cancel")
 def cancel_run(request: Request, run_id: str) -> dict[str, Any]:
     """``POST /api/runs/{id}/cancel``（1.0 ``:7770``）。"""

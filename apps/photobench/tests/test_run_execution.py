@@ -2302,3 +2302,75 @@ def test_completed_judging_does_not_make_partial_import_valid(monkeypatch):
     assert state["items"][0]["judge_status"] == "completed"
     assert state["status"] == "completed_with_errors"
     assert state["run_valid"] is state["summary"]["run_valid"] is False
+def test_retest_publishes_real_events_during_poll_and_preserves_each_turn(monkeypatch):
+    import copy
+
+    client = FakeSentrixClient(
+        turns={
+            "turn_1": [
+                {"status": "running", "public_progress": [{"text": "first running"}]},
+                {
+                    "status": "completed",
+                    "result": {"answer": "first answer"},
+                    "public_progress": [{"text": "first done"}],
+                },
+            ],
+            "turn_2": [
+                {"status": "running", "public_progress": [{"text": "second running"}]},
+                {
+                    "status": "completed",
+                    "result": {"answer": "final answer"},
+                    "public_progress": [{"text": "second done"}],
+                },
+            ],
+        }
+    )
+    execution, *_ = _execution(client=client)
+    execution._state = RunState({"status": "running", "items": []})
+    snapshots = []
+    monkeypatch.setattr(
+        execution._state, "persist", lambda: snapshots.append(copy.deepcopy(execution._state.data))
+    )
+    item = execution._evaluate_one(
+        {
+            "qa_id": "multi",
+            "question": "second",
+            "conversation": [{"message": "first"}, {"message": "second"}],
+        },
+        "space",
+        {},
+        _request(retest_context={"source_run_id": "original"}),
+    )
+    assert len(snapshots) == 4
+    assert snapshots[0]["interactive_item"]["runtime_turns"][0]["trace"] == [{"text": "first running"}]
+    second_live = snapshots[2]["interactive_item"]
+    assert [turn["index"] for turn in second_live["runtime_turns"]] == [0, 1]
+    assert second_live["runtime_turns"][0]["answer"] == "first answer"
+    assert second_live["runtime_turns"][1]["trace"] == [{"text": "second running"}]
+    assert second_live["runtime_turns"][1]["context_turn_count"] == 1
+    assert snapshots[0]["items"] == []  # Live projection never writes a premature scored item.
+    assert item["answer"] == "final answer"
+
+
+def test_retest_cancellation_keeps_last_real_progress(monkeypatch):
+    client = FakeSentrixClient(
+        turns={"turn_1": [{"status": "running", "public_progress": [{"text": "last event"}]}]}
+    )
+    execution, *_ = _execution(client=client)
+    state = execution._state = RunState({"status": "running"})
+    original_publish = execution._publish_retest_progress
+
+    def publish_and_cancel(polled, **kwargs):
+        original_publish(polled, **kwargs)
+        state.cancel_event.set()
+
+    monkeypatch.setattr(execution, "_publish_retest_progress", publish_and_cancel)
+    with pytest.raises(RunCancelledError):
+        execution._evaluate_one(
+            {"qa_id": "q", "question": "question"},
+            "space",
+            {},
+            _request(retest_context={"source_run_id": "original"}),
+        )
+    assert state.data["interactive_item"]["runtime_turns"][0]["trace"] == [{"text": "last event"}]
+    assert state.data["phases"]["qa_eval"]["cancelled_operations"][0]["operation_id"] == "turn_1"

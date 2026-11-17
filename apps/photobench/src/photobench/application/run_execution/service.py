@@ -51,6 +51,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Any
 
 from photobench.application.deploy.service import SentrixModelSwitch
@@ -2637,7 +2638,24 @@ class RunExecution:
                 if not turn_id:
                     raise RuntimeError(f"2.0 发起回合没有返回 turn_id：{started_turn}")
                 request_stage = "await_turn"
-                polled = self._await_turn(turn_id, request)
+                if request.retest_context and self._state is not None:
+                    polled = self._await_turn(
+                        turn_id,
+                        request,
+                        on_progress=partial(
+                            self._publish_retest_progress,
+                            record={
+                                "index": turn_index, "message": message,
+                                "qa_id": row.get("qa_id"), "turn_id": turn_id,
+                            },
+                            previous_turns=turn_records,
+                            assets=assets_by_name,
+                            item=item,
+                            started=started,
+                        ),
+                    )
+                else:
+                    polled = self._await_turn(turn_id, request)
                 last_result = polled.get("result") or {}
                 last_progress = polled.get("public_progress") or []
                 turn_records.append(
@@ -2953,7 +2971,45 @@ class RunExecution:
                 self._state.data["cleanup"]["status"] = "stop_pending"
         return facts
 
-    def _await_turn(self, turn_id: str, request: RunRequest) -> dict[str, Any]:
+    def _publish_retest_progress(
+        self,
+        polled: dict[str, Any],
+        *,
+        record: dict[str, Any],
+        previous_turns: list[dict[str, Any]],
+        assets: dict[str, list[dict[str, Any]]],
+        item: dict[str, Any],
+        started: float,
+    ) -> None:
+        from photobench.domain.chat.projection import turn_item
+
+        assert self._state is not None
+        live = {**item, **turn_item(record, polled, assets)}
+        live["runtime_turns"][0].update(
+            {
+                "index": record["index"],
+                "context_turn_count": record["index"],
+                "conversation_id": item.get("conversation_id"),
+            }
+        )
+        live["runtime_turns"] = [*previous_turns, *live["runtime_turns"]]
+        live["tool_trace"], live["execution_trace"] = traces_from_progress(live["runtime_turns"])
+        live["model_call_metrics"] = [
+            {**metric, "conversation_turn": turn["index"]}
+            for turn in live["runtime_turns"]
+            for metric in (turn.get("trace_bundle") or {}).get("model_calls", [])
+        ]
+        live["wall_clock_ms"] = round((time.perf_counter() - started) * 1000)
+        self._state.set("interactive_item", live)
+        self._state.persist()
+
+    def _await_turn(
+        self,
+        turn_id: str,
+        request: RunRequest,
+        *,
+        on_progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         """1.0 ``wait_for_assistant_turn``（``:909``）的 2.0 版。
 
         1.0 的判据是状态字符串落在 ``{"complete","completed","done","success"}``；
@@ -2995,6 +3051,8 @@ class RunExecution:
                     self._cancel_wait(min(backoff, max(0.0, deadline - time.monotonic())))
                     continue
 
+                if on_progress is not None:
+                    on_progress(polled)
                 if str(polled.get("status") or "") not in TURN_PENDING_STATUSES:
                     return polled
                 if time.monotonic() >= deadline:

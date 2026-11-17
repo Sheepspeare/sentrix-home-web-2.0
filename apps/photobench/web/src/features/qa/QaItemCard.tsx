@@ -1,4 +1,4 @@
-import { SourceGrid, SourceMetrics } from "../interactive/SourceGrid.tsx";
+import { CandidateMedia, DeliveredMedia, GroundTruthMedia } from "../interactive/UnifiedMedia.tsx";
 import { ProcessDiagnostics, type ProcessDiagnostic } from "./ProcessDiagnostics.tsx";
 import { ScoringReview } from "./ScoringReview.tsx";
 import { OPEN_PROFILE, ATM_PROFILE } from '../../lib/scoring.ts';
@@ -11,17 +11,14 @@ import { taxonomyLabel, abilityLabel } from "../../lib/qaTaxonomy.ts";
  * 详情先展示回答、媒体和评分；底部按需展开对话、性能与证据账本。
  *
  * **两个媒体区是两件事**（1.0 `:703-711` 的注释原文）：
- *   工具召回图片 `toolRecallMedia`（检索候选） / 模型使用图片 `itemEvidenceMedia`（显式交付，
+ *   工具召回候选媒体 `toolRecallMedia`（检索候选） / 模型交付媒体 `itemEvidenceMedia`（显式交付，
  *   未交付即空、**绝不回退到候选**）。两者都直接 import `lib/evidence.ts`，渲染也分开。
  */
 import type { MediaLike } from "../../api/media.ts";
 import type { RejudgeTask, RunItemDetail, RunItemSummary } from "../../api/types.ts";
 import {
-  itemMedia,
   itemRetrievalMetrics,
   conversationTurns,
-  itemEvidenceMedia,
-  toolRecallMedia,
 } from "../../lib/evidence.ts";
 import {
   completionLabel,
@@ -36,7 +33,6 @@ import {
   turnTerminationLabel,
   taskDecisionLabel,
 } from "../../lib/format.ts";
-import { isVideoMedia, imageUrl, pauseVideoAtEvidenceFrame } from "../../api/media.ts";
 import { itemLayerChain } from "../../lib/graphs.ts";
 import { itemTimingBreakdown, qaLatencySegments } from "../../lib/trace.ts";
 
@@ -48,47 +44,6 @@ type Dict = Record<string, unknown>;
 
 function dict(value: unknown): Dict {
   return typeof value === "object" && value !== null ? (value as Dict) : {};
-}
-
-/** 1.0 `media.file_name || media.media_id || media.image_id`。 */
-function mediaLabel(media: MediaLike): string {
-  return esc(media.file_name) || esc(media.media_id) || esc(media.image_id);
-}
-
-/** 1.0 `:3529-3537` 共用的图片瓦片（含视频证据帧）。 */
-function MediaTile({
-  media,
-  onOpenImage,
-  unmatched = false,
-  unmatchedLabel = "未命中",
-}: {
-  media: MediaLike;
-  onOpenImage: (media: MediaLike) => void;
-  unmatched?: boolean;
-  unmatchedLabel?: string;
-}) {
-  const src = imageUrl(media);
-  return (
-    <div className="image-tile">
-      {isVideoMedia(media) && src ? (
-        <video
-          src={src}
-          controls
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={(event) => pauseVideoAtEvidenceFrame(media, { target: event.currentTarget })}
-        ></video>
-      ) : src ? (
-        <img src={src} alt={esc(media.file_name)} loading="lazy" onClick={() => onOpenImage(media)} />
-      ) : (
-        <span className="image-empty">无媒体</span>
-      )}
-      <span className="image-label">
-        {mediaLabel(media)}
-        {unmatched ? <em> · {unmatchedLabel}</em> : null}
-      </span>
-    </div>
-  );
 }
 
 export interface QaItemCardProps {
@@ -153,7 +108,6 @@ export function QaItemCard({
           ⌄
         </span>
       </button>
-      {onRetest && <div className="qa-retest-actions"><button className="btn ghost compact" onClick={onRetest}>重测本题 / 模型比较</button></div>}
       {open && (
         <div className="qa-expanded">
           {loading ? (
@@ -165,6 +119,7 @@ export function QaItemCard({
               modelLabel={modelLabel}
               onOpenImage={onOpenImage}
               onOpenJudgeInput={onOpenJudgeInput}
+              onRetest={onRetest}
               review={undefined}
               onReviewChange={undefined}
             />
@@ -181,6 +136,7 @@ interface QaItemDetailProps {
   modelLabel: string;
   onOpenImage: (media: MediaLike) => void;
   onOpenJudgeInput: (detail: RunItemDetail) => void;
+  onRetest?: () => void;
   review?: ReviewDraft;
   onReviewChange?: (patch: ReviewDraft) => void;
 }
@@ -191,16 +147,13 @@ function QaItemDetail({
   modelLabel,
   onOpenImage,
   onOpenJudgeInput,
+  onRetest,
 }: QaItemDetailProps) {
   const turns = conversationTurns(detail);
   const chain = itemLayerChain(detail, albumId);
   const taskJudge = dict(detail.task_judge);
   const isAtm = albumId.startsWith("atm-") || Boolean(dict(detail.evaluation).source_qtype);
   const evidenceJudge = dict(detail.evidence_judge);
-  // 两个媒体区：候选 vs 显式交付，分开取、分开渲染。
-  const recallMedia = toolRecallMedia(detail, albumId);
-  const evidenceMedia = itemEvidenceMedia(detail, albumId);
-  const gtMedia = itemMedia(detail, albumId, true);
   const timing = itemTimingBreakdown(detail);
   const qaSegments = qaLatencySegments(detail);
   const toolTrace = hasToolTrace(detail);
@@ -276,66 +229,13 @@ function QaItemDetail({
               <b>{evidenceScoreLabel(detail.evidence_judge)}</b>
             </span> : null}
           </div>
-          <h4>工具召回图片（{recallMedia.length}）</h4>
-          <div className="image-grid">
-            {recallMedia.map((media, mediaIndex) => (
-              <MediaTile
-                key={`${esc(media.asset_id) || esc(media.file_name)}-${mediaIndex}`}
-                media={media}
-                onOpenImage={onOpenImage}
-              />
-            ))}
-            {recallMedia.length === 0 && <span className="muted small">检索未返回可识别媒体</span>}
-          </div>
-          <h4>模型使用图片（{evidenceMedia.length}）</h4>
-          <div className="image-grid">
-            {evidenceMedia.slice(0, 3).map((media, mediaIndex) => (
-              <MediaTile
-                key={`used-${esc(media.asset_id) || esc(media.file_name)}-${mediaIndex}`}
-                media={media}
-                onOpenImage={onOpenImage}
-              />
-            ))}
-            {evidenceMedia.length === 0 && (
-              <span className="muted small">回答依据图片为空（模型未选择交付图）</span>
-            )}
-          </div>
-          {evidenceMedia.length > 3 && (
-            <details className="qa-detail-block">
-              <summary>查看更多使用图片（{evidenceMedia.length - 3}）</summary>
-              <div className="image-grid">
-                {evidenceMedia.slice(3).map((media, mediaIndex) => (
-                  <MediaTile
-                    key={`used-more-${esc(media.asset_id) || esc(media.file_name)}-${mediaIndex}`}
-                    media={media}
-                    onOpenImage={onOpenImage}
-                  />
-                ))}
-              </div>
-            </details>
-          )}
+          <CandidateMedia item={detail} albumId={albumId} onOpenMedia={onOpenImage}/>
+          <DeliveredMedia item={detail} albumId={albumId} onOpenMedia={onOpenImage}/>
         </div>
-        <div>
-          <h4>召回邮件/文档</h4><SourceGrid items={detail.retrieved_source_refs || []} albumId={albumId}/>
-          <h4>实际读取</h4><SourceGrid items={detail.read_source_refs || []} albumId={albumId}/>
-          <h4>最终引用</h4><SourceGrid items={(detail.attachments || detail.predicted_source_refs || []).filter(s => s.source_id)} albumId={albumId}/>
-          {detail.source_metrics && <SourceMetrics metrics={detail.source_metrics} />}
-          <h4>检索 GT 邮件/文档</h4><SourceGrid items={detail.retrieval_source_refs || []} albumId={albumId}/>
-          <h4>答案证据 GT 邮件/文档</h4><SourceGrid items={detail.answer_evidence_source_refs || []} albumId={albumId}/>
+        <div className="qa-reference-column">
+          <GroundTruthMedia item={detail} albumId={albumId} onOpenMedia={onOpenImage}/>
           <h4>正确答案</h4>
           <p>{esc(detail.reference_answer)}</p>
-          <h4>检索 GT 媒体（{gtMedia.length}）</h4>
-          <div className="image-grid">
-            {gtMedia.map((media, mediaIndex) => (
-              <MediaTile
-                key={`${esc(media.asset_id) || `${esc(media.media_type)}-${esc(media.media_id)}`}-${mediaIndex}`}
-                media={media}
-                unmatched={media.matched === false}
-                unmatchedLabel={Number(detail.metrics_contract_version) === 2 ? "未交付" : "未命中"}
-                onOpenImage={onOpenImage}
-              />
-            ))}
-          </div>
           {qualityReason && (
             <>
               <h4>回答质量评分说明</h4>
@@ -408,6 +308,7 @@ function QaItemDetail({
         <div id={`process-log-${detail.qa_id}`}><DebugTracePanel detail={detail} modelLabel={modelLabel} /></div>
       </section>
       <div className="item-footer">
+        {onRetest && <button className="judge-details-trigger" type="button" onClick={onRetest}>重测本题 / 模型比较 <span>↗</span></button>}
         <button className="judge-details-trigger" type="button" onClick={() => onOpenJudgeInput(detail)}>
           JUDGE 模型输入 <span>↗</span>
         </button>
