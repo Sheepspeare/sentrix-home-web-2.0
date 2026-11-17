@@ -24,6 +24,22 @@ def test_reasoning_survives_queued_dispatch_and_expired_lease(isolated_app, monk
     monkeypatch.setattr(threading.Thread, "start", defer_dispatch)
     client = TestClient(isolated_app)
     container = isolated_app.state.container
+    delegate = container.chat_model
+    selected_contexts = []
+
+    class ContextModel:
+        def __init__(self, context_tokens=16384):
+            self.context_tokens = context_tokens
+
+        def for_reasoning(self):
+            return ContextModel(131072)
+
+        def complete(self, messages, tools):
+            selected_contexts.append(self.context_tokens)
+            return delegate.complete(messages, tools)
+
+    container = replace(container, chat_model=ContextModel())
+    isolated_app.state.container = container
     cid = client.post("/api/v1/assistant/conversations", json={"scope_id": "album1"}).json()["id"]
     path = f"/api/v1/assistant/conversations/{cid}/turns"
     headers = {"Idempotency-Key": "reasoning-recovery"}
@@ -48,6 +64,7 @@ def test_reasoning_survives_queued_dispatch_and_expired_lease(isolated_app, monk
     record = container.turn_repository.get(turn_id)
     assert record.attempt_no == 2 and record.status.is_terminal
     assert record.trace["reasoning"] is reasoning
+    assert selected_contexts and set(selected_contexts) == {131072 if reasoning else 16384}
     budget = record.trace["budget"]
     if reasoning:
         assert budget["profile"] == "reasoning"

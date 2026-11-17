@@ -86,6 +86,13 @@ class ChatModel(Protocol):
     def complete(self, messages: Sequence[ChatMessage], tools: Sequence[ToolSpec]) -> ModelReply: ...
 
 
+@runtime_checkable
+class ReasoningChatModel(Protocol):
+    """提供独立的推理回合客户端，普通回合继续使用原预算。"""
+
+    def for_reasoning(self) -> ChatModel: ...
+
+
 class GenerationHealthProbe(Protocol):
     """主模型生成能力的健康探测与最近状态。"""
 

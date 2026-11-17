@@ -101,6 +101,7 @@ class Settings(BaseSettings):
                 "vlm_generation_profile",
                 "vlm_exact_output_budget",
                 "vlm_context_tokens",
+                "vlm_reasoning_context_tokens",
                 "album_workers",
                 "face_providers",
                 "retinaface_providers",
@@ -201,6 +202,9 @@ class Settings(BaseSettings):
     # 发出去一个注定被截断的请求。这和「模型名不写死」是同一条理由：**窗口是部署事实，
     # 不是代码事实**（见本模块开头对 126 个 env flag 的那段）。
     vlm_context_tokens: int = 6144
+    # 推理回合的目标窗口；云端默认128K。单端点未自报容量时，可在这里声明
+    # 云端代理的窗口；本地端点仍以探测到的容量和精确计数合同为上限。
+    vlm_reasoning_context_tokens: int | None = Field(default=None, ge=1)
 
     # 视觉观察走同一个端点（multimodal 可用），模型名同样来自探测。
     # 一张图最多 3 次调用（首轮 / 补全 / 中文化），每次是一次带图的推理，比纯文本慢得多；

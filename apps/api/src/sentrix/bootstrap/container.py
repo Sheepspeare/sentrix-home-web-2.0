@@ -97,7 +97,12 @@ from sentrix.domain.retrieval.ports import (
     VisualEvidenceUtility,
 )
 from sentrix.domain.spaces.ports import SpaceRepository
-from sentrix.infrastructure.assistant.chat_client import MAX_ANSWER_TOKENS, ModelBudget, OpenAIChatModel
+from sentrix.infrastructure.assistant.chat_client import (
+    MAX_ANSWER_TOKENS,
+    REASONING_CONTEXT_TOKENS,
+    ModelBudget,
+    OpenAIChatModel,
+)
 from sentrix.infrastructure.assistant.events import InProcessTurnEventBroker
 from sentrix.infrastructure.assistant.model_endpoint import (
     FixedModelName,
@@ -428,6 +433,7 @@ class Container:
         vision_max_tokens = MAX_ANSWER_TOKENS
         vision_json_mode = settings.vlm_generation_profile == "qwen35_nonthinking"
         vision_generation: dict[str, Any] | None = None
+        reasoning_context = settings.vlm_reasoning_context_tokens or REASONING_CONTEXT_TOKENS
         if settings.llm_profile == "cloud":
             assert settings.llm_config_path is not None
             model_profile = load_model_profile(
@@ -509,6 +515,11 @@ class Container:
             vision_timeout = settings.vlm_timeout_s
             chat_budget = ModelBudget(
                 context_tokens=served_context or settings.vlm_context_tokens,
+            )
+            # 自报容量优先；未报容量的云端代理可以独立声明推理窗口。
+            reasoning_context = min(
+                reasoning_context,
+                served_context or settings.vlm_reasoning_context_tokens or settings.vlm_context_tokens,
             )
         # **嵌入方案是整方案原子切换**（``scheme.SCHEMES``）。默认 wemm；legacy 是
         # 16 GB Mac mini 的回退（chinese-clip 768d + bge-m3 1024d）。两个分支都只
@@ -712,6 +723,7 @@ class Container:
                 budget=chat_budget,
                 payload_config=chat_payload,
                 retry=chat_retry,
+                reasoning_context_tokens=reasoning_context,
             ),
             vlm_observer=OpenAIVlmObserver(
                 vision_base_url,

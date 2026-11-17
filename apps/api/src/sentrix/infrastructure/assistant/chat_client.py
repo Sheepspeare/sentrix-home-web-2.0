@@ -119,6 +119,7 @@ TOOLS_TOKENS_PER_CHAR = 0.48
 # 不传 ``context_tokens`` 时用的窗口。**只是为了测试与本地起得来**，生产必须由
 # ``Settings.vlm_context_tokens`` 给——窗口是部署事实（见该字段的注释）。
 DEFAULT_CONTEXT_TOKENS = 6144
+REASONING_CONTEXT_TOKENS = 131072
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,6 +365,7 @@ class OpenAIChatModel:
         budget: ModelBudget | None = None,
         payload_config: Mapping[str, Any] | None = None,
         retry: Mapping[str, Any] | None = None,
+        reasoning_context_tokens: int | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -380,6 +382,24 @@ class OpenAIChatModel:
         # 云端 payload 能力与重试策略；local 留空 = 现有行为。
         self._payload_config = dict(payload_config or {})
         self._retry = dict(retry or {})
+        self._reasoning_context_tokens = reasoning_context_tokens or self._context_tokens
+
+    def for_reasoning(self) -> OpenAIChatModel:
+        """每回合持有独立预算，保留端点、输出上限与请求参数。"""
+        context_tokens = self._reasoning_context_tokens
+        if self._model.exact_output_budget:
+            context_tokens = self._model.context_tokens
+        return OpenAIChatModel(
+            self._base_url,
+            self._model,
+            timeout_s=self._timeout_s,
+            context_tokens=context_tokens,
+            api_key=self._api_key,
+            budget=replace(self._budget, context_tokens=context_tokens, compaction_ratio=0.95),
+            payload_config=self._payload_config,
+            retry=self._retry,
+            reasoning_context_tokens=context_tokens,
+        )
 
     def complete(self, messages: Sequence[ChatMessage], tools: Sequence[ToolSpec]) -> ModelReply:
         if (
