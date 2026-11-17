@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Any
 
 from photobench.application.run_execution.service import RunExecution, RunRequest
@@ -208,15 +209,22 @@ class ChatService:
         client = self.client_for(session["runtime_snapshot"]["sentrix_url"])
         try:
             if not recovery:
-                prepared = self.execution_for(self._request(session)).prepare_interactive_model(
-                    self._request(session), cancel
-                )
+                # Explicit new messages follow product releases; saved turns keep their provenance.
+                connection = copy.deepcopy(session["runtime_snapshot"])
+                revision = client.diagnostics().get("build_revision")
+                if revision:
+                    connection.update(product_build_revision=revision, required_build_revision=revision)
+                snapshot = RunRuntimeSnapshot(json.dumps(connection), self.suites.interactive_models.revision)
+                request = replace(self._request(session), runtime_snapshot=snapshot)
+                prepared = self.execution_for(request).prepare_interactive_model(request, cancel)
                 self._update(
                     session_id,
                     lambda s: s.update(
                         model_name=prepared.get("model_name"),
                         model_identity=prepared.get("model_identity"),
                         model_preparation=prepared.get("phases"),
+                        turn_runtime_snapshot=connection,
+                        turn_build_revision=snapshot.build_revision,
                     ),
                 )
             if not session.get("conversation_id"):
@@ -278,6 +286,8 @@ class ChatService:
                     "turn_id": turn_id,
                     "message": message,
                     "status": "pending",
+                    "runtime_snapshot": copy.deepcopy(s.get("turn_runtime_snapshot", s["runtime_snapshot"])),
+                    "build_revision": s.get("turn_build_revision", s["build_revision"]),
                     "reasoning": s.get("reasoning") is True,
                     "started_at": now_iso(),
                 }

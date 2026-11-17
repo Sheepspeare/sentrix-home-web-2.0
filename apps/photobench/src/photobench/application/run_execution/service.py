@@ -1124,7 +1124,10 @@ class RunExecution:
                 expected.get("required_build_revision")
                 and observed.get("build_revision") != expected["required_build_revision"]
             ):
-                mismatches.append("build_revision")
+                mismatches.append(
+                    f"build_revision (expected={expected['required_build_revision']}, "
+                    f"actual={observed.get('build_revision')})"
+                )
             if mismatches:
                 raise RuntimeError("Sentrix effective configuration mismatch: " + ", ".join(mismatches))
             result["runtime_configuration"] = effective
