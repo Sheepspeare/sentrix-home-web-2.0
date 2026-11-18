@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18 10:55｜100连接恢复，GPU驱动阻塞原两轮
+
+SSH于10:50恢复，现场内核6.8.0-149-generic没有NVIDIA模块；两张3090在PCI可见，nvidia-smi失败。现有595-open模块覆盖到138，当前595.84；仓库提供149模块，安装模拟涉及16升级/2新增/1旧模块移除。realmagic无sudo免密权限，需管理员在100本机完成驱动恢复，命令及影响见audit/20261118-atm1013-three-model-full/ADMIN-RECOVERY.md。未安装系统包、改启动内核或重启主机。
+
+两原run均interrupted/QA0；Q4 e53f3c原11034份输入全部processed、停finalizing，Qwen 7fcbea为3778/11034、失败0。两端active-work空、recovery-plan均can_resume/剩余1013；同scope原资产、导入、记忆与历史保持。DB图片数包含派生帧，pipeline_receipts running是重启前记录；当前WeMM无CUDA、8291/8294启动失败循环。Q4模型曾CPU装载，恢复时须核空闲/GPU1容量后按原unit恢复CUDA，不能直接开始QA。
+
+旧Q4/Qwen/连接恢复wait全部消费。新GPU恢复wait 4482eaa1-4e6e-4cc3-a353-31e2fd564bef、本机PID15388，每60秒只读检测，两卡恢复/探针连续三失败/24小时通知原线程。ab3ba89先本机语法检查commit，再仅新增100实验目录inspect_reboot.py，远端业务Python编译、真实检查点/DB/GPU路径与SHA验收通过；业务/配置及侧聊16题包未发布。推送状态以gpu-recovery-delivery.json为准。
+
+GPU恢复后先核两卡/磁盘/WeMM/产品/原pipeline与turn，再新注册两wake、一次性resume原run并finish_incomplete_build=true，继续原full的检查点。保留原launch响应及历史，新run_id须写显式活动映射并更新probe；原3660秒/QA4、reasoning/graph和冻结ATM/Judge保持。当前尚未resume。Qwen1013答卷/评分/两导出验收后才接豆包，Hard子集不启动。详细证据见reboot-inspection.json、reboot-recovery-plans.json和state.json。
+
 ## 2026-11-18｜本地ATM小测扩为16题
 
 按用户要求保留原10题，在新版本加入六道涉邮件题，数值/列表/开放各新增2道，合计5/5/6。覆盖单封事实、日期、多邮件金额汇总、证据不足拒答、邮件ID交付和Hard邮件关联照片。新版候选2026.11.18-atm-smoke-16q/atm-bench-smoke16，默认atm-smoke-16q，另有email6及旧10/main6/hard4入口；16图/3视频/9邮件独立物化，官方原行、评分指纹、来源ID/时间/摘要/原对象完整。

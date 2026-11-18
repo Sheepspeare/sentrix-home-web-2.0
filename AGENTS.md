@@ -11,4 +11,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | 100于06:01起不可达；ATM两run最后仍处理，连接恢复wake/PID60866已挂；恢复后按精确run接手 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | 100恢复SSH但149内核缺GPU模块；原ATM两run中断，GPU恢复wait4482eaa1/PID15388已挂 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
