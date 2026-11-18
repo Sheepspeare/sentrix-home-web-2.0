@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18 11:56｜100独立温度与网卡取证已启用
+
+侧聊按用户要求新增30秒采集器，代码a2a41b9先本机验证commit，再同步100逐SHA验收。用户单元sentrix-nic-thermal-recorder.service已enabled/active，PID459313、NRestarts0、Linger=yes；连续样本间隔30.05秒通过。日志/home/realmagic/xy/diagnostics/nic-thermal/logs/samples.jsonl，32MiB×4轮转约128MiB，记录hwmon/GPU温度、两物理网卡累计收发/错误和PCIe/AER状态。Intel enp11s0无温度接口，明确null，另一网口PHY/MAC约56℃不能代替。没有切网口或重启业务；主线程测评与监控继续自行管理。
+
+同主板/型号/固件上游报告指向PCIe异常状态变化，尚无该报告最终确认修复；单独pcie_aspm=off已被报告者更正无效。可先用现有Marvell10G口作对照，尚未实施。完整证据、来源、停止命令及推送回执：产品项目audit/20261118-nic-thermal-recording/{README.md,delivery.json}。
+
 ## 2026-11-18｜题集评分默认值与运行配置回显修复
 
 用户截图显示开放式勾选，但8872/8874两活动续跑90f21f/211c0d实际均冻结atm_qs_v1，未改错评分。根因是启动表单按相册ID的atm-前缀选默认，日期命名相册误判；表单也未绑定运行快照。改为按所选qa_set自动选择，ATM系列默认QS，其他PhotoBench题集默认开放式；保留人工单选/双选。运行中独立读取精确run的冻结配置及GT开关，标明run/题集；查看历史记录时保持活动任务配置。结果与补评初始标准也优先读取冻结值，轮询保留人工选择。未读取到冻结配置时显示读取状态或错误。
