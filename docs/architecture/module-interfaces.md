@@ -1443,3 +1443,9 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 `ChatStore` 负责独立会话文件，`InteractiveSentrixClient` 在产品客户端上增加读取会话和取消回合。`ChatService` 与 RunSuites 共用任务占用和模型准备，固定会话的相册与模型；创建、发送、读取和取消接口位于 `/chat/sessions`。题库来源只发送问题，多轮顺序执行；标准答案及 GT 留在测评侧对照。恢复时对账已接受回合，保留调用事实，不重发生成请求。回合投影复用已有媒体与完整轨迹视图。
 
 测评发布可通过 `PHOTOBENCH_BUILD_REVISION` 独立声明已提交版本，优先于产品根的 build-info；产品版本仍从 diagnostics 单独冻结。
+
+### 2026-11-19 活动测评共享不可变轨迹
+
+ReadRuns 通过装配点注入 RunSuites.active_snapshot。活动任务的评分选择、题目及详情读取
+复用 RunState.snapshot 的一致视图，共享已完成不可变轨迹；可变评分元数据保持隔离。
+同一历史任务的并发完整读取共用在途解析，终态缓存仍限制64MiB。无新HTTP或存储契约。

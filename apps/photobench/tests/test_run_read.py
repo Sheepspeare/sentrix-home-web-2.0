@@ -710,3 +710,64 @@ def test_old_committed_summary_exposes_tool_qs_without_writing_original_files(tm
     assert export_sft(snapshot)["scoring"]["profiles"][ATM]["tool_list_qs"] == expected
     assert expected["total_score"] == 0.5
     assert all(Path(name).read_bytes() == content for name, content in originals.items())
+
+
+def test_active_detail_reads_reuse_live_trace_and_keep_current_scores(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from photobench.application.run_execution.state import RunState
+    from photobench.application.runs.suites import RunSuites
+
+    monkeypatch.setenv("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS", "1")
+    data = _state("live", status="running")
+    data["items"][0]["tool_trace"] = [{"tool": "read_source_text", "result": "原始正文" * 10000}]
+    _write(tmp_path, "live", data)
+    live = RunState(data)
+    suites = RunSuites.__new__(RunSuites)
+    suites._lock = threading.RLock()
+    suites._active = {"live": SimpleNamespace(state=live)}
+    reader = _read_runs(tmp_path)
+    reader._live_snapshot = suites.active_snapshot
+
+    def no_full_disk_read(run_id):
+        raise AssertionError("active reads must not parse another complete checkpoint")
+
+    monkeypatch.setattr(reader._store, "load_state", no_full_disk_read)
+    first = reader.get_run_item("live", 0)["item"]
+    frozen = live.data["items"][0]["tool_trace"]
+    assert first["tool_trace"][0]["result"] is frozen[0]["result"]
+    first["answer"] = "只改读侧"
+    assert live.data["items"][0].get("answer") is None
+    live.data["items"][0]["judge"] = {"score": 1}
+    second = reader.get_run_item("live", 0)["item"]
+    assert second["judge"]["score"] == 1
+    assert second["tool_trace"][0]["result"] is frozen[0]["result"]
+    assert reader.get_run_items("live")["total"] == 2
+    assert suites.active_snapshot("missing") is None
+
+
+def test_concurrent_full_state_reads_share_parse_and_propagate_failure(tmp_path, monkeypatch):
+    import time
+
+    reader = _read_runs(tmp_path)
+    reader._versions = None
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def load(run_id):
+        calls.append(run_id)
+        entered.set()
+        assert release.wait(5)
+        raise ValueError("broken checkpoint")
+
+    monkeypatch.setattr(reader._store, "load_state", load)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(reader._state, "r") for _ in range(4)]
+        assert entered.wait(5)
+        time.sleep(0.05)
+        release.set()
+        for result in futures:
+            with pytest.raises(ValueError, match="broken checkpoint"):
+                result.result()
+    assert calls == ["r"]
+    assert not reader._state_reads

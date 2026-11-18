@@ -99,6 +99,7 @@ class ReadRuns:
         live_states: Callable[[], Mapping[str, dict[str, Any]]] | None = None,
         *,
         history_reads_enabled: bool = True,
+        live_snapshot: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._store = store
         self._history_reads_enabled = history_reads_enabled
@@ -114,6 +115,8 @@ class ReadRuns:
         # 「还在跑的 run」的活状态。**传取值函数而不是快照**，与上面那个
         # ``sentrix_url`` 同一条理由：列表页每次来问都要拿当下的，不是装配那时的。
         self._live_states = live_states
+        self._live_snapshot = live_snapshot
+        self._state_reads: dict[str, Future[dict[str, Any]]] = {}
         self._lock = threading.RLock()
         self._states: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._item_locks = tuple(threading.RLock() for _ in range(64))
@@ -131,6 +134,31 @@ class ReadRuns:
         「这一份是终态」。用例 ``test_a_running_run_is_not_served_from_a_stale_cache``
         钉住它（把 ``not in`` 去掉，用例立刻红）。
         """
+        if self._live_snapshot is not None:
+            live = self._live_snapshot(run_id)
+            if live is not None:
+                return live
+        with self._lock:
+            pending = self._state_reads.get(run_id)
+            leader = pending is None
+            if pending is None:
+                pending = Future()
+                self._state_reads[run_id] = pending
+        if not leader:
+            return pending.result()
+        try:
+            state = self._disk_state(run_id)
+            pending.set_result(state)
+            return state
+        except BaseException as error:
+            pending.set_exception(error)
+            raise
+        finally:
+            with self._lock:
+                self._state_reads.pop(run_id, None)
+
+    def _disk_state(self, run_id: str) -> dict[str, Any]:
+        """Load one committed state; concurrent read paths share this allocation."""
         revision = self._versions.revision(run_id) if self._versions is not None else "legacy"
         with self._lock:
             if self._state_versions.get(run_id) != revision:

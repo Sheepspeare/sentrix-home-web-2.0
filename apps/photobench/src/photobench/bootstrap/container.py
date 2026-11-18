@@ -347,6 +347,7 @@ class Container:
             # 才会在配置被写回之后用上新的地址——与 1.0 的 ``global`` 等价。
             sentrix_url=lambda: config.sentrix_url,
             live_states=run_suites.active_states,
+            live_snapshot=run_suites.active_snapshot,
             history_reads_enabled=config.telemetry_history_enabled,
         )
         reports = RunReports(
