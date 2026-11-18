@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-19｜有限推理预算已激活，两路原scope续评
+
+1008291/8294已独立发布ffec2be，每题真实生成请求100、工具600（搜索100/其他500，搜索计入总额，两个分项互不借额）；收尾在上限内，HTTP重试和工具内VLM共用模型额度，连续失败工具移除。普通非推理行为保持。产品243项、测评71项远端候选通过；恢复配置快照daa1f15本地及100各86项通过，显式升级只替换四个调用上限，原配置来源完整保留。
+
+Q4新run `20261119-013809-2026.11.17-atm-sources-addresses-current-resume-62b2fc`继承92、剩921；Qwen新run `20261119-013722-2026.11.17-atm-sources-addresses-current-resume-842598`继承249、剩764。原scope、历史有效分/失败与取消记录保留，仅未完成题进入新预算；模型/题集/Judge冻结、QA4/3660秒、reasoning/graph保持。两路已出现真实新回合的reasoning-bounded-v1计数，Qwen已完成首批两题。原run快照提交指针SHA经切换与恢复核保持。
+
+Q4按此前授权移至GPU0/PID888621，模型/8100/4槽16K及权重路径保持；切换前GPU0空余13.4GiB。两产品PID891823/892400，测评PID976050/976123；8772/8191及其原PID11560/2371432保持。独立发布未覆盖共享旧根；源码本地commit后同步，局部适配保留、SHA和AST核只增resume_run调用上限快照。
+
+先新wake再各单次resume：Q4 wait bfeae5a2-a58f-418f-88a0-6a537b1fec4b/watcher107，Qwen wait d2a979ad-0e47-4d76-af4a-1ab1ffc9f3ab/watcher99457。精确映射以主实验state.json/checkpoint-watchers.json及本轮resume-watchers.json为准。stage/activate/模型切换/resume-snapshot/两次resume已消费，禁止重放。完整轨迹分离与节点懒加载仍为本机未提交草稿，本轮未发布；既有读侧/冻结轨迹复用已在两测评启用，不能据空闲API毫秒响应断言活动长尾读取完全解决。
+
+证据：产品项目 `audit/20261118-reasoning-bounds-release/README.md`、activation-response.json、resume-snapshot-response.json、actual-turn-budgets.json及两份resume intent/response。后续按新精确run验1013答卷、ATM评分和两导出；Qwen全部验收后才先wake再在8874接实际豆包2.1 Lite独立full，Q4并行。不启动Hard、不发布16题包、不改8772/8191或其他服务器。后续仍本地验证commit→同步100验收→push。
+
 ## 2026-11-18｜懒加载与推理有限预算规划完成，未实施
 
 23:16核验：Q4旧run7955c3因180秒快照持久化等待失败，64份答卷保留；活动续跑3ece8e于23:16为qa_eval/running，70/1013，Agent77、Judge63，worker已确认。Qwen211c0d为qa_eval/running，220/1013、Agent221、Judge218；产品有4个running turn，但active-work接口超时，worker状态未核实。两精确watcher55106/4162仍运行，未重启/恢复/补跑。精确快照见产品项目audit/20261118-atm1013-three-model-full/live-followup-2315.json。
