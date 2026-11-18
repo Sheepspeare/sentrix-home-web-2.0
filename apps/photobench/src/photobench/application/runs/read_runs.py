@@ -50,7 +50,7 @@ _STATE_CACHE_SIZE = 2
 _STATE_CACHE_BYTES = 64 * 1024 * 1024
 
 
-def _object_bytes(value: Any) -> int:
+def _object_bytes(value: Any, *, limit: int | None = None) -> int:
     """Account object graphs once; avoid serializing another full copy for sizing."""
     seen: set[int] = set()
     pending = [value]
@@ -61,6 +61,8 @@ def _object_bytes(value: Any) -> int:
             continue
         seen.add(id(item))
         size += sys.getsizeof(item)
+        if limit is not None and size > limit:
+            return size
         if isinstance(item, dict):
             pending.extend(item.keys())
             pending.extend(item.values())
@@ -140,9 +142,10 @@ class ReadRuns:
                 self._states.move_to_end(run_id)
                 return cached
         state = self._store.load_state(run_id)  # 不存在 -> KeyError，HTTP 层映射成 404
-        weight = _object_bytes(state)
+        terminal = state.get("status") not in NON_TERMINAL_STATUSES
+        weight = _object_bytes(state, limit=_STATE_CACHE_BYTES) if terminal else 0
         if (
-            state.get("status") not in NON_TERMINAL_STATUSES
+            terminal
             and weight <= _STATE_CACHE_BYTES
             and (self._versions is None or self._versions.revision(run_id) == revision)
         ):

@@ -11,9 +11,11 @@ run-execution，要么属于 S9b-3 的 judge。
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Request
+from starlette.concurrency import run_in_threadpool
 
 from photobench.api.deps import get_container
 from photobench.api.metrics_schema import RunItemResponse, RunItemsResponse, RunMetricsResponse
@@ -40,7 +42,7 @@ def list_runs(
 
 
 @router.get("/runs/{run_id}", response_model=RunMetricsResponse, response_model_exclude_unset=True)
-def get_run(
+async def get_run(
     request: Request,
     run_id: str,
     include_history: bool = True,
@@ -48,16 +50,36 @@ def get_run(
     scoring_batch: str = "",
 ) -> dict[str, Any]:
     """1.0 ``:7739``。run 不存在时 ``KeyError`` → 404（handler 在 ``api/errors.py``）。"""
-    if scoring_profile or scoring_batch:
-        return get_container(request).runs.get_run(
-            run_id,
-            include_history=include_history,
-            scoring_profile=scoring_profile,
-            scoring_batch=scoring_batch,
-        )
-    if include_history:
-        return get_container(request).runs.get_run(run_id)
-    return get_container(request).runs.get_run(run_id, include_history=False)
+    # Duplicate polls await one task on the event loop. Waiting inside each
+    # HTTP worker consumes all 40 slots when one large checkpoint is slow.
+    state = request.app.state
+    if not hasattr(state, "run_detail_reads"):
+        state.run_detail_reads = {}
+    reads: dict[tuple[str, bool, str, str], asyncio.Task[dict[str, Any]]] = state.run_detail_reads
+    key = (run_id, include_history, scoring_profile, scoring_batch)
+
+    def read() -> dict[str, Any]:
+        if scoring_profile or scoring_batch:
+            return get_container(request).runs.get_run(
+                run_id,
+                include_history=include_history,
+                scoring_profile=scoring_profile,
+                scoring_batch=scoring_batch,
+            )
+        if include_history:
+            return get_container(request).runs.get_run(run_id)
+        return get_container(request).runs.get_run(run_id, include_history=False)
+
+    async def shared_read() -> dict[str, Any]:
+        try:
+            return await run_in_threadpool(read)
+        finally:
+            reads.pop(key, None)
+
+    task = reads.get(key)
+    if task is None:
+        task = reads[key] = asyncio.create_task(shared_read())
+    return await asyncio.shield(task)
 
 
 @router.get("/runs/{run_id}/process-diagnostics")

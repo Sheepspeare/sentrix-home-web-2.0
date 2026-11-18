@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from photobench.config import Settings
 from photobench.main import create_app
@@ -101,6 +103,45 @@ def test_get_run_returns_the_state_without_items(client: TestClient):
     assert body["item_count"] == 1
     assert "items" not in body
     assert body["summary"]["answer_quality_mean"] == 2.0
+
+
+@pytest.mark.parametrize("fail_first", [False, True])
+def test_slow_duplicate_details_leave_workers_for_live_status(client, monkeypatch, fail_first):
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+    reads = client.app.state.container.runs
+    original = reads.get_run
+
+    def slow_read(*args, **kwargs):
+        calls.append(args[0])
+        entered.set()
+        assert release.wait(5)
+        if fail_first:
+            raise RuntimeError("checkpoint read failed")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(reads, "get_run", slow_read)
+
+    async def exercise():
+        transport = ASGITransport(app=client.app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as http:
+            pending = [asyncio.create_task(http.get("/api/v1/runs/run-a")) for _ in range(48)]
+            try:
+                assert await asyncio.to_thread(entered.wait, 2)
+                await asyncio.sleep(0.1)
+                status = await asyncio.wait_for(http.get("/api/v1/active-work"), timeout=1)
+                assert status.status_code == 200
+                assert calls == ["run-a"]
+            finally:
+                release.set()
+                responses = await asyncio.gather(*pending)
+            assert {r.status_code for r in responses} == ({400} if fail_first else {200})
+
+    asyncio.run(exercise())
+    fail_first = False
+    assert client.get("/api/v1/runs/run-a").status_code == 200
+    assert calls == ["run-a", "run-a"]
 
 
 def test_optional_metrics_projection_preserves_unknown_and_explicit_zero(client: TestClient):

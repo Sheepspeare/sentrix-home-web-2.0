@@ -451,6 +451,30 @@ def test_a_running_run_is_not_served_from_a_stale_cache(results: Path):
     assert reader.get_run("run-b")["status"] == "completed"  # 终态之后走缓存
 
 
+def test_running_state_skips_cache_size_traversal(results: Path, monkeypatch):
+    from photobench.application.runs import read_runs
+
+    def unexpected_size(*args, **kwargs):
+        raise AssertionError("active states are not cache candidates")
+
+    monkeypatch.setattr(read_runs, "_object_bytes", unexpected_size)
+    reader = _read_runs(results)
+    assert reader._state("run-b")["status"] == "running"
+    assert "run-b" not in reader._states
+
+
+def test_cache_size_walk_stops_at_its_admission_limit():
+    from photobench.application.runs.read_runs import _object_bytes
+
+    class Unvisited:
+        def __sizeof__(self):
+            raise AssertionError("walk continued after the size limit")
+
+    assert _object_bytes([Unvisited(), b"x" * 2048], limit=1024) > 1024
+    shared = ["small"]
+    assert _object_bytes([shared, shared], limit=1024) < 1024
+
+
 def test_read_reconciles_saved_validity_without_changing_history(tmp_path: Path):
     original = _state("partial", run_valid=True, phases={"pipeline_processing": {"status": "partial"}})
     _write(tmp_path, "partial", original)
