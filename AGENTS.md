@@ -11,4 +11,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | 100恢复SSH但149内核缺GPU模块；原ATM两run中断，GPU恢复wait4482eaa1/PID15388已挂 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | 100 GPU恢复；f8a75a5独立发布8872/8874，两原scope续跑90f21f/211c0d及精确监控已恢复 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18 11:15｜GPU恢复，ATM1013两轮从原scope续跑
+
+11:06核149内核/595.99.02两张3090可用，WeMM及8291/8294健康。原Q4误CPU装载已按原unit恢复GPU1/PID191317，Q4_K_M、4×16K和Q4_OK验证通过；十条旧pending及其他任务保持。
+
+发现突然重启的状态恢复未写scope_build，原resume接口会拒绝完成未完构建。本机f8a75a5依据中断full/build原阶段判定未完构建，并保留显式finish_incomplete_build和完整导入条件；192项本地、83项远端发布组合及Ruff/格式通过。远端现有型号/清理适配保留，AST核仅resume_run变化。独立复制测评应用至/home/realmagic/xy/experiments/atm1013-20261118/resume-release，仅8872/8874切专属unit，PID194991/194992；原共享源码SHA及8772/8191 PID11560/1497保持。
+
+两次resume各一次成功，原scope/11034导入及阶段成果保持，原中断历史和快照指针SHA不变。活动Q4为20261118-111519-2026.11.17-atm-sources-addresses-current-resume-90f21f，父e53f3c；Qwen为20261118-111529-2026.11.17-atm-sources-addresses-current-resume-211c0d，父7fcbea。均running/pipeline_processing且worker_alive，QA0；Q4材料11034/11034、finalizing，Qwen从3778/11034继续。执行器mode=reuse，属于此次full原scope的检查点续跑；1013题、reasoning/graph、QA4、3660秒及冻结ATM/Judge配置保持，未重新导入。
+
+GPU wait4482eaa1已消费；新Q4 wait7f3c8516-d9f0-48b8-8230-e27245052c75/PID20926，Qwen wait0bda9c0b-9a26-4661-90a8-ed6dd6a08932/PID20927，注册先于恢复，每60秒精确探测活动映射。原launch-response保留，active-runs.json和resume响应明确父子ID。四份脚本逐SHA验收；本地commit→同步验收完成，推送回执见audit/20261118-atm1013-three-model-full/resume-delivery.json。侧聊16题包未发布100。
+
+接手读同目录state.json、README.md、resume-active-runs.json和本次事件，禁止重放安装/模型恢复/resume或原launch脚本。异常保留完成数据继续原scope；Qwen1013答卷/评分/两导出验收后才接豆包独立full新scope，并先注册wake。三轮验收、比较及监控收尾仍待完成。
+
 ## 2026-11-18 10:55｜100连接恢复，GPU驱动阻塞原两轮
 
 SSH于10:50恢复，现场内核6.8.0-149-generic没有NVIDIA模块；两张3090在PCI可见，nvidia-smi失败。现有595-open模块覆盖到138，当前595.84；仓库提供149模块，安装模拟涉及16升级/2新增/1旧模块移除。realmagic无sudo免密权限，需管理员在100本机完成驱动恢复，命令及影响见audit/20261118-atm1013-three-model-full/ADMIN-RECOVERY.md。未安装系统包、改启动内核或重启主机。
