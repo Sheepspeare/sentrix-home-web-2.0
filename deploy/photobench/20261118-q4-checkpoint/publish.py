@@ -74,7 +74,7 @@ def activate(revision):
     generation = json.loads(pointer)["generation"]
     state = json.loads((directory / ".snapshots" / generation / "metadata.json").read_text())["overview"]
     assert state["status"] == "failed" and state["item_count"] == 51
-    assert state["current_phase"] == "qa_eval" and state["scope_id"] == mapping["q4km"]["scope_id"]
+    assert state["failed_phase"] == "qa_eval" and state["scope_id"] == mapping["q4km"]["scope_id"]
     with sqlite3.connect(
         "file:/home/realmagic/xy/atm-bench-20261110/product-data/sentrix.db?mode=ro", uri=True, timeout=10
     ) as db:
