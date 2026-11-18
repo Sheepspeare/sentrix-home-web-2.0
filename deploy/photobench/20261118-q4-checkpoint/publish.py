@@ -36,8 +36,8 @@ def pid(unit):
     ).strip()
 
 
-def api(port, path):
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/{path}", timeout=15) as response:
+def api(port, path, timeout=15):
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/{path}", timeout=timeout) as response:
         return json.load(response)
 
 

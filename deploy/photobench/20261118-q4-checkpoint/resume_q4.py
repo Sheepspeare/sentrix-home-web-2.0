@@ -28,7 +28,7 @@ def resume(wait_id):
     assert not api(8872, "active-work")["work"]
     with urllib.request.urlopen("http://127.0.0.1:8100/v1/models", timeout=15) as response:
         assert json.load(response)["data"][0]["id"] == "qwen3.5-4b-q4_k_m"
-    plan = api(8872, f"runs/{run_id}/recovery-plan")
+    plan = api(8872, f"runs/{run_id}/recovery-plan", timeout=90)
     save("recovery-plan-accepted.json", plan)
     assert plan["can_resume"] and plan["remaining_qa_count"] == 962, plan
     assert not plan["product_version_changed"] and not plan["judge_use_gt_images"]
