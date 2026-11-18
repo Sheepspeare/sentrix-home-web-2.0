@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
@@ -39,7 +40,7 @@ from sentrix.application.retrieval.retrieve_evidence import EvidenceRequest, Ret
 from sentrix.application.retrieval.retrieve_graph import graph_direction, graph_intent
 from sentrix.domain.assistant.evidence_binding import fact_value_type
 from sentrix.domain.assistant.evidence_ledger import EvidenceType
-from sentrix.domain.assistant.models import Attachment
+from sentrix.domain.assistant.models import AmbiguousPersonName, Attachment, PersonProfile
 from sentrix.domain.assistant.ports import PersonDirectory, ResultSetRepository
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetEntry
 from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS, SOURCE_TEXT_PAGE_CHARS
@@ -63,6 +64,30 @@ DEFAULT_INSPECT_QUESTION = "请描述这张照片"
 
 DEFAULT_SEARCH_LIMIT = 6
 MAX_SEARCH_LIMIT = 6
+
+_WHO_SUFFIX = re.compile(r"(?:请问\s*)?([^\s，。？！?！]{1,40})\s*是谁(?:呀|啊|呢)?")
+_WHO_PREFIX = re.compile(r"(?:请问\s*)?谁是\s*([^\s，。？！?！]{1,40})")
+_PERSON_PHOTOS = re.compile(
+    r"(?:请\s*)?(?:给我看看|给我找|帮我找|找一下|查找|找|看看|看一下)?\s*"
+    r"([^\s，。？！?！]{1,40}?)\s*的\s*(?:照片|图片)"
+)
+
+
+def _person_question_name(question: str) -> str:
+    query = question.strip().rstrip("？?。!！").strip()
+    for pattern in (_WHO_SUFFIX, _WHO_PREFIX, _PERSON_PHOTOS):
+        if match := pattern.fullmatch(query):
+            return match.group(1)
+    return ""
+
+
+@dataclass(frozen=True, slots=True)
+class KnownPersonAnswer:
+    answer: str
+    person: PersonProfile | None = None
+    result_set: ResultSet | None = None
+    attachments: tuple[Attachment, ...] = ()
+
 
 # 复合摘要的三个上限，逐条取自 1.0 ``agent_runtime/tools.py:371-414`` 的
 # ``_observation_summary``（单段文字 120 字、整串 300 字、列表取前 8 项）。
@@ -245,7 +270,9 @@ class AssistantToolbox:
         graph_enabled: bool = True,
     ) -> ToolOutcome:
         if name == "search_memories":
-            return self._search(arguments, scope_id=scope_id, now=now, graph_enabled=graph_enabled)
+            return self._search(
+                arguments, scope_id=scope_id, now=now, graph_enabled=graph_enabled, question=question
+            )
         if name == "get_result_page":
             return self._page(arguments, scope_id=scope_id)
         if name == "query_photo_people":
@@ -331,10 +358,23 @@ class AssistantToolbox:
         scope_id: str,
         now: datetime,
         graph_enabled: bool = True,
+        question: str = "",
     ) -> ToolOutcome:
         query = str(arguments.get("query") or "").strip()
         if not query:
             return _failure("empty_query", "query 不能为空，请用用户问题里的实词。")
+
+        person_name = _person_question_name(question or query)
+        if not person_name and query == question.strip().rstrip("？?。!！"):
+            person_name = query
+        if person_name:
+            try:
+                person = self._people.lookup(person_name, scope_id)
+            except AmbiguousPersonName:
+                return _failure("ambiguous_person", "有多位已确认人物匹配这个姓名，请补充信息。")
+            if person is not None and person.confirmed and person.entity_id:
+                people_results = self._person_result_set(person, scope_id, query, now)
+                return self._page_outcome(people_results, page_no=1)
 
         result = self._retrieval.execute(
             EvidenceRequest(
@@ -1194,11 +1234,56 @@ class AssistantToolbox:
 
     # ---- get_person_profile -------------------------------------------------
 
+    def _person_result_set(
+        self, person: PersonProfile, scope_id: str, query: str, now: datetime
+    ) -> ResultSet:
+        visible: list[str] = []
+        for asset_id in self._people.asset_ids(person):
+            asset = self._assets.get(asset_id)
+            if asset is not None and asset.media_type is MediaType.IMAGE and Path(asset.path).is_file():
+                visible.append(asset_id)
+                if len(visible) >= DEFAULT_SEARCH_LIMIT:
+                    break
+        result_set = ResultSet(
+            id=f"rs_{uuid.uuid4().hex[:12]}",
+            scope_id=scope_id,
+            query=query,
+            asset_ids=tuple(visible),
+            created_at=now,
+            evidence_classes=dict.fromkeys(visible, "exact"),
+        )
+        self._result_sets.add(result_set)
+        return result_set
+
+    def known_person_answer(self, question: str, scope_id: str, now: datetime) -> KnownPersonAnswer | None:
+        name = _person_question_name(question)
+        if not name:
+            return None
+        try:
+            person = self._people.lookup(name, scope_id)
+        except AmbiguousPersonName:
+            return KnownPersonAnswer(f"有多位已确认人物匹配「{name}」。你指的是哪一位？")
+        if person is None or not person.entity_id or not person.confirmed:
+            return None
+        answer = f"相册中「{name}」是已确认人物。"
+        if name != person.name:
+            answer = f"「{name}」是相册里「{person.name}」的别名。"
+        if person.summary:
+            answer += "\n\n" + person.summary.strip()
+        result_set = self._person_result_set(person, scope_id, question, now)
+        handles = [entry.handle for entry in result_set.page(1, page_size=3).entries]
+        attachments = self.deliver(result_set.id, handles, scope_id=scope_id).attachments
+        answer += "\n\n下面是与这位人物关联的照片。" if attachments else "\n\n当前没有可显示的关联照片。"
+        return KnownPersonAnswer(answer, person, result_set, attachments)
+
     def _person(self, arguments: Mapping[str, Any], *, scope_id: str) -> ToolOutcome:
         name = str(arguments.get("person") or "").strip()
         if not name:
             return _failure("empty_person", "person 不能为空。")
-        profile = self._people.lookup(name, scope_id)
+        try:
+            profile = self._people.lookup(name, scope_id)
+        except AmbiguousPersonName:
+            return _failure("ambiguous_person", "有多位已确认人物匹配这个姓名，请补充信息。")
         if profile is None or not profile.confirmed:
             return ToolOutcome(
                 observation={"person": name, "found": False},
@@ -1219,6 +1304,7 @@ class AssistantToolbox:
                 "found": True,
                 "membership": profile.membership,
                 "relationship_count": len(profile.relationships),
+                "entity_id": profile.entity_id,
             },
             model_visible={
                 "person": profile.name,

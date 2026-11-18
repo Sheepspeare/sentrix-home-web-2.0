@@ -32,6 +32,7 @@ from sentrix.application.memories.assign_events import (
 from sentrix.application.memories.build_graph import BuildMemoryGraph
 from sentrix.application.memories.maintain_facts import MaintainFacts
 from sentrix.application.memories.summarize_event import SummarizeEvent
+from sentrix.application.memories.sync_corrections import ReindexCorrectedMemories, SyncCorrections
 from sentrix.application.retrieval.index_observation_text import IndexObservationText
 from sentrix.application.retrieval.index_visual import IndexAssetVisual
 from sentrix.domain.media.import_jobs import ImportJob
@@ -63,7 +64,26 @@ def build_memory_graph(container: Container) -> BuildMemoryGraph:
         causal_judge=container.causal_judge,
         vectors=container.vector_repository,
         causal_batch_size=causal_batch_size,
+        build_lock=lambda: container.database.advisory_lock("graph-build"),
     )
+
+
+def build_correction_sync(container: Container) -> SyncCorrections:
+    reindex = ReindexCorrectedMemories(
+        container.observation_repository,
+        container.event_repository,
+        container.lexical_index,
+        container.text_embedder,
+        container.text_vector_repository,
+        container.memory_corrections,
+    ).reindex
+
+    def graph(scope: str) -> None:
+        stats = build_memory_graph(container).execute(scope)
+        if stats.causal_status == "degraded":
+            raise RuntimeError("因果边同步降级，请重试")
+
+    return SyncCorrections(container.memory_corrections, reindex, graph)
 
 
 def refresh_memory_graph(container: Container, scope_id: str) -> GraphBuildStats | None:

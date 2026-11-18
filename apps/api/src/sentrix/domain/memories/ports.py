@@ -7,6 +7,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol
 
+from sentrix.domain.identity.models import EntityPropertyRecord, EntityRecord
 from sentrix.domain.memories.causality import CausalVerdict
 from sentrix.domain.memories.events import EventEntityRecord, EventParticipantRecord, EventRecord
 from sentrix.domain.memories.facts import Fact
@@ -23,6 +24,24 @@ class MemoryCorrectionRepository(Protocol):
     """修正与审计同事务；派生同步失败保留任务，重试读取最新权威值。"""
 
     def read(self, kind: str, target_id: str) -> dict[str, object] | None: ...
+
+    def rename_person(
+        self, entity_id: str, name: str
+    ) -> tuple[EntityRecord, tuple[str, ...], str] | None: ...
+
+    def save_aliases(
+        self, entity_id: str, value: object, evidence_ids: Sequence[str]
+    ) -> tuple[EntityPropertyRecord, str]: ...
+
+    def graph_sync_lock(self) -> AbstractContextManager[None]: ...
+
+    def next_name_sync_batch(self, now: str) -> tuple[str, int] | None: ...
+
+    def finish_name_sync_batch(self, scope_id: str, through: int, error: str) -> None: ...
+
+    def latest_name_sync(self, entity_id: str) -> dict[str, object] | None: ...
+
+    def retry_name_sync(self, job_id: str) -> dict[str, object] | None: ...
 
     def correct(
         self, kind: str, target_id: str, revision: int, changes: Mapping[str, object], reason: str

@@ -3,8 +3,8 @@
  *
  * `reload` 与 `refresh` 的差别不是命名洁癖：`reload` 是「用户换了相册 / 点了重试」，
  * 要亮 loading；`refresh` 是「刚写完一次，把服务端的新状态取回来」——**写完重拉但
- * 不闪 loading**，否则每改一次名字整页就白一下。两者都**不做乐观更新**：后端是权威，
- * LWW / 锁语义在服务端，本地先改一份就是又抄了一遍规则。
+ * 不闪 loading**，否则每改一次名字整页就白一下。姓名回执包含已提交的值，可以先更新相应人物，
+ * 再读取图谱的最新状态。
  *
  * loading 是**推导出来的**（请求键与已落地的结果键不一致），不是在 effect 开头
  * `setState("loading")`：后者是一次多余的级联渲染，也踩 oxlint 的 set-state-in-effect。
@@ -56,6 +56,7 @@ function toData(input: Awaited<ReturnType<typeof getFamilyGraph>>): FamilyGraphD
 export interface UseFamilyGraph extends FamilyGraphData {
   reload: () => void;
   refresh: () => Promise<void>;
+  applySavedNames: (id: string, names: Partial<Pick<FamilyPerson, "display_name" | "aliases">>) => void;
 }
 
 export function useFamilyGraph(scopeId: string): UseFamilyGraph {
@@ -103,10 +104,19 @@ export function useFamilyGraph(scopeId: string): UseFamilyGraph {
     }
   }, [scopeId, token]);
 
+  const applySavedNames = useCallback((id: string, names: Partial<Pick<FamilyPerson, "display_name" | "aliases">>) => {
+    setResult((previous) => previous === null ? null : {
+      ...previous,
+      data: { ...previous.data, people: previous.data.people.map((person) => person.id === id ? { ...person, ...names } : person) },
+    });
+    // Reconcile any concurrent graph changes without blocking the saved form.
+    void refresh();
+  }, [refresh]);
+
   const data =
     result === null || result.key !== requestKey
       ? { ...INITIAL }
       : result.data;
 
-  return { ...data, reload, refresh };
+  return { ...data, reload, refresh, applySavedNames };
 }

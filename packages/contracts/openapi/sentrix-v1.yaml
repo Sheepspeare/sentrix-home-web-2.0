@@ -77,6 +77,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosticsResponse'
+  /api/v1/memories/corrections/name-sync:
+    get:
+      tags:
+      - memory-corrections
+      summary: Latest Name Sync
+      operationId: latest_name_sync_api_v1_memories_corrections_name_sync_get
+      parameters:
+      - name: entity_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Entity Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/NameSyncStatus'
+                - type: 'null'
+                title: Response Latest Name Sync Api V1 Memories Corrections Name
+                  Sync Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/memories/corrections/name-sync/{job_id}/retry:
+    post:
+      tags:
+      - memory-corrections
+      summary: Retry Name Sync
+      operationId: retry_name_sync_api_v1_memories_corrections_name_sync__job_id__retry_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NameSyncStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/memories/corrections:
     get:
       tags:
@@ -783,10 +839,10 @@ paths:
           type: array
           items:
             type: string
-          description: 人物条件，可重复：scope 内已确认人物的本名
+          description: 人物条件，可重复：已确认人物的本名或别名
           default: []
           title: Person
-        description: 人物条件，可重复：scope 内已确认人物的本名
+        description: 人物条件，可重复：已确认人物的本名或别名
       - name: place
         in: query
         required: false
@@ -4647,6 +4703,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - id
@@ -6422,6 +6483,27 @@ components:
       - turn_id
       - created_at
       title: MessageSummary
+    NameSyncStatus:
+      properties:
+        id:
+          type: string
+          title: Id
+        status:
+          type: string
+          enum:
+          - pending
+          - synced
+          - failed
+          title: Status
+        error:
+          type: string
+          title: Error
+      type: object
+      required:
+      - id
+      - status
+      - error
+      title: NameSyncStatus
     OperationCancellationResponse:
       properties:
         operation_id:
@@ -7164,6 +7246,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - entity

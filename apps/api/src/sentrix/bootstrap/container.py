@@ -654,7 +654,7 @@ class Container:
             event_participant_repository=SqliteEventParticipantRepository(database),
             fact_repository=SqliteFactRepository(database),
             memory_graph=SqliteMemoryGraphRepository(database),
-            memory_corrections=SqliteMemoryCorrections(database),
+            memory_corrections=SqliteMemoryCorrections(database, entities),
             media_deletion=SqliteMediaDeletionRepository(database),
             causal_judge=OpenAICausalJudge(
                 chat_base_url,

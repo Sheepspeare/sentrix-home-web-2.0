@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,8 +21,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sentrix.application.identity.person_directory import EntityPersonDirectory
+from sentrix.application.memories.sync_corrections import SyncCorrections
+from sentrix.bootstrap.assistant_wiring import build_run_turn
+from sentrix.domain.assistant.models import AmbiguousPersonName
 from sentrix.domain.identity.models import PENDING_CLUSTER_NAME
-from sentrix.api.routes import corrections as correction_routes
 
 NOW = "2026-09-23T10:00:00+00:00"
 
@@ -533,23 +536,65 @@ def test_rename_folds_the_old_name_into_aliases(identity_client: TestClient):
     assert "sync_error" in response.json()
 
 
-def test_rename_reports_pending_when_derived_sync_fails(
-    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
+def test_saved_name_survives_graph_failure_and_retry(identity_client: TestClient):
     add_entity(identity_client, "ent_1", name="妈妈", status="confirmed")
+    jobs = identity_client.app.state.container.memory_corrections
+    completed: list[str] = []
 
-    class FailedSync:
-        @staticmethod
-        def execute(_scope: str) -> str:
-            return "图谱暂不可用"
+    def graph(scope: str) -> None:
+        if not completed:
+            raise RuntimeError("图谱暂不可用")
 
-    monkeypatch.setattr(correction_routes, "synchronizer", lambda _container: FailedSync())
+    sync = SyncCorrections(jobs, lambda _scope: pytest.fail("unchanged text must not be embedded"), graph)
     response = identity_client.patch("/api/v1/people/ent_1/name", json={"name": "母亲"})
-
     assert response.status_code == 200
-    assert response.json()["entity"]["canonical_name"] == "母亲"
-    assert response.json()["sync_status"] == "pending"
-    assert response.json()["sync_error"] == "图谱暂不可用"
+    edit = response.json()
+    assert edit["sync_status"] == "pending"
+    assert edit["sync_error"] == ""
+    status_url = "/api/v1/memories/corrections/name-sync?entity_id=ent_1"
+    assert identity_client.get(status_url).json() == {
+        "id": edit["sync_job_id"],
+        "status": "pending",
+        "error": "",
+    }
+
+    assert sync.execute_next_name_batch()
+    failed = identity_client.get(status_url).json()
+    assert failed["status"] == "pending"
+    assert "同步失败" in failed["error"]
+    assert not sync.execute_next_name_batch()
+    assert identity_client.get("/api/v1/people/ent_1").json()["entity"]["canonical_name"] == "母亲"
+    for _ in range(2):
+        with _db(identity_client).connect() as conn, conn:
+            conn.execute(
+                "UPDATE memory_corrections SET next_attempt_at='' WHERE id=?", (edit["sync_job_id"],)
+            )
+        assert sync.execute_next_name_batch()
+    assert identity_client.get(status_url).json()["status"] == "failed"
+
+    retried = identity_client.post(f"/api/v1/memories/corrections/name-sync/{edit['sync_job_id']}/retry")
+    assert retried.status_code == 202
+    completed.append(HOME)
+    assert sync.execute_next_name_batch()
+    assert identity_client.get(status_url).json()["status"] == "synced"
+
+
+@pytest.mark.parametrize("edit", ["name", "aliases"])
+def test_name_and_alias_edits_roll_back_if_the_durable_job_cannot_be_saved(identity_client: TestClient, edit):
+    add_entity(identity_client, "ent_1", name="妈妈", status="confirmed")
+    with _db(identity_client).connect() as conn, conn:
+        conn.execute(
+            "CREATE TRIGGER fail_name_sync BEFORE INSERT ON memory_corrections "
+            "BEGIN SELECT RAISE(ABORT, 'job insert failed'); END"
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="job insert failed"):
+        if edit == "name":
+            identity_client.patch("/api/v1/people/ent_1/name", json={"name": "母亲"})
+        else:
+            identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["小名"]})
+    person = identity_client.get("/api/v1/people/ent_1").json()["entity"]
+    assert person["canonical_name"] == "妈妈"
+    assert person["aliases"] == []
 
 
 def test_rename_with_a_blank_name_is_400(identity_client: TestClient):
@@ -1501,3 +1546,65 @@ def test_the_detail_properties_split_current_from_history(identity_client: TestC
 
     assert body["properties"] == []
     assert [item["id"] for item in body["property_history"]] == ["prop_old"]
+
+
+def test_assistant_resolves_both_names_to_one_person_and_delivers_only_linked_photos(
+    identity_client: TestClient, tmp_path: Path
+):
+    add_entity(identity_client, "ent_1", name="力霸天", status="confirmed")
+    add_entity(identity_client, "ent_hidden", name="天天", status="confirmed", scope_id=HIDDEN)
+    photo = tmp_path / "person.jpg"
+    photo.write_bytes(b"fixture image")
+    with _db(identity_client).connect() as conn, conn:
+        conn.execute("UPDATE assets SET path=?,status='processed' WHERE id='asset_1'", (str(photo),))
+        conn.execute(
+            "INSERT INTO entity_mentions (id,entity_id,observation_id,created_at)"
+            " VALUES('m','ent_1','obs_1',?)",
+            (NOW,),
+        )
+    edit = identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["天天"]})
+    assert edit.status_code == 200 and edit.json()["sync_status"] == "pending"
+    container = identity_client.app.state.container
+    runner = build_run_turn(container)
+    conv = identity_client.post("/api/v1/assistant/conversations", json={"scope_id": ""}).json()
+    for name in ("力霸天", "天天"):
+        profile = container.person_directory.lookup(name, "")
+        assert profile is not None and (profile.entity_id, profile.scope_id) == ("ent_1", HOME)
+        start = identity_client.post(
+            f"/api/v1/assistant/conversations/{conv['id']}/turns", json={"message": f"{name}是谁？"}
+        )
+        assert start.status_code == 202
+        turn_id = start.json()["turn_id"]
+        runner.run(turn_id)
+        response = identity_client.get(f"/api/v1/assistant/turns/{turn_id}").json()
+        assert response["status"] == "complete"
+        assert "力霸天" in response["result"]["answer"]
+        assert [item["asset_id"] for item in response["result"]["attachments"]] == ["asset_1"]
+        for scope in ("", HOME):
+            search = identity_client.get(
+                "/api/v1/search", params={"q": name, "person": name, "scope_id": scope}
+            )
+            assert search.status_code == 200
+            assert [item["asset"]["id"] for item in search.json()["items"]] == ["asset_1"]
+
+    assert (
+        identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": []}).status_code
+        == 200
+    )
+    assert container.person_directory.lookup("天天", "") is None
+
+
+def test_ambiguous_alias_in_visible_albums_is_not_assigned_arbitrarily(identity_client: TestClient):
+    for entity_id, name in (("ent_1", "甲"), ("ent_2", "乙")):
+        add_entity(identity_client, entity_id, name=name, status="confirmed")
+        assert (
+            identity_client.put(
+                f"/api/v1/entities/{entity_id}/properties/aliases", json={"value": ["天天"]}
+            ).status_code
+            == 200
+        )
+    directory = identity_client.app.state.container.person_directory
+    with pytest.raises(AmbiguousPersonName):
+        directory.lookup("天天", "")
+    response = identity_client.get("/api/v1/search", params={"q": "天天", "person": "天天"})
+    assert response.status_code == 409

@@ -683,8 +683,23 @@ export interface PersonDetailResponse {
 }
 
 export interface MemorySyncResult {
-  sync_status: "synced" | "pending";
+  sync_status: "synced" | "pending" | "failed";
   sync_error: string;
+  sync_job_id?: string | null;
+}
+
+interface PersonNameSyncStatus {
+  id: string;
+  status: MemorySyncResult["sync_status"];
+  error: string;
+}
+
+export function getPersonNameSync(entityId: string): Promise<PersonNameSyncStatus | null> {
+  return request(`/memories/corrections/name-sync?entity_id=${encodeURIComponent(entityId)}`);
+}
+
+export function retryPersonNameSync(jobId: string): Promise<PersonNameSyncStatus> {
+  return request(`/memories/corrections/name-sync/${encodeURIComponent(jobId)}/retry`, { method: "POST" });
 }
 
 export async function retryMemoryCorrections(scopeId: string): Promise<{ error: string }> {

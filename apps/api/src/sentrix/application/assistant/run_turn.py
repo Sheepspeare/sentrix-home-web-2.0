@@ -52,6 +52,7 @@ from sentrix.application.assistant.judge import FaithfulnessJudge
 from sentrix.application.assistant.tools import (
     AssistantToolbox,
     DeliveredPhotos,
+    KnownPersonAnswer,
     ToolOutcome,
     is_empty_result,
 )
@@ -73,6 +74,7 @@ from sentrix.domain.assistant.evidence_binding import (
 )
 from sentrix.domain.assistant.evidence_ledger import (
     EvidenceLedger,
+    EvidenceRequirement,
     EvidenceType,
     RequirementValueType,
 )
@@ -797,6 +799,7 @@ class RunTurn:
         profile: TurnProfile = DEFAULT_PROFILE,
         operation_control: OperationControl | None = None,
         observations: ObservationRepository | None = None,
+        known_person_answer: Callable[[str, str, datetime], KnownPersonAnswer | None] | None = None,
     ) -> None:
         self._operation_control = operation_control
         self._model = model
@@ -804,6 +807,7 @@ class RunTurn:
         self._turns = turns
         self._toolbox = toolbox
         self._observations = observations
+        self._known_person_answer = known_person_answer
         self._profile = profile
         self._policy = ToolPolicy()
         self._guard = FinalGuard()
@@ -985,6 +989,12 @@ class RunTurn:
             if refusal is not None:
                 session.state.finish(TerminationReason.POLICY_REFUSAL)
                 answer = refusal
+            elif (
+                self._known_person_answer is not None
+                and (known := self._known_person_answer(record.question, record.scope_id, datetime.now(UTC)))
+                is not None
+            ):
+                answer = self._complete_known_person(session, known)
             else:
                 session.has_source_text = (
                     self._observations is not None and self._observations.has_source_text(record.scope_id)
@@ -2024,6 +2034,61 @@ class RunTurn:
         # 写成 ``return state.can_step()``：走到这里已经确定判了不实，唯一还剩的问题就是
         # **还能不能重答**——不能就落回收尾路径。
         return state.can_step()
+
+    def _complete_known_person(self, session: _Session, known: KnownPersonAnswer) -> str:
+        if known.person is None:
+            session.state.finish(TerminationReason.ANSWERED_WITH_GAP)
+            return known.answer
+        person = known.person
+        facts = {"person": person.name, "found": True, "entity_id": person.entity_id}
+        session.ledger.requirements.append(
+            EvidenceRequirement("person", EvidenceType.PERSON_PROFILE, "人物档案")
+        )
+        session.ledger.satisfy(EvidenceType.PERSON_PROFILE, call_id="confirmed-person")
+        session.state.record(
+            ToolCallRecord(
+                "confirmed-person", "get_person_profile", "confirmed-person", "ok", observation=facts
+            )
+        )
+        self._publish(
+            session,
+            session.state.emit(
+                ProgressStage.TOOL_RESULT,
+                ProgressStatus.OK,
+                "已读取人物档案。",
+                kind="tool_result",
+                payload={"tool": "get_person_profile", "result": facts},
+            ),
+        )
+        if known.result_set is not None:
+            result_set = known.result_set
+            photos = {
+                "result_set_id": result_set.id,
+                "total": len(result_set.asset_ids),
+                "asset_ids": list(result_set.asset_ids),
+            }
+            session.state.record(
+                ToolCallRecord(
+                    "confirmed-person-photos",
+                    "search_memories",
+                    "confirmed-person-photos",
+                    "ok",
+                    observation=photos,
+                )
+            )
+            self._publish(
+                session,
+                session.state.emit(
+                    ProgressStage.TOOL_RESULT,
+                    ProgressStatus.OK,
+                    "已核对关联照片。",
+                    kind="tool_result",
+                    payload={"tool": "search_memories", "result": photos},
+                ),
+            )
+        session.delivered = DeliveredPhotos(known.attachments)
+        session.state.finish(TerminationReason.ANSWERED)
+        return known.answer
 
     def _run_tool(self, session: _Session, call: ToolCall) -> tuple[str, tuple[Attachment, ...], bool, bool]:
         """执行一次工具调用，返回 ``(发回模型的 JSON, 本次交付, 检索是否为空, 有没有拿到东西)``。

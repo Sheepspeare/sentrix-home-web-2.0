@@ -20,11 +20,13 @@ import {
   batchConfirmPeople,
   deliveredPhotoThumbUrl,
   getPerson,
+  getPersonNameSync,
   getPersonPortrait,
   mergePeople,
   rejectFaceCluster,
   renamePerson,
   retryMemoryCorrections,
+  retryPersonNameSync,
   sendPortraitFeedback,
   setEntityProperty,
   setFamilyMembership,
@@ -63,6 +65,7 @@ interface Props {
   readonly relationships: FamilyRelationship[];
   readonly onClose: () => void;
   readonly onChanged: () => Promise<void>;
+  readonly onNamesSaved?: (id: string, names: Partial<Pick<FamilyPerson, "display_name" | "aliases">>) => void;
   /** 图上拖拽落到人身上时预选的对方；普通点开是 null。 */
   readonly relateTarget?: string | null;
   readonly relateAttempt?: number;
@@ -92,6 +95,7 @@ export function PersonDetail({
   relationships,
   onClose,
   onChanged,
+  onNamesSaved,
   relateTarget = null,
   relateAttempt = 0,
   mergeConfirmation = null,
@@ -140,7 +144,33 @@ export function PersonDetail({
     if (aliasesOpen) aliasInput.current?.focus();
   }, [aliasesOpen]);
 
-  async function run(action: () => Promise<unknown>): Promise<boolean> {
+  const nameSyncJob = syncResult?.sync_job_id;
+  const syncStatus = syncResult?.sync_status;
+  useEffect(() => {
+    if (syncStatus !== undefined && (!nameSyncJob || syncStatus !== "pending")) return;
+    let alive = true;
+    let timer: number | undefined;
+    const check = async () => {
+      try {
+        const job = await getPersonNameSync(person.id);
+        if (!alive || job === null) return;
+        if (nameSyncJob || job.status !== "synced") {
+          setSyncResult((current) => {
+            if (current?.sync_job_id && current.sync_job_id !== nameSyncJob) return current;
+            return { sync_job_id: job.id, sync_status: job.status, sync_error: job.error };
+          });
+        }
+        if (job.status !== "pending") return;
+      } catch {
+        if (!nameSyncJob) return;
+      }
+      if (alive) timer = window.setTimeout(() => void check(), 1200);
+    };
+    void check();
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [nameSyncJob, person.id, syncStatus]);
+
+  async function run(action: () => Promise<unknown>, refresh = true): Promise<boolean> {
     if (active.current) return false;
     active.current = true;
     setBusy(true);
@@ -152,7 +182,7 @@ export function PersonDetail({
         && (result.sync_status === "synced" || result.sync_status === "pending")) {
         setSyncResult(result as MemorySyncResult);
       }
-      await onChanged();
+      if (refresh) await onChanged();
       return true;
     } catch (cause) {
       setError(describeReviewError(cause));
@@ -167,11 +197,16 @@ export function PersonDetail({
     if (syncRetrying || active.current) return;
     setSyncRetrying(true);
     try {
+      if (nameSyncJob) {
+        const job = await retryPersonNameSync(nameSyncJob);
+        setSyncResult({ sync_job_id: job.id, sync_status: job.status, sync_error: job.error });
+        return;
+      }
       const { error: syncError } = await retryMemoryCorrections(person.scope_id);
       setSyncResult({ sync_status: syncError ? "pending" : "synced", sync_error: syncError });
       if (!syncError) await onChanged();
     } catch (cause) {
-      setSyncResult({ sync_status: "pending", sync_error: describeReviewError(cause) });
+      setSyncResult({ sync_job_id: nameSyncJob, sync_status: "pending", sync_error: describeReviewError(cause) });
     } finally {
       setSyncRetrying(false);
     }
@@ -183,6 +218,7 @@ export function PersonDetail({
     const result = await renamePerson(person.id, next);
     setName(result.entity.canonical_name);
     setAliasUpdate({ base: person.aliases, value: result.aliases });
+    onNamesSaved?.(person.id, { display_name: result.entity.canonical_name, aliases: result.aliases });
     return result;
   }
 
@@ -235,7 +271,7 @@ export function PersonDetail({
         if (ok && confirmedId !== person.id) onRedirect?.(confirmedId);
       });
     } else {
-      void run(() => rename(next));
+      void run(() => rename(next), onNamesSaved === undefined);
     }
   }
 
@@ -330,10 +366,12 @@ export function PersonDetail({
     void run(async () => {
       // `PATCH /people/{id}/name` 只收 name；别名是通用实体属性，走属性写入。
       const result = await setEntityProperty(person.id, "aliases", next);
-      setAliasUpdate({ base: person.aliases, value: next });
+      const saved = Array.isArray(result.value) ? result.value.map(String) : next;
+      setAliasUpdate({ base: person.aliases, value: saved });
+      onNamesSaved?.(person.id, { aliases: saved });
       setAliasesOpen(false);
       return result;
-    });
+    }, onNamesSaved === undefined);
   }
 
   // ---- 介绍 / 整理 -------------------------------------------------------------------
@@ -391,9 +429,11 @@ export function PersonDetail({
       {syncResult === null ? null : (
         <div className={"memory-sync-feedback is-" + syncResult.sync_status} role="status">
           <span>{syncResult.sync_status === "synced"
-            ? "修改已保存，关联记忆、图谱与检索索引已同步。"
-            : "修改已保存，但关联数据待同步。" + (syncResult.sync_error ? " " + syncResult.sync_error : "")}</span>
-          {syncResult.sync_status === "pending" ? (
+            ? "修改已保存，关联记忆已同步。"
+            : syncResult.sync_error || syncResult.sync_status === "failed"
+              ? "修改已保存，同步失败。 " + syncResult.sync_error
+              : "修改已保存，正在同步关联记忆。"}</span>
+          {syncResult.sync_status !== "synced" && (!nameSyncJob || syncResult.sync_error || syncResult.sync_status === "failed") ? (
             <button type="button" className="button ghost small" disabled={busy || syncRetrying}
               onClick={() => void syncMemories()}>重试同步</button>
           ) : null}

@@ -8,6 +8,7 @@ inside a transaction, and recorded in ``schema_migrations``.
 
 from __future__ import annotations
 
+import fcntl
 import sqlite3
 import threading
 from collections.abc import Iterator
@@ -45,6 +46,12 @@ class Database:
         # 图谱/家庭图谱会在同一线程嵌套读取，因此连接锁必须是可重入的 RLock。
         with _connection_locks_guard:
             self._connect_lock = _connection_locks.setdefault(self.path.resolve(), threading.RLock())
+
+    @contextmanager
+    def advisory_lock(self, purpose: str) -> Iterator[None]:
+        with self.path.resolve().with_suffix(f".{purpose}.lock").open("a") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            yield
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

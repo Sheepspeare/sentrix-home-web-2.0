@@ -5,8 +5,8 @@ S3 装配的是 ``NoIdentityDirectory``——那时身份层还没建起来，�
 有了真答案。**工具契约、账本与门禁一行都没动**（S3 那个占位实现的模块注释当初就是这么
 约定的）：换掉的只是容器里那一个字段的实参。
 
-**只认已确认的人。** 判据是 ``find_confirmed_person_by_name`` 本身——它查的正是
-``entity_type='person' AND status='confirmed'``，先精确名再扫别名。未确认的候选人物簇
+**只认已确认的人。** ``confirmed_people_named`` 先查本名，再查生效的别名。全相册只看
+对人物视图开放的空间，查到多位则要求澄清。未确认的候选人物簇
 不进这个目录：那还只是一次聚类猜测，把它当档案答出去，等于让猜测变成检索事实
 （``link_confirmed_mention`` 拒绝未确认实体，是同一条理由）。
 
@@ -24,12 +24,32 @@ S3 装配的是 ``NoIdentityDirectory``——那时身份层还没建起来，�
 
 from __future__ import annotations
 
-from sentrix.domain.assistant.models import PersonProfile, PersonRelationship
+from collections.abc import Sequence
+
+from sentrix.domain.assistant.models import AmbiguousPersonName, PersonProfile, PersonRelationship
+from sentrix.domain.assistant.ports import PersonDirectory
 from sentrix.domain.identity.models import PENDING_CLUSTER_NAME, entity_display_name
 from sentrix.domain.identity.ports import EntityRepository, FamilyGraphRepository
 
 # 对方实体被删、没名字或还没确认时用它，**不编造**，也不暴露内部 cluster id。
 UNNAMED_MEMBER = PENDING_CLUSTER_NAME
+
+
+def assets_for_names(
+    directory: PersonDirectory, names: Sequence[str], scope_id: str
+) -> tuple[str, ...] | None:
+    assets: tuple[str, ...] | None = None
+    for name in dict.fromkeys(name.strip() for name in names if name.strip()):
+        person = directory.lookup(name, scope_id)
+        if person is None:
+            return ()
+        matching = directory.asset_ids(person)
+        if assets is None:
+            assets = matching
+        else:
+            ids = set(matching)
+            assets = tuple(asset_id for asset_id in assets if asset_id in ids)
+    return assets
 
 
 class EntityPersonDirectory:
@@ -41,12 +61,13 @@ class EntityPersonDirectory:
         clean_name = str(name or "").strip()
         if not clean_name:
             return None
-        match = self._entities.find_confirmed_person_by_name(scope_id, clean_name)
-        if match is None:
+        candidates = self._entities.confirmed_people_named(scope_id, clean_name)
+        if not candidates:
             return None
-        entity = self._entities.get(match.entity_id)
-        if entity is None:
-            return None
+        if len(candidates) > 1:
+            raise AmbiguousPersonName(clean_name)
+        (entity,) = candidates
+        scope_id = entity.scope_id
         membership = self._family.get_effective_membership(scope_id, entity.id)
         portrait = self._family.get_active_portrait(scope_id, entity.id)
         return PersonProfile(
@@ -60,7 +81,12 @@ class EntityPersonDirectory:
             membership_source=(membership.source if membership is not None else "") or "",
             summary=(portrait.portrait_text if portrait is not None else "") or "",
             relationships=self._relationships(scope_id, entity.id),
+            entity_id=entity.id,
+            scope_id=scope_id,
         )
+
+    def asset_ids(self, person: PersonProfile) -> tuple[str, ...]:
+        return self._entities.asset_ids_for_person(person.entity_id, person.scope_id)
 
     def _relationships(self, scope_id: str, entity_id: str) -> tuple[PersonRelationship, ...]:
         """只收**此人是 subject** 的边——``predicate`` 才是「此人是对方的什么」。

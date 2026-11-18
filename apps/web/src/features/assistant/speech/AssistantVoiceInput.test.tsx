@@ -7,9 +7,9 @@ vi.mock("./useSpeechInput", () => ({ useSpeechInput: (options: { onTranscript: (
   mocks.transcript = options.onTranscript;
   return { ...mocks, message: "", error: null, unavailable: null };
 } }));
-vi.mock("../useTurnStream", () => ({ useTurnStream: () => ({
+vi.mock("../useTurnStream", () => ({ waitForTurnAcceptance: async () => {}, useTurnStream: () => ({
   progress: [], result: null, busy: false, error: null, ask: mocks.ask,
-  cancel: vi.fn(), cancelled: false, executionState: "", attemptNo: 0, turnId: "",
+  cancel: vi.fn(), resume: vi.fn(), cancelled: false, executionState: "", attemptNo: 0, turnId: "",
 }) }));
 vi.mock("../../../shared/api/client", async (original) => ({
   ...await original<typeof import("../../../shared/api/client")>(),

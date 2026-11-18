@@ -539,6 +539,12 @@ class EntityRepository(Protocol):
         """
         ...
 
+    def confirmed_people_named(self, scope_id: str, name: str) -> tuple[EntityRecord, ...]:
+        """Exact name matches, or effective aliases, within the requested visible scope."""
+        ...
+
+    def asset_ids_for_person(self, entity_id: str, scope_id: str) -> tuple[str, ...]: ...
+
     def record_revision(
         self,
         entity_id: str,

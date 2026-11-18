@@ -13,7 +13,7 @@ import {
 import { Lightbox } from "../../shared/ui/Lightbox";
 import { ResultSetWall } from "./ResultSetWall";
 import { TurnTimeline, isTerminalStatus } from "./TurnTimeline";
-import { useTurnStream } from "./useTurnStream";
+import { useTurnStream, waitForTurnAcceptance } from "./useTurnStream";
 import { useSpeechInput } from "./speech/useSpeechInput";
 import "./speech/speechInput.css";
 
@@ -128,8 +128,10 @@ export function AssistantPanel({
     progress,
     result,
     busy,
+    stopping,
     error,
     ask,
+    resume,
     cancel,
     cancelled,
     executionState,
@@ -169,12 +171,19 @@ export function AssistantPanel({
     setHistoryCursor("");
     setHistoryHasMore(false);
     setHistoryLoading(true);
-    getConversation(conversationId)
+    waitForTurnAcceptance(conversationId)
+      .then(() => getConversation(conversationId))
       .then((detail) => {
         if (token !== historyToken.current) return;
-        setExchanges(replayExchanges(detail));
+        const history = replayExchanges(detail);
+        setExchanges(history);
         setHistoryCursor(detail.next_cursor ?? "");
         setHistoryHasMore(detail.has_more === true);
+        const active = history.find((item) => item.turnId !== "" && !isTerminalStatus(item.status));
+        if (active) {
+          setLive({ conversationId, key: active.key });
+          resume(active.turnId);
+        }
       })
       .catch((cause: Error) => {
         if (token !== historyToken.current) return;
@@ -184,7 +193,8 @@ export function AssistantPanel({
       .finally(() => {
         if (token === historyToken.current) setHistoryLoading(false);
       });
-  }, [conversationId]);
+    return () => { historyToken.current++; };
+  }, [conversationId, resume]);
 
   const loadEarlier = useCallback(async () => {
     if (conversationId === null || historyCursor === "" || loadingEarlier) return;
@@ -232,9 +242,10 @@ export function AssistantPanel({
             ? {
                 ...item,
                 status: poll.status,
-                reason: poll.waiting_reason || item.reason,
+                reason: poll.result?.termination_reason ?? (poll.waiting_reason || item.reason),
                 answer: poll.result?.answer || item.answer,
                 attachments: poll.result?.attachments ?? item.attachments,
+                events: poll.public_progress,
               }
             : item,
         ),
@@ -291,7 +302,7 @@ export function AssistantPanel({
           turnId: "",
           events: [],
         },
-        ...previous,
+        ...previous.filter((item) => !(item.turnId === "" && item.status === "failed" && item.question === question)),
       ]);
       return ask(conversationId, question);
     },
@@ -321,11 +332,12 @@ export function AssistantPanel({
           : item,
       ),
     );
+    setLive(null);
   }, [conversationId, live, result]);
 
   // 建回合/轮询失败时 hook 只给一句 error；把那条提问标成失败，别一直停在「处理中」。
   useEffect(() => {
-    if (error === null || live === null) return;
+    if (error === null || live === null || liveTurnId !== null || busy) return;
     setExchanges((previous) =>
       previous.map((item) =>
         item.key === live.key && item.status === "running"
@@ -333,7 +345,7 @@ export function AssistantPanel({
           : item,
       ),
     );
-  }, [error, live]);
+  }, [busy, error, live, liveTurnId]);
 
   // 用户点了停止：就地收尾这一条，不再等一个不会到达的 complete。
   useEffect(() => {
@@ -441,8 +453,8 @@ export function AssistantPanel({
           {busy ? "处理中…" : "发送"}
         </button>
         {busy ? (
-          <button type="button" className="ghost-action" onClick={() => void cancel()}>
-            停止回答
+          <button type="button" className="ghost-action" disabled={stopping} onClick={() => void cancel()}>
+            {stopping ? "正在停止…" : "停止回答"}
           </button>
         ) : null}
       </form>

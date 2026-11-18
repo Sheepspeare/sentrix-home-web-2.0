@@ -317,3 +317,9 @@ class PersonProfile:
     membership_source: str = ""
     summary: str = ""
     relationships: tuple[PersonRelationship, ...] = ()
+    entity_id: str = ""
+    scope_id: str = ""
+
+
+class AmbiguousPersonName(ValueError):
+    """More than one confirmed person matches the provided name in this scope."""

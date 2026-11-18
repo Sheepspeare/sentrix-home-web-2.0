@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from sentrix.application.retrieval.index_observation_text import IndexObservationText
 from sentrix.domain.media.ports import ObservationRepository
@@ -85,7 +86,7 @@ class SyncCorrections:
         self._graph = graph
 
     def execute(self, scope_id: str) -> str:
-        with SYNC_LOCK:
+        with SYNC_LOCK, self._repository.graph_sync_lock():
             errors = []
             for operation in (self._repository.refresh_people, self._graph, self._reindex):
                 try:
@@ -97,3 +98,50 @@ class SyncCorrections:
             error = "; ".join(errors)
             self._repository.finish(scope_id, error)
             return error
+
+    def execute_next_name_batch(self) -> bool:
+        if self._repository.next_name_sync_batch(datetime.now(UTC).isoformat()) is None:
+            return False
+        with SYNC_LOCK, self._repository.graph_sync_lock():
+            batch = self._repository.next_name_sync_batch(datetime.now(UTC).isoformat())
+            if batch is None:
+                return False
+            scope_id, through = batch
+            error = ""
+            try:
+                # Name snapshots and person_bridge already commit with rename.
+                # Neither canonical names nor aliases are inputs to text vectors.
+                self._graph(scope_id)
+            except Exception as exc:  # noqa: BLE001 - the committed name stays saved
+                log.warning("人物姓名记忆图待重试 scope=%s: %s", scope_id, exc)
+                error = "关联记忆图同步失败，请重试。"
+            self._repository.finish_name_sync_batch(scope_id, through, error)
+            return True
+
+
+class PersonNameSyncExecutor:
+    """Run pending name edits independently of their HTTP requests."""
+
+    def __init__(self, sync: SyncCorrections) -> None:
+        self._sync = sync
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="person-name-sync", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+    def _run(self) -> None:
+        while not self._stop.wait(0.5):
+            try:
+                self._sync.execute_next_name_batch()
+            except Exception:  # noqa: BLE001 - transient storage failures leave the job queued
+                log.exception("无法读取或更新人物同步任务")

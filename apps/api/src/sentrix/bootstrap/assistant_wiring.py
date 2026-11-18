@@ -129,28 +129,30 @@ def _tool_limits(container: Container) -> ToolLimits:
 
 
 def build_run_turn(container: Container) -> RunTurn:
+    toolbox = AssistantToolbox(
+        retrieval=build_retrieve_evidence(container),
+        assets=container.asset_repository,
+        result_sets=container.result_set_repository,
+        people=container.person_directory,
+        memory_facts=QueryMemoryFacts(
+            structured=container.structured_query_repository,
+            entities=container.entity_repository,
+        ),
+        faces=container.face_repository,
+        observations=container.observation_repository,
+        photo_inspector=container.photo_inspector,
+        person_crops=container.person_crop_renderer,
+        events=container.event_repository,
+        asset_places=container.asset_place_repository,
+        limits=_tool_limits(container),
+    )
     return RunTurn(
         model=container.chat_model,
         operation_control=container.operation_control,
         conversations=container.conversation_repository,
         turns=container.turn_repository,
-        toolbox=AssistantToolbox(
-            retrieval=build_retrieve_evidence(container),
-            assets=container.asset_repository,
-            result_sets=container.result_set_repository,
-            people=container.person_directory,
-            memory_facts=QueryMemoryFacts(
-                structured=container.structured_query_repository,
-                entities=container.entity_repository,
-            ),
-            faces=container.face_repository,
-            observations=container.observation_repository,
-            photo_inspector=container.photo_inspector,
-            person_crops=container.person_crop_renderer,
-            events=container.event_repository,
-            asset_places=container.asset_place_repository,
-            limits=_tool_limits(container),
-        ),
+        toolbox=toolbox,
+        known_person_answer=toolbox.known_person_answer,
         observations=container.observation_repository,
         profile=_turn_profile(container),
     )

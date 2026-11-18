@@ -166,6 +166,8 @@ class PersonDirectory(Protocol):
 
     def lookup(self, name: str, scope_id: str) -> PersonProfile | None: ...
 
+    def asset_ids(self, person: PersonProfile) -> tuple[str, ...]: ...
+
 
 class TurnEventBroker(Protocol):
     """把正在跑的回合的进度事件实时推给订阅者。

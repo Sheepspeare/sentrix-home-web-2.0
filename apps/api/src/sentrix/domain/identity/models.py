@@ -30,6 +30,8 @@ from datetime import datetime
 # Python 里出现（``entity.get("status") == "confirmed"``），两边漂开一次就是一条静默的
 # 空结果——所以收在这里一份。
 
+ALIAS_PROPERTY_KEY = "aliases"
+
 ENTITY_TYPE_PERSON = "person"
 # 语义实体那四类。1.0 的 ``entity_type`` 有五个取值（person / place / object / time /
 # atmosphere）**外加一个 ``emotion``**——它只在语义分组里出现，而且被当成 atmosphere。

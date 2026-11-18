@@ -135,7 +135,7 @@ describe("PersonDetail 人物记忆修正", () => {
 
     await waitFor(() => expect(client.renamePerson).toHaveBeenCalledWith("person_1", "妈妈2"));
     await waitFor(() => expect((screen.getByLabelText("姓名") as HTMLInputElement).value).toBe("妈妈2"));
-    expect(await screen.findByText("修改已保存，关联记忆、图谱与检索索引已同步。")).toBeTruthy();
+    expect(await screen.findByText("修改已保存，关联记忆已同步。")).toBeTruthy();
     expect(onChanged).toHaveBeenCalledOnce();
   });
 
@@ -149,7 +149,7 @@ describe("PersonDetail 人物记忆修正", () => {
     fireEvent.click(screen.getByRole("button", { name: "修正并同步关联记忆" }));
 
     await waitFor(() => expect(client.retryMemoryCorrections).toHaveBeenCalledWith("album1"));
-    expect(await screen.findByText("修改已保存，关联记忆、图谱与检索索引已同步。")).toBeTruthy();
+    expect(await screen.findByText("修改已保存，关联记忆已同步。")).toBeTruthy();
     expect(onChanged).toHaveBeenCalledOnce();
   });
 });
@@ -220,7 +220,7 @@ describe("PersonDetail 别名编辑", () => {
     fireEvent.click(await screen.findByRole("button", { name: "保存别名" }));
     const notice = await screen.findByRole("status");
     expect(notice.textContent).toContain("图谱暂不可用");
-    expect(notice.textContent).toContain("待同步");
+    expect(notice.textContent).toContain("同步失败");
     expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
   });
 });

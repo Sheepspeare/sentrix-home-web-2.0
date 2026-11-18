@@ -27,6 +27,7 @@ from sentrix.domain.identity.models import (
     EntityRecord,
 )
 from sentrix.domain.identity.ports import EntityRepository, FaceRepository
+from sentrix.domain.memories.ports import MemoryCorrectionRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,7 @@ class RenameResult:
 
     entity: EntityRecord
     aliases: tuple[str, ...]
+    sync_job_id: str = ""
 
 
 class NamePerson:
@@ -48,10 +50,12 @@ class NamePerson:
         faces: FaceRepository,
         entities: EntityRepository,
         review: ReviewCluster,
+        corrections: MemoryCorrectionRepository | None = None,
     ) -> None:
         self._faces = faces
         self._entities = entities
         self._review = review
+        self._corrections = corrections
 
     def rename(self, entity_id: str, new_name: str) -> RenameResult | None:
         """给一个人改名：旧名折进别名，``name_state`` 转 ``confirmed``，留一条修订。
@@ -66,6 +70,9 @@ class NamePerson:
         """
         if not str(new_name or "").strip():
             raise InvalidReviewRequestError("person name is required")
+        if self._corrections is not None:
+            saved = self._corrections.rename_person(entity_id, new_name)
+            return RenameResult(*saved) if saved else None
         entity = self._entities.rename_person(entity_id, new_name)
         if entity is None:
             return None

@@ -7,36 +7,18 @@ from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from functools import wraps
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from sentrix.api.deps import get_container
 from sentrix.api.errors import InvalidRequestError, NotFoundError
-from sentrix.application.memories.sync_corrections import SYNC_LOCK, ReindexCorrectedMemories, SyncCorrections
+from sentrix.application.memories.sync_corrections import SYNC_LOCK
 from sentrix.bootstrap.container import Container
-from sentrix.bootstrap.import_wiring import build_memory_graph
+from sentrix.bootstrap.import_wiring import build_correction_sync as synchronizer
 
 router = APIRouter(tags=["memory-corrections"])
-
-
-def synchronizer(container: Container) -> SyncCorrections:
-    reindex = ReindexCorrectedMemories(
-        container.observation_repository,
-        container.event_repository,
-        container.lexical_index,
-        container.text_embedder,
-        container.text_vector_repository,
-        container.memory_corrections,
-    ).reindex
-
-    def graph(scope: str) -> None:
-        stats = build_memory_graph(container).execute(scope)
-        if stats.causal_status == "degraded":
-            raise RuntimeError("因果边同步降级，请重试")
-
-    return SyncCorrections(container.memory_corrections, reindex, graph)
 
 
 def memory_write(kind: str, key: str) -> Callable[..., Any]:
@@ -101,6 +83,26 @@ class CorrectionResponse(BaseModel):
 
 class CorrectionRecords(BaseModel):
     items: list[dict[str, Any]]
+
+
+class NameSyncStatus(BaseModel):
+    id: str
+    status: Literal["pending", "synced", "failed"]
+    error: str
+
+
+@router.get("/memories/corrections/name-sync")
+def latest_name_sync(entity_id: str, container: Container = Depends(get_container)) -> NameSyncStatus | None:
+    status = container.memory_corrections.latest_name_sync(entity_id)
+    return NameSyncStatus.model_validate(status) if status is not None else None
+
+
+@router.post("/memories/corrections/name-sync/{job_id}/retry", status_code=202)
+def retry_name_sync(job_id: str, container: Container = Depends(get_container)) -> NameSyncStatus:
+    status = container.memory_corrections.retry_name_sync(job_id)
+    if status is None:
+        raise NotFoundError("name sync job not found")
+    return NameSyncStatus.model_validate(status)
 
 
 @router.get("/memories/corrections", response_model=CorrectionRecords)

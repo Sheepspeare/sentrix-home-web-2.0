@@ -19,7 +19,7 @@ import hashlib
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
@@ -87,6 +87,7 @@ from sentrix.bootstrap.container import Container
 from sentrix.bootstrap.import_wiring import refresh_memory_graph
 from sentrix.domain.identity.decoration import is_reviewable, is_single_sample, private_place
 from sentrix.domain.identity.models import (
+    ALIAS_PROPERTY_KEY,
     CLUSTER_SAMPLES_LIMIT,
     CLUSTER_STATUS_PENDING,
     CLUSTER_STATUS_REJECTED,
@@ -180,6 +181,7 @@ def _name_person(container: Container) -> NamePerson:
         faces=container.face_repository,
         entities=container.entity_repository,
         review=_review_cluster(container),
+        corrections=container.memory_corrections,
     )
 
 
@@ -665,7 +667,6 @@ def _property_payload(record: EntityPropertyRecord) -> EntityPropertyPayload:
 
 
 @router.put("/entities/{entity_id}/properties/{property_key}")
-@memory_write("entity", "entity_id")
 def set_entity_property(
     entity_id: str,
     property_key: str,
@@ -683,6 +684,23 @@ def set_entity_property(
     写成属性的这条路**会顶掉派生值**（这是它存在的意义），所以它归 ``set_property``
     而不归 ``maintain_property``；两条路的差别在 ``EntityRepository`` 的 docstring 里。
     """
+    if property_key.strip() != ALIAS_PROPERTY_KEY:
+        return cast(
+            EntityPropertyPayload, _write_entity_property(entity_id, property_key, payload, container)
+        )
+    try:
+        written, job_id = container.memory_corrections.save_aliases(
+            entity_id, payload.value, payload.evidence_ids or []
+        )
+    except KeyError as error:
+        raise NotFoundError("entity not found") from error
+    return _property_payload(written).model_copy(update={"sync_status": "pending", "sync_job_id": job_id})
+
+
+@memory_write("entity", "entity_id")
+def _write_entity_property(
+    entity_id: str, property_key: str, payload: EntityPropertyRequest, container: Container
+) -> EntityPropertyPayload:
     try:
         written = container.entity_repository.set_property(
             entity_id, property_key, payload.value, evidence_ids=payload.evidence_ids or []
@@ -837,7 +855,6 @@ def get_person(person_id: str, container: Container = Depends(get_container)) ->
 
 
 @router.patch("/people/{person_id}/name")
-@memory_write("entity", "person_id")
 def rename_person(
     person_id: str,
     payload: RenamePersonRequest,
@@ -847,7 +864,10 @@ def rename_person(
     if result is None:
         raise NotFoundError("person not found")
     return RenamePersonResponse(
-        entity=_person_payload(container, result.entity), aliases=list(result.aliases)
+        entity=_person_payload(container, result.entity),
+        aliases=list(result.aliases),
+        sync_status="pending" if result.sync_job_id else "synced",
+        sync_job_id=result.sync_job_id or None,
     )
 
 
