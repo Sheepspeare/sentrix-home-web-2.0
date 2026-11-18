@@ -1239,6 +1239,47 @@ def test_resume_rejects_unconfigured_product_revision_and_non_boolean_recovery(t
         suites.resume_run("run-1", {"repair_missing_judges": "yes"})
 
 
+@pytest.mark.parametrize("select_revision", [False, True])
+def test_reasoning_resume_freezes_limits_only_for_explicit_product_upgrade(
+    tmp_path, monkeypatch, select_revision
+):
+    captured = []
+    gate = threading.Event()
+    saved = _cancelled_state()
+    saved["reasoning"] = True
+    prior_settings = {"chat_timeout_s": 120, "reasoning_max_model_calls": 999}
+    saved["runtime_snapshot"] = {
+        "sentrix_url": "http://original:8291",
+        "model_base_url": "http://original:8100/v1",
+        "product_build_revision": "old-product",
+        "product_settings": prior_settings,
+    }
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    limits = {
+        "reasoning_max_model_calls": 100,
+        "reasoning_max_tool_calls": 600,
+        "reasoning_max_search_calls": 100,
+        "reasoning_max_other_tool_calls": 500,
+    }
+    configured = {
+        **suites._config.public_runtime_connection_config(),
+        "product_build_revision": "bounded",
+        "product_settings": {**limits, "chat_timeout_s": 30},
+    }
+    monkeypatch.setattr(suites._config, "public_runtime_connection_config", lambda: configured)
+    try:
+        suites.resume_run("run-1", {"product_build_revision": "bounded"} if select_revision else {})
+        effective = captured[0].runtime_snapshot.connection()["product_settings"]
+        assert effective == ({**prior_settings, **limits} if select_revision else prior_settings)
+        assert saved["runtime_snapshot"]["product_settings"] == prior_settings
+    finally:
+        gate.set()
+
+
 def test_missing_rejudge_preserves_valid_zero_and_only_repairs_failed_subscore(tmp_path):
     import copy
 
