@@ -274,13 +274,18 @@ def test_active_run_list_uses_cached_projection_while_state_is_locked(tmp_path: 
         suites._register_active("live-run", SimpleNamespace(state=state))
     assert suites.active_states()["live-run"] == run_list_entry(state.data)
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    with ThreadPoolExecutor(max_workers=2) as pool:
         state.lock.acquire()
         try:
-            entries = pool.submit(suites.active_states).result(timeout=1)
+            work_future = pool.submit(suites.work_status)
+            entries_future = pool.submit(suites.active_states)
+            work = work_future.result(timeout=1)
+            entries = entries_future.result(timeout=1)
         finally:
             state.lock.release()
 
+    assert work["work"][0]["status"] == "running"
+    assert work["cleanup_status"] == "pending"
     assert entries["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 1
 
     state.record_phase("qa_eval", "progress", {"agent_completed": 2})

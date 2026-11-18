@@ -1015,18 +1015,10 @@ class RunSuites:
 
     def work_status(self) -> dict[str, Any]:
         with self._lock:
-            runs = []
-            for run_id, execution in self._active.items():
-                thread = self._threads.get(run_id)
-                runs.append(
-                    {
-                        "id": run_id,
-                        "kind": "run",
-                        "worker_alive": bool(thread and thread.is_alive()),
-                        "status": execution.state.get("status") if execution.state else "pending",
-                        "cleanup": dict(execution.state.get("cleanup") or {}) if execution.state else {},
-                    }
-                )
+            active = [
+                (run_id, execution, self._threads.get(run_id), self._live_entries.get(run_id, {}))
+                for run_id, execution in self._active.items()
+            ]
             auxiliary = [
                 {
                     "id": key,
@@ -1060,12 +1052,34 @@ class RunSuites:
                 for sampler in samplers
                 if sampler.pending_work()
             ]
-            return {
-                "work": [*runs, *auxiliary, *reserved, *cleanup, *probes],
-                "cleanup_status": "pending"
-                if runs or auxiliary or reserved or cleanup or probes
-                else "stopped",
-            }
+        runs = []
+        for run_id, execution, thread, cached in active:
+            state = execution.state
+            data = cached
+            lock = getattr(state, "lock", None)
+            if state is not None and lock is None:
+                data = state.data
+            elif state is not None and lock is not None and lock.acquire(blocking=False):
+                try:
+                    data = {
+                        "status": state.data.get("status"),
+                        "cleanup": copy.deepcopy(state.data.get("cleanup") or {}),
+                    }
+                finally:
+                    lock.release()
+            runs.append(
+                {
+                    "id": run_id,
+                    "kind": "run",
+                    "worker_alive": bool(thread and thread.is_alive()),
+                    "status": data.get("status") or "pending",
+                    "cleanup": copy.deepcopy(data.get("cleanup") or {}),
+                }
+            )
+        return {
+            "work": [*runs, *auxiliary, *reserved, *cleanup, *probes],
+            "cleanup_status": "pending" if runs or auxiliary or reserved or cleanup or probes else "stopped",
+        }
 
     def refresh_cleanup(self) -> dict[str, Any]:
         with self._lock:
@@ -2259,11 +2273,12 @@ class RunSuites:
     def active_run_ids(self) -> list[str]:
         """Still executing runs; stopped executions are released, stop-pending blocks admission."""
         with self._lock:
-            return [
-                run_id
-                for run_id, execution in self._active.items()
-                if execution.state is not None and execution.state.get("status") in DIRTY_STATUSES
-            ]
+            active = list(self._active.items())
+        return [
+            run_id
+            for run_id, execution in active
+            if execution.state is not None and execution.state.get("status") in DIRTY_STATUSES
+        ]
 
 
 def _items_digest(items: Sequence[dict[str, Any]]) -> str:
