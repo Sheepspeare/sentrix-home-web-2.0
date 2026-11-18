@@ -733,14 +733,29 @@ def test_resume_rejects_unfinished_pipeline_before_starting_agents(tmp_path):
     assert not suites._active
 
 
-def test_explicit_pipeline_recovery_freezes_source_ids_and_qa_without_touching_original(tmp_path):
+@pytest.mark.parametrize(
+    "checkpoint_fields",
+    [
+        {"scope_build": {"status": "incomplete"}},
+        {"status": "interrupted", "mode": "full"},
+        {"status": "interrupted", "mode": "build"},
+        {
+            "status": "interrupted",
+            "mode": "reuse",
+            "resume_context": {"finish_incomplete_build": True},
+        },
+    ],
+)
+def test_explicit_pipeline_recovery_freezes_source_ids_and_qa_without_touching_original(
+    tmp_path, checkpoint_fields
+):
     import copy
 
     saved = _cancelled_state(
-        scope_build={"status": "incomplete"},
         pipeline_asset_ids=["a", "b"],
         items=[],
         phases={"identity_seed": {"status": "done"}, "photo_import": {"status": "done"}},
+        **checkpoint_fields,
     )
     original = copy.deepcopy(saved)
     captured = []
@@ -758,6 +773,14 @@ def test_explicit_pipeline_recovery_freezes_source_ids_and_qa_without_touching_o
         assert saved == original
     finally:
         gate.set()
+
+
+def test_abrupt_full_build_interruption_requires_explicit_pipeline_recovery(tmp_path):
+    saved = _cancelled_state(status="interrupted", mode="full", items=[])
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    with pytest.raises(InvalidRequestError, match="incomplete build"):
+        suites.resume_run("run-1")
+    assert not suites._active
 
 
 @pytest.mark.parametrize("checkpoint", [[], ["a"]])

@@ -662,14 +662,23 @@ class RunSuites:
         scope_id = str(saved.get("scope_id") or "").strip()
         if not scope_id:
             raise InvalidRequestError("the saved run has no memory-space checkpoint")
-        incomplete = (saved.get("scope_build") or {}).get("status") == "incomplete"
+        phases = saved.get("phases") or {}
+        interrupted_build = (
+            status == "interrupted"
+            and not saved.get("scope_build")
+            and (
+                saved.get("mode") in {"full", "build"}
+                or (saved.get("resume_context") or {}).get("finish_incomplete_build") is True
+            )
+            and (phases.get("pipeline_processing") or {}).get("status") != "done"
+        )
+        incomplete = (saved.get("scope_build") or {}).get("status") == "incomplete" or interrupted_build
         if incomplete and not recover_pipeline:
             raise InvalidRequestError(
                 "selected scope has an incomplete build; confirm the original pipeline has stopped "
                 "and finish the build before resuming QA"
             )
         if recover_pipeline:
-            phases = saved.get("phases") or {}
             imported = bool((saved.get("resume_context") or {}).get("asset_import_complete")) or all(
                 (phases.get(key) or {}).get("status") == "done" for key in ("identity_seed", "photo_import")
             )

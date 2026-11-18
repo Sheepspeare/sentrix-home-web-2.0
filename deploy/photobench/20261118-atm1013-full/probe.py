@@ -11,7 +11,10 @@ from prepare_runtime import BASE, api
 
 def probe(stage):
     port, product, endpoint, model = STAGES[stage]
-    run_id = json.loads((BASE / f'{stage}-launch-response.json').read_text())['run_ids'][0]
+    mapping_path = BASE / 'active-runs.json'
+    mapping = json.loads(mapping_path.read_text()) if mapping_path.exists() else {}
+    run_id = (mapping[stage]['run_id'] if stage in mapping else
+              json.loads((BASE / f'{stage}-launch-response.json').read_text())['run_ids'][0])
     root = Path('/home/realmagic/xy/atm-bench-20261110/results') if stage == 'q4km' else BASE / 'cloud-results'
     run_dir = root / run_id
     pointer = json.loads((run_dir / 'snapshot-commit.json').read_text())
