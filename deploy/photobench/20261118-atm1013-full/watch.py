@@ -12,7 +12,7 @@ parser.add_argument('--registration', type=Path, required=True)
 parser.add_argument('--audit', type=Path, required=True)
 parser.add_argument('--run-id', help='Require this exact active run; a mapping change needs review')
 parser.add_argument('--reviewed-active-work-outage', action='store_true',
-                    help='Record the reviewed API timeout, observe real product events, wake on API recovery')
+                    help='Record the reviewed API timeout; wake after three consecutive healthy status probes')
 parser.add_argument('--check', action='store_true')
 args = parser.parse_args()
 sender = Path.home() / '.codex/skills/wakecodex/scripts/send_event.py'
@@ -20,6 +20,7 @@ args.audit.mkdir(parents=True, exist_ok=True)
 started = changed = time.monotonic()
 prior = None
 failures = 0
+healthy_status_probes = 0
 while True:
     reason = ''
     try:
@@ -42,6 +43,7 @@ while True:
             changed, prior = time.monotonic(), fingerprint
         active_rows = snapshot['active']
         active = any(w.get('id') == snapshot['run_id'] and w.get('worker_alive') for w in active_rows or [])
+        healthy_status_probes = healthy_status_probes + 1 if active else 0
         if args.run_id and snapshot['run_id'] != args.run_id:
             reason = 'Active run mapping changed; inspect the expected exact run'
         elif snapshot['status'] not in ['pending', 'running', 'cancelling']:
@@ -52,8 +54,8 @@ while True:
             reason = 'Actual model identity changed'
         elif min(snapshot['disk_free'].values()) < 1536 * 1024**2:
             reason = 'Disk free space below 1.5 GiB'
-        elif args.reviewed_active_work_outage and active_rows is not None:
-            reason = 'Reviewed status API outage recovered; inspect staged read optimizations'
+        elif args.reviewed_active_work_outage and healthy_status_probes >= 3:
+            reason = 'Status API recovered in three consecutive probes; inspect staged read optimizations'
         elif (active_rows is None and snapshot['current_phase'] == 'qa_eval'
               and not snapshot.get('live_turns') and time.monotonic() - started > 120):
             reason = 'Product turns stopped while evaluator status remains unavailable'
@@ -64,6 +66,7 @@ while True:
                       else 'Watcher reached seven-day deadline')
     except Exception as error:
         failures += 1
+        healthy_status_probes = 0
         snapshot = {'stage': args.stage, 'probe_error': str(error), 'consecutive_failures': failures}
         if isinstance(error, subprocess.CalledProcessError):
             snapshot['probe_returncode'] = error.returncode

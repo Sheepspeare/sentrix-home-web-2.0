@@ -13,4 +13,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | Q4续7955c3保留52题；读优化2cbc6cf候选已验待空闲，Qwen已进入QA | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-18 | Q4持续QA，API恢复通知需三次确认；读优化候选待空闲启用，Qwen并行QA | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
