@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18 18:04｜Q4大快照修复并保留51题接续
+
+Q4原90f21f因180秒快照等待失败；51题的run.json为2.17GB，最大单题轨迹334MB。de88f01先本机验证commit，再发布1008872独立q4-checkpoint-release：进程内快速复制、逐题一次编码、可选gzip无损存储及读取/恢复/分析兼容。远端state排空适配已回收本机，冻结协议/预算保持。本地1649项、93定向、Ruff/8文件Mypy通过；100实际93项、真实51题解压逐字节SHA通过，孤立copy15.247s/write9.814s、单份压至334MB；运行中首条慢快照约23.7+28.9秒。启动时仍记录过列表15秒超时，尚不能认定列表延迟完全消除。
+
+仅8872空闲切换，PID2527943；8874/两产品/8772/8191保持。新wake先于单次resume POST，7955c3继承51题/剩余962，父90f21f及原scope保持；原51行JSONL SHA=d6de5be6440ef4fb31f7d84acd7ced33845e88ff35e715bd12428f69830248c0，与新前51行完全一致。现qa_eval/52题、实际4槽工作；不是仅队列受理。原评分有效分、缺项/失败历史保持，终态须精确补齐并验1013答卷/ATM评分/两导出。
+
+活动Q4完整ID：20261118-175624-2026.11.17-atm-sources-addresses-current-resume-7955c3，新wait f0e83446-d246-40b5-83f6-e3cf1e219516/PID4158。Qwen211c0d仍11034/11034材料processed、finalizing、QA0，原wait0bda9c0b保持，watcher20927替换为4162。27aaa87监控绑定精确ID，poll_count不计业务进展，失败保留stderr。旧Q4wait7f3c8516已消费；启动检查中两次失败均在业务操作前退出，修正commit后同步，未重复POST。Qwen完整验收后才接豆包；不启动Hard、不发布16题包、不改8772/8191或其他服务器。
+
+详细状态及接手入口为产品项目audit/20261118-atm1013-three-model-full/{README.md,state.json,checkpoint-watchers.json}，验收/限制/推送回执见audit/20261118-q4-checkpoint-recovery/。本轮stage/activate/resume已消费禁重放，后续仍本地验证commit→同步100验收→push。
+
 ## 2026-11-18｜列表接口避开大快照锁等待
 
 用户反馈`/runs?page=1&page_size=20&group_tasks=true`超时。根因是活动列表生成摘要需获取RunState锁，后台大快照复制会长时间持有此锁；`/active-work`还会在持任务注册锁期间等待该锁，间接阻塞列表。此前日志复制约47秒/写入约57秒，前端10秒超时。

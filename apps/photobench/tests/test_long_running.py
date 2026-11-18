@@ -127,6 +127,7 @@ def test_streamed_snapshot_pair_preserves_json_contract(tmp_path, items):
 
 
 def test_gzip_checkpoint_roundtrip_overview_analysis_and_orphan_recovery(tmp_path, monkeypatch):
+    from photobench.application.runs.reports import RunReports
     from photobench.infrastructure.error_analysis.worker import lines, source
     from photobench.infrastructure.results.encoding import read_snapshot
     from photobench.infrastructure.results.recovery import FileRunStartupRecovery
@@ -143,6 +144,9 @@ def test_gzip_checkpoint_roundtrip_overview_analysis_and_orphan_recovery(tmp_pat
     assert FileRunStore(tmp_path).load_state("r") == state
     assert FileRunStore(tmp_path).load_overview("r")["item_count"] == 2
     assert list(FileRunStore(tmp_path).iter_entries())[0]["status"] == "running"
+    reports = RunReports(FileRunStore(tmp_path), SimpleNamespace(), lambda: "http://unused")
+    assert len(reports.export_traces("r")) == 2
+    assert len(reports.export_sft("r")["items"]) == 2
     pinned = tmp_path / "pinned.jsonl"
     result = source(tmp_path, "r", pinned=pinned)
     assert result["format"] == "jsonl"
