@@ -23,10 +23,12 @@ from fakes_execution import FakeAlbums, FakeHttpClient, FakeResultWriter, judge_
 
 from photobench.application.config.service import ConfigService
 from photobench.application.run_execution.service import RunRequest
+from photobench.application.run_execution.state import RunState
 from photobench.application.runs.index import RunIndex
 from photobench.application.runs.suites import RunSuites
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import InvalidRequestError
+from photobench.domain.runs.analysis import run_list_entry
 from photobench.infrastructure.config.env import DotenvSecretStore
 from photobench.infrastructure.config.files import JsonConfigStore
 
@@ -248,6 +250,51 @@ def test_reuse_is_accepted_with_an_existing_scope(tmp_path: Path):
 
     assert suite["mode"] == "reuse"
     assert suite["existing_scope_id"] == "PhotoBench-20260101-000000-album-qwen"
+
+
+def test_active_run_list_uses_cached_projection_while_state_is_locked(tmp_path: Path):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    state = RunState(
+        {
+            "run_id": "live-run",
+            "status": "running",
+            "started_at": "2026-11-18T00:00:00+08:00",
+            "qa_count": 2,
+            "items": [
+                {"qa_id": "q1", "judge": {"score": 2}, "execution_status": "completed"},
+                {"qa_id": "q2", "judge": {"score": 0}, "execution_status": "completed"},
+            ],
+            "phases": {"qa_eval": {"status": "running", "progress": {"agent_completed": 1}}},
+        }
+    )
+    suites = _suites(tmp_path)
+    with suites._lock:
+        suites._register_active("live-run", SimpleNamespace(state=state))
+    assert suites.active_states()["live-run"] == run_list_entry(state.data)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        state.lock.acquire()
+        try:
+            entries = pool.submit(suites.active_states).result(timeout=1)
+        finally:
+            state.lock.release()
+
+    assert entries["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 1
+
+    state.record_phase("qa_eval", "progress", {"agent_completed": 2})
+    refreshed = suites.active_states()["live-run"]
+    assert refreshed["phases"]["qa_eval"]["progress"]["agent_completed"] == 2
+    assert refreshed["summary"]["judge_distribution"] == {"0": 1, "1": 0, "2": 1}
+    refreshed["phases"]["qa_eval"]["progress"]["agent_completed"] = 999
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        state.lock.acquire()
+        try:
+            cached = pool.submit(suites.active_states).result(timeout=1)
+        finally:
+            state.lock.release()
+    assert cached["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 2
 
 
 class _StrictAlbums:

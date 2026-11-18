@@ -157,6 +157,7 @@ class RunSuites:
         self._sleep = sleep
         self._lock = threading.RLock()
         self._active: dict[str, RunExecution] = {}
+        self._live_entries: dict[str, dict[str, Any]] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._memory_thread: threading.Thread | None = None
         self._auxiliary: dict[str, tuple[threading.Thread, threading.Event]] = {}
@@ -172,6 +173,39 @@ class RunSuites:
             for rid, run in self._active.items()
             if run.state is None or run.state.get("status") in DIRTY_STATUSES
         ]
+
+    @staticmethod
+    def _live_list_entry(data: dict[str, Any]) -> dict[str, Any]:
+        """Seed a newly registered run before its first live refresh."""
+        items = data.get("items") or []
+        seed_state = {
+            **data,
+            "items": items[:1] if data.get("retest_context") else [],
+        }
+        seed_state.pop("scoring_results", None)
+        seed_state.pop("diagnostic_results", None)
+        entry = analysis.run_list_entry(seed_state)
+        summary = entry.setdefault("summary", {})
+        entry["item_count"] = len(items)
+        summary["completed"] = len(items)
+        summary["total"] = summary.get("total") or data.get("qa_count") or len(items)
+        saved_media_ranking = (data.get("summary") or {}).get("media_ranking")
+        if saved_media_ranking:
+            summary["media_ranking"] = saved_media_ranking
+        return entry
+
+    def _register_active(self, run_id: str, execution: RunExecution) -> None:
+        """Register a new run and seed its lock-independent list projection."""
+        self._active[run_id] = execution
+        state = execution.state
+        if state is not None:
+            lock = getattr(state, "lock", None)
+            if lock is None:
+                data = dict(state.data)
+            else:
+                with lock:
+                    data = dict(state.data)
+            self._live_entries[run_id] = copy.deepcopy(self._live_list_entry(data))
 
     @staticmethod
     def _stop_pending(state: Mapping[str, Any]) -> bool:
@@ -209,6 +243,7 @@ class RunSuites:
                 self._index.upsert(analysis.run_list_entry(finished))
             finally:
                 with self._lock:
+                    self._live_entries.pop(run_id, None)
                     if not self._stop_pending(finished):
                         self._active.pop(run_id, None)
                         self._threads.pop(run_id, None)
@@ -432,7 +467,7 @@ class RunSuites:
                 requests[run_id] = request
                 execution = self._new_execution(request)
                 execution.prepare(request)
-                self._active[run_id] = execution
+                self._register_active(run_id, execution)
                 created.append(run_id)
 
         def _run_sequentially() -> None:
@@ -601,7 +636,7 @@ class RunSuites:
             self._require_inactive()
             execution = self._new_execution(request)
             execution.prepare(request)
-            self._active[new_id] = execution
+            self._register_active(new_id, execution)
             thread = threading.Thread(
                 target=self._execute_and_release, args=(new_id, request), name=new_id, daemon=True
             )
@@ -864,7 +899,7 @@ class RunSuites:
             self._require_inactive()
             execution = self._new_execution(request)
             execution.prepare(request)
-            self._active[new_run_id] = execution
+            self._register_active(new_run_id, execution)
 
         def _run_resumed() -> None:
             try:
@@ -2189,19 +2224,37 @@ class RunSuites:
         所以那一轮在界面上**完全够不着**：看不到进度，也点不到取消。
 
         实测 2026-10-09：一轮 487 题的评测跑了一个多小时，界面上一直什么都没有。
+
+        The state lock is shared with checkpoint deep copies. If a write is holding it,
+        return the last detached list projection; otherwise calculate and detach the
+        compact list projection while the state is stable under the lock.
         """
         with self._lock:
-            states: dict[str, dict[str, Any]] = {}
-            for run_id in self.active_run_ids():
-                execution = self._active.get(run_id)
-                if execution is None or execution.state is None:
+            active = list(self._active.items())
+        states: dict[str, dict[str, Any]] = {}
+        for run_id, execution in active:
+            state = execution.state
+            if state is None:
+                continue
+            lock = getattr(state, "lock", None)
+            if lock is None:
+                entry = copy.deepcopy(analysis.run_list_entry(dict(state.data)))
+            elif lock.acquire(blocking=False):
+                try:
+                    entry = copy.deepcopy(analysis.run_list_entry(state.data))
+                finally:
+                    lock.release()
+                with self._lock:
+                    self._live_entries[run_id] = copy.deepcopy(entry)
+            else:
+                with self._lock:
+                    cached = self._live_entries.get(run_id)
+                if cached is None:
                     continue
-                # 浅拷贝：调用方（列表页）不该拿到执行体正在改的那只 dict。
-                # 取 ``.data`` 而不是 ``dict(state)``——``RunState`` 是带锁的**包装**，
-                # 它本身不是 dict。
-                with execution.state.lock:
-                    states[run_id] = analysis.run_list_entry(execution.state.data)
-            return states
+                entry = copy.deepcopy(cached)
+            if entry and entry.get("status") in DIRTY_STATUSES:
+                states[run_id] = entry
+        return states
 
     def active_run_ids(self) -> list[str]:
         """Still executing runs; stopped executions are released, stop-pending blocks admission."""
