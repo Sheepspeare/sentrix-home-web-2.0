@@ -54,10 +54,14 @@ while True:
             reason = 'Disk free space below 1.5 GiB'
         elif args.reviewed_active_work_outage and active_rows is not None:
             reason = 'Reviewed status API outage recovered; inspect staged read optimizations'
+        elif (active_rows is None and snapshot['current_phase'] == 'qa_eval'
+              and not snapshot.get('live_turns') and time.monotonic() - started > 120):
+            reason = 'Product turns stopped while evaluator status remains unavailable'
         elif time.monotonic() - changed > 7200:
             reason = 'No recorded phase/import/QA progress for two hours'
-        elif time.monotonic() - started > 7 * 86400:
-            reason = 'Watcher reached seven-day deadline'
+        elif time.monotonic() - started > (3600 if args.reviewed_active_work_outage else 7 * 86400):
+            reason = ('Reviewed status API outage persists for one hour' if args.reviewed_active_work_outage
+                      else 'Watcher reached seven-day deadline')
     except Exception as error:
         failures += 1
         snapshot = {'stage': args.stage, 'probe_error': str(error), 'consecutive_failures': failures}
