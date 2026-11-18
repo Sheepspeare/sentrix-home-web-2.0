@@ -57,9 +57,7 @@ def test_result_set_attempt_migration_repairs_stale_numeric_marker(tmp_path):
             "CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL "
             "DEFAULT (datetime('now')))"
         )
-        connection.execute(
-            "INSERT INTO schema_migrations(version) VALUES('0020')"
-        )
+        connection.execute("INSERT INTO schema_migrations(version) VALUES('0020')")
         connection.execute(
             "CREATE TABLE agent_result_sets (id TEXT PRIMARY KEY, scope_id TEXT NOT NULL, "
             "query TEXT NOT NULL DEFAULT '', asset_ids_json TEXT NOT NULL DEFAULT '[]', "
@@ -166,7 +164,7 @@ def test_duplicate_migration_versions_fail_before_creating_database(tmp_path):
     assert not database.path.exists()
 
 
-@pytest.mark.parametrize("baseline", ["fresh", "our_branch", "main"])
+@pytest.mark.parametrize("baseline", ["fresh", "our_branch", "main", "legacy_import_control"])
 def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
     source = Path(__file__).resolve().parents[2] / "src/sentrix/infrastructure/persistence/migrations"
     old_scripts = tmp_path / "old"
@@ -179,6 +177,14 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
         for script in source.glob("*.sql"):
             if script.name[:4] < "0027":
                 (old_scripts / script.name).write_bytes(script.read_bytes())
+    elif baseline == "legacy_import_control":
+        # 已导入照片的旧库用 0019 记录取消请求列，而非媒体清理表。
+        for script in source.glob("*.sql"):
+            if script.name[:4] < "0028" and script.name != "0019_media_cleanup.sql":
+                (old_scripts / script.name).write_bytes(script.read_bytes())
+        (old_scripts / "0019_import_control.sql").write_bytes(
+            (source / "0031_import_control.sql").read_bytes()
+        )
     elif baseline == "main":
         # main 的编号：0015 文本向量、0016 视频任务、0017 配置哈希、0018 拍摄时间。
         (old_scripts / "0015_text_vectors.sql").write_bytes((source / "0024_text_vectors.sql").read_bytes())
@@ -188,12 +194,19 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
         )
         (old_scripts / "0018_capture_time.sql").write_bytes((source / "0027_capture_time.sql").read_bytes())
     path = tmp_path / "t.db"
+    original_ledger = []
     if baseline != "fresh":
         old = Database(path, old_scripts)
         old.migrate()
         with old.connect() as connection:
+            original_ledger = list(connection.execute("SELECT version, applied_at FROM schema_migrations"))
             connection.execute("CREATE TABLE regression_sentinel (value TEXT)")
             connection.execute("INSERT INTO regression_sentinel VALUES ('preserved')")
+            if baseline == "our_branch":
+                connection.execute(
+                    "INSERT INTO media_cleanup_jobs (asset_id, asset_ids_json, paths_json, sources_json) "
+                    "VALUES ('pending-cleanup', '[\"asset\"]', '[\"photo.jpg\"]', '[]')"
+                )
             if baseline == "main":
                 connection.execute(
                     "CREATE TABLE capture_audit AS SELECT applied_at FROM schema_migrations"
@@ -207,12 +220,15 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
         if baseline != "fresh":
             assert connection.execute("SELECT value FROM regression_sentinel").fetchone()[0] == "preserved"
         versions = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+        current_ledger = set(connection.execute("SELECT version, applied_at FROM schema_migrations"))
+        assert set(original_ledger) <= current_ledger
         for table in (
             "text_vectors",
             "video_jobs",
             "import_jobs",
             "scope_postprocess",
             "memory_rotation_sequences",
+            "media_cleanup_jobs",
         ):
             assert (
                 connection.execute(
@@ -226,6 +242,17 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             row[1] for row in connection.execute("PRAGMA table_info(asset_places)")
         }
         assert "cancel_requested" in {row[1] for row in connection.execute("PRAGMA table_info(import_jobs)")}
+        assert [row[1] for row in connection.execute("PRAGMA table_info(import_jobs)")].count(
+            "cancel_requested"
+        ) == 1
+        assert {"scope_id", "file_name", "media_type", "deleted_at"} <= {
+            row[1] for row in connection.execute("PRAGMA table_info(media_cleanup_jobs)")
+        }
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_media_cleanup_jobs_scope_deleted'"
+        ).fetchone()
+        if baseline == "legacy_import_control":
+            assert {"0019_media_cleanup", "0031"} <= versions
         assert "idempotency_key" in {row[1] for row in connection.execute("PRAGMA table_info(agent_turns)")}
         if baseline == "main":
             # main 的数值版本被别的迁移占用；本分支用带后缀的版本记录补齐。
@@ -243,6 +270,11 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             )
         if baseline == "our_branch":
             assert "0027" in versions
+            job = connection.execute(
+                "SELECT asset_ids_json, paths_json, files_done, vectors_done FROM media_cleanup_jobs "
+                "WHERE asset_id='pending-cleanup'"
+            ).fetchone()
+            assert tuple(job) == ('["asset"]', '["photo.jpg"]', 0, 0)
         assert connection.execute("SELECT capture_sort_key('2026-11-06T12:00:00+08:00')").fetchone()[0]
         assert (
             connection.execute(

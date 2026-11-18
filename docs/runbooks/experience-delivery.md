@@ -19,9 +19,17 @@
 | 0016 | `scope_postprocess` 代际 |
 | 0017 | 回合幂等键/租约/围栏、助手消息唯一索引、`agent_turn_events_v2` |
 | 0018 | 回忆序列、游标与已看记录 |
-| 0019 | 导入取消请求 |
+| 0019 | 媒体清理 outbox（旧库曾用此编号记录导入取消请求） |
 | 0020 | 结果集按回合尝试归属 |
 | 0021 | 相册后处理失败退避（`next_attempt_at`） |
+| 0028 | 媒体删除历史及其索引 |
+| 0031 | 导入取消请求（`import_jobs.cancel_requested`） |
+
+升级旧库时，迁移器同时检查版本记录和实际表结构：旧 `0019` 已记录但
+`media_cleanup_jobs` 缺失时，在事务内补建该表，以 `0019_media_cleanup` 记录，
+保留旧编号及应用时间。若旧 `0019` 已添加 `cancel_requested`，则 `0031` 只补记
+版本，不重复添加列。再次启动不会重复执行；不要通过删除版本记录或重建数据库处理
+`no such table: media_cleanup_jobs`。升级前使用 SQLite backup API 备份数据库，保留媒体目录。
 
 控制库（`apps/api/src/sentrix/control/migrations`）：
 

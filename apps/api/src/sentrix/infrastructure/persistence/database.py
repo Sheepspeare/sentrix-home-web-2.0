@@ -143,10 +143,12 @@ class Database:
                 has_attempt_no = table_exists and Database._column_exists(
                     connection, "agent_result_sets", "attempt_no"
                 )
-                index_exists = connection.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='index' "
-                    "AND name='idx_agent_result_sets_turn'"
-                ).fetchone() is not None
+                index_exists = (
+                    connection.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_agent_result_sets_turn'"
+                    ).fetchone()
+                    is not None
+                )
                 if not has_turn_id:
                     connection.execute(
                         "ALTER TABLE agent_result_sets ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''"
@@ -157,13 +159,10 @@ class Database:
                     )
                 if not index_exists:
                     connection.execute(
-                        "CREATE INDEX idx_agent_result_sets_turn "
-                        "ON agent_result_sets(turn_id, attempt_no)"
+                        "CREATE INDEX idx_agent_result_sets_turn ON agent_result_sets(turn_id, attempt_no)"
                     )
                 if done is None:
-                    connection.execute(
-                        "INSERT INTO schema_migrations (version) VALUES (?)", (version,)
-                    )
+                    connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
                 elif not (has_turn_id and has_attempt_no and index_exists):
                     connection.execute(
                         "INSERT INTO schema_migrations (version) VALUES (?)",
@@ -213,6 +212,14 @@ class Database:
                 and not Database._table_exists(connection, "memory_rotation_sequences")
             ):
                 done, record_version = None, "0018_memory_rotation"
+            if (
+                done is not None
+                and script.name == "0019_media_cleanup.sql"
+                and not Database._table_exists(connection, "media_cleanup_jobs")
+            ):
+                # Legacy import-control used 0019 for cancel_requested. Preserve
+                # that ledger entry and create the missing cleanup outbox once.
+                done, record_version = None, "0019_media_cleanup"
             if done is not None and script.name == "0015_text_vectors.sql":
                 text_table = connection.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='text_vectors'"
@@ -299,6 +306,13 @@ class Database:
                     connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
                     connection.execute("COMMIT")
                     return True
+            if script.name == "0031_import_control.sql" and Database._column_exists(
+                connection, "import_jobs", "cancel_requested"
+            ):
+                # The same column was already added by legacy 0019_import_control.
+                connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+                connection.execute("COMMIT")
+                return True
             for statement in _statements(script.read_text(encoding="utf-8")):
                 connection.execute(statement)
             connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (record_version,))
