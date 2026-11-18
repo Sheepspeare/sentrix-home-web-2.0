@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser(__doc__)
 parser.add_argument('--stage', choices=['q4km', 'qwen37', 'doubao'], required=True)
 parser.add_argument('--registration', type=Path, required=True)
 parser.add_argument('--audit', type=Path, required=True)
+parser.add_argument('--run-id', help='Require this exact active run; a mapping change needs review')
 parser.add_argument('--check', action='store_true')
 args = parser.parse_args()
 sender = Path.home() / '.codex/skills/wakecodex/scripts/send_event.py'
@@ -29,12 +30,16 @@ while True:
         failures = 0
         (args.audit / f'{args.stage}-latest.json').write_text(json.dumps(snapshot, indent=2))
         fingerprint = json.dumps([snapshot['current_phase'], snapshot['item_count'],
-            snapshot['imports'], {k: {f: p.get(f) for f in ['status', 'progress', 'agent_completed', 'judge_completed']}
+            snapshot['imports'], {k: {f: ({key: value for key, value in p.get(f, {}).items()
+                if key not in {'poll_count', 'polled_at'}} if f == 'progress' and isinstance(p.get(f), dict)
+                else p.get(f)) for f in ['status', 'progress', 'agent_completed', 'judge_completed']}
             for k, p in snapshot['phases'].items()}], sort_keys=True)
         if fingerprint != prior:
             changed, prior = time.monotonic(), fingerprint
         active = any(w.get('id') == snapshot['run_id'] and w.get('worker_alive') for w in snapshot['active'])
-        if snapshot['status'] not in ['pending', 'running', 'cancelling']:
+        if args.run_id and snapshot['run_id'] != args.run_id:
+            reason = 'Active run mapping changed; inspect the expected exact run'
+        elif snapshot['status'] not in ['pending', 'running', 'cancelling']:
             reason = 'Run reached a terminal status; inspect completeness, scoring and exports'
         elif not active:
             reason = 'Exact run has no live worker'
@@ -49,6 +54,9 @@ while True:
     except Exception as error:
         failures += 1
         snapshot = {'stage': args.stage, 'probe_error': str(error), 'consecutive_failures': failures}
+        if isinstance(error, subprocess.CalledProcessError):
+            snapshot['probe_returncode'] = error.returncode
+            snapshot['probe_stderr'] = (error.stderr or '')[-4000:]
         if failures >= 3:
             reason = 'Three consecutive exact-run probes failed'
     if args.check:
