@@ -31,12 +31,12 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import os
+import pickle
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 
 from photobench.domain.results.ports import RunResultWriter
 from photobench.domain.runs.analysis import now_iso
@@ -202,7 +202,11 @@ class RunState:
         for attempt in range(10):
             try:
                 with self._lock:
-                    return copy.deepcopy(self.data)
+                    # State is a JSON tree. The C implementation preserves shared
+                    # trace references while avoiding deepcopy's per-node Python
+                    # dispatch. Only bytes made here are decoded; pickle is never
+                    # used to read persisted or externally supplied data.
+                    return cast(dict[str, Any], pickle.loads(pickle.dumps(self.data, protocol=5)))
             except RuntimeError as error:
                 if "changed size during iteration" not in str(error) or attempt == 9:
                     raise
@@ -216,10 +220,10 @@ class RunState:
                     self._persist_condition.wait_for(
                         lambda: self._persist_stopping or self._persist_requested > self._persist_written
                     )
-                    if self._persist_stopping:
+                    if self._persist_stopping and self._persist_requested <= self._persist_written:
                         return
                     self._persist_condition.wait_for(lambda: self._persist_stopping, timeout=self.debounce)
-                    if self._persist_stopping:
+                    if self._persist_stopping and self._persist_requested <= self._persist_written:
                         return
                 try:
                     began = time.monotonic()
@@ -255,6 +259,12 @@ class RunState:
                     self._persist_written = target
                     self._persist_condition.notify_all()
         finally:
+            with self._lock:
+                if (self.data.get("persistence") or {}).get("status") == "stop_pending":
+                    self.data["persistence"] = {
+                        "status": "failed" if self._persist_error else "stopped",
+                        "error": str(self._persist_error) if self._persist_error else None,
+                    }
             with self._persist_condition:
                 if not self._persist_stopping and self._persist_error is None:
                     self._persist_error = RuntimeError("persist writer exited unexpectedly")
@@ -295,20 +305,30 @@ class RunState:
 
     def stop_persist_writer(self) -> None:
         """Signal stop even on persistence failure; report any writer still holding resources."""
-        deadline = time.monotonic() + self.persist_timeout
+        flush_error: Exception | None = None
         try:
             self.persist(wait=True)
+        except Exception as exc:
+            flush_error = exc
         finally:
             with self._persist_condition:
                 self._persist_stopping = True
                 self._persist_condition.notify_all()
             thread = self._persist_thread
             if thread is not None:
-                thread.join(timeout=max(0, deadline - time.monotonic()))
-                if thread.is_alive():
-                    with self._lock:
+                # Flushing and joining have independent budgets. On timeout the
+                # writer drains requested revisions before exiting.
+                thread.join(timeout=self.persist_timeout)
+                with self._lock:
+                    if thread.is_alive():
                         self.data["persistence"] = {"status": "stop_pending", "error": "writer_stop_timeout"}
-                    raise TimeoutError("benchmark state writer did not stop before deadline")
+                        raise TimeoutError("benchmark state writer did not stop before deadline")
+                    if (self.data.get("persistence") or {}).get("status") == "stop_pending":
+                        self.data["persistence"] = {"status": "stopped"}
+        if self._persist_error is not None:
+            raise RuntimeError(f"benchmark state persistence failed: {self._persist_error}")
+        if flush_error is not None and self._persist_written < self._persist_requested:
+            raise flush_error
 
 
 __all__ = ["PERSIST_DEBOUNCE_SECONDS", "RunState"]

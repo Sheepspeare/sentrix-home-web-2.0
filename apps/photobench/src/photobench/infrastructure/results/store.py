@@ -6,6 +6,7 @@ pointer; root files are compatible exports, not the authoritative transaction.
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ from typing import Any
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.runs.analysis import effective_summary, run_list_entry
 from photobench.domain.runs.task_history import execution_metadata
+from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
 from photobench.infrastructure.results.file_copy import copy_export
 
 log = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ def committed_path(run_dir: Path, name: str) -> Path:
     generation = json.loads(pointer.read_text(encoding="utf-8"))["generation"]
     if not isinstance(generation, str) or len(generation) != 32 or not generation.isalnum():
         raise ValueError("invalid snapshot generation")
-    return run_dir / ".snapshots" / generation / name
+    return snapshot_file(run_dir / ".snapshots" / generation, name)
 
 
 def _durable_text(path: Path, text: str) -> None:
@@ -54,6 +56,47 @@ def _sync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _write_result_pair(stage: Path, state: dict[str, Any], compressed: bool = False) -> None:
+    """Encode each answer once for the complete JSON and line-oriented export.
+
+    Large traces used to be encoded twice and joined into two additional whole
+    run strings. Keep the same file contract with memory bounded by one item.
+    """
+    suffix = ".gz" if compressed else ""
+    run_path, results_path = stage / ("run.json" + suffix), stage / ("results.jsonl" + suffix)
+
+    def encode(text: str) -> bytes:
+        raw = text.encode("utf-8")
+        return gzip.compress(raw, compresslevel=1, mtime=0) if compressed else raw
+
+    # Concatenated gzip members decode to the same JSON. Reuse each encoded
+    # answer in both files, including its compression work.
+    with run_path.open("wb") as run, results_path.open("wb") as results:
+        results.write(encode(""))
+        run.write(encode("{"))
+        for index, (key, value) in enumerate(state.items()):
+            if index:
+                run.write(encode(", "))
+            run.write(encode(json.dumps(key, ensure_ascii=False) + ": "))
+            if key != "items" or value is None:
+                run.write(encode(json.dumps(value, ensure_ascii=False)))
+                continue
+            run.write(encode("["))
+            for row_index, row in enumerate(value or []):
+                encoded = encode(json.dumps(row, ensure_ascii=False))
+                if row_index:
+                    run.write(encode(", "))
+                run.write(encoded)
+                results.write(encoded)
+                results.write(encode("\n"))
+            run.write(encode("]"))
+        run.write(encode("}"))
+    # Close the compressors first so the gzip footer is durable as well.
+    for path in (run_path, results_path):
+        with path.open("rb") as handle:
+            os.fsync(handle.fileno())
 
 
 def _overview(state: dict[str, Any]) -> dict[str, Any]:
@@ -93,7 +136,7 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
             ):
                 from photobench.domain.evaluation.profiles import scoring_summary
 
-                state = json.loads(committed_path(run_dir, "run.json").read_text(encoding="utf-8"))
+                state = read_snapshot(committed_path(run_dir, "run.json"))
                 entry.setdefault("summary", {})["scoring"] = scoring_summary(state)
             entry.update(execution_metadata(payload.get("overview") or {}))
             return entry
@@ -128,7 +171,7 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
         return entry
 
 
-def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
+def write_committed_snapshot(run_dir: Path, state: dict[str, Any], *, compressed: bool = False) -> None:
     """Stage/fsync the complete pair, then atomically publish one commit pointer.
 
     Root files are legacy exports. Their repair never changes the committed
@@ -144,11 +187,7 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
         previous = json.loads(pointer.read_text())["generation"] if pointer.exists() else None
         temporary = run_dir / "snapshot-commit.tmp"
         try:
-            _durable_text(stage / "run.json", json.dumps(state, ensure_ascii=False))
-            _durable_text(
-                stage / "results.jsonl",
-                "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in state.get("items") or []),
-            )
+            _write_result_pair(stage, state, compressed)
             _durable_text(
                 stage / "metadata.json",
                 json.dumps(
@@ -157,7 +196,9 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
             )
             _sync_directory(stage)
             _sync_directory(stages)
-            _durable_text(temporary, json.dumps({"version": 1, "generation": generation}))
+            _durable_text(
+                temporary, json.dumps({"version": 2 if compressed else 1, "generation": generation})
+            )
             temporary.replace(pointer)
         except BaseException:
             temporary.unlink(missing_ok=True)
@@ -170,9 +211,10 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
         _sync_directory(run_dir)
         try:
             for name in ("run.json", "results.jsonl"):
-                export = run_dir / (name + ".tmp")
-                copy_export(stage / name, export)
-                export.replace(run_dir / name)
+                source = snapshot_file(stage, name)
+                export = run_dir / (source.name + ".tmp")
+                copy_export(source, export)
+                export.replace(run_dir / source.name)
         except OSError:
             log.exception(
                 "Snapshot %s committed; legacy export/cleanup needs repair: %s", generation, run_dir
@@ -190,7 +232,7 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any]) -> None:
                         shutil.rmtree(old)
                     except OSError:
                         log.warning("Could not clean obsolete checkpoint: %s", old, exc_info=True)
-            for name in ("run.json.tmp", "results.jsonl.tmp"):
+            for name in ("run.json.tmp", "results.jsonl.tmp", "run.json.gz.tmp", "results.jsonl.gz.tmp"):
                 with suppress(OSError):
                     (run_dir / name).unlink(missing_ok=True)
 
@@ -251,7 +293,8 @@ class FileRunStore:
                 raise KeyError(run_id)
             # Detach the immutable generation bytes before releasing the lock.
             # Parsing a large trace must not block the next durable commit.
-            text = path.read_text(encoding="utf-8")
+            with open_snapshot(path) as handle:
+                text = handle.read()
         value = json.loads(text)
         if not isinstance(value, dict):
             raise KeyError(run_id)
@@ -363,6 +406,7 @@ class FileResultWriter:
 
     def __init__(self, results_root: Path) -> None:
         self._root = results_root
+        self._compressed = os.environ.get("PHOTOBENCH_COMPRESS_SNAPSHOTS") == "1"
 
     def _run_dir(self, run_id: str) -> Path:
         """与 ``FileRunStore._run_dir`` 同一条路径穿越拦截。写入侧更需要它：
@@ -373,7 +417,7 @@ class FileResultWriter:
 
     def write_snapshot(self, run_id: str, state: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)
-        write_committed_snapshot(run_dir, state)
+        write_committed_snapshot(run_dir, state, compressed=self._compressed)
 
     def write_telemetry_view(self, run_id: str, view: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)

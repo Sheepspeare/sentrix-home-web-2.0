@@ -22,6 +22,7 @@ from photobench.domain.error_analysis.rules import RULE_VERSION, matches
 from photobench.domain.error_analysis.taxonomy import ABILITY_DISPLAY_PROJECTION, project_case_abilities
 from photobench.infrastructure.error_analysis.comparison_inputs import freeze_side
 from photobench.infrastructure.error_analysis.worker import atomic, lines, revision, run_worker, source
+from photobench.infrastructure.results.encoding import snapshot_file
 
 ACTIVE = {"queued", "running", "cancelling", "paused"}
 
@@ -52,7 +53,7 @@ class FileAnalysisBackend:
         if not run_id or run_id in {".", ".."} or "/" in run_id or "\\" in run_id:
             raise KeyError(run_id)
         p = self.root / run_id
-        if not (p / "run.json").is_file():
+        if not snapshot_file(p, "run.json").is_file():
             raise KeyError(run_id)
         return p
 

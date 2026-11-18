@@ -26,6 +26,7 @@ from photobench.domain.evaluation.profile_view import profile_state, select_batc
 from photobench.domain.runs.judge import judge_chat_url
 from photobench.infrastructure.error_analysis.ai_comparison_worker import run_ai_comparison
 from photobench.infrastructure.error_analysis.ai_worker import run_ai
+from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
 from photobench.infrastructure.results.store import committed_path, run_lock
 
 
@@ -39,19 +40,20 @@ def source(
         # generation while this worker is reading; all source facts must remain
         # tied to the generation selected by the result path.
         selected = rows.parent
+        complete = snapshot_file(selected, "run.json")
         meta = selected / "metadata.json"
         if meta.is_file():
             state = json.loads(meta.read_text())["overview"]
         else:
             # Legacy state may be large; this runs only in the isolated worker.
-            state = json.loads((selected / "run.json").read_text())
+            state = read_snapshot(complete)
             state.pop("items", None)
         identity = _selected_identity(selected)
         selection = {}
-        if scoring_profile and not (selected / "run.json").is_file():
+        if scoring_profile and not complete.is_file():
             raise ValueError("Selected scoring standard requires a complete run snapshot")
-        if (selected / "run.json").is_file():
-            full = json.loads((selected / "run.json").read_text())
+        if complete.is_file():
+            full = read_snapshot(complete)
             state["qa_snapshot"] = full.get("qa_snapshot") or {}
             if not scoring_profile and full.get("scoring_batches"):
                 scoring_profile = full["scoring_batches"][0]["profile_id"]
@@ -93,14 +95,15 @@ def source(
                             + chr(10)
                         )
         if pinned is not None and not scoring_profile and rows.is_file():
-            shutil.copyfile(rows, pinned)
+            with open_snapshot(rows) as incoming, pinned.open("w", encoding="utf-8") as out:
+                shutil.copyfileobj(incoming, out)
         runtime = state.get("runtime_snapshot") or {}
         return {
             **selection,
             "run_id": run_id,
             "qa_snapshot": snapshot_metadata(state.get("qa_snapshot") or {}),
             "_qa_rows": (state.get("qa_snapshot") or {}).get("rows") or [],
-            "path": str(rows if rows.is_file() else selected / "run.json"),
+            "path": str(rows if rows.is_file() else complete),
             "format": "jsonl" if rows.is_file() else "legacy_run_json",
             "revision": fingerprint(identity),
             "status": state.get("status"),
@@ -149,7 +152,7 @@ def _identity(directory: Path) -> list[Any]:
 def _selected_identity(selected: Path) -> list[Any]:
     facts: list[Any] = []
     for name in ("results.jsonl", "metadata.json", "run.json"):
-        path = selected / name
+        path = snapshot_file(selected, name)
         if path.is_file():
             stat = path.stat()
             facts.append([str(path), stat.st_ino, stat.st_size, stat.st_mtime_ns])
@@ -163,7 +166,7 @@ def revision(root: Path, run_id: str) -> str:
 
 
 def lines(path: Path) -> Iterator[dict[str, Any]]:
-    with path.open(encoding="utf-8") as file:
+    with open_snapshot(path) as file:
         for line in file:
             if line.strip():
                 yield json.loads(line)
@@ -220,9 +223,13 @@ def run_worker(
             # Pin a private input copy: source snapshot generations may be retired by rejudge.
             pinned = target / "input.jsonl"
             if not pinned.exists() and src["format"] == "jsonl":
-                shutil.copyfile(src["path"], pinned)
+                with (
+                    open_snapshot(Path(src["path"])) as text_input,
+                    pinned.open("w", encoding="utf-8") as out,
+                ):
+                    shutil.copyfileobj(text_input, out)
             elif not pinned.exists():
-                old = json.loads(Path(src["path"]).read_text())
+                old = read_snapshot(Path(src["path"]))
                 with pinned.open("w", encoding="utf-8") as out:
                     for item in old.get("items") or []:
                         check()
