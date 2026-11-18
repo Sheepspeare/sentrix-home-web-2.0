@@ -20,6 +20,7 @@ from typing import Any
 
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.runs.analysis import effective_summary, run_list_entry
+from photobench.domain.runs.frozen_trace import TRACE_TYPES
 from photobench.domain.runs.task_history import execution_metadata
 from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
 from photobench.infrastructure.results.file_copy import copy_export
@@ -58,7 +59,12 @@ def _sync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _write_result_pair(stage: Path, state: dict[str, Any], compressed: bool = False) -> None:
+def _write_result_pair(
+    stage: Path,
+    state: dict[str, Any],
+    compressed: bool = False,
+    trace_cache: dict[int, tuple[Any, bytes]] | None = None,
+) -> None:
     """Encode each answer once for the complete JSON and line-oriented export.
 
     Large traces used to be encoded twice and joined into two additional whole
@@ -70,6 +76,36 @@ def _write_result_pair(stage: Path, state: dict[str, Any], compressed: bool = Fa
     def encode(text: str) -> bytes:
         raw = text.encode("utf-8")
         return gzip.compress(raw, compresslevel=1, mtime=0) if compressed else raw
+
+    used: set[int] = set()
+
+    def field_bytes(value: Any) -> bytes:
+        if isinstance(value, TRACE_TYPES) and trace_cache is not None:
+            identity = id(value)
+            used.add(identity)
+            cached = trace_cache.get(identity)
+            if cached is None:
+                cached = (value, encode(json.dumps(value, ensure_ascii=False)))
+                trace_cache[identity] = cached
+            return cached[1]
+        return encode(json.dumps(value, ensure_ascii=False))
+
+    def fragments(row: dict[str, Any]) -> Iterator[bytes]:
+        yield encode("{")
+        for index, (key, child) in enumerate(row.items()):
+            if index:
+                yield encode(", ")
+            yield encode(json.dumps(key, ensure_ascii=False) + ": ")
+            if key == "runtime_turns" and isinstance(child, list):
+                yield encode("[")
+                for turn_index, turn in enumerate(child):
+                    if turn_index:
+                        yield encode(", ")
+                    yield from fragments(turn)
+                yield encode("]")
+            else:
+                yield field_bytes(child)
+        yield encode("}")
 
     # Concatenated gzip members decode to the same JSON. Reuse each encoded
     # answer in both files, including its compression work.
@@ -85,14 +121,22 @@ def _write_result_pair(stage: Path, state: dict[str, Any], compressed: bool = Fa
                 continue
             run.write(encode("["))
             for row_index, row in enumerate(value or []):
-                encoded = encode(json.dumps(row, ensure_ascii=False))
                 if row_index:
                     run.write(encode(", "))
-                run.write(encoded)
-                results.write(encoded)
+                chunks = (
+                    fragments(row)
+                    if trace_cache is not None
+                    else (encode(json.dumps(row, ensure_ascii=False)),)
+                )
+                for encoded in chunks:
+                    run.write(encoded)
+                    results.write(encoded)
                 results.write(encode("\n"))
             run.write(encode("]"))
         run.write(encode("}"))
+    if trace_cache is not None:
+        for identity in trace_cache.keys() - used:
+            del trace_cache[identity]
     # Close the compressors first so the gzip footer is durable as well.
     for path in (run_path, results_path):
         with path.open("rb") as handle:
@@ -171,7 +215,13 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
         return entry
 
 
-def write_committed_snapshot(run_dir: Path, state: dict[str, Any], *, compressed: bool = False) -> None:
+def write_committed_snapshot(
+    run_dir: Path,
+    state: dict[str, Any],
+    *,
+    compressed: bool = False,
+    trace_cache: dict[int, tuple[Any, bytes]] | None = None,
+) -> None:
     """Stage/fsync the complete pair, then atomically publish one commit pointer.
 
     Root files are legacy exports. Their repair never changes the committed
@@ -187,7 +237,7 @@ def write_committed_snapshot(run_dir: Path, state: dict[str, Any], *, compressed
         previous = json.loads(pointer.read_text())["generation"] if pointer.exists() else None
         temporary = run_dir / "snapshot-commit.tmp"
         try:
-            _write_result_pair(stage, state, compressed)
+            _write_result_pair(stage, state, compressed, trace_cache)
             _durable_text(
                 stage / "metadata.json",
                 json.dumps(
@@ -407,6 +457,9 @@ class FileResultWriter:
     def __init__(self, results_root: Path) -> None:
         self._root = results_root
         self._compressed = os.environ.get("PHOTOBENCH_COMPRESS_SNAPSHOTS") == "1"
+        self._trace_caches: dict[str, dict[int, tuple[Any, bytes]]] | None = (
+            {} if os.environ.get("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS") == "1" else None
+        )
 
     def _run_dir(self, run_id: str) -> Path:
         """与 ``FileRunStore._run_dir`` 同一条路径穿越拦截。写入侧更需要它：
@@ -417,7 +470,16 @@ class FileResultWriter:
 
     def write_snapshot(self, run_id: str, state: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)
-        write_committed_snapshot(run_dir, state, compressed=self._compressed)
+        cache = self._trace_caches.setdefault(run_id, {}) if self._trace_caches is not None else None
+        write_committed_snapshot(run_dir, state, compressed=self._compressed, trace_cache=cache)
+        if self._trace_caches is not None and state.get("status") in {
+            "completed",
+            "completed_with_errors",
+            "failed",
+            "cancelled",
+            "interrupted",
+        }:
+            self._trace_caches.pop(run_id, None)
 
     def write_telemetry_view(self, run_id: str, view: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)

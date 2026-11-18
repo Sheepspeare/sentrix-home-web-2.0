@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import pickle
@@ -40,6 +41,7 @@ from typing import Any, cast
 
 from photobench.domain.results.ports import RunResultWriter
 from photobench.domain.runs.analysis import now_iso
+from photobench.domain.runs.frozen_trace import freeze_item_traces
 
 #: 1.0 ``:211`` 的 ``PERSIST_DEBOUNCE_SECONDS``。合并同一短窗口里的多次快照请求。
 log = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ class RunState:
         self._persist_stopping = False
         self._persist_error: Exception | None = None
         self._persist_thread: threading.Thread | None = None
+        self._reuse_traces = os.environ.get("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS") == "1"
 
     @property
     def lock(self) -> threading.RLock:
@@ -202,6 +205,9 @@ class RunState:
         for attempt in range(10):
             try:
                 with self._lock:
+                    if self._reuse_traces:
+                        freeze_item_traces(self.data.get("items") or [])
+                        return copy.deepcopy(self.data)
                     # State is a JSON tree. The C implementation preserves shared
                     # trace references while avoiding deepcopy's per-node Python
                     # dispatch. Only bytes made here are decoded; pickle is never
