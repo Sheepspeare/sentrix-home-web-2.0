@@ -872,8 +872,7 @@ def test_a_third_search_is_refused_after_one_retry(env):
 
     assert [name for name, _ in toolbox.calls] == ["search_memories", "search_memories"]
     refusals = [
-        event for _seq, _attempt, event in turns.events_after(turn_id, 0)
-        if event.status.value == "denied"
+        event for _seq, _attempt, event in turns.events_after(turn_id, 0) if event.status.value == "denied"
     ]
     assert refusals and "检索额度" in refusals[0].text
 
@@ -1011,6 +1010,34 @@ def test_strict_budget_does_not_add_an_extra_recovery_model_call(env):
     result = run_turn.run(start(run_turn, conversation))
     assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
     assert len(model.calls) == 3
+
+
+def test_reasoning_stops_repeated_denied_calls_and_persists_true_attempt_budget(env):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+    from sentrix.domain.assistant.request_budget import admit_model_attempt, current_request_budget
+
+    class CountedModel(ScriptedModel):
+        def complete(self, messages, tools):
+            admit_model_attempt(10)
+            return super().complete(messages, tools)
+
+    conversations, turns, conversation, _db = env
+    model = CountedModel([tool_call("read_source_text", "bad", unknown="invalid")])
+    run_turn = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox(),
+        profile=replace(REASONING_PROFILE, max_model_calls=8),
+    )
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
+    saved = turns.get(result.turn_id)
+    budget = saved.trace["budget"]["request_limits"]
+    assert budget["version"] == "reasoning-bounded-v1"
+    assert budget["model_attempts"] <= 8 and budget["tool_admitted"] <= 600
+    assert any(event.kind == "request_budget" for _, _, event in turns.events_after(result.turn_id, 0))
+    assert current_request_budget() is None
 
 
 def test_strict_context_budget_preserves_history_and_does_not_retry_cropped_input(env):

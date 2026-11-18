@@ -495,6 +495,10 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
         "retinaface_providers",
         "agent_max_steps",
         "agent_max_tool_calls",
+        "reasoning_max_model_calls",
+        "reasoning_max_tool_calls",
+        "reasoning_max_search_calls",
+        "reasoning_max_other_tool_calls",
         "vlm_generation_profile",
         "vlm_exact_output_budget",
         "vlm_context_tokens",
@@ -502,7 +506,15 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
     if set(value) - allowed:
         raise InvalidRequestError("unknown product_settings keys")
     result = dict(value)
-    for key, minimum in (("agent_max_steps", 3), ("agent_max_tool_calls", 0), ("vlm_context_tokens", 1)):
+    for key, minimum in (
+        ("agent_max_steps", 3),
+        ("agent_max_tool_calls", 0),
+        ("vlm_context_tokens", 1),
+        ("reasoning_max_model_calls", 3),
+        ("reasoning_max_tool_calls", 3),
+        ("reasoning_max_search_calls", 1),
+        ("reasoning_max_other_tool_calls", 3),
+    ):
         if key in result and (type(result[key]) is not int or result[key] < minimum):
             raise InvalidRequestError(f"{key} must be an integer >= {minimum}")
     if "vlm_exact_output_budget" in result and type(result["vlm_exact_output_budget"]) is not bool:

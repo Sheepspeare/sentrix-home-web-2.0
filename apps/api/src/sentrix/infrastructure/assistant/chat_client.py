@@ -50,6 +50,7 @@ from sentrix.domain.assistant.ports import (
     OutputTruncatedError,
     PromptTooLongError,
 )
+from sentrix.domain.assistant.request_budget import admit_model_attempt
 from sentrix.domain.assistant.request_context import output_budget_override, request_slot
 from sentrix.domain.assistant.tools import ToolSpec, openai_tools
 from sentrix.infrastructure.assistant.model_endpoint import FixedModelName, ServedModel
@@ -815,9 +816,10 @@ class OpenAIChatModel:
         retry_status = set(self._retry.get("retry_on_status") or (429, 500, 502, 503, 504, 529))
         attempts = 0
         while True:
+            request_timeout = admit_model_attempt(self._timeout_s)
             attempts += 1
             try:
-                with httpx.Client(timeout=self._timeout_s) as client:
+                with httpx.Client(timeout=request_timeout) as client:
                     response = client.post(
                         f"{self._base_url}/chat/completions",
                         json=payload,

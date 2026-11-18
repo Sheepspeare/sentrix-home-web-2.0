@@ -98,6 +98,10 @@ class Settings(BaseSettings):
                 "vlm_timeout_s",
                 "agent_max_steps",
                 "agent_max_tool_calls",
+                "reasoning_max_model_calls",
+                "reasoning_max_tool_calls",
+                "reasoning_max_search_calls",
+                "reasoning_max_other_tool_calls",
                 "vlm_generation_profile",
                 "vlm_exact_output_budget",
                 "vlm_context_tokens",
@@ -178,6 +182,10 @@ class Settings(BaseSettings):
     agent_turn_workers: int = Field(default=1, ge=1, le=64, validation_alias="SENTRIX_AGENT_TURN_MAX_WORKERS")
     agent_max_steps: int = Field(default=8, ge=3)
     agent_max_tool_calls: int = Field(default=6, ge=0)
+    reasoning_max_model_calls: int = Field(default=100, ge=3)
+    reasoning_max_tool_calls: int = Field(default=600, ge=3)
+    reasoning_max_search_calls: int = Field(default=100, ge=1)
+    reasoning_max_other_tool_calls: int = Field(default=500, ge=3)
     vlm_generation_profile: Literal["legacy", "qwen35_nonthinking"] = "legacy"
     # Requires the serving engine's /tokenize endpoint, including vision tokens.
     vlm_exact_output_budget: bool = False

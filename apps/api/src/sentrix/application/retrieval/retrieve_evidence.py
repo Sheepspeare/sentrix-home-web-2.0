@@ -38,6 +38,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
+from contextvars import copy_context
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -429,7 +430,8 @@ class RetrieveEvidence:
         unscored_images: list[tuple[int, FusedCandidate]] = []
         if prepared:
             with ThreadPoolExecutor(max_workers=self._utility_concurrency) as executor:
-                scores = list(executor.map(score_one, (image for _, _, image in prepared)))
+                futures = [executor.submit(copy_context().run, score_one, image) for _, _, image in prepared]
+                scores = [future.result() for future in futures]
             for (position, candidate, _), score in zip(prepared, scores, strict=True):
                 if score is None:
                     unscored_images.append((position, candidate))

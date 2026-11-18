@@ -126,6 +126,64 @@ def chat_model(server: str) -> OpenAIChatModel:
     return OpenAIChatModel(server, ServedModel(server))
 
 
+def test_http_retries_consume_the_shared_model_limit(server):
+    from sentrix.domain.assistant.request_budget import (
+        RequestBudget,
+        RequestBudgetExceeded,
+        final_model_request,
+        reset_request_budget,
+        set_request_budget,
+    )
+
+    _Handler.status = 503
+    model = OpenAIChatModel(
+        server,
+        ServedModel(server),
+        retry={
+            "max_attempts": 10,
+            "base_delay_s": 0,
+            "jitter_s": 0,
+        },
+    )
+    budget = RequestBudget(max_model_calls=5)
+    token = set_request_budget(budget)
+    try:
+        with pytest.raises(RequestBudgetExceeded):
+            model.complete(
+                [ChatMessage(ChatRole.SYSTEM, "assistant"), ChatMessage(ChatRole.USER, "hello")], ()
+            )
+        assert len(_Handler.received) == budget.model_attempts == 3
+        with final_model_request(), pytest.raises(RequestBudgetExceeded):
+            model.complete(
+                [ChatMessage(ChatRole.SYSTEM, "assistant"), ChatMessage(ChatRole.USER, "finish")], ()
+            )
+        assert len(_Handler.received) == budget.model_attempts == 5
+    finally:
+        reset_request_budget(token)
+
+
+def test_tool_internal_vlm_format_retry_uses_the_same_budget(server):
+    from sentrix.domain.assistant.request_budget import (
+        RequestBudget,
+        RequestBudgetExceeded,
+        reset_request_budget,
+        set_request_budget,
+    )
+    from sentrix.infrastructure.media.vlm_observer import chat_json
+
+    _Handler.reject_structured = True
+    budget = RequestBudget(max_model_calls=3)
+    token = set_request_budget(budget)
+    try:
+        with pytest.raises(RequestBudgetExceeded):
+            chat_json(
+                server + "/chat/completions", ServedModel(server), "read image", None, 10, json_mode=True
+            )
+        assert len(_Handler.received) == budget.model_attempts == 1
+    finally:
+        reset_request_budget(token)
+
+
 def context_model(server: str) -> OpenAIChatModel:
     """带显式窗口的客户端。窗口是**部署事实**，生产由 ``Settings.vlm_context_tokens``
     给；测试里指定一个小值，构造超预算的提示词不必真写 6000 个 token。"""

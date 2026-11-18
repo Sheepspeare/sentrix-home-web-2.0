@@ -68,16 +68,11 @@ def test_reasoning_survives_queued_dispatch_and_expired_lease(isolated_app, monk
     budget = record.trace["budget"]
     if reasoning:
         assert budget["profile"] == "reasoning"
-        assert all(
-            budget[key] is None
-            for key in (
-                "max_steps",
-                "max_tool_calls",
-                "max_search_calls",
-                "max_page_calls",
-                "max_inspections",
-            )
-        )
+        assert budget["max_steps"] == 100 and budget["max_tool_calls"] == 600
+        assert budget["max_search_calls"] == 100
+        assert budget["request_limits"]["max_model_calls"] == 100
+        assert budget["request_limits"]["max_other_tool_calls"] == 500
+        assert budget["max_page_calls"] is None and budget["max_inspections"] is None
         assert budget["wall_time_s"] >= 3600
     else:
         assert budget["profile"] == "goal_driven_candidate"
@@ -123,7 +118,10 @@ def test_reasoning_preserves_cloud_model_policies(isolated_app):
     normal = build_run_turn(container)
     reasoning = build_run_turn(container, reasoning=True)
     assert normal._profile.max_steps == 10 and normal._profile.max_tool_calls == 4
-    assert reasoning._profile.max_steps is None and reasoning._profile.max_tool_calls is None
+    assert reasoning._profile.max_steps == reasoning._profile.max_model_calls == 100
+    assert reasoning._profile.max_tool_calls == 600
+    assert reasoning._profile.max_search_calls == 100
+    assert reasoning._profile.max_other_tool_calls == 500
     assert reasoning._profile.wall_time_s == 7200
     assert reasoning._profile.history_char_budget == normal._profile.history_char_budget == 64000
     assert reasoning._profile.judge_message_chars == normal._profile.judge_message_chars == 3000

@@ -102,6 +102,12 @@ from sentrix.domain.assistant.ports import (
     TurnRepository,
 )
 from sentrix.domain.assistant.profile import DEFAULT_PROFILE, TurnProfile
+from sentrix.domain.assistant.request_budget import (
+    RequestBudgetExceeded,
+    final_model_request,
+    reset_request_budget,
+    set_request_budget,
+)
 from sentrix.domain.assistant.request_context import (
     acquire_slot,
     release_slot,
@@ -415,6 +421,7 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
             "max_page_calls": state.profile.max_page_calls,
             "max_inspections": state.profile.max_inspections,
             "wall_time_s": state.profile.wall_time_s,
+            "request_limits": state.request_budget.snapshot() if state.request_budget is not None else None,
         },
         "delivered": [item.asset_id for item in session.delivered.items],
         "answer_coverage": session.best_coverage,
@@ -998,6 +1005,40 @@ class RunTurn:
             reasoning=record.trace.get("reasoning") is True,
         )
 
+        budget = session.state.request_budget
+        if budget is not None:
+            first_budget_at = None
+            for _, _, event in self._turns.events_after(turn_id, 0):
+                if event.kind == "request_budget":
+                    budget.restore(event.payload)
+                    if first_budget_at is None:
+                        first_budget_at = datetime.fromisoformat(event.timestamp)
+            if first_budget_at is not None:
+                elapsed = max(0.0, (datetime.now(UTC) - first_budget_at).total_seconds())
+                budget.deadline = min(budget.deadline, time.monotonic() + self._profile.wall_time_s - elapsed)
+                session.state.started_at = budget.deadline - self._profile.wall_time_s
+
+            def persist_budget(snapshot: Mapping[str, Any]) -> None:
+                event = session.state.emit(
+                    ProgressStage.THINKING,
+                    ProgressStatus.RUNNING,
+                    "已更新本题请求额度。",
+                    kind="request_budget",
+                    payload=snapshot,
+                )
+                sequence = self._turns.append_event(
+                    turn_id,
+                    event,
+                    fence=session.fence,
+                    attempt_no=session.attempt_no,
+                    now=datetime.now(UTC),
+                )
+                if sequence is None:
+                    raise OperationCancelled("request admission fence expired")
+
+            budget.on_change = persist_budget
+        budget_token = set_request_budget(budget)
+
         # 政策拒答那条出口**不经过规划**，所以 ``planned`` 可能从头到尾没被赋值。
         # 先绑成 None，``_turn_trace`` 据此报 ``not_planned``——没规划过与规划成功
         # 是两件事，编一个「ok」会让那个面板把拒答读成一次正常规划。
@@ -1065,6 +1106,11 @@ class RunTurn:
                         answer = self._converse(session, record)
                     except OperationCancelled:
                         raise
+                    except RequestBudgetExceeded as error:
+                        session.state.finish(TerminationReason.STEP_BUDGET_EXHAUSTED)
+                        answer = self._stop(
+                            session, TerminationReason.STEP_BUDGET_EXHAUSTED, detail=error.code
+                        )
                     except Exception:
                         # 兜底不是「错误处理」，是「绝不让收尾原因落空」：任何未预料的异常也
                         # 必须以一个有名字的原因结束，而不是留下一个半开的回合。
@@ -1073,12 +1119,16 @@ class RunTurn:
                         answer = emergency.clarify_answer(TerminationReason.MODEL_ERROR)
 
             self._check_cancel(turn_id)
+        except RequestBudgetExceeded as error:
+            session.state.finish(TerminationReason.STEP_BUDGET_EXHAUSTED)
+            answer = self._stop(session, TerminationReason.STEP_BUDGET_EXHAUSTED, detail=error.code)
         except OperationCancelled:
             session.state.finish(TerminationReason.CANCELLED)
             answer = ""
         finally:
             # 模型调用已经全部结束；租约只保护槽位，不覆盖下面的落库收尾。
             release_slot(record.conversation_id)
+            reset_request_budget(budget_token)
 
         # 收尾前给还开着的需求补上真实原因：**是试过没拿到，还是根本没试**。
         # 必须在最后一次 ``as_payload()`` 之前——它同时喂给落库与返回值。
@@ -1243,6 +1293,8 @@ class RunTurn:
         while True:
             self._check_cancel(state.turn_id)
             if not state.can_step():
+                if state.request_budget is not None and not state.request_budget.can_model():
+                    state.request_budget.stop_code = "model_call_limit"
                 reason = (
                     TerminationReason.TIMEOUT
                     if state.wall_remaining() <= 0
@@ -1270,7 +1322,15 @@ class RunTurn:
                 specs = tuple(spec for spec in frozen_specs if spec.name == FINAL_ANSWER_TOOL)
             elif self._use_all_tools:
                 # 推理模式不按证据需求剪枝，发全量契约让模型自己决定下一步。
-                specs = unrestricted_tools()
+                specs = tuple(
+                    spec
+                    for spec in unrestricted_tools()
+                    if spec.name == FINAL_ANSWER_TOOL
+                    or (
+                        state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
+                        and (state.request_budget is None or state.request_budget.can_tool(spec.name))
+                    )
+                )
             else:
                 specs = tuple(
                     spec
@@ -1396,6 +1456,17 @@ class RunTurn:
             productive = False
             for call in reply.tool_calls:
                 if call.name == FINAL_ANSWER_TOOL:
+                    if state.request_budget is not None and not state.request_budget.admit_tool(call.name):
+                        if terminal is call:
+                            terminal = None
+                        messages.append(
+                            ChatMessage(
+                                ChatRole.TOOL,
+                                '{"error":"final_tool_budget_exhausted"}',
+                                tool_call_id=call.call_id,
+                            )
+                        )
+                        continue
                     # 终止动作不进 ``_run_tool``：它不检索也不读库，交付与作答在同一步里
                     # 完成。但仍然要回一条 tool 消息——带了 tool_calls 却不给配对结果，
                     # 严格 chat template 的端点会直接 400。
@@ -2316,6 +2387,10 @@ class RunTurn:
         )
 
     def _force_final_once(self, session: _Session) -> str:
+        with final_model_request():
+            return self._request_final_answer(session)
+
+    def _request_final_answer(self, session: _Session) -> str:
         """**额外一次纯 final 调用**：让模型明确给出结论。失败返回空串。
 
         1.0 ``runtime.py:1590-1623``（定义）与 ``:2379-2387``（步数耗尽处调用）。

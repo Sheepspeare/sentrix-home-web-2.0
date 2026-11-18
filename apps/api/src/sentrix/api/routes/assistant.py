@@ -325,6 +325,8 @@ async def turn_events(
             nonlocal cursor
             for seq, attempt_no, stored in turns.events_after(turn_id, from_seq):
                 cursor = seq
+                if stored.kind == "request_budget":
+                    continue
                 yield _format_progress(
                     ProgressEvent(
                         step_index=seq,
@@ -409,6 +411,8 @@ def get_turn(turn_id: str, container: Container = Depends(get_container)) -> Tur
     terminal = record.status.is_terminal
     progress = []
     for seq, attempt_no, event in container.turn_repository.events_after(turn_id, 0):
+        if event.kind == "request_budget":
+            continue
         progress.append(
             _progress_payload(
                 ProgressEvent(
