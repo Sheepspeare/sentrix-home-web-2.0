@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ScoringSettings } from './ScoringSettings.tsx';
 import { ScoringResults, ItemScoringResults } from './ScoringResults.tsx';
 import { ScoringPromptEditor } from './ScoringPromptEditor.tsx';
-import { ATM_PROFILE, OPEN_PROFILE, PROFILE_LABELS, defaultScoring, scoringPayload } from '../lib/scoring.ts';
+import { ATM_PROFILE, OPEN_PROFILE, PROFILE_LABELS, defaultScoring, runScoring, scoringPayload } from '../lib/scoring.ts';
 
 afterEach(cleanup);
 describe('独立评分标准', () => {
@@ -142,6 +142,12 @@ it('基于benchmark默认单选，手动双选仍可提交', () => {
   expect(defaultScoring('album3').profiles).toEqual([OPEN_PROFILE]);
   const selection = defaultScoring('atm-bench'); selection.profiles.push(OPEN_PROFILE);
   expect(scoringPayload(selection).scoring_profiles).toEqual([ATM_PROFILE, OPEN_PROFILE]);
+});
+it('冻结评分优先于题集默认，保留人工选择和GT开关', () => {
+  const selection = runScoring({qa_set:'atm-bench',scoring_profiles:[OPEN_PROFILE],scoring_configs:{[OPEN_PROFILE]:{use_gt_images:true}}});
+  expect(selection.profiles).toEqual([OPEN_PROFILE]);
+  expect(selection.configs[OPEN_PROFILE].use_gt_images).toBe(true);
+  expect(runScoring({album_id:'2026.11.17-atm-sources-addresses',qa_set:'atm-bench-hard'}).profiles).toEqual([ATM_PROFILE]);
 });
 it('逐题同时显示已采集结果，隐藏未采集标准并保留零分', () => {
   render(<ItemScoringResults results={[]} current={{[OPEN_PROFILE]:{status:'not_collected'},[ATM_PROFILE]:{status:'completed',score:0,max_score:1,purpose:'list',tool_list_score:.75,media_metrics:{tools:{status:'available',jaccard:.75}}}}}/>);

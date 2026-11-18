@@ -467,3 +467,25 @@ it('defaults a new profile run to its first collected standard and preserves man
   await act(async () => {await result.current.loadActiveRun();});
   expect(result.current.readProfile).toBe('atm_qs_v1');
 });
+
+it('从冻结标准初始化结果与补评，轮询不覆盖手动选择', async () => {
+  const frozen = runDetail({album_id:'2026.11.17-atm-sources-addresses',qa_set:'atm-bench',
+    scoring_profiles:['atm_qs_v1'],scoring_configs:{atm_qs_v1:{use_gt_images:true}}});
+  apiMock.mockImplementation(async (url:string) => url.includes('?include_history=') ? frozen : {});
+  const {result}=mount();
+  await act(async()=>{await result.current.loadActiveRun();});
+  await waitFor(()=>expect(result.current.readProfile).toBe('atm_qs_v1'));
+  expect(result.current.scoring.profiles).toEqual(['atm_qs_v1']);
+  expect(result.current.scoring.configs.atm_qs_v1.use_gt_images).toBe(true);
+  act(()=>result.current.setReadProfile('photobench_open_v1'));
+  await act(async()=>{await result.current.loadActiveRun();});
+  expect(result.current.readProfile).toBe('photobench_open_v1');
+});
+
+it('旧记录缺少冻结标准时按题集选择，题集优先于相册名称', async () => {
+  apiMock.mockImplementation(async (url:string) => url.includes('?include_history=')
+    ? runDetail({album_id:'atm-photos',qa_set:'compact-10q'}) : {});
+  const {result}=mount();
+  await act(async()=>{await result.current.loadActiveRun();});
+  await waitFor(()=>expect(result.current.scoring.profiles).toEqual(['photobench_open_v1']));
+});

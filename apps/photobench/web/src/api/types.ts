@@ -19,6 +19,8 @@
 // 媒体
 // ---------------------------------------------------------------------------
 
+import type { ScoringConfig } from '../lib/scoring.ts';
+
 export type MediaType = "image" | "video";
 
 export interface SourceRef { source_type?: unknown; source_id?: unknown; asset_id?: unknown; title?: unknown; summary?: unknown; source_timestamp?: unknown; excerpt?: unknown; file_name?: unknown }
@@ -410,6 +412,8 @@ export interface Run {
   model_source?: string;
   model_backend?: string;
   qa_set?: string;
+  scoring_profiles?: string[];
+  scoring_configs?: Record<string, ScoringConfig>;
   qa_name?: string;
   qa_count?: number | null;
   status?: string;

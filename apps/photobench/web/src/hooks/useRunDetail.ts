@@ -21,7 +21,7 @@
  *     再 onRejudgeStarted」以保持 1.0 的先后。
  */
 
-import { defaultScoring, newBatchNonce, scoringPayload } from '../lib/scoring.ts';
+import { defaultScoring, newBatchNonce, runScoring, scoringPayload } from '../lib/scoring.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, post } from "../api/client.ts";
@@ -177,8 +177,9 @@ export function useRunDetail(options: RunDetailOptions) {
   useEffect(() => {
     if (!activeRunId || activeRun?.run_id !== activeRunId || initializedReadRun.current === activeRunId) return;
     initializedReadRun.current = activeRunId;
-    setScoring(defaultScoring(String(activeRun.album_id || '')));
-    setReadProfile(defaultScoring(String(activeRun.album_id || '')).profiles[0]);
+    const selection = runScoring(activeRun);
+    setScoring(selection);
+    setReadProfile(selection.profiles[0]);
     setReadBatch('');
   }, [activeRunId, activeRun]);
   const readQuery = readProfile ? new URLSearchParams({scoring_profile:readProfile, scoring_batch:readBatch}).toString() : '';

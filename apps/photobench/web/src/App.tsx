@@ -140,8 +140,8 @@ export function App({ initialLoading = false }: AppProps) {
 
   const [startScoring, setStartScoring] = useState(defaultScoring);
   useEffect(() => {
-    setStartScoring(defaultScoring(selectedAlbum));
-  }, [selectedAlbum]);
+    setStartScoring(defaultScoring(selectedQa));
+  }, [selectedAlbum, selectedQa]);
   const [deleteScopeAfterRun, setDeleteScopeAfterRun] = useState(false);
   const [graphEnabled, setGraphEnabled] = useState(true);
   const [reasoning, setReasoning] = useState(true);
@@ -395,6 +395,26 @@ export function App({ initialLoading = false }: AppProps) {
       }
     : undefined;
 
+  const runningSummary = runs.activeRun && ['running', 'pending'].includes(runs.activeRun.status || '')
+    ? runs.activeRun : runs.runs.find(run => ['running', 'pending'].includes(run.status || ''));
+  const runningRunId = runningSummary?.run_id;
+  const [runningSnapshot, setRunningSnapshot] = useState<Run | null>(null);
+  const [runningScoringError, setRunningScoringError] = useState('');
+  useEffect(() => {
+    setRunningSnapshot(null);
+    setRunningScoringError('');
+    if (!runningRunId) return;
+    const controller = new AbortController();
+    void api<Run>(`/runs/${encodeURIComponent(runningRunId)}?include_history=false`, {signal:controller.signal})
+      .then(run => {if (!controller.signal.aborted) {
+        setRunningSnapshot(run);
+        if (!run.scoring_profiles?.length) setRunningScoringError('该任务未记录冻结评分标准');
+      }})
+      .catch(error => {if (!controller.signal.aborted) setRunningScoringError((error as Error).message);});
+    return () => controller.abort();
+  }, [runningRunId]);
+  const runningRun = runningSummary?.scoring_profiles?.length ? runningSummary
+    : runningSnapshot?.run_id === runningRunId ? runningSnapshot : runningSummary;
   const interactiveModels = { profiles: modelApi.profiles, targets: configApi.config?.vllm_targets || {}, managerUrl: modelApi.vllmManagerUrl, modelEndpoint: modelApi.modelEndpoint };
   const selectInteractiveRun = (id: string) => { setActiveView("runs"); void runs.loadRuns(1); runs.selectRun({ run_id: id }); runs.startPolling(); };
   if (loading) {
@@ -415,7 +435,7 @@ export function App({ initialLoading = false }: AppProps) {
               baselineRuns={runs.runs}
               start={{
                 ...startInput,
-                scoring: startScoring, onScoringChange: setStartScoring,
+                scoring: startScoring, onScoringChange: setStartScoring, runningRun, runningScoringError,
                 prompts:{judgePromptKinds:runs.judgePromptKinds,activePromptKind:runs.activePromptKind,
                   onSwitchPromptKind:runs.switchPromptKind,rejudgePrompt:runs.rejudgePrompt,onRejudgePromptChange:runs.setRejudgePrompt,
                   judgeModel:configApi.judgeModel,onSavePrompt:()=> {void configApi.saveJudgePrompt(runs.activePromptKind,runs.rejudgePrompt);},onResetPrompt:runs.resetJudgePrompt},

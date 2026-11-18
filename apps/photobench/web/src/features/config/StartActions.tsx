@@ -1,12 +1,15 @@
 /** Controlled scoring settings and run actions. */
 import { ScoringSettings } from '../../components/ScoringSettings.tsx';
 import { ScoringPromptEditor, type ScoringPromptEditorProps } from '../../components/ScoringPromptEditor.tsx';
-import { defaultScoring, type ScoringSelection } from '../../lib/scoring.ts';
+import { defaultScoring, runScoring, type ScoringSelection } from '../../lib/scoring.ts';
+import type { Run } from '../../api/types.ts';
 import { runModeMeta, startDisabledReason, type StartDisabledInput } from "./rules.ts";
 
 export interface StartActionsProps extends StartDisabledInput {
   prompts?: ScoringPromptEditorProps;
   scoring?: ScoringSelection;
+  runningRun?: Run | null;
+  runningScoringError?: string;
   onScoringChange?: (v: ScoringSelection) => void;
   deleteScopeAfterRun: boolean;
   onDeleteScopeAfterRunChange: (next: boolean) => void;
@@ -42,12 +45,21 @@ export function StartActions(props: StartActionsProps) {
   const buttonLabel = hasRunning ? "已有任务运行中" : runModeMeta(runMode).button;
 
   const locked = suiteRunning || hasRunning;
+  const frozenRun = locked && props.runningRun?.scoring_profiles?.length ? props.runningRun : null;
+  const readingFrozen = locked && props.runningRun && !frozenRun;
+  const scoringMode = locked && props.runningRun ? props.runningRun.mode : runMode;
   return (
     <div className="start-settings">
-      {runMode !== "build" && (
-        <ScoringSettings value={props.scoring ?? defaultScoring()} onChange={v => props.onScoringChange?.(v)} disabled={locked} />
+      {scoringMode !== "build" && (<>
+        <p className="config-help">{frozenRun
+          ? `运行任务评分（已冻结） · ${frozenRun.qa_set || '题集未记录'} · ${frozenRun.run_id}`
+          : readingFrozen ? props.runningScoringError ? `读取运行评分配置失败：${props.runningScoringError}` : '正在读取运行任务的冻结评分配置…'
+          : '新任务评分设置（切换题集时自动选择，可手动调整）'}</p>
+        {!readingFrozen && <ScoringSettings value={frozenRun ? runScoring(frozenRun) : props.scoring ?? defaultScoring()} onChange={v => props.onScoringChange?.(v)} disabled={locked} />}
+      </>)}
+      {runMode !== 'build' && props.prompts && !props.runningRun && (
+        <ScoringPromptEditor {...props.prompts} running={locked} />
       )}
-      {runMode !== 'build' && props.prompts && <ScoringPromptEditor {...props.prompts} running={locked} />}
       <div className="start-action-bar">
         <div className="start-primary-actions">
           <button className="btn" type="button" disabled={Boolean(reason)} title={reason || undefined} onClick={onStart}>
