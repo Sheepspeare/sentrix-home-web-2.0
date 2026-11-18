@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-18｜Marvell迁移候选文件已备，尚未导入
+
+用户授权先准备配置，之后决定是否切换。5430262先本机验证commit，再同步100的/home/realmagic/xy/diagnostics/marvell-migration-20261118，三文件SHA及系统libnm解析/verify通过。候选绑定enp12s0及MAC，保持192.168.0.100/24、网关/DNS，autoconnect=false；只存用户目录，尚未导入或激活，因系统写入需sudo认证。管理员可sudo python3该目录prepare.py --install，仅导入不启用。原两接口地址、默认路由与活动连接逐项核保持。
+
+正式切换前仍须指定Marvell验证当前网段/网关、安排断网窗口及调整固定Intel网口的watchdog；本轮未实施。证据、导入命令与推送回执：产品项目audit/20261118-marvell-migration-prep/{README.md,delivery.json}。温度采集继续，主线程业务/测评未操作。
+
 ## 2026-11-18 11:56｜100独立温度与网卡取证已启用
 
 侧聊按用户要求新增30秒采集器，代码a2a41b9先本机验证commit，再同步100逐SHA验收。用户单元sentrix-nic-thermal-recorder.service已enabled/active，PID459313、NRestarts0、Linger=yes；连续样本间隔30.05秒通过。日志/home/realmagic/xy/diagnostics/nic-thermal/logs/samples.jsonl，32MiB×4轮转约128MiB，记录hwmon/GPU温度、两物理网卡累计收发/错误和PCIe/AER状态。Intel enp11s0无温度接口，明确null，另一网口PHY/MAC约56℃不能代替。没有切网口或重启业务；主线程测评与监控继续自行管理。
