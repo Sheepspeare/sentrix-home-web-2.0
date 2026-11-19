@@ -1,5 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 02:08｜豆包历史媒体副本验收并启动独立1013题
+
+准备171603于01:53:46正常完成，bb58891d终态已处理。285bb73新只读验收确认原库14表指纹完全一致；6330媒体资产/5519观察/18254视觉向量保持；6742邮件原文、词法及semantic/episodic向量各6742全覆盖。新版地址补6330资产，标准后处理无失败，图146027节点/333897边。原媒体VLM不重跑，旧视频抽帧覆盖保留，报告标“历史豆包媒体记忆复用+新版邮件增量”。
+
+8294/8874真实空闲后单次切换，实际PID351254/351297，数据根doubao-reuse-49f347c/product-data，主模型18107实际doubao-seed-2.1-lite、普通与推理上下文16384。进程目录保持conversation-delete-9363d4b-v2/product与wait-chat-950b2be/evaluation；运行连接、systemd最终环境文件与静态Environment同步，预算100/600/100/500、QA4/3660、冻结ATM v5/Judge和reasoning/graph保持。8保护服务PID及Qwen0bbacb manifest指纹不变。首次验收错把SQLite短连接必须留在/proc/fd作条件，已停止在切换后；686ed9d仅补只读accept-activation，用在线6742新邮件及实际环境验库，没有重复切换或重启。
+
+新wake79d22271-9818-4c64-8b62-42ae61b28032先注册，02:06:24独立reuse run `20261120-020624-2026.11.17-atm-sources-addresses-current-d52ecf`启动；继承答卷0，scope仍为独立库中的PhotoBench-20261112-174516-atm-bench-media-current。精确watcher79813已核qa_eval、4个实际产品turn、型号/预算/16K与数据库一致。监控终态、精确worker、进程/库/预算漂移、磁盘<1.5GiB、可用内存<4GiB、单服务RSS>24GiB、连续3次探测失败及两小时无QA/turn进度；只唤醒审查，不自动重启。Q4 3556c7最新590/1013、worker/型号正常，fd46ad08/watcher6536保持；原18隔离及活动后端不动。
+
+新脚本accept_prepared/activate_run/probe_run/watch_run已先本机语法/差异检查并提交285bb73/033b5de/686ed9d/5231242，再传100核SHA、执行实际验收。300秒等待已生效，但未证明原211秒慢写或OOM根因消除。/home约5.2GiB，终态导出须流式避免重复大文件。入口产品项目audit/20261120-doubao-media-reuse/{README.md,delivery.json,watchers.json,doubao-latest.json}及主实验state/checkpoint-watchers。activate/accept-activation/formal launch均已消费，禁止重放；终态核1013去向、冻结ATM分与真实失败，再验在线trace/SFT两完整流式导出，最后三模型比较。不启动Hard/16题包，不改8772/8191/153或其他服务器。
+
+
 ## 2026-11-20 01:30｜Qwen终态已验收，8874两修复上线，豆包准备复用旧媒体
 
 Qwen0bbacb 1013唯一QA、1012答卷/有效ATM分、1真实995f8ba1模型失败。四份现成答卷仅Judge补评4/4完成、0失败，原1008回执及所有答卷指纹保持；有效均值65.884562%，失败未补0，total_score为空。17新attempt、996原答卷、1010seed答卷/1005回执及源manifest均保持。固定版本完整在线trace44,902,276字节/SFT1,009,589,070字节SHA验收通过，未落大正文。fe870c77与score_four.py accept已消费。
