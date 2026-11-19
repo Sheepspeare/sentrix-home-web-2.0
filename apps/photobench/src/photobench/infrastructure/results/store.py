@@ -477,9 +477,9 @@ class FileRunStore:
         return self._split_reader(run_id, revision).state()
 
     def load_item_core(
-        self, run_id: str, index: int, profile: str, batch: str, *, revision: str = ""
+        self, run_id: str, index: int, profile: str, batch: str, *, revision: str = "", preview: bool = False
     ) -> dict[str, Any]:
-        return self._split_reader(run_id, revision).core(index, profile, batch)
+        return self._split_reader(run_id, revision).core(index, profile, batch, preview=preview)
 
     def load_item_record(self, run_id: str, index: int, *, revision: str = "") -> dict[str, Any]:
         return self._split_reader(run_id, revision).item_record(index)

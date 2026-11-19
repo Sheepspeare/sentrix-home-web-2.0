@@ -22,6 +22,7 @@ export type ProcessDiagnostic = {
   rule_version: string; qa_id: string; answer_fingerprint: string;
   original_answered_with_gap: boolean; findings: Finding[]; chain: Chain[];
   scoring_context?: ScoringContext;
+  preview_counts?: Record<string, number>;
 };
 const STATUS: Record<string, string> = {
   confirmed: '日志可确认', needs_review: '待复核', record_missing: '记录不足',
@@ -30,8 +31,9 @@ const STATUS: Record<string, string> = {
 export function ProcessDiagnostics({ value }: { value: ProcessDiagnostic | undefined }) {
   if (!value) return null;
   return <details className="process-diagnostics">
-    <summary className="diagnostic-heading"><span>答题过程诊断</span><small>{value.chain.length} 组检索记录 · {value.findings.length} 条观测</small></summary>
+    <summary className="diagnostic-heading"><span>答题过程诊断</span><small>{value.preview_counts?.chain ?? value.chain.length} 组检索记录 · {value.preview_counts?.findings ?? value.findings.length} 条观测</small></summary>
     <div className="diagnostic-body">
+    {value.preview_counts ? <p className="muted">当前显示前20条预览；完整记录可在本题完整内容中按块查看。</p> : null}
     <p className="diagnostic-description">依据已保存日志分析；语义结论需复核，正式评分保留原记录。</p>
     <div className="diagnostic-chain-grid" aria-label="检索与交付记录">
       {value.chain.map((chain, index) => <article className="diagnostic-chain" key={index}>

@@ -56,10 +56,11 @@ def verify(root: Path, run_id: str, output: Path, duration: int):
             overview = current.overview()
             assert overview["item_count"] == len(state["items"])
             current.index()
-            core = current.core(index)
+            core = current.core(index, preview=True)
             page = current.nodes(index)
             size = len(json.dumps(core, ensure_ascii=False).encode())
             node_size = len(json.dumps(page, ensure_ascii=False).encode())
+            assert size < 256 * 1024, (index, size)
             assert len(page["nodes"]) <= 50
             if page["nodes"]:
                 chunk = current.content(index, page["nodes"][0]["node_id"])

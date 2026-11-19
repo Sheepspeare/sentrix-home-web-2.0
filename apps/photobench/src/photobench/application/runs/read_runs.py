@@ -712,7 +712,9 @@ class ReadRuns:
         with nullcontext() if indexed else self._item_locks[hash(run_id) % len(self._item_locks)]:
             if indexed:
                 assert self._indexed is not None
-                item = self._indexed.load_item_core(run_id, item_index, scoring_profile, scoring_batch)
+                item = self._indexed.load_item_core(
+                    run_id, item_index, scoring_profile, scoring_batch, preview=True
+                )
                 overview = self._indexed.load_selected_overview(
                     run_id,
                     scoring_profile,

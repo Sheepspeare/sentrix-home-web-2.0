@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, cast
 
@@ -213,6 +214,8 @@ class SplitResultWriter:
         self._nodes_cache: dict[tuple[str, ...], Any] = {}
         self._fingerprints: dict[str, str] = {}
         self._metric_refs: dict[tuple[str, str], Any] = {}
+        self._metric_values: OrderedDict[tuple[str, str], tuple[Any, int]] = OrderedDict()
+        self._metric_bytes = 0
 
     def metric_item(self, item: dict[str, Any], objects: ObjectWriter | None = None) -> dict[str, Any]:
         result = dict(item)
@@ -231,7 +234,20 @@ class SplitResultWriter:
                         lambda value=value: objects.put([metric_record(row) for row in value]),
                     )
                     self._metric_refs[cache_key] = projected
-                result[key] = self._metric_reader.value(projected)
+                cached_value = self._metric_values.get(cache_key)
+                if cached_value is None:
+                    records = plain(self._metric_reader.value(projected))
+                    weight = len(json_bytes(records))
+                    if weight <= 64 * 1024 * 1024:
+                        self._metric_values[cache_key] = (records, weight)
+                        self._metric_bytes += weight
+                        while self._metric_bytes > 64 * 1024 * 1024:
+                            _, (_, removed) = self._metric_values.popitem(last=False)
+                            self._metric_bytes -= removed
+                else:
+                    records = cached_value[0]
+                    self._metric_values.move_to_end(cache_key)
+                result[key] = records
                 continue
             identity = (id(value), key)
             cached = self._metric_cache.get(identity)
@@ -675,11 +691,40 @@ class SplitRunReader:
     def index(self, profile: str = "", batch: str = "") -> list[dict[str, Any]]:
         return cast(list[dict[str, Any]], plain(self.variant(profile, batch)["index"]))
 
-    def core(self, index: int, profile: str = "", batch: str = "") -> dict[str, Any]:
+    def core(
+        self, index: int, profile: str = "", batch: str = "", *, preview: bool = False
+    ) -> dict[str, Any]:
         cores = self.variant(profile, batch)["cores"]
         if index < 0 or index >= len(cores):
             raise KeyError(f"item index out of range: {index}")
-        result = plain(cores[index])
+        core = cores[index]
+        result = plain({k: v for k, v in core.items() if k != "process_diagnostics"})
+        diagnostics = core.get("process_diagnostics")
+        if preview and isinstance(diagnostics, dict):
+            shortened = False
+
+            def brief(value: Any) -> Any:
+                nonlocal shortened
+                if isinstance(value, dict):
+                    return {k: brief(v) for k, v in value.items()}
+                if isinstance(value, list):
+                    shortened = shortened or len(value) > 20
+                    return [brief(value[n]) for n in range(min(len(value), 20))]
+                if isinstance(value, str) and len(value) > 1024:
+                    shortened = True
+                    return value[:1024]
+                return value
+
+            result["process_diagnostics"] = brief(diagnostics)
+            if shortened:
+                result["process_diagnostics"]["preview_counts"] = {
+                    k: len(v) for k, v in diagnostics.items() if isinstance(v, list)
+                }
+                result.setdefault("content_fields", []).append(
+                    {"path": "process_diagnostics", "characters": 0}
+                )
+        else:
+            result["process_diagnostics"] = plain(diagnostics)
         result["trace_storage"]["revision"] = self.revision
         return cast(dict[str, Any], result)
 
@@ -771,5 +816,9 @@ class SplitRunReader:
         }
 
     def item_content(self, index: int, path: list[str | int], offset: int, limit: int) -> dict[str, Any]:
-        value = self.reader.walk(self.item_ref(index)["item"], path)
+        if path == ["process_diagnostics"]:
+            core = self.variant()["cores"][index]
+            value = self.reader.walk(core, path)
+        else:
+            value = self.reader.walk(self.item_ref(index)["item"], path)
         return {**self.reader.content(value, offset, limit), "read_revision": self.revision}

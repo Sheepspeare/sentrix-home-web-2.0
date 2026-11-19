@@ -411,3 +411,27 @@ def test_process_findings_and_fingerprint_keep_unprojected_tool_result(tmp_path)
     assert expected["tool_events"]
     SplitResultWriter(tmp_path).write(tmp_path / "split-run", fixture)
     assert SplitRunReader(tmp_path, tmp_path / "split-run").core(0)["process_diagnostics"] == expected
+
+
+def test_large_diagnostics_are_previewed_without_losing_full_record(tmp_path):
+    fixture = state()
+    fixture["items"][0]["tool_trace"] = [
+        {"tool": "read_photo_text", "status": "denied", "result": {"failure_reason": "no_text_detected"}}
+        for _ in range(240)
+    ]
+    SplitResultWriter(tmp_path).write(tmp_path / "split-run", fixture)
+    reader = SplitRunReader(tmp_path, tmp_path / "split-run")
+    full = reader.core(0)["process_diagnostics"]
+    preview = reader.core(0, preview=True)
+    assert len(preview["process_diagnostics"]["tool_events"]) == 20
+    assert preview["process_diagnostics"]["preview_counts"]["tool_events"] == len(full["tool_events"])
+    assert len(json.dumps(preview).encode()) < 256 * 1024
+    pieces, offset = [], 0
+    while True:
+        chunk = reader.item_content(0, ["process_diagnostics"], offset, 1024)
+        pieces.append(chunk["text"])
+        if chunk["next_offset"] is None:
+            break
+        offset = chunk["next_offset"]
+    assert json.loads("".join(pieces)) == full
+    assert len(reader.core(0)["process_diagnostics"]["tool_events"]) == 240

@@ -211,7 +211,7 @@ function QaItemDetail({
           <h4>{turns.length > 1 ? "最终一轮回答" : "模型回答"}</h4>
           <p>{esc(detail.final_answer) || esc(detail.answer) || esc(detail.error) || "未完成"}</p>
           {Array.isArray(detail.content_fields) ? (detail.content_fields as { path: string; characters: number }[]).map(field =>
-            <SavedItemContent key={String(detail.run_id) + String(detail.index) + field.path} detail={detail} path={field.path} label={`完整内容（${field.path}，${field.characters}字符）`} />) : null}
+            <SavedItemContent key={String(detail.run_id) + String(detail.index) + field.path} detail={detail} path={field.path} label={`完整内容（${field.path}${field.characters ? `，${field.characters}字符` : ""}）`} />) : null}
           <div className="capability-grid">
             <span>
               <small>{isAtm ? "公共行为诊断（评测端）" : turns.length > 1 ? "最终一轮回答行为" : "回答行为"}</small>
