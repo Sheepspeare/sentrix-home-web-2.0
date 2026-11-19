@@ -137,10 +137,21 @@ def activate():
         deadline=time.monotonic()+120
         while True:
             try:
-                api('health/live',product=unit==PRODUCT_UNIT);break
+                api('health/live',product=True) if unit==PRODUCT_UNIT else api('config');break
             except OSError:
                 if time.monotonic()>deadline:raise
                 time.sleep(1)
+    finish_activation()
+
+
+def finish_activation():
+    assert (HERE/'activate-intent.json').is_file()
+    assert not (HERE/'activate-response.json').exists()
+    intent=json.loads((HERE/'activate-intent.json').read_text())
+    row=idle();staged=json.loads((HERE/'stage-response.json').read_text())
+    protected=intent['protected_pids']
+    for unit,root in [(PRODUCT_UNIT,PRODUCT),(EVALUATION_UNIT,EVALUATION)]:
+        assert Path(os.readlink(f'/proc/{pid(unit)}/cwd'))==root
     env=dict(part.decode().split('=',1) for part in Path(f'/proc/{pid(PRODUCT_UNIT)}/environ').read_bytes().split(b'\0') if b'=' in part)
     assert env['SENTRIX_VLM_GENERATION_PROFILE']=='qwen35_nonthinking'
     for k,v in LIMITS.items():assert int(env['SENTRIX_'+k.upper()])==v
@@ -171,6 +182,6 @@ def resume(wait_id):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(__doc__);p.add_argument('action',choices=['stage','stop','activate','resume']);p.add_argument('--wait-id');a=p.parse_args()
+    p=argparse.ArgumentParser(__doc__);p.add_argument('action',choices=['stage','stop','activate','finish_activation','resume']);p.add_argument('--wait-id');a=p.parse_args()
     if a.action=='resume':resume(a.wait_id)
     else:globals()[a.action]()
