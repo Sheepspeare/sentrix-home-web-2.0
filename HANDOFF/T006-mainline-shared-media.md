@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-19 22:18｜六补评分验收，17题独立新attempt已运行
+
+六题Judge 6/6完成、失败0；accept_scoring.py实际核1011有效分、1005原有效回执SHA逐项保持，两原执行失败状态保持。补评分wait75fbfd92已处理。源0e3686原1013项/1011有效分及17异常答卷完整保留。
+
+3739235单次seed/resume已消费：新run170bf7（完整ID见主实验state）继承996题，只执行授权17异常；新wake ddd6b98e-7279-4dc8-9aac-46fcd953f948先登记、watcher11012精确监控。c1f2ed9只读验收脚本本机提交后同步100核SHA/语法，实际核996继承答卷及996评分、源manifest保持；已保存1新attempt，共997项，running/qa_eval、worker/型号正常。4个真实新回合均100/600/100/500，QA4/3660保持。Q4最新459题、worker/型号正常，fd46ad08/6536保持，未重启或切新优化。
+
+下一步等17题终态wake，按精确QA ID比较新旧attempt/结束原因/分数，核1013去向、真实失败和两完整流式导出后再豆包full新scope。不得重放plan/seed/resume/补Judge/accept_scoring及任何旧发布恢复脚本；不强改失败成功或补0。完整懒加载、Q4原18隔离、原scope/资产/分与历史保持。当前审计audit/20261119-qwen-persist-recovery、主实验state/checkpoint-watchers已更新，推送SHA回执见delivery.json。
+
 ## 2026-11-19 22:08｜Qwen持久化恢复、实际版本修正及17题新尝试授权
 
 当前入口改为产品项目audit/20261119-qwen-persist-recovery/{README.md,delivery.json,watchers.json}及主实验state/checkpoint-watchers。Q4原3556c7最新455/1013、worker/型号正常，fd46ad08与watcher6536保持；本轮未重启Q4。以下原21:00“仅恢复七题/43及671不可重跑”的限制已由用户最新明确授权取代，原结果及失败历史仍完整保留。
