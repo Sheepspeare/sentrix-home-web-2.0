@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/19完整懒加载已上线1008872/8874。Qwen全1013终态1002有效分，现仅7服务故障继承1006续4c5f90；两份补评分/两完整导出待验，豆包未启。Q4正式采样/GPU0保持3556c7，已401题；四预算100/600/100/500及18隔离保持。当前run/wake取主实验state/checkpoint-watchers，接audit/20261119-qwen1013-acceptance与T006。
+- 11/19 Qwen持久化恢复0e3686已1013题/1005有效分，六现成答卷补Judge活动已挂精确wake；新增授权17异常题新attempt，名单/脚本已验但未启动。8874实际cmdline/SHA已核新读版本，Q4保持3556c7/455题及原wake。现行审计为产品项目audit/20261119-qwen-persist-recovery，主实验state/checkpoint-watchers为映射入口。
 
 
 - 默认中文、精炼客观。代码根目录为本文件所在目录。

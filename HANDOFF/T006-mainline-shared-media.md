@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-19 22:08｜Qwen持久化恢复、实际版本修正及17题新尝试授权
+
+当前入口改为产品项目audit/20261119-qwen-persist-recovery/{README.md,delivery.json,watchers.json}及主实验state/checkpoint-watchers。Q4原3556c7最新455/1013、worker/型号正常，fd46ad08与watcher6536保持；本轮未重启Q4。以下原21:00“仅恢复七题/43及671不可重跑”的限制已由用户最新明确授权取代，原结果及失败历史仍完整保留。
+
+Qwen4c5f90持久化180秒等待失败，保存1007题。找回3个已完成产品回合，原答卷一致；独立seed继承1010后仅运行3个未执行QA。0e3686现completed_with_errors，1013题齐、1011 execution completed/2执行失败、1005有效ATM分，原1002有效回执保持。六现成答卷同冻结batch仅补Judge，辅助活动scoring-0d4fa66aef1e4a8c8e3c457977712156，wait75fbfd92-410c-4170-bac1-5f4408802304/watcher5955已精确核存活。旧bd347d8c终态事件已处理。
+
+3d32090将活动列表统计移到状态锁外，b4cb0ae读取已提交统计并叠加实时进度。两早期98/99启动项被zzzzzzzz-full-lazy.conf覆盖；先前只看PID产生误判，0e3686三题仍在旧目录跑，不能归因新补丁。dfb513d修真正生效项后，8874 PID3279790的/proc/cmdline及四文件SHA确认qwen-live-list-8b6da36实际加载；保护PID保持。最新1010题独立并发验收保存14.93/11.59秒、408列表读、RSS572040KiB、源manifest及评分保持。本机/100最新147项均通过；原远端5模型适配失败在baseline复现。241秒原综合write的唯一根因尚未复现，无本轮新增OOM证据。
+
+用户明确授权最新版定点处理17个Agent异常（11步数、2planner、2guard、1timeout、1model_error），保留原run/答卷/分/失败，保存新attempt，优先于豆包。3739235单次retry_anomalies.py本机提交后同步100验SHA/语法；17题精确ID/原指纹与分布已核。尚未seed或resume；六补评分核1005旧有效回执及六新分后，单次seed继承其余996题、原1013保持；每次resume先新wake再单次POST并保存映射。预算100/600/100/500、QA4/3660、reasoning/graph、冻结ATM/Judge及原scope保持。两完整流式导出验收前不启豆包；完整懒加载已上线两端，Q4原18隔离保持，不启动Hard/16题包、不改8772/8191/153或其他服务器。提交推送回执见审计delivery.json。
+
 ## 2026-11-19 21:00｜Qwen全1013终态分类后仅恢复七个服务故障
 
 Qwen f41436 completed_with_errors：1013均执行、1002有效ATM分，QS有效均值0.6586843988790096但total_score=null。严格筛出7个未交卷服务超时/502，c9179c1先本机验证commit、同步100校验SHA，再先wake单次resume为4c5f90；继承1006题、原scope/失败史保持，无服务重启。1002评分回执及答案指纹逐项一致，另4未评分答卷的答案/状态/媒体一致。真实新回合预算100/600/100/500、QA4/3660及冻结ATM/Judge保持。新wait560dfaf0-1bae-49e6-8d60-b9305b7c8e16/watcher86994；Q4原fd46ad08/6536保持，已401题、worker/GPU正常。
