@@ -28,13 +28,20 @@ def main():
     # Execution traces are immutable references; compare their content digests,
     # avoiding traversal of old prompts and full response bodies.
     from photobench.infrastructure.results.split_json import STORED_TYPES
+
+    def references(value):
+        if isinstance(value, STORED_TYPES):
+            return {'immutable_object_ref': value.ref}
+        if isinstance(value, dict):
+            return {key: references(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [references(child) for child in value]
+        return value
+
     for qa, item in prior.items():
         for field in fields:
             a, b = item.get(field), by_id[qa].get(field)
-            if isinstance(a, STORED_TYPES) and isinstance(b, STORED_TYPES):
-                assert a.ref == b.ref, (qa, field)
-            else:
-                assert source.reader.fingerprint(a) == current.reader.fingerprint(b), (qa, field)
+            assert references(a) == references(b), (qa, field)
     old_scores = old['scoring_results']
     score_subset = {k: new['scoring_results'][k] for k in old_scores}
     score_sha = source.reader.fingerprint(old_scores)
