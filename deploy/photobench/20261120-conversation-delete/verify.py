@@ -40,19 +40,19 @@ def conversation_inventory():
 
 
 def main():
-    assert not (HERE / "verify-intent.json").exists()
+    assert not (HERE / "verify-post-intent.json").exists()
     idle()
     activation = json.loads((HERE / "activate-intent.json").read_text())
     before_results = result_hashes()
     before_sessions = api(8874, "chat/sessions")
     before_product = conversation_inventory()
-    save("verify-intent.json", {"results": before_results, "product": before_product})
+    save("verify-post-intent.json", {"results": before_results, "product": before_product})
     missing = "chat-" + "0" * 24
     request(8874, f"chat/sessions/{missing}", 404, method="DELETE")
     request(8294, "assistant/conversations/conv_delete_verification_missing", 404, method="DELETE")
     mapping = json.loads((BASE / "active-runs.json").read_text())
     scope = mapping["qwen37"]["scope_id"]
-    chat = request(8874, "chat/sessions", 202, {"scope_id": scope})
+    chat = request(8874, "chat/sessions", 202, {"scope_id": scope}, method="POST")
     assert not chat["turns"] and not chat.get("conversation_id") and chat["status"] == "ready"
     save("verify-chat-created.json", {"session_id": chat["session_id"]})
     request(8874, "chat/sessions/" + chat["session_id"], 204, method="DELETE")
@@ -62,6 +62,7 @@ def main():
         "assistant/conversations",
         201,
         {"scope_id": scope, "title": "DELETE API verification (empty)"},
+        method="POST",
     )
     save("verify-conversation-created.json", {"conversation_id": conversation["id"]})
     target = "assistant/conversations/" + conversation["id"]
