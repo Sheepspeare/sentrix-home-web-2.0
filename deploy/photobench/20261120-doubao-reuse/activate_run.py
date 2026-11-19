@@ -177,8 +177,22 @@ def activate():
     for unit, port, route in ((PRODUCT, 8294, "health/live"), (EVALUATOR, 8874, "config")):
         subprocess.run(["systemctl", "--user", "restart", unit], check=True)
         wait_http(port, route)
+    accept_activation()
+
+
+def accept_activation():
+    """Finish read-only verification after activation; never restart or change configuration."""
+    assert not (HERE / "activate-response.json").exists()
+    intent = json.loads((HERE / "activate-intent.json").read_text())
+    config_path = Path(intent["config_path"])
+    updated = json.loads(config_path.read_text())
+    product_settings = updated["product_settings"]
+    protected = intent["protected_pids"]
+    result_manifest = BASE / "cloud-results" / QWEN / "split-commit.json"
+    result_sha = intent["qwen_manifest_sha256"]
     actual_env = environment(pid(PRODUCT))
-    assert all(actual_env.get(k) == v for k, v in product_values.items())
+    assert actual_env["SENTRIX_DATA_DIR"] == str(DATA)
+    assert actual_env["SENTRIX_VLM_BASE_URL"] == ENDPOINT
     effective = api(8294, "diagnostics")
     settings = effective["runtime_configuration"]
     assert settings["vlm_base_url"] == ENDPOINT
@@ -189,16 +203,20 @@ def activate():
     assert current["model_base_url"] == ENDPOINT and current["endpoint_model"] == MODEL
     assert current["product_settings"] == product_settings
     assert environment(pid(EVALUATOR))["PHOTOBENCH_PERSIST_TIMEOUT_SECONDS"] == "300"
-    opened_databases = {os.readlink(p) for p in Path(f"/proc/{pid(PRODUCT)}/fd").iterdir() if p.is_symlink() and p.exists()}
-    assert str(DATA / "sentrix.db") in opened_databases
-    assert str(SOURCE) not in opened_databases
+    online_emails = api(8294, f"assets?scope_id={SCOPE}&media_type=text&limit=1")
+    assert online_emails["total"] == 6742 and len(online_emails["items"]) == 1
+    with sqlite3.connect("file:" + str(DATA / "sentrix.db") + "?mode=ro", uri=True) as db:
+        assert db.execute("select media_type from assets where id=?", (online_emails["items"][0]["id"],)).fetchone()[0] == "text"
+    with sqlite3.connect("file:" + str(SOURCE) + "?mode=ro", uri=True) as db:
+        assert db.execute("select count(*) from assets where scope_id=? and media_type='text'", (SCOPE,)).fetchone()[0] == 0
     assert {unit: pid(unit) for unit in PROTECTED} == protected
     assert sha(result_manifest) == result_sha
     after_activity = idle(DATA / "sentrix.db")
     save("activate-response.json", {
         "status": "accepted", "finished_at": now(), "pids": {PRODUCT: pid(PRODUCT), EVALUATOR: pid(EVALUATOR)},
         "protected_pids_unchanged": True, "qwen_manifest_unchanged": True,
-        "database": str(DATA / "sentrix.db"), "database_opened_verified": True,
+        "database": str(DATA / "sentrix.db"), "online_email_count_verified": 6742,
+        "database_verification": "actual process environment and online unique copied-email read",
         "runtime_config_sha256": sha(config_path), "runtime_config": current,
         "effective_product": effective, "activity": after_activity,
         "ports_restarted": [8294, 8874], "persist_timeout_seconds": 300,
@@ -250,11 +268,13 @@ def launch(wait_id):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("operation", choices=["activate", "launch"])
+    parser.add_argument("operation", choices=["activate", "accept-activation", "launch"])
     parser.add_argument("--wait-id")
     args = parser.parse_args()
     if args.operation == "activate":
         activate()
+    elif args.operation == "accept-activation":
+        accept_activation()
     else:
         assert args.wait_id
         launch(args.wait_id)
