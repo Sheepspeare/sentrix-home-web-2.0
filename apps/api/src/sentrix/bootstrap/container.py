@@ -584,6 +584,7 @@ class Container:
         # 家庭图谱仓储被两个消费方用：容器自己的字段，以及人物目录——目录要靠它回答
         # 「这个人的归属与关系」（S7c）。拿在手上传两次，而不是就地 new 两个实例。
         family = SqliteFamilyGraphRepository(database, entities)
+        portraits = SqlitePortraitRepository(database)
         return cls(
             build_revision=read_build_revision(),
             model_profile=model_profile,
@@ -693,7 +694,7 @@ class Container:
             relationship_repository=SqliteRelationshipRepository(database),
             family_graph_repository=family,
             person_merge_repository=SqlitePersonMergeRepository(database),
-            portrait_repository=SqlitePortraitRepository(database),
+            portrait_repository=portraits,
             chat_model=OpenAIChatModel(
                 chat_base_url,
                 chat_served,
@@ -730,7 +731,7 @@ class Container:
             conversation_repository=SqliteConversationRepository(database),
             turn_repository=SqliteTurnRepository(database),
             result_set_repository=SqliteResultSetRepository(database),
-            person_directory=EntityPersonDirectory(entities=entities, family=family),
+            person_directory=EntityPersonDirectory(entities=entities, family=family, portraits=portraits),
             import_jobs=SqliteImportJobRepository(database),
             memory_rotation=SqliteRotationRepository(database),
             turn_event_broker=InProcessTurnEventBroker(),

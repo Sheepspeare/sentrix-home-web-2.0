@@ -25,11 +25,13 @@ S3 装配的是 ``NoIdentityDirectory``——那时身份层还没建起来，�
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from sentrix.domain.assistant.models import AmbiguousPersonName, PersonProfile, PersonRelationship
 from sentrix.domain.assistant.ports import PersonDirectory
-from sentrix.domain.identity.models import PENDING_CLUSTER_NAME, entity_display_name
-from sentrix.domain.identity.ports import EntityRepository, FamilyGraphRepository
+from sentrix.domain.identity.family import SOURCE_USER_OVERRIDE
+from sentrix.domain.identity.models import ENTITY_STATUS_CONFIRMED, PENDING_CLUSTER_NAME, entity_display_name
+from sentrix.domain.identity.ports import EntityRepository, FamilyGraphRepository, PortraitRepository
 
 # 对方实体被删、没名字或还没确认时用它，**不编造**，也不暴露内部 cluster id。
 UNNAMED_MEMBER = PENDING_CLUSTER_NAME
@@ -41,7 +43,7 @@ def assets_for_names(
     assets: tuple[str, ...] | None = None
     for name in dict.fromkeys(name.strip() for name in names if name.strip()):
         person = directory.lookup(name, scope_id)
-        if person is None:
+        if person is None or not person.confirmed or not person.entity_id:
             return ()
         matching = directory.asset_ids(person)
         if assets is None:
@@ -53,11 +55,18 @@ def assets_for_names(
 
 
 class EntityPersonDirectory:
-    def __init__(self, *, entities: EntityRepository, family: FamilyGraphRepository) -> None:
+    def __init__(
+        self,
+        *,
+        entities: EntityRepository,
+        family: FamilyGraphRepository,
+        portraits: PortraitRepository | None = None,
+    ) -> None:
         self._entities = entities
         self._family = family
+        self._portraits = portraits
 
-    def lookup(self, name: str, scope_id: str) -> PersonProfile | None:
+    def lookup(self, name: str, scope_id: str, *, include_portrait: bool = False) -> PersonProfile | None:
         clean_name = str(name or "").strip()
         if not clean_name:
             return None
@@ -69,7 +78,9 @@ class EntityPersonDirectory:
         (entity,) = candidates
         scope_id = entity.scope_id
         membership = self._family.get_effective_membership(scope_id, entity.id)
-        portrait = self._family.get_active_portrait(scope_id, entity.id)
+        summary, photo_portrait = (
+            self._current_portraits(scope_id, entity.id, entity.updated_at) if include_portrait else ("", "")
+        )
         return PersonProfile(
             # 报**实体的本名**而不是查询串：按别名查到时，用户问的是别名、答案里的名字
             # 得是本名，否则模型会把这个人的两个名字当成两个人。
@@ -79,11 +90,42 @@ class EntityPersonDirectory:
             # 「归属不明」是同一件事，不区分。
             membership=(membership.membership if membership is not None else "") or "unknown",
             membership_source=(membership.source if membership is not None else "") or "",
-            summary=(portrait.portrait_text if portrait is not None else "") or "",
+            summary=summary,
+            summary_source=SOURCE_USER_OVERRIDE if summary else "",
+            photo_portrait=photo_portrait,
             relationships=self._relationships(scope_id, entity.id),
             entity_id=entity.id,
             scope_id=scope_id,
+            aliases=self._entities.person_aliases(entity.id),
+            family_role_label=entity.family_role or "",
         )
+
+    def _current_portraits(
+        self, scope_id: str, entity_id: str, entity_updated_at: datetime | None
+    ) -> tuple[str, str]:
+        def aware(value: datetime) -> datetime:
+            return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+        latest_edit = max(
+            (
+                aware(stamp)
+                for stamp in (entity_updated_at, self._family.latest_user_edit_at(scope_id, entity_id))
+                if stamp is not None
+            ),
+            default=None,
+        )
+
+        def current(created_at: datetime | None) -> bool:
+            return created_at is not None and (latest_edit is None or aware(created_at) >= latest_edit)
+
+        photo = self._portraits.get_active(entity_id) if self._portraits is not None else None
+        if photo and photo.scope_id == scope_id and current(photo.created_at) and photo.portrait_text.strip():
+            return "", photo.portrait_text.strip()
+        family = self._family.get_active_portrait(scope_id, entity_id)
+        # Legacy generated family text contains whole-image observations and cached relationships.
+        if family and family.source == SOURCE_USER_OVERRIDE and current(family.created_at):
+            return family.portrait_text.strip(), ""
+        return "", ""
 
     def asset_ids(self, person: PersonProfile) -> tuple[str, ...]:
         return self._entities.asset_ids_for_person(person.entity_id, person.scope_id)
@@ -111,6 +153,11 @@ class EntityPersonDirectory:
                     predicate=row.predicate,
                     other_name=(UNNAMED_MEMBER if other is None else entity_display_name(other)),
                     source=row.source,
+                    other_aliases=(
+                        self._entities.person_aliases(other.id)
+                        if other is not None and other.status == ENTITY_STATUS_CONFIRMED
+                        else ()
+                    ),
                 )
             )
         return tuple(found)

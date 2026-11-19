@@ -604,6 +604,38 @@ class SqliteFamilyGraphRepository:
 
     # ---- 家庭画像 --------------------------------------------------------------
 
+    def latest_user_edit_at(self, scope_id: str, entity_id: str) -> datetime | None:
+        with self._database.connect() as connection:
+            stamps = connection.execute(
+                "SELECT updated_at FROM family_person_memberships"
+                " WHERE scope_id=? AND entity_id=? AND source=?"
+                " UNION ALL SELECT updated_at FROM family_relationships"
+                " WHERE scope_id=? AND (subject_entity_id=? OR object_entity_id=?) AND source=?"
+                " UNION ALL SELECT updated_at FROM family_relationship_blocks"
+                " WHERE scope_id=? AND (left_entity_id=? OR right_entity_id=?) AND source=?",
+                (
+                    scope_id,
+                    entity_id,
+                    SOURCE_USER_OVERRIDE,
+                    scope_id,
+                    entity_id,
+                    entity_id,
+                    SOURCE_USER_OVERRIDE,
+                    scope_id,
+                    entity_id,
+                    entity_id,
+                    SOURCE_USER_OVERRIDE,
+                ),
+            ).fetchall()
+        return max(
+            (
+                stamp if stamp.tzinfo is not None else stamp.replace(tzinfo=UTC)
+                for row in stamps
+                if (stamp := _timestamp(row[0])) is not None
+            ),
+            default=None,
+        )
+
     def get_active_portrait(self, scope_id: str, entity_id: str) -> FamilyPortraitRecord | None:
         with self._database.connect() as connection:
             row = connection.execute(

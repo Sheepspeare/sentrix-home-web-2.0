@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from sentrix.api.deps import get_container
+from sentrix.api.errors import ConflictError, DomainErrorResponse
 from sentrix.api.routes.media import to_summary
 from sentrix.api.schemas.search import ChannelTrace, SearchHit, SearchResponse
 from sentrix.application.identity.person_directory import assets_for_names
@@ -50,7 +51,10 @@ def _has_gps(container: Container, asset_id: str) -> bool:
     return asset is not None and asset.captured_location is not None
 
 
-@router.get("/search")
+@router.get(
+    "/search",
+    responses={409: {"model": DomainErrorResponse, "description": "有多位已确认人物匹配所填姓名或别名"}},
+)
 def search_assets(
     q: str = Query(..., min_length=1, max_length=200, description="内容词，例如 桥 / 海边 / 红色"),
     # 空串与不传都表示**全部相册**（1.0 的 `if scope_id:`）。默认值从 "home-default"
@@ -70,7 +74,7 @@ def search_assets(
     try:
         linked_assets = assets_for_names(container.person_directory, person, scope_id)
     except AmbiguousPersonName as error:
-        raise HTTPException(status_code=409, detail="有多位已确认人物匹配这个姓名") from error
+        raise ConflictError("有多位已确认人物匹配这个姓名") from error
 
     use_case = build_retrieve_evidence(container)
     result = use_case.execute(

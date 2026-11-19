@@ -91,6 +91,18 @@ def _decode_list(text: str | None) -> list[object]:
     return value if isinstance(value, list) else []
 
 
+def _person_aliases(value_json: str | None) -> tuple[str, ...]:
+    value = _decode(value_json)
+    raw = value if isinstance(value, list) else [value]
+    return tuple(
+        dict.fromkeys(
+            name
+            for item in raw
+            if isinstance(item, str) and (name := item.strip()) and not is_pending_cluster_name(name)
+        )
+    )
+
+
 def _dedupe(values: Sequence[str]) -> tuple[str, ...]:
     """1.0 到处在用的 ``list(dict.fromkeys(...))``：保序去重。"""
     return tuple(dict.fromkeys(str(item) for item in values if str(item)))
@@ -602,7 +614,7 @@ class SqliteEntityRepository:
         scope_clause = (
             "scope_id=?"
             if scope_id
-            else "scope_id IN (SELECT id FROM memory_spaces WHERE include_in_people=1)"
+            else "scope_id NOT IN (SELECT id FROM memory_spaces WHERE include_in_people=0)"
         )
         scope_params = (scope_id,) if scope_id else ()
         with self._database.connect() as conn:
@@ -615,11 +627,14 @@ class SqliteEntityRepository:
             ).fetchall()
             if not rows:
                 rows = conn.execute(
-                    base + " AND EXISTS (SELECT 1 FROM entity_properties p, json_each(p.value_json) alias"
+                    "SELECT e.*, (SELECT p.value_json FROM entity_properties p"
                     " WHERE p.entity_id=e.id AND p.property_key=? AND p.status='active'"
-                    " AND alias.type='text' AND trim(alias.value)=?) ORDER BY id",
-                    (*scope_params, ALIAS_PROPERTY_KEY, target),
+                    " ORDER BY p.revision DESC, p.updated_at DESC LIMIT 1) AS aliases_json"
+                    f" FROM entities e WHERE {scope_clause}"
+                    " AND e.entity_type='person' AND e.status='confirmed' ORDER BY e.id",
+                    (ALIAS_PROPERTY_KEY, *scope_params),
                 ).fetchall()
+                rows = [row for row in rows if target in _person_aliases(row["aliases_json"])]
         return tuple(_row_to_entity(row) for row in rows)
 
     def asset_ids_for_person(self, entity_id: str, scope_id: str) -> tuple[str, ...]:
@@ -978,15 +993,7 @@ class SqliteEntityRepository:
         self, connection: sqlite3.Connection, entity_id: str
     ) -> tuple[str, ...]:
         row = self._current_property(connection, entity_id, ALIAS_PROPERTY_KEY)
-        if row is None:
-            return ()
-        value = _decode(row["value_json"])
-        raw = value if isinstance(value, list) else ([value] if value else [])
-        # 旧数据里可能存着改名时折进来的内部簇名（「待确认人物簇 · cluster-x」）。
-        # 那是落库标识，不是用户起的名字，读侧统一滤掉。
-        return tuple(
-            str(item) for item in raw if str(item or "").strip() and not is_pending_cluster_name(str(item))
-        )
+        return _person_aliases(row["value_json"]) if row is not None and row["status"] == "active" else ()
 
     def set_person_aliases(self, entity_id: str, aliases: Sequence[str]) -> tuple[str, ...]:
         cleaned = _dedupe([str(item or "").strip() for item in aliases if str(item or "").strip()])

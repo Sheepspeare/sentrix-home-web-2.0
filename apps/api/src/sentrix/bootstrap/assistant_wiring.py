@@ -136,8 +136,9 @@ def build_run_turn(container: Container) -> RunTurn:
         people=container.person_directory,
         memory_facts=QueryMemoryFacts(
             structured=container.structured_query_repository,
-            entities=container.entity_repository,
+            people=container.person_directory,
         ),
+        spaces=container.spaces,
         faces=container.face_repository,
         observations=container.observation_repository,
         photo_inspector=container.photo_inspector,

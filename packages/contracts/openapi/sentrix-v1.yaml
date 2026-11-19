@@ -870,6 +870,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchResponse'
+        '409':
+          description: 有多位已确认人物匹配所填姓名或别名
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainErrorResponse'
         '422':
           description: Validation Error
           content:
@@ -3974,6 +3980,24 @@ components:
       - embeddings
       - runtime_configuration
       title: DiagnosticsResponse
+    DomainErrorResponse:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        detail:
+          additionalProperties: true
+          type: object
+          title: Detail
+      type: object
+      required:
+      - code
+      - message
+      - detail
+      title: DomainErrorResponse
     EntityDetailAppearance:
       properties:
         id:

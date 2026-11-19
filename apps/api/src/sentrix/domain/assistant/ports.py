@@ -164,7 +164,13 @@ class PersonDirectory(Protocol):
     查到了人但没有关系数据，不是「查不到这个人」。
     """
 
-    def lookup(self, name: str, scope_id: str) -> PersonProfile | None: ...
+    def lookup(self, name: str, scope_id: str, *, include_portrait: bool = False) -> PersonProfile | None:
+        """Read a confirmed profile by current name or alias.
+
+        Return None for a missing person and raise AmbiguousPersonName for multiple matches.
+        An empty scope includes household spaces and excludes spaces hidden from People.
+        """
+        ...
 
     def asset_ids(self, person: PersonProfile) -> tuple[str, ...]: ...
 

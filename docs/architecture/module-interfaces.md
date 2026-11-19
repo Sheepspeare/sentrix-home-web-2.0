@@ -213,7 +213,7 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | `ConversationRepository` | 同文件 `:84` | `create/get/list_for_scope/rename/delete/add_message/list_messages/history_for_prompt` | `SqliteConversationRepository` | `conversation_repository` |
 | `TurnRepository` | `:111` | `create/get/claim/append_event/events_after/finish/list_for_conversation` | `SqliteTurnRepository` | `turn_repository` |
 | `ResultSetRepository` | `:144` | `add/get` | `SqliteResultSetRepository` | `result_set_repository` |
-| `PersonDirectory` | `:150` | `lookup(name, scope_id) -> PersonProfile \| None` | `EntityPersonDirectory` | `person_directory` |
+| `PersonDirectory` | `domain/assistant/ports.py` | `lookup(name, scope_id, include_portrait=False)`、`asset_ids(person)` | `EntityPersonDirectory` | `person_directory` |
 | `TurnEventBroker` | `:161` | `open/publish/finish/subscribe` | `InProcessTurnEventBroker` | `turn_event_broker` |
 | `ToolExecutor` | `:180` | `execute(call, arguments)` | **无实现/未装配** | — |
 
@@ -222,6 +222,11 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 - `ChatModel.complete` 必须抛 `ModelServiceError` 族；`PromptTooLongError` / `OutputTruncatedError` 是控制流，不是普通错误。
 - `TurnRepository.claim` 是并发闸门：`pending → running` 只能有一个执行者抢到。
 - `TurnEventBroker` 是进程内实时流；历史补偿必须由 `TurnRepository.events_after` 提供，两半合起来才是完整 SSE。
+- `PersonDirectory` 先查已确认的本名，再查生效别名。空相册范围保留未登记的旧相册，排除
+  `include_in_people=0` 的空间。无匹配返回 `None`，多个匹配抛 `AmbiguousPersonName`。
+  简单身份回答读取当前归属和关系。人物概述可按需读取叙事画像，早于姓名或家庭图谱修改的画像省略。
+- 普通问答把规划中的人物条件解析为人物 ID，并按照片提及记录筛选候选。合照使用共同出现的资产，
+  时间和地点继续参与检索。明确找图需要照片证据和实际交付。找图为零时保留缺口和完整候选轨迹。
 
 助手语音新增 `SpeechRecognizer`（同 `domain/assistant/ports.py`）：
 `load/available/load_error/transcribe/close`；Container 字段 `speech_recognizer`，
@@ -341,6 +346,7 @@ make lint format-check typecheck arch photobench-check check-docs coverage
 | `EventParticipantRepository.rehome` | 必须在事件合并的 `DELETE` 之前完成（FK） |
 | `FamilyGraphRepository.set_relationship` | 先 supersede 旧边，再一次写正反两行 |
 | `FamilyGraphRepository` locked | 遇到 `locked=1` 静默跳过，不报错、不覆盖 |
+| `FamilyGraphRepository.latest_user_edit_at` | 查询人物最近的用户归属与关系变更时间，包含撤回 |
 | `EntityRepository` | 派生值永不覆盖用户值 |
 | `VideoRepository.save_probe` | 必须在资产行落库之后 |
 | `VideoRepository.cleanup_derivatives` | 先删随行，再删主行 |

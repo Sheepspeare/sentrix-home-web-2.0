@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -1185,6 +1186,10 @@ class FamilyGraphRepository(Protocol):
         ...
 
     # ---- 家庭画像 --------------------------------------------------------------
+
+    def latest_user_edit_at(self, scope_id: str, entity_id: str) -> datetime | None:
+        """Time of the latest user membership or relationship edit, including retractions."""
+        ...
 
     def get_active_portrait(self, scope_id: str, entity_id: str) -> FamilyPortraitRecord | None:
         """当前生效的那一段家庭画像。
