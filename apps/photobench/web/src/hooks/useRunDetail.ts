@@ -357,8 +357,6 @@ export function useRunDetail(options: RunDetailOptions) {
         ...(resetPage || analysisOpen.current
           ? [loadKeyframeAnalysis(runId), loadMemoryEffectiveness(runId)]
           : []),
-        // 图质量面板始终展示在 run 详情中，不应依赖记忆分析面板是否展开。
-        // resetPage 表示刚切换到一条 run，此时立即读取一次；后续展开时再复用同一入口。
         ...(resetPage || analysisOpen.current ? [loadGraphQuality(runId)] : []),
         loadQaPage ? loadQaPage(resetPage ? 1 : undefined) : Promise.resolve(),
       ]);

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from photobench.domain.runs import exports, keyframe_analysis, memory_effectiveness
 
 
@@ -826,3 +828,14 @@ def test_missing_delivery_record_is_not_counted_as_no_delivery():
     assert delivery["delivery_rate"] is None
     assert delivery["unrecorded_items"] == 1
     assert delivery["not_delivered_items"] == 0
+
+
+@pytest.mark.parametrize("options", [{}, {"scores": [0]}, {"scores": [0], "min_score": 1}, {"min_score": 1}])
+def test_streamed_exports_preserve_existing_complete_json(options):
+    import json
+
+    from photobench.domain.runs.stream_exports import sft_json, trace_json
+
+    state = _state(items=[_debug_calls_item(), _trace_item(qa_id="q2")])
+    assert json.loads("".join(trace_json(state, **options))) == exports.export_traces(state, **options)
+    assert json.loads("".join(sft_json(state, **options))) == exports.export_sft(state, **options)

@@ -39,7 +39,7 @@ import threading
 import time
 from typing import Any, cast
 
-from photobench.domain.results.ports import RunResultWriter
+from photobench.domain.results.ports import CommittedTraceCompactor, RunResultWriter
 from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.frozen_trace import freeze_item_traces
 
@@ -83,7 +83,10 @@ class RunState:
         self._persist_stopping = False
         self._persist_error: Exception | None = None
         self._persist_thread: threading.Thread | None = None
-        self._reuse_traces = os.environ.get("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS") == "1"
+        self._reuse_traces = (
+            os.environ.get("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS") == "1"
+            or os.environ.get("PHOTOBENCH_SPLIT_RESULTS") == "1"
+        )
 
     @property
     def lock(self) -> threading.RLock:
@@ -243,6 +246,9 @@ class RunState:
                     writer = self._writer
                     assert writer is not None
                     writer.write_snapshot(self.run_id, stored)
+                    if isinstance(writer, CommittedTraceCompactor):
+                        with self._lock:
+                            writer.compact_committed_traces(self.run_id, self.data, stored)
                     elapsed = time.monotonic() - began
                     if elapsed >= 5:
                         log.warning(
@@ -282,7 +288,11 @@ class RunState:
         if writer is None:
             return
         if self._persist_thread is None:
-            writer.write_snapshot(self.run_id, self.snapshot())
+            stored = self.snapshot()
+            writer.write_snapshot(self.run_id, stored)
+            if isinstance(writer, CommittedTraceCompactor):
+                with self._lock:
+                    writer.compact_committed_traces(self.run_id, self.data, stored)
             return
         deadline = time.monotonic() + self.persist_timeout
         with self._persist_condition:

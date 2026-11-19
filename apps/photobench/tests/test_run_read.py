@@ -365,6 +365,40 @@ def test_get_run_item_returns_the_full_item_and_rejects_a_bad_index(results: Pat
         runs.get_run_item("run-a", 99)
 
 
+def test_split_mode_requires_explicit_legacy_index(results: Path, monkeypatch):
+    monkeypatch.setenv("PHOTOBENCH_SPLIT_RESULTS", "1")
+    store = FileRunStore(results)
+    assert store.use_read_index("run-a") is False
+    from photobench.infrastructure.results.split_store import ReadIndexRequired
+
+    with pytest.raises(ReadIndexRequired):
+        store.load_state("run-a")
+    with pytest.raises(ReadIndexRequired):
+        _read_runs(results).get_run_item("run-a", 0)
+
+
+def test_split_backed_run_preserves_item_list_and_detail_fields(results: Path):
+    from photobench.infrastructure.results.split_store import SplitResultWriter
+
+    store = FileRunStore(results)
+    original_state = store.load_state("run-a")
+    original = _read_runs(results)
+    original_page = original.get_run_items("run-a")
+    original_item = original.get_run_item("run-a", 0)["item"]
+
+    SplitResultWriter(results).write(results / "run-a", original_state)
+    indexed = _read_runs(results)
+    split_page = indexed.get_run_items("run-a")
+    split_item = indexed.get_run_item("run-a", 0)["item"]
+
+    assert [row["qa_id"] for row in split_page["items"]] == [row["qa_id"] for row in original_page["items"]]
+    assert split_page["items"][0]["judge"] == original_page["items"][0]["judge"]
+    assert split_item["index"] == 0
+    assert split_item["qa_id"] == original_item["qa_id"]
+    assert split_item["trace_storage"]["version"] == 3
+    assert split_item["trace_storage"]["revision"]
+
+
 def test_legacy_runs_get_their_ground_truth_images_hydrated_over_http(results: Path):
     """``_hydrate_legacy_gt_images``（1.0 ``:6851``）：本切片里 ``request_json`` 的唯一调用者。"""
     _write(

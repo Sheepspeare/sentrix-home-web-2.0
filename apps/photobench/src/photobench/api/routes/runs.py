@@ -152,6 +152,84 @@ def get_run_item(
     )
 
 
+@router.get("/runs/{run_id}/items/{item_index}/trace")
+def get_trace_nodes(
+    request: Request,
+    run_id: str,
+    item_index: str,
+    turn: int = 0,
+    kind: str = "",
+    offset: str = "0",
+    limit: str = "50",
+    revision: str = "",
+) -> dict[str, Any]:
+    try:
+        index, page, size = int(item_index), int(offset), int(limit)
+    except ValueError as exc:
+        raise InvalidRequestError("trace pagination must be integers") from exc
+    return get_container(request).runs.get_trace_nodes(
+        run_id,
+        index,
+        turn=turn,
+        kind=kind,
+        offset=page,
+        limit=size,
+        revision=revision,
+        scoring_profile="",
+        scoring_batch="",
+    )
+
+
+@router.get("/runs/{run_id}/items/{item_index}/trace/{node_id}")
+def get_trace_node_content(
+    request: Request,
+    run_id: str,
+    item_index: str,
+    node_id: str,
+    field: str = "",
+    offset: str = "0",
+    limit: str = "65536",
+    revision: str = "",
+) -> dict[str, Any]:
+    try:
+        index, page, size = int(item_index), int(offset), int(limit)
+    except ValueError as exc:
+        raise InvalidRequestError("trace content pagination must be integers") from exc
+    return get_container(request).runs.get_trace_content(
+        run_id,
+        index,
+        node_id,
+        field=field,
+        offset=page,
+        limit=size,
+        revision=revision,
+        scoring_profile="",
+        scoring_batch="",
+    )
+
+
+@router.get("/runs/{run_id}/items/{item_index}/content")
+def get_item_content(
+    request: Request,
+    run_id: str,
+    item_index: str,
+    path: str,
+    offset: str = "0",
+    limit: str = "65536",
+    revision: str = "",
+) -> dict[str, Any]:
+    try:
+        index, page, size = int(item_index), int(offset), int(limit)
+        keys: list[str | int] = []
+        for part in filter(None, path.split(".")):
+            keys.append(int(part) if part.isdigit() else part)
+    except ValueError as exc:
+        raise InvalidRequestError("item content path and pagination are invalid") from exc
+    return get_container(request).runs.get_item_content(
+        run_id, index, path=keys, offset=page, limit=size, revision=revision
+    )
+
+
 @router.get("/runs/{run_id}/reviews")
 def get_reviews(request: Request, run_id: str) -> dict[str, Any]:
     """1.0 ``:7730``。写侧（``POST``）属 S9b-3。"""

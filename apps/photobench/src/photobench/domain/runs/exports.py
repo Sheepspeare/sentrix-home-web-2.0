@@ -250,7 +250,7 @@ def export_sft(
             steps_out: list[dict[str, Any]] = []
             if debug_calls:
                 # 2.0 的完整轨迹：每条都是一次模型调用，自带 messages / tools / response。
-                steps_out = [dict(call) for call in debug_calls]
+                steps_out = list(debug_calls)
             else:
                 for step in turn.get("debug_trace") or []:
                     if not isinstance(step, Mapping):

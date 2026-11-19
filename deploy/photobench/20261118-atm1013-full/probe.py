@@ -18,9 +18,13 @@ def probe(stage, allow_active_timeout=False):
               json.loads((BASE / f'{stage}-launch-response.json').read_text())['run_ids'][0])
     root = Path('/home/realmagic/xy/atm-bench-20261110/results') if stage == 'q4km' else BASE / 'cloud-results'
     run_dir = root / run_id
-    pointer = json.loads((run_dir / 'snapshot-commit.json').read_text())
-    metadata = run_dir / '.snapshots' / pointer['generation'] / 'metadata.json'
-    state = json.loads(metadata.read_text())['overview']
+    split = run_dir / 'split-commit.json'
+    if split.is_file():
+        state = json.loads(split.read_text())['monitor']
+    else:
+        pointer = json.loads((run_dir / 'snapshot-commit.json').read_text())
+        metadata = run_dir / '.snapshots' / pointer['generation'] / 'metadata.json'
+        state = json.loads(metadata.read_text())['overview']
     assert state['run_id'] == run_id
     keys = ['run_id', 'status', 'current_phase', 'scope_id', 'qa_count', 'item_count', 'reasoning',
             'graph_enabled', 'model_name', 'model_identity', 'runtime_snapshot', 'execution_budgets',

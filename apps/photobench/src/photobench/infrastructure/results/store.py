@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
 from photobench.domain.runs.analysis import effective_summary, run_list_entry
@@ -24,6 +24,9 @@ from photobench.domain.runs.frozen_trace import TRACE_TYPES
 from photobench.domain.runs.task_history import execution_metadata
 from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
 from photobench.infrastructure.results.file_copy import copy_export
+
+if TYPE_CHECKING:
+    from photobench.infrastructure.results.split_store import SplitRunReader
 
 log = logging.getLogger(__name__)
 # Fixed stripes bound lock memory, including deleted and never-seen run IDs.
@@ -162,6 +165,11 @@ def _overview(state: dict[str, Any]) -> dict[str, Any]:
 
 def read_entry(run_dir: Path) -> dict[str, Any]:
     """Cheap committed metadata; legacy derived index is invalidated by file identity."""
+    from photobench.infrastructure.results.split_json import MANIFEST
+    from photobench.infrastructure.results.split_store import SplitRunReader
+
+    if (run_dir / MANIFEST).is_file():
+        return SplitRunReader(run_dir.parent, run_dir).entry()
     with run_lock(run_dir):
         metadata = committed_path(run_dir, "metadata.json")
         if metadata.is_file():
@@ -174,7 +182,7 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
             if evaluation is not None:
                 entry.setdefault("summary", {})["evaluation_summary"] = evaluation
             scoring = (entry.get("summary") or {}).get("scoring") or {}
-            if any(
+            if os.environ.get("PHOTOBENCH_SPLIT_RESULTS") != "1" and any(
                 batch.get("profile_id") == "atm_qs_v1" and "tool_list_qs" not in batch
                 for batch in (scoring.get("batches") or {}).values()
             ):
@@ -196,6 +204,10 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
                 return entry
         except (OSError, ValueError, KeyError, TypeError):
             pass
+        if os.environ.get("PHOTOBENCH_SPLIT_RESULTS") == "1":
+            from photobench.infrastructure.results.split_store import ReadIndexRequired
+
+            raise ReadIndexRequired(run_dir.name)
         state = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(state, dict) or not state.get("run_id"):
             raise ValueError("missing run_id")
@@ -337,11 +349,22 @@ class FileRunStore:
 
     def load_state(self, run_id: str) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)
+        if not run_dir.is_dir():
+            raise KeyError(run_id)
         from photobench.infrastructure.results.resume_quarantine import load_resume_quarantine_state
 
         reduced = load_resume_quarantine_state(run_dir, run_id)
         if reduced is not None:
             return reduced
+        from photobench.infrastructure.results.split_json import MANIFEST
+        from photobench.infrastructure.results.split_store import SplitRunReader
+
+        if (run_dir / MANIFEST).is_file():
+            return SplitRunReader(self._root, run_dir).state()
+        if os.environ.get("PHOTOBENCH_SPLIT_RESULTS") == "1":
+            from photobench.infrastructure.results.split_store import ReadIndexRequired
+
+            raise ReadIndexRequired(run_id)
         with run_lock(run_dir):
             path = committed_path(run_dir, "run.json")
             if not path.is_file():
@@ -366,6 +389,12 @@ class FileRunStore:
 
     def load_overview(self, run_id: str) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)
+        from photobench.infrastructure.results.split_json import MANIFEST
+        from photobench.infrastructure.results.split_store import SplitRunReader
+
+        if (run_dir / MANIFEST).is_file():
+            overview = SplitRunReader(self._root, run_dir).overview()
+            return self._attach_live(run_dir, overview)
         with run_lock(run_dir):
             path = committed_path(run_dir, "metadata.json")
             if path.is_file():
@@ -400,8 +429,80 @@ class FileRunStore:
                         overview["llama_server_args"] = view["llama_server_args"]
             return {**overview, "read_revision": self.revision(run_id)}
 
+    def _attach_live(self, run_dir: Path, overview: dict[str, Any]) -> dict[str, Any]:
+        if not overview.get("finished_at") and overview.get("status") in {"pending", "running", "cancelling"}:
+            try:
+                live = json.loads((run_dir / "telemetry-live.json").read_text())
+            except FileNotFoundError:
+                live = None
+            if (
+                isinstance(live, dict)
+                and live.get("started_at") == overview.get("started_at")
+                and live.get("run_id") == run_dir.name
+            ):
+                overview["telemetry_live"] = live["telemetry_live"]
+                if (overview.get("phases", {}).get("gpu_metrics") or {}).get("status") not in {
+                    "done",
+                    "skipped",
+                }:
+                    overview.setdefault("phases", {})["gpu_metrics"] = live["gpu_metrics"]
+        return overview
+
+    def use_read_index(self, run_id: str) -> bool:
+        from photobench.infrastructure.results.split_json import MANIFEST
+
+        run_dir = self._run_dir(run_id)
+        if not run_dir.is_dir():
+            raise KeyError(run_id)
+        return (run_dir / MANIFEST).is_file()
+
+    def _split_reader(self, run_id: str, revision: str = "") -> SplitRunReader:
+        from photobench.infrastructure.results.split_store import SplitRunReader
+
+        return SplitRunReader(self._root, self._run_dir(run_id), revision)
+
+    def load_selected_overview(
+        self, run_id: str, profile: str, batch: str, *, revision: str = ""
+    ) -> dict[str, Any]:
+        return self._attach_live(
+            self._run_dir(run_id), self._split_reader(run_id, revision).overview(profile, batch)
+        )
+
+    def load_item_index(
+        self, run_id: str, profile: str, batch: str, *, revision: str = ""
+    ) -> list[dict[str, Any]]:
+        return self._split_reader(run_id, revision).index(profile, batch)
+
+    def load_indexed_state(self, run_id: str, *, revision: str = "") -> dict[str, Any]:
+        return self._split_reader(run_id, revision).state()
+
+    def load_item_core(
+        self, run_id: str, index: int, profile: str, batch: str, *, revision: str = ""
+    ) -> dict[str, Any]:
+        return self._split_reader(run_id, revision).core(index, profile, batch)
+
+    def load_item_record(self, run_id: str, index: int, *, revision: str = "") -> dict[str, Any]:
+        return self._split_reader(run_id, revision).item_record(index)
+
+    def load_item_answer_fingerprint(self, run_id: str, index: int, *, revision: str = "") -> str:
+        return self._split_reader(run_id, revision).item_answer_fingerprint(index)
+
+    def load_trace_nodes(self, run_id: str, index: int, **options: Any) -> dict[str, Any]:
+        return self._split_reader(run_id, options.pop("revision", "")).nodes(index, **options)
+
+    def load_trace_content(self, run_id: str, index: int, node_id: str, **options: Any) -> dict[str, Any]:
+        return self._split_reader(run_id, options.pop("revision", "")).content(index, node_id, **options)
+
+    def load_item_content(self, run_id: str, index: int, **options: Any) -> dict[str, Any]:
+        return self._split_reader(run_id, options.pop("revision", "")).item_content(index, **options)
+
     def revision(self, run_id: str) -> str:
         run_dir = self._run_dir(run_id)
+        from photobench.infrastructure.results.split_json import manifest
+
+        selected = manifest(run_dir)
+        if selected is not None:
+            return str(selected["revision"])
         with run_lock(run_dir):
             path = committed_path(run_dir, "run.json")
             try:
@@ -461,6 +562,7 @@ class FileResultWriter:
 
     def __init__(self, results_root: Path) -> None:
         self._root = results_root
+        self._split_writer: Any = None
         self._compressed = os.environ.get("PHOTOBENCH_COMPRESS_SNAPSHOTS") == "1"
         self._trace_caches: dict[str, dict[int, tuple[Any, bytes]]] | None = (
             {} if os.environ.get("PHOTOBENCH_REUSE_TRACE_CHECKPOINTS") == "1" else None
@@ -475,6 +577,14 @@ class FileResultWriter:
 
     def write_snapshot(self, run_id: str, state: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)
+        from photobench.infrastructure.results.split_json import MANIFEST
+        from photobench.infrastructure.results.split_store import SplitResultWriter
+
+        if os.environ.get("PHOTOBENCH_SPLIT_RESULTS") == "1" or (run_dir / MANIFEST).is_file():
+            if self._split_writer is None:
+                self._split_writer = SplitResultWriter(self._root)
+            self._split_writer.write(run_dir, state)
+            return
         cache = self._trace_caches.setdefault(run_id, {}) if self._trace_caches is not None else None
         write_committed_snapshot(run_dir, state, compressed=self._compressed, trace_cache=cache)
         if self._trace_caches is not None and state.get("status") in {
@@ -485,6 +595,34 @@ class FileResultWriter:
             "interrupted",
         }:
             self._trace_caches.pop(run_id, None)
+
+    def compact_committed_traces(self, run_id: str, current: dict[str, Any], stored: dict[str, Any]) -> None:
+        from photobench.domain.runs.frozen_trace import ITEM_TRACE_FIELDS, TURN_TRACE_FIELDS
+        from photobench.infrastructure.results.split_json import MANIFEST
+        from photobench.infrastructure.results.split_store import SplitRunReader
+
+        directory = self._run_dir(run_id)
+        if not (directory / MANIFEST).is_file():
+            return
+        reader = SplitRunReader(self._root, directory)
+        live = {str(item.get("qa_id")): item for item in current.get("items") or []}
+        for index, saved in enumerate(stored.get("items") or []):
+            item = live.get(str(saved.get("qa_id")))
+            if item is None:
+                continue
+            lazy = reader.item_record(index)
+            for key in ITEM_TRACE_FIELDS:
+                if key in saved and item.get(key) is saved[key]:
+                    item[key] = saved[key] = lazy[key]
+            for position, turn in enumerate(saved.get("runtime_turns") or []):
+                active_turns = item.get("runtime_turns") or []
+                if position >= len(active_turns):
+                    continue
+                active = active_turns[position]
+                lazy_turn = lazy["runtime_turns"][position]
+                for key in TURN_TRACE_FIELDS:
+                    if key in turn and active.get(key) is turn[key]:
+                        active[key] = turn[key] = lazy_turn[key]
 
     def write_telemetry_view(self, run_id: str, view: dict[str, Any]) -> None:
         run_dir = self._run_dir(run_id)

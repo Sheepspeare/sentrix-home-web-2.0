@@ -63,7 +63,11 @@ def media_keys(refs: Any) -> set[str]:
 
 
 def item_process(
-    row: Mapping[str, Any], item: Mapping[str, Any], scores: Mapping[str, Any] | None = None
+    row: Mapping[str, Any],
+    item: Mapping[str, Any],
+    scores: Mapping[str, Any] | None = None,
+    *,
+    answer_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """No GT-based identity inference, rescoring, network, or mutation."""
     turns = item.get("runtime_turns") or [item]
@@ -372,32 +376,34 @@ def item_process(
                 turn_index=judge.get("turn_index"),
                 scoring_batch_id=judge.get("batch_id"),
             )
-    answer_source = {
-        "answer": item.get("answer"),
-        "turns": [
-            {
-                key: t.get(key)
-                for key in (
-                    "answer",
-                    "attachments",
-                    "requirements",
-                    "termination_reason",
-                    "predicted_media",
-                    "retrieval_observations",
-                    "trace_bundle",
-                    "tool_trace",
-                )
-            }
-            for t in turns
-        ],
-        "tools": tools,
-        "candidates": candidates,
-        "predicted_media": item.get("predicted_media"),
-    }
+    if answer_fingerprint is None:
+        answer_source = {
+            "answer": item.get("answer"),
+            "turns": [
+                {
+                    key: t.get(key)
+                    for key in (
+                        "answer",
+                        "attachments",
+                        "requirements",
+                        "termination_reason",
+                        "predicted_media",
+                        "retrieval_observations",
+                        "trace_bundle",
+                        "tool_trace",
+                    )
+                }
+                for t in turns
+            ],
+            "tools": tools,
+            "candidates": candidates,
+            "predicted_media": item.get("predicted_media"),
+        }
+        answer_fingerprint = fingerprint(answer_source)
     return {
         "rule_version": VERSION,
         "qa_id": str(item.get("qa_id")),
-        "answer_fingerprint": fingerprint(answer_source),
+        "answer_fingerprint": answer_fingerprint,
         "definition_fingerprint": fingerprint(row),
         "analysis_status": "completed",
         "turn_count": len(turns),
@@ -416,11 +422,7 @@ def item_process(
 
 def run_process(state: Mapping[str, Any]) -> dict[str, Any]:
     context, scores = scoring_context(state)
-    rows = {str(r["qa_id"]): r for r in (state.get("qa_snapshot") or {}).get("rows") or []}
-    items = [
-        {**item_process(rows.get(str(i.get("qa_id")), {}), i, scores), "scoring_context": context}
-        for i in state.get("items") or []
-    ]
+    items = [process_for_qa(state, str(i.get("qa_id"))) for i in state.get("items") or []]
     categories: Counter[str] = Counter()
     statuses: Counter[str] = Counter()
     for item in items:
@@ -464,9 +466,16 @@ def run_process(state: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def process_for_qa(state: Mapping[str, Any], qa_id: str) -> dict[str, Any]:
+    cached = (state.get("_process_diagnostics") or {}).get(qa_id)
+    if cached is not None:
+        return dict(cached)
     context, scores = scoring_context(state)
     row: Mapping[str, Any] = next(
         (r for r in (state.get("qa_snapshot") or {}).get("rows") or [] if str(r["qa_id"]) == qa_id), {}
     )
     item: Mapping[str, Any] = next((i for i in state.get("items") or [] if str(i.get("qa_id")) == qa_id), {})
-    return {**item_process(row, item, scores), "scoring_context": context}
+    answer_fingerprint = (state.get("_answer_fingerprints") or {}).get(qa_id)
+    return {
+        **item_process(row, item, scores, answer_fingerprint=answer_fingerprint),
+        "scoring_context": context,
+    }

@@ -41,6 +41,11 @@ class InvalidRequestError(DomainError):
     status_code = 400
 
 
+class ReadIndexRequiredError(DomainError):
+    code = "read_index_required"
+    status_code = 409
+
+
 class RequestOutcomeUnknownError(RuntimeError):
     """A non-idempotent request may have executed; automatic replay is forbidden."""
 

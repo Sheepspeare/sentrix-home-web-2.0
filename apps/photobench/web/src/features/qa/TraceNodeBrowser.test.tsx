@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { RunItemDetail } from "../../api/types.ts";
 import { TraceNodeBrowser } from "./TraceNodeBrowser.tsx";
+import * as client from "../../api/client.ts";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const context=[{role:"system",content:"系统原文",extension:{zero:0,no:false,nil:null,empty:""}},{role:"user",content:"问题"}];
 const first={call_id:"c1",call_type:"agent",step_id:"step_1",seq:0,status:"complete",duration_ms:1200,streamed:false,model:"model-current",messages:context,tools:[{function:{name:"search"},future:null}],response:{content:"",thought:"原思考",tool_calls:[{arguments:"{broken"}],future:false}};
 const second={...first,call_id:"c2",step_id:"step_2",seq:1,attempt:2,duration_ms:0,messages:[...structuredClone(context),{role:"tool",content:"新增观察"}],response:{content:"答案"}};
@@ -52,4 +53,24 @@ it("每个用户轮次的相同步骤与重复前缀独立",()=>{
   const {container}=render(<TraceNodeBrowser detail={copy} turnIndex={1}/>);
   expect(container.textContent).not.toContain("完全一致");
   expect(within(screen.getByRole("navigation")).getAllByRole("button")).toHaveLength(2);
+});
+
+
+it("分块轨迹先取摘要，点击才取内容；按页获取更多节点", async () => {
+  const request = vi.spyOn(client, "api").mockImplementation(async (path) => {
+    const url = String(path);
+    if (url.includes("/trace/t0_gcalls_i0")) return { text: "完整输入", offset: 0, next_offset: null };
+    if (url.includes("offset=50")) return { nodes: [{ node_id: "t0_gcalls_i50", kind: "tool", turn_index: 0 }], total: 51, next_offset: null };
+    return { nodes: [{ node_id: "t0_gcalls_i0", kind: "model", turn_index: 0, metadata: { step_id: "step-1" } }], total: 51, next_offset: 50 };
+  });
+  const detail = { index: 0, run_id: "split-run", trace_storage: { version: 3, revision: "abc" }, runtime_turns: [{ index: 0 }] } as RunItemDetail;
+  render(<TraceNodeBrowser detail={detail} turnIndex={0} />);
+  await screen.findByRole("button", { name: /step-1/ });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("完整输入")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /step-1/ }));
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole("button", { name: /加载更多节点/ }));
+  await screen.findByRole("button", { name: /t0_gcalls_i50/ });
+  expect(request).toHaveBeenCalledTimes(3);
 });

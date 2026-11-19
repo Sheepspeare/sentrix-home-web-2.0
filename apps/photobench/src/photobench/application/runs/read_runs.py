@@ -21,6 +21,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -38,7 +39,13 @@ from photobench.domain.evaluation.profile_view import (
 )
 from photobench.domain.evaluation.profiles import scoring_source_metadata
 from photobench.domain.http.ports import JsonHttpClient
-from photobench.domain.results.ports import ProcessDiagnosticStore, RunReadViews, RunRevisions, RunStore
+from photobench.domain.results.ports import (
+    ProcessDiagnosticStore,
+    RunIndexedViews,
+    RunReadViews,
+    RunRevisions,
+    RunStore,
+)
 from photobench.domain.runs import analysis
 from photobench.domain.runs.task_history import execution_metadata, task_families
 from photobench.domain.runs.telemetry_summary import attach_recorded_history
@@ -105,6 +112,7 @@ class ReadRuns:
         self._history_reads_enabled = history_reads_enabled
         self._versions = store if isinstance(store, RunRevisions) else None
         self._views = store if isinstance(store, RunReadViews) else None
+        self._indexed = store if isinstance(store, RunIndexedViews) else None
         self._state_weights: dict[str, int] = {}
         self._projections: OrderedDict[tuple[str, str, str], dict[str, Any]] = OrderedDict()
         self._state_versions: dict[str, str] = {}
@@ -340,11 +348,25 @@ class ReadRuns:
         try:
             result = self._project_run(run_id, include_history=include_history)
             if scoring_profile or scoring_batch:
-                selected = profile_state(self._state(run_id), scoring_profile, scoring_batch)
-                result["summary"] = analysis.effective_summary(selected)
-                result["summary"]["scoring"] = selected["summary"]["scoring"]
-                result["selected_scoring_profile"] = scoring_profile
-                result["selected_scoring_batch"] = selected["selected_scoring_batch"]
+                if self._indexed is not None and self._indexed.use_read_index(run_id):
+                    selected_view = self._indexed.load_selected_overview(
+                        run_id, scoring_profile, scoring_batch
+                    )
+                    for field in (
+                        "summary",
+                        "selected_scoring_profile",
+                        "selected_scoring_batch",
+                        "read_revision",
+                    ):
+                        if field in selected_view:
+                            result[field] = selected_view[field]
+                    result["run_valid"] = result["summary"].get("run_valid")
+                else:
+                    selected = profile_state(self._state(run_id), scoring_profile, scoring_batch)
+                    result["summary"] = analysis.effective_summary(selected)
+                    result["summary"]["scoring"] = selected["summary"]["scoring"]
+                    result["selected_scoring_profile"] = scoring_profile
+                    result["selected_scoring_batch"] = selected["selected_scoring_batch"]
             entries = sorted(self._index.entries(), key=_run_sort_key, reverse=True)
             fresh = {
                 **(self._index.entry(run_id) or {}),
@@ -420,7 +442,8 @@ class ReadRuns:
             result["item_count"] = len(state.get("items") or [])
             result["summary"] = analysis.effective_summary(state)
         if (
-            result.get("primary_scoring_batch_ids")
+            result.get("storage_format") != 3
+            and result.get("primary_scoring_batch_ids")
             and result.get("status") not in {"pending", "running", "cancelling"}
             and (
                 result["summary"].get("profile_media_version") != 1
@@ -477,7 +500,20 @@ class ReadRuns:
     def get_process_diagnostics(
         self, run_id: str, scoring_profile: str = "", scoring_batch: str = ""
     ) -> dict[str, Any]:
-        state = self._state(run_id)
+        if self._indexed is not None and self._indexed.use_read_index(run_id):
+            state = self._indexed.load_selected_overview(run_id, scoring_profile, scoring_batch)
+            revision = state["read_revision"]
+            state["items"] = self._indexed.load_item_index(
+                run_id, scoring_profile, scoring_batch, revision=revision
+            )
+            state["_process_diagnostics"] = {
+                str(item.get("qa_id")): self._indexed.load_item_core(
+                    run_id, index, scoring_profile, scoring_batch, revision=revision
+                )["process_diagnostics"]
+                for index, item in enumerate(state["items"])
+            }
+        else:
+            state = self._state(run_id)
         result = run_process(
             {**state, "selected_scoring_profile": scoring_profile, "selected_scoring_batch": scoring_batch}
         )
@@ -509,14 +545,28 @@ class ReadRuns:
         scoring_batch: str = "",
     ) -> dict[str, Any]:
         """``GET /api/runs/{id}/items``（1.0 ``get_run_items`` ``:6441``）。"""
-        with self._item_locks[hash(run_id) % len(self._item_locks)]:
-            cached = primary_profile_state(profile_state(self._state(run_id), scoring_profile, scoring_batch))
-            state = {**cached, "items": [dict(item) for item in cached.get("items") or []]}
-            self._hydrate_legacy_gt_images(state)
-            qa_metadata = self._qa_index(state)
-            all_items = [
-                analysis.hydrate_qa_metadata(item, qa_metadata) for item in (state.get("items") or [])
-            ]
+        indexed = self._indexed is not None and self._indexed.use_read_index(run_id)
+        with nullcontext() if indexed else self._item_locks[hash(run_id) % len(self._item_locks)]:
+            if indexed:
+                assert self._indexed is not None
+                cached = self._indexed.load_selected_overview(run_id, scoring_profile, scoring_batch)
+                qa_metadata = self._qa_index(cached)
+                all_items = [
+                    analysis.hydrate_qa_metadata(item, qa_metadata)
+                    for item in self._indexed.load_item_index(
+                        run_id, scoring_profile, scoring_batch, revision=cached["read_revision"]
+                    )
+                ]
+            else:
+                cached = primary_profile_state(
+                    profile_state(self._state(run_id), scoring_profile, scoring_batch)
+                )
+                state = {**cached, "items": [dict(item) for item in cached.get("items") or []]}
+                self._hydrate_legacy_gt_images(state)
+                qa_metadata = self._qa_index(state)
+                all_items = [
+                    analysis.hydrate_qa_metadata(item, qa_metadata) for item in (state.get("items") or [])
+                ]
             search = str(search or "").strip().lower()
             task_type = str(task_type or "").strip()
             tag = str(tag or "").strip()
@@ -559,10 +609,13 @@ class ReadRuns:
                 ),
             }
             for source_index, item in enumerate(all_items):
-                turn_messages = " ".join(
-                    str(turn.get("message") or "")
-                    for turn in (item.get("runtime_turns") or item.get("conversation") or [])
-                    if isinstance(turn, dict)
+                turn_messages = str(
+                    item.get("_search_messages")
+                    or " ".join(
+                        str(turn.get("message") or "")
+                        for turn in (item.get("runtime_turns") or item.get("conversation") or [])
+                        if isinstance(turn, dict)
+                    )
                 ).lower()
                 if (
                     search
@@ -609,15 +662,25 @@ class ReadRuns:
             # 两个切片等长（source_indexes 与 items 一一对应），strict=False 与 1.0 的
             # 隐式截断语义相同；写成 strict=True 只会在将来真的错位时换一种报错。
             summaries = [
-                analysis.item_summary(item, source_index, reviews.get(str(item.get("qa_id"))))
+                (
+                    {
+                        **{k: v for k, v in item.items() if not k.startswith("_")},
+                        "review": reviews.get(str(item.get("qa_id"))),
+                    }
+                    if indexed
+                    else analysis.item_summary(item, source_index, reviews.get(str(item.get("qa_id"))))
+                )
                 for item, source_index in zip(
                     items[start : start + page_size],
                     source_indexes[start : start + page_size],
                     strict=False,
                 )
             ]
+            if indexed:
+                summaries = [{k: v for k, v in item.items() if not k.startswith("_")} for item in summaries]
             for item in summaries:
-                item["profile_scores"] = item_profile_results(cached, str(item.get("qa_id")))
+                if not indexed:
+                    item["profile_scores"] = item_profile_results(cached, str(item.get("qa_id")))
             return {
                 "items": summaries,
                 "page": page,
@@ -645,7 +708,38 @@ class ReadRuns:
         self, run_id: str, item_index: int, scoring_profile: str = "", scoring_batch: str = ""
     ) -> dict[str, Any]:
         """``GET /api/runs/{id}/items/{index}``（1.0 ``get_run_item`` ``:6528``）。"""
-        with self._item_locks[hash(run_id) % len(self._item_locks)]:
+        indexed = self._indexed is not None and self._indexed.use_read_index(run_id)
+        with nullcontext() if indexed else self._item_locks[hash(run_id) % len(self._item_locks)]:
+            if indexed:
+                assert self._indexed is not None
+                item = self._indexed.load_item_core(run_id, item_index, scoring_profile, scoring_batch)
+                overview = self._indexed.load_selected_overview(
+                    run_id,
+                    scoring_profile,
+                    scoring_batch,
+                    revision=item["trace_storage"]["revision"],
+                )
+                item = analysis.hydrate_qa_metadata(item, self._qa_index(overview))
+                item["run_id"] = run_id
+                if not item.get("scope_id") and overview.get("scope_id"):
+                    item["scope_id"] = overview["scope_id"]
+                    item["scope_source"] = "saved_run_scope_v1"
+                reviews = self.get_reviews(run_id)
+                item["review"] = (reviews.get("reviews") or {}).get(str(item.get("qa_id")))
+                item["scoring_reviews"] = [
+                    r
+                    for r in reviews.get("scoring_reviews") or []
+                    if r.get("qa_id") == str(item.get("qa_id"))
+                ]
+                qa_id = str(item.get("qa_id"))
+                qa_row = item.pop("_qa_snapshot_row", None)
+                if qa_row is not None:
+                    metadata = {
+                        **{key: value for key, value in qa_row.items() if key != "answer"},
+                        "reference_answer": qa_row.get("answer"),
+                    }
+                    item = analysis.hydrate_qa_metadata(item, {qa_id: metadata})
+                return {"index": item_index, "item": item}
             cached = primary_profile_state(profile_state(self._state(run_id), scoring_profile, scoring_batch))
             state = {**cached, "items": [dict(item) for item in cached.get("items") or []]}
             self._hydrate_legacy_gt_images(state)
@@ -678,3 +772,23 @@ class ReadRuns:
                 if v.get("qa_id") == item.get("qa_id")
             ]
             return {"index": item_index, "item": item}
+
+    def get_trace_nodes(self, run_id: str, index: int, **options: Any) -> dict[str, Any]:
+        if self._indexed is None:
+            raise ValueError("read_index_required")
+        profile = str(options.pop("scoring_profile", ""))
+        batch = str(options.pop("scoring_batch", ""))
+        if self._indexed.use_read_index(run_id):
+            options["scoring_profile"] = profile
+            options["scoring_batch"] = batch
+        return self._indexed.load_trace_nodes(run_id, index, **options)
+
+    def get_trace_content(self, run_id: str, index: int, node_id: str, **options: Any) -> dict[str, Any]:
+        if self._indexed is None:
+            raise ValueError("read_index_required")
+        return self._indexed.load_trace_content(run_id, index, node_id, **options)
+
+    def get_item_content(self, run_id: str, index: int, **options: Any) -> dict[str, Any]:
+        if self._indexed is None:
+            raise ValueError("read_index_required")
+        return self._indexed.load_item_content(run_id, index, **options)
