@@ -34,12 +34,13 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
   const browser = useQaBrowser({ sentrixUrl, manifests });
   const selectedId = useRef('');
   const loadSessions = async () => { const data = await api<{ items: ChatSession[] }>('/chat/sessions'); setSessions(data.items); return data.items; };
-  const select = async (id: string) => {
+  const select = async (id: string, openConversation = true) => {
     selectedId.current = id;
     try {
       const data = await api<ChatSession>(`/chat/sessions/${encodeURIComponent(id)}`);
       if (selectedId.current !== id) return;
-      setConversationOpen(true); setReasoning(data.reasoning === true);
+      if (openConversation) setConversationOpen(true);
+      setReasoning(data.reasoning === true);
       setSession(data); setScope(data.scope_id); setModel({ profile: data.model_profile, base_url: String(data.runtime_snapshot?.model_base_url || ''), manager_url: String(data.runtime_snapshot?.vllm_manager_url || ''), endpoint_model: data.endpoint_model || data.model_name }); localStorage.setItem('photobench-chat-session', id);
     } catch (e) { setError((e as Error).message); }
   };
@@ -53,7 +54,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
         if (disposed) return;
         setSpaces(data.spaces); setBases(data.reuse_bases); setScope(data.spaces[0]?.id || '');
         const remembered = localStorage.getItem('photobench-chat-session');
-        if (remembered && history.some(s => s.session_id === remembered)) void select(remembered);
+        if (remembered && history.some(s => s.session_id === remembered)) void select(remembered, false);
       } catch (e) { if (!disposed) setError((e as Error).message); }
     })();
     return () => { disposed = true; selectedId.current = ''; };

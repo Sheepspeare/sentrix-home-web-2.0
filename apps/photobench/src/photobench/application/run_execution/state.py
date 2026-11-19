@@ -52,7 +52,7 @@ PERSIST_DEBOUNCE_SECONDS = max(0.05, float(os.environ.get("PHOTOBENCH_PERSIST_DE
 #: ``run.json`` 约 271 MB，写完时收尾线程等不到提交就超时，整轮被误判成 failed，
 #: 而 487 条 results 其实一条不少。落盘是后台线程，调大它只影响收尾等待，不影响
 #: 评测墙钟；需要时可用 ``PHOTOBENCH_PERSIST_TIMEOUT_SECONDS`` 覆盖。
-PERSIST_TIMEOUT_SECONDS = max(1.0, float(os.environ.get("PHOTOBENCH_PERSIST_TIMEOUT_SECONDS", "180")))
+PERSIST_TIMEOUT_SECONDS = max(1.0, float(os.environ.get("PHOTOBENCH_PERSIST_TIMEOUT_SECONDS", "300")))
 
 
 class RunState:

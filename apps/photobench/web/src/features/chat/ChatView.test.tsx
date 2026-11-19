@@ -20,15 +20,35 @@ function savedChats(status = 'ready') {
     if (init?.method === 'DELETE') return {};
     return sessions.find(s => path.endsWith('/' + s.session_id));
   });
-  render(<ChatView sentrixUrl="http://product" manifests={[]} models={options} busy={false} onOpenMedia={vi.fn()}/>);
+  return render(<ChatView sentrixUrl="http://product" manifests={[]} models={options} busy={false} onOpenMedia={vi.fn()}/>);
 }
+
+it.each(['ready', 'running'])('restores a %s conversation without opening its trace on entering or returning to chat', async status => {
+  localStorage.setItem('photobench-chat-session', 'one');
+  const first = savedChats(status);
+  await screen.findByRole('button', { name: '打开对话与轨迹' });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(localStorage.getItem('photobench-chat-session')).toBe('one');
+  first.unmount();
+  savedChats(status);
+  const open = await screen.findByRole('button', { name: '打开对话与轨迹' });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(open);
+  expect(screen.getByRole('dialog', { name: '聊天对话与执行轨迹' })).toBeTruthy();
+});
+
+it('opens the conversation when a history entry is explicitly selected', async () => {
+  savedChats();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(await screen.findByRole('button', { name: /^第二段对话/ }));
+  expect(await screen.findByRole('dialog', { name: '聊天对话与执行轨迹' })).toBeTruthy();
+});
 
 it('confirms deletion, clears the selected conversation and its saved selection', async () => {
   localStorage.setItem('photobench-chat-session', 'one');
   savedChats();
-  await screen.findByRole('dialog');
-  fireEvent.click(screen.getByLabelText('关闭'));
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await screen.findByRole('button', { name: '打开对话与轨迹' });
+  expect(screen.queryByRole('dialog')).toBeNull();
   fireEvent.click(await screen.findByLabelText('删除对话：第一段对话'));
   expect(api.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: '取消' }));
