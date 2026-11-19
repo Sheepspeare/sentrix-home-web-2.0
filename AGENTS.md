@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/19完整懒加载已上线1008872/8874。Q4正式采样对齐1538772实际连接8195的local qwen35_nonthinking；153仅读，未生效JSON及消融排除。GPU0恢复后Q4继承196续3556c7，Qwen f41436保持；四预算100/600/100/500、18隔离、有效分/失败历史保留。现行run/wake取主实验state.json/checkpoint-watchers.json；正式配置与GPU恢复回执见产品项目audit/20261119-psh-formal-config。真实101长轨迹峰值1.67GB/最长保存150.54秒，1013终态待验。
+- 11/19完整懒加载已上线1008872/8874。Qwen全1013终态1002有效分，现仅7服务故障继承1006续4c5f90；两份补评分/两完整导出待验，豆包未启。Q4正式采样/GPU0保持3556c7，已401题；四预算100/600/100/500及18隔离保持。当前run/wake取主实验state/checkpoint-watchers，接audit/20261119-qwen1013-acceptance与T006。
 
 
 - 默认中文、精炼客观。代码根目录为本文件所在目录。
@@ -17,4 +17,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-19 | 完整懒加载已上线8872/8874，原scope续评与两精确wake正常；1013终态待验 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-19 | 完整懒加载已上线；Qwen七题服务恢复运行，补评/导出待验；Q4并行 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

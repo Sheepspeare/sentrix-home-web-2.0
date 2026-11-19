@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-19 21:00｜Qwen全1013终态分类后仅恢复七个服务故障
+
+Qwen f41436 completed_with_errors：1013均执行、1002有效ATM分，QS有效均值0.6586843988790096但total_score=null。严格筛出7个未交卷服务超时/502，c9179c1先本机验证commit、同步100校验SHA，再先wake单次resume为4c5f90；继承1006题、原scope/失败史保持，无服务重启。1002评分回执及答案指纹逐项一致，另4未评分答卷的答案/状态/媒体一致。真实新回合预算100/600/100/500、QA4/3660及冻结ATM/Judge保持。新wait560dfaf0-1bae-49e6-8d60-b9305b7c8e16/watcher86994；Q4原fd46ad08/6536保持，已401题、worker/GPU正常。
+
+两正常答卷仍缺评分（QA71582c85、bfe15c10，完整ID见审计），resume不自动补profile评分；恢复空闲后精确同batch补Judge，不重跑Agent。43/671原失败已有答卷，禁止自动重试/改成功/补0；预算耗尽等也保留。1013每题去向、评分与两完整流式导出尚未验收，豆包尚未启动。UI行号随暂缺7题压缩，后续以qa_id定位。测评RSS/HWM约1.36/1.88GiB，系统可用约64GiB，/home约13.5GiB。旧一次脚本已消费禁止重放。主实验state/checkpoint-watchers及audit/20261119-qwen1013-acceptance/{README.md,delivery.json,watchers.json}为现行入口。
+
 ## 2026-11-19 15:59｜Q4正式采样生效，恢复GPU0后保留196题续评
 
 psh a5daf519与main 28ba9e6已是本分支祖先。只读1538772最新实际任务，产品连接8195，以local模式启用qwen35_nonthinking；磁盘q4km.json未被加载，8230属于实验副本，均不复制。正式采样temperature0.7/top_p0.8/top_k20/min_p0/presence_penalty1.5/seed42/enable_thinking=false；Agent reasoning、100/600/100/500及失败工具过滤保持。f75c105新增环境模板，并在显式产品升级续评时冻结采样开关；2e99113修产品版本配置持久化。两者均已验证并发布100Q4，Qwen产品配置不动。
