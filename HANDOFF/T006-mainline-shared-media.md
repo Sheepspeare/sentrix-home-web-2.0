@@ -6,7 +6,7 @@ Qwen0bbacb 1013唯一QA、1012答卷/有效ATM分、1真实995f8ba1模型失败�
 
 950b2be已局部上线8874/PID71956，实际app-dir为wait-chat-950b2be/evaluation/apps/photobench/src；有效300秒、线上静态文件及真实浏览器静默恢复/主动打开通过，只重启8874，保护PID/结果manifest保持。本机ChatView7项、长运行专项及构建通过。延长等待没有消除原211秒慢写或OOM的证明。
 
-新授权取代旧豆包full从零方案：历史3759图/533视频的像素/方向和音画载荷全部匹配，拍摄时间/GPS也匹配；旧WeMM2048配置可复用。6742邮件与新包原文全匹配。使用独立SQLite副本保留原库基线，同历史scope补地址/词法索引和邮件/文本嵌入，标准后处理后再正式1013题reuse新run；保留旧视频抽帧，报告写“历史豆包媒体记忆复用+新版邮件增量”。准备脚本49f347c及watcher已本机验证提交、同步100校SHA/只读preflight通过；是否实际启动取新audit delivery/watchers及launch回执，不重放旧脚本。Q4最新568题原fd46ad08/6536继续，不切活动后端。当前入口产品项目audit/20261120-doubao-media-reuse及主实验state/checkpoint-watchers。
+新授权取代旧豆包full从零方案：历史3759图/533视频的像素/方向和音画载荷全部匹配，拍摄时间/GPS也匹配；旧WeMM2048配置可复用。6742邮件与新包原文全匹配。使用独立SQLite副本保留原库基线，同历史scope补地址/词法索引和邮件/文本嵌入，标准后处理后再正式1013题reuse新run；保留旧视频抽帧，报告写“历史豆包媒体记忆复用+新版邮件增量”。准备脚本49f347c及watcher已本机验证提交、同步100校SHA/只读preflight通过；01:30:56先wake bb58891d-dbfe-43d3-aa33-8838659f7ce4再单次launch，worker171603与watcher69971存活，当前阶段snapshot。副本创建后/home约6.5GiB；正式Agent尚未启动。回调先验副本与6742邮件/索引/后处理、原基线，再空闲切换并另挂正式QA wake。不重放本轮launch或旧脚本。Q4最新572题原fd46ad08/6536继续，不切活动后端。当前入口产品项目audit/20261120-doubao-media-reuse及主实验state/checkpoint-watchers。
 
 ## 2026-11-20｜侧聊修复检查点等待和聊天自动弹窗，豆包改为复用媒体记忆
 
