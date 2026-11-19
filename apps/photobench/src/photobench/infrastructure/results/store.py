@@ -347,6 +347,12 @@ class FileRunStore:
             except (OSError, ValueError, KeyError, TypeError):
                 log.warning("Could not index run: %s", run_dir, exc_info=True)
 
+    def load_entry(self, run_id: str) -> dict[str, Any]:
+        directory = self._run_dir(run_id)
+        if not directory.is_dir():
+            raise KeyError(run_id)
+        return read_entry(directory)
+
     def load_state(self, run_id: str) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)
         if not run_dir.is_dir():

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from photobench.application.run_execution.state import RunState
 from photobench.application.runs.suites import RunSuites
-from photobench.infrastructure.results.store import FileResultWriter
+from photobench.infrastructure.results.store import FileResultWriter, FileRunStore
 from photobench.infrastructure.results.split_store import SplitRunReader
 
 BASE = Path('/home/realmagic/xy/experiments/atm1013-20261118')
@@ -42,6 +42,7 @@ def main():
     state.update(status='running', current_phase='qa_eval')
     live = RunState(state, run_id=RUN, writer=ValidationWriter(ROOT))
     suites = object.__new__(RunSuites)
+    suites._store = FileRunStore(ROOT)
     suites._lock = threading.RLock()
     suites._active = {RUN: SimpleNamespace(state=live)}
     suites._live_entries = {RUN: suites._live_list_entry(state)}

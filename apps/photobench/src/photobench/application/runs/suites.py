@@ -74,7 +74,7 @@ from photobench.domain.evaluation.profiles import (
 )
 from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
-from photobench.domain.results.ports import RunResultWriter, RunStore
+from photobench.domain.results.ports import RunListViews, RunResultWriter, RunStore
 from photobench.domain.runs import analysis
 from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name, safe_slug
@@ -2294,11 +2294,18 @@ class RunSuites:
             if state is None:
                 continue
             lock = getattr(state, "lock", None)
+            indexed = isinstance(self._store, RunListViews)
             if lock is None:
-                detached = copy.deepcopy(state.data)
+                detached = (
+                    copy.deepcopy(self._live_list_entry(state.data))
+                    if indexed else copy.deepcopy(state.data)
+                )
             elif lock.acquire(blocking=False):
                 try:
-                    detached = state.snapshot()
+                    detached = (
+                        copy.deepcopy(self._live_list_entry(state.data))
+                        if indexed else state.snapshot()
+                    )
                 finally:
                     lock.release()
             else:
@@ -2310,7 +2317,17 @@ class RunSuites:
                 if entry.get("status") in DIRTY_STATUSES:
                     states[run_id] = entry
                 continue
-            entry = copy.deepcopy(analysis.run_list_entry(detached))
+            if indexed:
+                # Summary scores belong to the last atomic publication. Live
+                # status/progress/counts overlay it without traversing any trace.
+                try:
+                    committed = self._store.load_entry(run_id)
+                except KeyError:
+                    entry = detached
+                else:
+                    entry = {**committed, **detached, "summary": committed.get("summary") or {}}
+            else:
+                entry = copy.deepcopy(analysis.run_list_entry(detached))
             with self._lock:
                 self._live_entries[run_id] = copy.deepcopy(entry)
             if entry and entry.get("status") in DIRTY_STATUSES:

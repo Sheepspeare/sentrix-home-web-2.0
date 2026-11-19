@@ -145,6 +145,13 @@ class RunRevisions(Protocol):
 
 
 @runtime_checkable
+class RunListViews(Protocol):
+    """Read the committed list projection without visiting execution traces."""
+
+    def load_entry(self, run_id: str) -> dict[str, Any]: ...
+
+
+@runtime_checkable
 class RunReadViews(Protocol):
     """Optional lightweight committed view, without loading item traces.
 
