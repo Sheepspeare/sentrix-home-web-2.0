@@ -1,5 +1,19 @@
 # T006 主线集成与跨相册媒体共享
 
+
+## 2026-11-19 13:34｜18条历史轨迹定点隔离已上线，两路已续评
+
+- 测评修复 `fcb32bd` 已部署1008872/8874（PID614203/614225），包含47523cd活动读取内存修复；本机100项、100候选100项通过。种子安装辅助脚本 `73c45eb` 已验SHA并push，feature分支远端一致。产品、模型及其他实例保持原版本。
+- 针对Q4原run `62cc28` / generation `6d296ab38f414887a55fc0aade1672b0` 的18条轨迹，在完整解析前选择轻状态；保留101条答卷、执行状态、分数、失败历史和1013分母。原不可变检查点及18条归档保持；隔离题不自动重跑Agent或补Judge。
+- 原563MiB压缩检查点生成73MiB轻状态。独立流式比较全部非隔离轨迹字段，双方规范流SHA均为 `9ae2f3a559b00091a41e60d86134c239dc540a0355999ae424f5416523b9d9ca`；安装验SHA和原指针保持通过。离线生成最大RSS2.87GiB，独立校验最大RSS3.77GiB。
+- Q4新run `20261119-133056-2026.11.17-atm-sources-addresses-current-resume-bfe3ee` 继承101/剩912/18隔离；Qwen新run `20261119-132135-2026.11.17-atm-sources-addresses-current-resume-2f8ee5` 继承679/剩334。验收时两路qa_eval/running、精确worker=true、各4产品回合、型号匹配，Qwen已保存691条。100/600/100/500、QA4/3660、reasoning/graph和冻结ATM/豆包Judge保持。
+- 8872真实并发读取：隔离题1.40秒/20KB且三类重轨迹长度0、分页3.20秒、总览0.52秒、active-work0.15秒。读取前后Q4 RSS约1.70→1.71GiB，HWM3.42GiB保持；Qwen RSS2.26GiB/HWM3.92GiB，系统可用约65.9GiB。本轮现场结果不能替代全程验证。
+- 两路wake均先注册后恢复：Q4 `eac4aef7-a65f-4e13-a817-0c2f5117df86` / watcher60310；Qwen `98e5080b-f49f-4023-b295-5876c0fb4112` / watcher57594。listener healthy/queue/dry_run=false；终态、worker、型号、磁盘、无进展及连续探针失败均触发续接。
+- 完整分块存储及节点懒加载仍是本机未提交草稿，未部署。本次完成定点旧轨迹隔离。两轮完整1013答卷、评分、两导出验收仍待后续wake；Qwen验收后才接豆包独立full。stage/activate/seed安装/两次resume均已消费，禁止重放。
+
+证据：`audit/20261119-oversized-trace-quarantine/{delivery.json,real101-preservation.json,install-seed-response.json,live-acceptance-summary.json,q4km-concurrent-read-acceptance.json,watchers.json}`；活动映射以主实验`state.json/checkpoint-watchers.json`及100`active-runs.json`为准。
+
+
 ## 2026-11-19 02:22｜Q4 OOM修复并从95题续评，两路异常监控已验证
 
 01:51内核OOM杀死8872测评PID976050，匿名RSS62616860KiB；自动重启后62b2fc标interrupted，保存95题及81有效ATM评分。47523cd已本机提交并完成100候选验收：活动读取复用一致快照及不可变完成轨迹，同run历史完整读取合并在途解析。仅8872切至独立oom-read-47523cd/PID1164820，其余六个保护进程PID保持。既有云模型/清理覆盖层已取证保留。本机131项、远端129项通过；真实并发读取RSS仅增加约122MiB、峰值保持，但列表14.15秒/单题14.96秒，性能尚未完全解决。
