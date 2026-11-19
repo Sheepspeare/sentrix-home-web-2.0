@@ -1,12 +1,12 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/20侧聊授权豆包复用11/12既有媒体记忆、补建邮件后测1013题，取代从零重建要求。检查点等待默认300秒与聊天页静默恢复已本机验证，待主线程上线验收后再启动豆包；见T006最新记录。
+- 11/20侧聊授权豆包复用11/12既有媒体记忆、补建邮件后测1013题，取代从零重建要求。检查点等待300秒与聊天页静默恢复已在8874上线验收；独立副本补邮件准备见audit/20261120-doubao-media-reuse，正式豆包未启；见T006最新记录。
 
 - 11/20对话删除9363d4b已在1008294/8874上线并验空会话204/404及原数据保持；两端列表二次确认/活动会话409。8872/Q4活动中未切，空闲后另发。见T006与产品项目audit/20261120-conversation-delete。
 
 - 11/20 00:00轨迹查看4df9302前端在1008872/8874生效；后端已空闲启用8874/PID3854102并核cmdline/SHA/在线轻读，8872仍待自身空闲。见audit/20261119-qwen-anomaly17-persist及T006。
 
-- 11/20 Qwen0bbacb终态1013项/1012答卷/1真实模型失败，1008有效分；仅Judge补四份现成答卷已启，wake fe870c77/watch60461。原996答卷/1005继承分及历史保持；Q4 3556c7已563题原fd46ad08继续。入口audit/20261120-qwen-terminal及主实验state/checkpoint-watchers，两导出待验，豆包未启。
+- 11/20 Qwen0bbacb的1013项/1012有效分/1真实失败及完整trace/SFT两导出已验收，原答卷与分/历史保持；Q4 3556c7原fd46ad08继续。豆包改复用历史媒体+新版邮件增量，入口audit/20261120-doubao-media-reuse及主实验state/checkpoint-watchers。
 
 
 - 默认中文、精炼客观。代码根目录为本文件所在目录。
@@ -23,4 +23,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Qwen终态已核、四题仅Judge补评监控中；Q4继续，完整导出待验 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Qwen答卷/评分/两导出已验收；8874两修复上线，豆包复用准备 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
