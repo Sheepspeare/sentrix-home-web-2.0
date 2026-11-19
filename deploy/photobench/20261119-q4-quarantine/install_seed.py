@@ -51,7 +51,10 @@ def main() -> None:
         state = load_resume_quarantine_state(candidate, source["run_id"])
         if state is None:
             raise RuntimeError("production loader did not select the reduced seed")
-        save("install-seed-intent.json", {"source": source, "manifest": manifest, "preservation": verification})
+        save(
+            "install-seed-intent.json",
+            {"source": source, "manifest": manifest, "preservation": verification},
+        )
         # Same filesystem: the verified compressed file is shared without another large copy.
         os.link(staged / "resume-quarantine-state.json.gz", run_dir / "resume-quarantine-state.json.gz")
         temporary_manifest = run_dir / ".resume-quarantine.install.tmp"
