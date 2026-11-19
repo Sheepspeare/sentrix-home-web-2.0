@@ -4,7 +4,7 @@
 
 - 11/20 00:00轨迹查看4df9302前端在1008872/8874生效；后端已空闲启用8874/PID3854102并核cmdline/SHA/在线轻读，8872仍待自身空闲。见audit/20261119-qwen-anomaly17-persist及T006。
 
-- 11/20 Qwen170bf7写入超时后找回3份已完成产品答卷，继承1010仅续3题为0bbacb；wake6f788501/watch41342。原答卷/有效分/失败保持；Q4 3556c7原fd46ad08继续。当前入口为主实验state/checkpoint-watchers及audit/20261119-qwen-anomaly17-persist。
+- 11/20 Qwen0bbacb终态1013项/1012答卷/1真实模型失败，1008有效分；仅Judge补四份现成答卷已启，wake fe870c77/watch60461。原996答卷/1005继承分及历史保持；Q4 3556c7已563题原fd46ad08继续。入口audit/20261120-qwen-terminal及主实验state/checkpoint-watchers，两导出待验，豆包未启。
 
 
 - 默认中文、精炼客观。代码根目录为本文件所在目录。
@@ -21,4 +21,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | 对话删除已上线8294/8874；Qwen终态待验，Q4监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Qwen终态已核、四题仅Judge补评监控中；Q4继续，完整导出待验 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

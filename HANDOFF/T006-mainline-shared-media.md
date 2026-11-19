@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 01:00｜Qwen 17题终态已核，仅补四份现成答卷评分
+
+0bbacb终态1013题：1012执行完成、1个新995f8ba1 model_error，1008有效ATM分，四份现成答卷缺Judge。17个授权attempt均有独立产品回合：5正常交卷/7有缺口/4步骤上限/1模型错误；状态不代替正确性。996原继承答卷、1010seed答卷和1005评分回执逐项保持，源0e3686原1013项/1011有效分及170bf7 manifest SHA不变。保留新模型失败，不自动重跑或补0。
+
+先新wake fe870c77-445f-47b9-8245-55f820457144，再仅Judge四题同冻结批次，辅助scoring-5432bc9e56bf4fa0bc19ad0d3d8a0f4a，watcher60461已精确核running/worker_alive。原1008分/全部答卷指纹已记；下一步score_four.py accept单次验四分与保持性，再验完整在线trace/SFT两导出，通过后才先wake启8874真实豆包full新scope。当前豆包未启动。
+
+本轮未重启服务，8874实际conversation-delete-9363d4b-v2；Q4 3556c7已563题、worker/型号正常，原fd46ad08/6536保持。预算100/600/100/500、QA4/3660及18隔离保持。/home约11.2GiB，导出应流式验收。脚本先本机ruff/语法检查与commit后同步SHA，终态检查和精确补评启动已过。现行入口产品项目audit/20261120-qwen-terminal及主实验state/checkpoint-watchers，旧回调6f788501已处理；本轮inspect/launch不可重放。没有证明原211秒持久化或未来OOM已彻底消除。
+
+
 ## 2026-11-20｜对话删除已上线8294/8874
 
 9363d4b沿产品已有DELETE加事务内活动回合检查，测评新增DELETE并联动删除产品/本地session；两端列表直接显示删除和二次确认，活动会话409。仅删对应消息/轨迹，资产及测评run/答卷/分保留。本机后端137+1、前端16+3和两端构建通过；100候选产品48/测评89通过。8294/8874空闲后单次切换，PID4104799/4104804，实际目录conversation-delete-9363d4b-v2/{product/apps/api/src,evaluation/apps/photobench/src}。8保护单元PID及原结果manifest保持，29文件/两端在线静态SHA一致；独立空会话DELETE204/GET404、不存在DELETE404，旧会话/消息/回合不变，模型新增0。8874页面删除入口可见。
