@@ -205,6 +205,13 @@ def activate():
     sources = {s: idle(s) for s in STAGES}
     protected = {u: pid(u) for u in PROTECTED}
     save("activate-intent.json", {"sources": sources, "protected_pids": protected})
+    version = HERE / "full-lazy-version.env"
+    with version.open("x") as f:
+        f.write(
+            "PHOTOBENCH_BUILD_REVISION=" + manifest()["revision"]
+            + "+100-full-lazy\nPHOTOBENCH_SPLIT_RESULTS=1\nPHOTOBENCH_WEB_DIST_ROOT="
+            + str(HERE / "web-dist") + "\n"
+        )
     for s, (port, _, unit) in STAGES.items():
         drop = Path.home() / ".config/systemd/user" / f"{unit}.d/zzzzzzzz-full-lazy.conf"
         with drop.open("x") as f:
@@ -215,10 +222,8 @@ def activate():
                 + str(port)
                 + " --app-dir "
                 + str(RELEASE / "apps/photobench/src")
-                + "\nEnvironment=PHOTOBENCH_BUILD_REVISION="
-                + manifest()["revision"]
-                + "+100-full-lazy\nEnvironment=PHOTOBENCH_SPLIT_RESULTS=1\nEnvironment=PHOTOBENCH_WEB_DIST_ROOT="
-                + str(HERE / "web-dist")
+                + "\nEnvironmentFile="
+                + str(version)
                 + "\n"
             )
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
