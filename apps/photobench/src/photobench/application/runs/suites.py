@@ -905,6 +905,7 @@ class RunSuites:
                             "reasoning_max_tool_calls",
                             "reasoning_max_search_calls",
                             "reasoning_max_other_tool_calls",
+                            "vlm_generation_profile",
                         )
                         if key in configured
                     },

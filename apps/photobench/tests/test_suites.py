@@ -1290,14 +1290,18 @@ def test_resume_rejects_unconfigured_product_revision_and_non_boolean_recovery(t
 
 
 @pytest.mark.parametrize("select_revision", [False, True])
-def test_reasoning_resume_freezes_limits_only_for_explicit_product_upgrade(
+def test_reasoning_resume_freezes_limits_and_sampling_only_for_explicit_product_upgrade(
     tmp_path, monkeypatch, select_revision
 ):
     captured = []
     gate = threading.Event()
     saved = _cancelled_state()
     saved["reasoning"] = True
-    prior_settings = {"chat_timeout_s": 120, "reasoning_max_model_calls": 999}
+    prior_settings = {
+        "chat_timeout_s": 120,
+        "reasoning_max_model_calls": 999,
+        "vlm_generation_profile": "legacy",
+    }
     saved["runtime_snapshot"] = {
         "sentrix_url": "http://original:8291",
         "model_base_url": "http://original:8100/v1",
@@ -1318,13 +1322,21 @@ def test_reasoning_resume_freezes_limits_only_for_explicit_product_upgrade(
     configured = {
         **suites._config.public_runtime_connection_config(),
         "product_build_revision": "bounded",
-        "product_settings": {**limits, "chat_timeout_s": 30},
+        "product_settings": {
+            **limits,
+            "vlm_generation_profile": "qwen35_nonthinking",
+            "chat_timeout_s": 30,
+        },
     }
     monkeypatch.setattr(suites._config, "public_runtime_connection_config", lambda: configured)
     try:
         suites.resume_run("run-1", {"product_build_revision": "bounded"} if select_revision else {})
         effective = captured[0].runtime_snapshot.connection()["product_settings"]
-        assert effective == ({**prior_settings, **limits} if select_revision else prior_settings)
+        assert effective == (
+            {**prior_settings, **limits, "vlm_generation_profile": "qwen35_nonthinking"}
+            if select_revision
+            else prior_settings
+        )
         assert saved["runtime_snapshot"]["product_settings"] == prior_settings
     finally:
         gate.set()
