@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/19测评查看UI已本机验证：原左右节点/四页签懒加载、紧凑邮件、时延统计及旧节点引用修复。准备仅8872/8874静态发布，后端待真正空闲；见docs/refactor/2026-11-19-trace-viewer-lazy-ui.md与T006。
+- 11/19测评查看UI 4df9302已静态发布1008872/8874：原左右节点/四页签懒加载、紧凑邮件及准确时延说明；服务PID/原两wake保持。后端候选160项及真实1013只读通过，待对应产品/测评空闲激活；见docs/refactor/2026-11-19-trace-viewer-lazy-ui.md与T006。
 
 - 11/19 Qwen六补评分已验：源0e3686保留1013项/1011有效分、原1005回执不变；17异常新attempt170bf7继承996题运行，waitddd6b98e/watch11012。Q4 3556c7已459题，原fd46ad08保持。完整懒加载/四预算/原失败保留；现行映射及验收入口为主实验state/checkpoint-watchers、audit/20261119-qwen-persist-recovery。
 
@@ -19,4 +19,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-19 | Qwen17新attempt/Q4并行；轨迹UI本机验证，静态待发布 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-19 | Qwen17新attempt/Q4并行；轨迹UI已静态发布，后端候选待空闲 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
