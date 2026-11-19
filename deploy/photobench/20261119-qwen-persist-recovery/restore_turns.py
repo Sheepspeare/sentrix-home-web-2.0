@@ -95,8 +95,13 @@ def main():
     save('restore-intent.json', {'source_run': SOURCE, 'source_manifest_sha256': source_sha,
                                 'seed_run': SEED, 'scope_id': scope, 'terminal_turns': facts,
                                 'scoring_receipts_sha256': receipts_before, 'product_http_methods': ['GET']})
-    assets_body = get('assets?scope_id=' + scope + '&limit=10000')
-    assets = assets_body['assets'] if isinstance(assets_body, dict) else assets_body
+    assets = []
+    while True:
+        page = get(f'assets?scope_id={scope}&limit=500&offset={len(assets)}&sort=created&order=asc')
+        assets.extend(page['items'])
+        if len(assets) >= page['total']:
+            break
+        assert page['items'], 'asset pagination stopped early'
     assets_by_name = index_assets_by_name(assets)
     assert len(assets) == state['qa_assets'], (len(assets), state['qa_assets'])
     restored = []
