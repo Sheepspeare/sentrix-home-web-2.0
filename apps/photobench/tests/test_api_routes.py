@@ -81,10 +81,10 @@ def test_process_diagnostics_api_item_and_exports_share_derived_observations(cli
     report = client.get("/api/v1/runs/run-a/process-diagnostics").json()
     assert report["summary"]["analyzed_qa"] == 1
     assert report["summary"]["agent_calls"] == report["summary"]["judge_calls"] == 0
-    expected = report["items"][0]
+    assert report["items"][0]["qa_id"] == "q1"
     for profile in ("", "photobench_open_v1", "atm_qs_v1"):
         item = client.get("/api/v1/runs/run-a/items/0", params={"scoring_profile": profile}).json()
-        assert item["item"]["process_diagnostics"] == expected
+        assert "process_diagnostics" not in item["item"]
     assert path.read_bytes() == original
     derived = next((path.parent.parent / ".process-diagnostics").glob("run-a.*.json"))
     assert json.loads(derived.read_text()) == report

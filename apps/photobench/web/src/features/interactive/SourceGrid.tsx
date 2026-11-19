@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BASE } from "../../api/client.ts";
 import type { SourceRef } from "../../api/types.ts";
 import { fmtTimestamp } from '../../lib/format.ts';
 
 function SourceCard({ source, albumId }: { source: SourceRef; albumId: string }) {
+  const pending = useRef(false);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState("");
   const name = String(source.source_id || source.file_name || "文档");
@@ -13,20 +14,24 @@ function SourceCard({ source, albumId }: { source: SourceRef; albumId: string })
     ? `${BASE}/assets/${encodeURIComponent(String(source.asset_id))}/file`
     : `${BASE}/albums/${encodeURIComponent(albumId)}/documents/${encodeURIComponent(fileName)}`;
   async function loadText() {
+    if (pending.current) return;
+    pending.current = true;
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`读取失败：${response.status}`);
       setText(await response.text());
     } catch (cause) { setError((cause as Error).message); }
+    finally { pending.current = false; }
   }
-  return <details onToggle={event => {
+  return <details className="source-card" onToggle={event => {
+    if (event.target !== event.currentTarget) return;
     if (event.currentTarget.open && text === null && !error) void loadText();
   }}>
-    <summary>{source.source_type === "email" ? "邮件" : "文档"} · {String(source.title || name)}</summary>
-    <p>{name} <time dateTime={timestamp} title={timestamp}>{fmtTimestamp(timestamp)}</time></p>
+    <summary><span className="source-card-title">{source.source_type === "email" ? "邮件" : "文档"} · {String(source.title || name)}</span>{timestamp ? <time dateTime={timestamp} title={timestamp}>{fmtTimestamp(timestamp)}</time> : null}</summary>
+    <div className="source-card-body"><p className="source-card-id">{name}</p>
     {source.summary ? <p>{String(source.summary)}</p> : null}
     {source.excerpt ? <blockquote>{String(source.excerpt)}</blockquote> : null}
-    <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{error || text || "加载原文…"}</pre>
+    <pre>{error || text || "加载原文…"}</pre></div>
   </details>;
 }
 

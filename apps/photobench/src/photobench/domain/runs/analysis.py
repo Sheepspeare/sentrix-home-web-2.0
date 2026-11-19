@@ -2098,14 +2098,15 @@ def hydrate_qa_metadata(item: dict[str, Any], qa_metadata: dict[str, dict[str, A
     hydrated.update(retrieval_metric_projection(hydrated))
     if not hydrated.get("attribution") or not retrieval_metric_eligible(hydrated):
         hydrated["attribution"] = derive_attribution(hydrated)
-    hydrated["tool_trace"] = bind_tool_calls_to_model_rounds(
-        hydrated.get("tool_trace") or [],
-        hydrated.get("execution_trace") or [],
-        hydrated.get("model_call_metrics") or [],
-    )
-    hydrated["model_call_metrics"] = annotate_model_calls(
-        hydrated.get("model_call_metrics") or [], hydrated.get("execution_trace") or []
-    )
+    if (hydrated.get("trace_storage") or {}).get("version") != 3:
+        hydrated["tool_trace"] = bind_tool_calls_to_model_rounds(
+            hydrated.get("tool_trace") or [],
+            hydrated.get("execution_trace") or [],
+            hydrated.get("model_call_metrics") or [],
+        )
+        hydrated["model_call_metrics"] = annotate_model_calls(
+            hydrated.get("model_call_metrics") or [], hydrated.get("execution_trace") or []
+        )
     agent_steps = [
         step
         for step in hydrated.get("execution_trace") or []
@@ -2113,7 +2114,9 @@ def hydrate_qa_metadata(item: dict[str, Any], qa_metadata: dict[str, dict[str, A
         and str(step.get("stage") or step.get("type") or "") == "model"
         and str(step.get("call_type") or "agent") in {"agent", "recovery"}
     ]
-    if agent_steps or hydrated.get("metrics_contract_version") == 2:
+    if (hydrated.get("trace_storage") or {}).get("version") != 3 and (
+        agent_steps or hydrated.get("metrics_contract_version") == 2
+    ):
         hydrated["agent_stability"] = agent_stability(hydrated)
     return hydrated
 

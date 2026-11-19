@@ -51,3 +51,11 @@
 @media(pointer:coarse) {
  .trace-node-browser button,.trace-node-details button,.trace-raw-record>summary,.trace-repeated-context>summary { min-height:44px; }
 }
+
+.trace-node-workspace>.trace-node-route { max-height:620px; overflow-y:auto; }
+.trace-node-pagination,.trace-content-pagination { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:11px; color:#6c7890; margin-top:12px; }
+.trace-node-pagination>span { width:100%; }
+.trace-node-pagination button,.trace-content-pagination button { border:1px solid #dce3ed; border-radius:5px; padding:5px 9px; background:#fff; color:#455674; cursor:pointer; }
+.trace-node-pagination button:disabled,.trace-content-pagination button:disabled { opacity:.45; cursor:default; }
+.trace-context-note.trace-turn-meta { margin:6px 0; font-size:11px; color:#748198; display:flex; flex-wrap:wrap; gap:6px 16px; }
+@media(max-width:720px) { .trace-node-workspace>.trace-node-route { max-height:300px; } }

@@ -29,7 +29,7 @@ from urllib.parse import quote
 from photobench.application.runs.index import RunIndex
 from photobench.domain.datasets.ports import QaMetadataSource
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
-from photobench.domain.error_analysis.process import process_for_qa, run_process
+from photobench.domain.error_analysis.process import run_process
 from photobench.domain.evaluation.profile_view import (
     choice_matching_result,
     item_profile_results,
@@ -762,12 +762,7 @@ class ReadRuns:
             item["scoring_results"] = item_scores(cached, str(item.get("qa_id")))
             item["profile_scores"] = item_profile_results(cached, str(item.get("qa_id")))
             item["choice_matching_result"] = choice_matching_result(cached, str(item.get("qa_id")))
-            diagnostic_state = (
-                cached
-                if scoring_profile
-                else {**cached, "selected_scoring_profile": "", "selected_scoring_batch": ""}
-            )
-            item["process_diagnostics"] = process_for_qa(diagnostic_state, str(item.get("qa_id")))
+            item.pop("process_diagnostics", None)
             item["diagnostic_results"] = [
                 v
                 for v in (cached.get("diagnostic_results") or {}).values()

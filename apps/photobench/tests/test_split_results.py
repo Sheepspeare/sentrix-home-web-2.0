@@ -136,7 +136,7 @@ def test_split_run_item_diagnostics_use_only_selected_question(tmp_path: Path, m
     (run_dir / "run.json").write_text(json.dumps(fixture, ensure_ascii=False))
     from photobench.domain.error_analysis.process import process_for_qa
 
-    expected_diagnostics = process_for_qa(fixture, "q1")
+    assert process_for_qa(fixture, "q1")["qa_id"] == "q1"
     SplitResultWriter(root).write(run_dir, fixture)
 
     class NoMetadata:
@@ -166,8 +166,10 @@ def test_split_run_item_diagnostics_use_only_selected_question(tmp_path: Path, m
     monkeypatch.setattr(split_json.ObjectReader, "value", reject_large_string)
     detail = reads.get_run_item("split-run", 0)["item"]
     assert detail["reference_answer"] == "参考答案"
-    assert detail["process_diagnostics"]["qa_id"] == "q1"
-    assert detail["process_diagnostics"] == expected_diagnostics
+    assert "process_diagnostics" not in detail
+    assert "model_call_metrics" not in detail
+    assert "tool_trace" not in detail
+    assert detail["trace_read_summary"]["model_call_count"] == 1
     assert len(detail["diagnostic_results"]) == 0
 
 
@@ -413,7 +415,7 @@ def test_process_findings_and_fingerprint_keep_unprojected_tool_result(tmp_path)
     assert SplitRunReader(tmp_path, tmp_path / "split-run").core(0)["process_diagnostics"] == expected
 
 
-def test_large_diagnostics_are_previewed_without_losing_full_record(tmp_path):
+def test_qa_view_excludes_diagnostics_without_losing_full_record(tmp_path):
     fixture = state()
     fixture["items"][0]["tool_trace"] = [
         {"tool": "read_photo_text", "status": "denied", "result": {"failure_reason": "no_text_detected"}}
@@ -423,8 +425,9 @@ def test_large_diagnostics_are_previewed_without_losing_full_record(tmp_path):
     reader = SplitRunReader(tmp_path, tmp_path / "split-run")
     full = reader.core(0)["process_diagnostics"]
     preview = reader.core(0, preview=True)
-    assert len(preview["process_diagnostics"]["tool_events"]) == 20
-    assert preview["process_diagnostics"]["preview_counts"]["tool_events"] == len(full["tool_events"])
+    assert "process_diagnostics" not in preview
+    assert all(field["path"] != "process_diagnostics" for field in preview.get("content_fields", []))
+    assert preview["trace_read_summary"]["tool_call_count"] == 240
     assert len(json.dumps(preview).encode()) < 256 * 1024
     pieces, offset = [], 0
     while True:
@@ -473,3 +476,117 @@ def test_legacy_stream_preserves_answer_fingerprints_and_numeric_types(tmp_path)
     assert type(loaded["predicted_media"][0]["start_s"]) is float
     assert math.copysign(1, loaded["predicted_media"][0]["offset"]) == -1
     assert json.dumps(loaded, sort_keys=True) == json.dumps(record, sort_keys=True)
+
+
+def test_viewer_stats_order_and_individual_messages_do_not_read_trace_bodies(tmp_path, monkeypatch):
+    from photobench.infrastructure.results import split_json
+
+    fixture = state()
+    item = fixture["items"][0]
+    item["metrics_contract_version"] = 2
+    item["wall_clock_ms"] = 1000
+    item["agent_stability"] = {"structured_json_total": 4, "structured_json_success": 3}
+    item["model_call_metrics"] = [
+        {"call_type": "planner", "step_id": "p1", "duration_ms": 100},
+        {"call_type": "agent", "step_id": "s1", "duration_ms": 200},
+        {"call_type": "tool_internal", "duration_ms": 500},
+    ]
+    item["runtime_turns"][0]["trace_bundle"]["debug_calls"] = [
+        {
+            "call_type": "planner",
+            "step_id": "p1",
+            "seq": 0,
+            "duration_ms": 100,
+            "messages": [{"role": "user", "content": "题目"}],
+        },
+        {
+            "call_type": "agent",
+            "step_id": "s1",
+            "seq": 1,
+            "duration_ms": 200,
+            "messages": [
+                {"role": "system", "content": "大消息" * 50000},
+                {"role": "user", "content": "题目"},
+            ],
+        },
+        {"call_type": "agent", "step_id": "s2", "seq": 2, "duration_ms": 100},
+    ]
+    item["tool_trace"] = [
+        {
+            "tool": "search_memories",
+            "parent_step_id": "s1",
+            "duration_ms": 600,
+            "result": {"text": "大输出" * 50000},
+        }
+    ]
+    SplitResultWriter(tmp_path).write(tmp_path / "split-run", fixture)
+    reader = SplitRunReader(tmp_path, tmp_path / "split-run")
+    original_getitem = split_json.StoredDict.__getitem__
+
+    def without_bodies(self, key):
+        if key in {"process_diagnostics", "content", "response", "result"}:
+            raise AssertionError(f"viewer read body: {key}")
+        return original_getitem(self, key)
+
+    monkeypatch.setattr(split_json.StoredDict, "__getitem__", without_bodies)
+    core = reader.core(0, preview=True)
+    assert core["trace_read_summary"] == {
+        "model_call_count": 3,
+        "tool_call_count": 1,
+        "model_ms": 300,
+        "tool_ms": 600,
+        "timing_complete": True,
+    }
+    assert "process_diagnostics" not in core
+    nodes = reader.nodes(0)["nodes"]
+    assert [node["kind"] for node in nodes] == ["planner", "model", "tool", "model"]
+    assert nodes[1]["message_roles"] == [{"index": 0, "role": "system"}, {"index": 1, "role": "user"}]
+    # Walking one message uses its descriptor, independently of the large earlier message.
+    content = reader.content(0, nodes[1]["node_id"], field="messages.1", limit=1024)
+    assert json.loads(content["text"]) == {"role": "user", "content": "题目"}
+    assert content["next_offset"] is None
+
+
+def test_reused_stored_trace_keeps_node_records_as_references(tmp_path):
+    SplitResultWriter(tmp_path).write(tmp_path / "source", state())
+    inherited = SplitRunReader(tmp_path, tmp_path / "source").state()
+    inherited["run_id"] = "resumed"
+    SplitResultWriter(tmp_path).write(tmp_path / "resumed", inherited)
+    reader = SplitRunReader(tmp_path, tmp_path / "resumed")
+    node = reader.nodes(0)["nodes"][0]
+    value = json.loads(reader.content(0, node["node_id"])["text"])
+    assert value["messages"] == [{"role": "user", "content": "输入"}]
+    assert "$photobench_object_v3" not in value
+    assert json.loads(reader.content(0, node["node_id"], field="messages.0")["text"]) == value["messages"][0]
+
+
+def test_old_descriptor_wrapped_nodes_read_without_rewriting_manifest(tmp_path, monkeypatch):
+    from photobench.infrastructure.results.split_json import ObjectWriter
+    from photobench.infrastructure.results.split_store import build_node_index, build_nodes
+
+    fixture = state()
+    SplitResultWriter(tmp_path).write(tmp_path / "source", fixture)
+    reader = SplitRunReader(tmp_path, tmp_path / "source")
+    original = reader.item_ref(0)
+    objects = ObjectWriter(tmp_path)
+    nodes = build_nodes(fixture["items"][0], objects)
+    for node in nodes:
+        node["record"] = dict(node["record"])
+        node.pop("message_roles", None)
+        node.pop("message_count", None)
+    directory = build_node_index(nodes, objects)
+    directory.pop("read_summary")
+    directory.pop("order_version")
+    ref = objects.put(directory)
+    objects.db.commit()
+    monkeypatch.setattr(reader, "item_ref", lambda index: {"item": original["item"], "nodes": ref})
+    before = (tmp_path / "source" / "split-commit.json").read_bytes()
+    node = reader.nodes(0)["nodes"][0]
+    assert node["message_roles"] == [{"index": 0, "role": "user"}]
+    assert json.loads(reader.content(0, node["node_id"], field="messages.0")["text"]) == {
+        "role": "user",
+        "content": "输入",
+    }
+    assert reader.trace_overview(0)["tool_call_count"] == 1
+    assert (tmp_path / "source" / "split-commit.json").read_bytes() == before
+    objects.close()

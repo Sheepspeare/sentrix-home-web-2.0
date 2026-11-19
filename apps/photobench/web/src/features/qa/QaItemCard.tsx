@@ -1,6 +1,6 @@
 import { SavedItemContent } from "./SavedItemContent.tsx";
 import { CandidateMedia, DeliveredMedia, GroundTruthMedia } from "../interactive/UnifiedMedia.tsx";
-import { ProcessDiagnostics, type ProcessDiagnostic } from "./ProcessDiagnostics.tsx";
+import { useTraceOverview } from "../../lib/lazyTrace.ts";
 import { ScoringReview } from "./ScoringReview.tsx";
 import { OPEN_PROFILE, ATM_PROFILE } from '../../lib/scoring.ts';
 import { ChoiceMatchingResult, EvaluationResult, EvaluationTypeBadge, evaluationReason } from "../../components/EvaluationResult.tsx";
@@ -155,9 +155,11 @@ function QaItemDetail({
   const taskJudge = dict(detail.task_judge);
   const isAtm = albumId.startsWith("atm-") || Boolean(dict(detail.evaluation).source_qtype);
   const evidenceJudge = dict(detail.evidence_judge);
-  const timing = itemTimingBreakdown(detail);
-  const qaSegments = qaLatencySegments(detail);
-  const toolTrace = hasToolTrace(detail);
+  const { overview, loading: metricsLoading, error: metricsError } = useTraceOverview(detail);
+  const measuredDetail = overview ? { ...detail, trace_read_summary: overview } : detail;
+  const timing = itemTimingBreakdown(measuredDetail);
+  const qaSegments = qaLatencySegments(measuredDetail);
+  const toolTrace = hasToolTrace(measuredDetail);
   const qualityReason = evaluationReason(judgeReason(detail.judge));
   const behaviorReason = judgeReason(detail.task_judge);
   const evidenceReason = judgeReason(detail.evidence_judge);
@@ -179,7 +181,6 @@ function QaItemDetail({
           </span>
         ))}
       </div>
-      <ProcessDiagnostics value={detail.process_diagnostics as ProcessDiagnostic | undefined} />
       <ItemScoringResults results={detail.scoring_results} diagnostics={detail.diagnostic_results} current={detail.profile_scores} definition={detail.evaluation} />
       <ScoringReview key={String(detail.run_id) + String(detail.qa_id)} runId={String(detail.run_id || '')} results={detail.scoring_results} reviews={detail.scoring_reviews}/>
       {!detail.profile_scores && <details><summary>历史评分</summary><EvaluationResult value={detail.evaluation_result || detail.judge} definition={detail.evaluation} showChoiceMatching={!detail.choice_matching_result} />{detail.choice_matching_result != null && <ChoiceMatchingResult value={detail.choice_matching_result} definition={detail.evaluation} standalone />}</details>}
@@ -210,7 +211,7 @@ function QaItemDetail({
         <div>
           <h4>{turns.length > 1 ? "最终一轮回答" : "模型回答"}</h4>
           <p>{esc(detail.final_answer) || esc(detail.answer) || esc(detail.error) || "未完成"}</p>
-          {Array.isArray(detail.content_fields) ? (detail.content_fields as { path: string; characters: number }[]).map(field =>
+          {Array.isArray(detail.content_fields) ? (detail.content_fields as { path: string; characters: number }[]).filter(field => field.path !== "process_diagnostics").map(field =>
             <SavedItemContent key={String(detail.run_id) + String(detail.index) + field.path} detail={detail} path={field.path} label={`完整内容（${field.path}${field.characters ? `，${field.characters}字符` : ""}）`} />) : null}
           <div className="capability-grid">
             <span>
@@ -260,6 +261,8 @@ function QaItemDetail({
         </div>
       </div>
       <section className="qa-performance">
+        {metricsLoading ? <p className="muted small">正在读取调用统计…</p> : metricsError ? <p className="muted small">调用统计读取失败：{metricsError}</p> : null}
+        {overview?.timing_complete === false ? <p className="muted small">部分调用未记录耗时，累计仅含已记录时长，暂不绘制占比。</p> : null}
         <div className="timing-breakdown">
           <span>
             {Number(detail.metrics_contract_version) === 2 ? "Agent 请求墙钟" : "端到端（旧口径）"} <b>{fmtMs(timing.wall_clock_ms)}</b>
@@ -308,7 +311,7 @@ function QaItemDetail({
             </div>
           </div>
         )}
-        <div id={`process-log-${detail.qa_id}`}><DebugTracePanel detail={detail} modelLabel={modelLabel} /></div>
+        <div id={`process-log-${detail.qa_id}`}><DebugTracePanel detail={measuredDetail} modelLabel={modelLabel} /></div>
       </section>
       <div className="item-footer">
         {onRetest && <button className="judge-details-trigger" type="button" onClick={onRetest}>重测本题 / 模型比较 <span>↗</span></button>}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -27,6 +28,7 @@ from photobench.infrastructure.results.split_json import (
     ObjectReader,
     ObjectWriter,
     database,
+    is_reference,
     json_bytes,
     manifest,
     publish,
@@ -452,7 +454,7 @@ class SplitResultWriter:
                     node_ref = self._nodes_cache.get(trace_key)
                     if node_ref is None:
                         node_ref = objects.derive(
-                            "node-directory-v3",
+                            "node-directory-v4",
                             trace_key,
                             lambda item=item, receipts=receipts: objects.put(
                                 build_node_index(build_nodes(item, objects, receipts), objects)
@@ -557,12 +559,28 @@ def build_nodes(
                 "type",
                 "created_at",
                 "timestamp",
+                "streamed",
+                "ttft_ms",
+                "tokens_per_second",
+                "model",
+                "role",
             )
             if k in record and not isinstance(record[k], (dict, list))
         }
         metadata = {k: v[:256] if isinstance(v, str) else v for k, v in metadata.items()}
         while len(json_bytes(metadata)) > 1536:
             metadata.pop(next(reversed(metadata)))
+        message_index = {}
+        messages = record.get("messages")
+        if isinstance(messages, list):
+            message_index = {
+                "message_count": len(messages),
+                "message_roles": [
+                    {"index": i, "role": str(message.get("role") or "unknown")[:32]}
+                    for i, message in enumerate(messages[:50])
+                    if isinstance(message, dict)
+                ],
+            }
         node_id = f"n{len(nodes)}"
         nodes.append(
             {
@@ -573,6 +591,7 @@ def build_nodes(
                 "source_path": path,
                 "record": objects.put(record),
                 "fields": list(record.keys()),
+                **message_index,
             }
         )
 
@@ -628,6 +647,76 @@ def _node_group(kind: str) -> str:
     return "calls"
 
 
+def order_call_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Place tools after their uniquely identified parent attempt; preserve ambiguous records."""
+    calls = [node for node in nodes if node["kind"] != "tool"]
+    calls.sort(
+        key=lambda node: (
+            node.get("metadata", {}).get("seq")
+            if isinstance(node.get("metadata", {}).get("seq"), (int, float))
+            else 0
+        )
+    )
+    by_call: dict[str, list[dict[str, Any]]] = {}
+    by_step: dict[str, list[dict[str, Any]]] = {}
+    for call in calls:
+        metadata = call.get("metadata", {})
+        if metadata.get("call_id"):
+            by_call.setdefault(str(metadata["call_id"]), []).append(call)
+        if metadata.get("step_id") and metadata.get("status") not in {"error", "failed", "cancelled"}:
+            by_step.setdefault(str(metadata["step_id"]), []).append(call)
+    children: dict[str, list[dict[str, Any]]] = {}
+    unbound = []
+    for node in nodes:
+        if node["kind"] != "tool":
+            continue
+        metadata = node.get("metadata", {})
+        call_id, step_id = metadata.get("parent_call_id"), metadata.get("parent_step_id")
+        matches = by_call.get(str(call_id), []) if call_id else by_step.get(str(step_id), [])
+        if len(matches) == 1:
+            children.setdefault(str(matches[0]["node_id"]), []).append(node)
+        else:
+            unbound.append(node)
+    return [row for call in calls for row in [call, *children.get(str(call["node_id"]), [])]] + unbound
+
+
+def node_overview(nodes: Any) -> dict[str, Any]:
+    """Aggregate only node metadata, never a model prompt or tool result."""
+    turns: dict[int, dict[str, Any]] = {}
+    for node in nodes:
+        turn = turns.setdefault(int(node["turn_index"]), {"debug": [], "metrics": [], "tools": []})
+        kind = node["kind"]
+        if kind in {"planner", "model", "judge"}:
+            turn["debug"].append(node.get("metadata", {}))
+        elif kind == "metrics":
+            turn["metrics"].append(node.get("metadata", {}))
+        elif kind == "tool":
+            turn["tools"].append(node.get("metadata", {}))
+    result: dict[str, Any] = {
+        "model_call_count": 0,
+        "tool_call_count": 0,
+        "model_ms": 0,
+        "tool_ms": 0,
+        "timing_complete": True,
+    }
+    for turn in turns.values():
+        calls = turn["metrics"] or turn["debug"]
+        result["model_call_count"] += len(calls)
+        result["tool_call_count"] += len(turn["tools"])
+        for field, records in (("model_ms", calls), ("tool_ms", turn["tools"])):
+            for row in records:
+                if field == "model_ms" and row.get("call_type") == "tool_internal":
+                    continue
+                duration = row.get("duration_ms", row.get("total_ms"))
+                if duration is None and isinstance(row.get("latency_s"), (int, float)):
+                    duration = row["latency_s"] * 1000
+                if isinstance(duration, (int, float)) and math.isfinite(duration) and duration >= 0:
+                    result[field] += duration
+                else:
+                    result["timing_complete"] = False
+    return result
+
+
 def build_node_index(nodes: list[dict[str, Any]], objects: ObjectWriter) -> dict[str, Any]:
     """Store bounded node-summary pages and a compact per-turn directory."""
     grouped: dict[tuple[int, str], list[dict[str, Any]]] = {}
@@ -639,11 +728,19 @@ def build_node_index(nodes: list[dict[str, Any]], objects: ObjectWriter) -> dict
 
     turns: dict[str, dict[str, Any]] = {}
     for (turn, group), rows in grouped.items():
+        if group == "calls":
+            rows = order_call_nodes(rows)
+        rows = [{**row, "node_id": f"t{turn}_g{group}_i{position}"} for position, row in enumerate(rows)]
         pages = [
             objects.put(rows[start : start + NODE_PAGE_SIZE]) for start in range(0, len(rows), NODE_PAGE_SIZE)
         ]
         turns.setdefault(str(turn), {})[group] = {"count": len(rows), "pages": pages}
-    return {"page_size": NODE_PAGE_SIZE, "turns": turns}
+    return {
+        "page_size": NODE_PAGE_SIZE,
+        "turns": turns,
+        "order_version": 2,
+        "read_summary": node_overview(nodes),
+    }
 
 
 class SplitRunReader:
@@ -698,41 +795,57 @@ class SplitRunReader:
         if index < 0 or index >= len(cores):
             raise KeyError(f"item index out of range: {index}")
         core = cores[index]
-        result = plain({k: v for k, v in core.items() if k != "process_diagnostics"})
-        diagnostics = core.get("process_diagnostics")
-        if preview and isinstance(diagnostics, dict):
-            shortened = False
-
-            def brief(value: Any) -> Any:
-                nonlocal shortened
-                if isinstance(value, dict):
-                    return {k: brief(v) for k, v in value.items()}
-                if isinstance(value, list):
-                    shortened = shortened or len(value) > 20
-                    return [brief(value[n]) for n in range(min(len(value), 20))]
-                if isinstance(value, str) and len(value) > 1024:
-                    shortened = True
-                    return value[:1024]
-                return value
-
-            result["process_diagnostics"] = brief(diagnostics)
-            if shortened:
-                result["process_diagnostics"]["preview_counts"] = {
-                    k: len(v) for k, v in diagnostics.items() if isinstance(v, list)
-                }
-                result.setdefault("content_fields", []).append(
-                    {"path": "process_diagnostics", "characters": 0}
-                )
+        result = plain({k: core[k] for k in core if k != "process_diagnostics"})
+        if not preview:
+            result["process_diagnostics"] = plain(core.get("process_diagnostics"))
         else:
-            result["process_diagnostics"] = plain(diagnostics)
+            # QA viewing never dereferences diagnostics. Analysis/export remain explicit consumers.
+            fields = [
+                row for row in result.get("content_fields", []) if row.get("path") != "process_diagnostics"
+            ]
+            if fields:
+                result["content_fields"] = fields
+            else:
+                result.pop("content_fields", None)
+            result["trace_read_summary"] = self.trace_overview(index)
         result["trace_storage"]["revision"] = self.revision
         return cast(dict[str, Any], result)
+
+    def trace_overview(self, index: int) -> dict[str, Any]:
+        directory = self.reader.value(self.item_ref(index)["nodes"])
+        if "read_summary" in directory:
+            return cast(dict[str, Any], plain(directory["read_summary"]))
+
+        # Existing immutable revisions need no rewrite or trace hydration.
+        def summaries() -> Any:
+            turns = self.reader.value(directory["turns"])
+            for groups in turns.values():
+                for name, group in groups.items():
+                    if name not in {"calls", "sources"}:
+                        continue
+                    for page in group.get("pages", []):
+                        for node in self.reader.value(page):
+                            yield {
+                                "turn_index": node["turn_index"],
+                                "kind": node["kind"],
+                                "metadata": plain(node.get("metadata", {})),
+                            }
+
+        return node_overview(summaries())
 
     def item_ref(self, index: int) -> Any:
         values = self.reader.value(self.manifest["views"])["nodes"]
         if index < 0 or index >= len(values):
             raise KeyError(f"item index out of range: {index}")
         return values[index]
+
+    def node_record(self, node: Any) -> Any:
+        record = self.reader.value(node["record"])
+        # Older directories encoded a reused descriptor as a JSON dictionary.
+        # Its field list distinguishes this internal wrapper from original JSON.
+        if is_reference(record) and list(record) != list(node.get("fields", [])):
+            record = self.reader.value(plain(record))
+        return record
 
     def item_record(self, index: int) -> dict[str, Any]:
         """Return one QA as a lazy mapping; large text fields load only when accessed."""
@@ -762,17 +875,44 @@ class SplitRunReader:
         total = int(group_index.get("count", 0))
         pages = group_index.get("pages", [])
         selected = []
-        for position in range(offset, min(offset + limit, total)):
-            page_number, page_offset = divmod(position, page_size)
-            rows = self.reader.value(pages[page_number])
-            row = rows[page_offset]
-            selected.append({k: plain(v) for k, v in row.items() if k != "record"})
+        if group == "calls" and node_index.get("order_version") != 2:
+            rows = [
+                {k: plain(v) for k, v in row.items() if k != "record"}
+                for page in pages
+                for row in self.reader.value(page)
+            ]
+            selected = [
+                {k: v for k, v in row.items() if k != "record"}
+                for row in order_call_nodes(rows)[offset : offset + limit]
+            ]
+        else:
+            for position in range(offset, min(offset + limit, total)):
+                page_number, page_offset = divmod(position, page_size)
+                rows = self.reader.value(pages[page_number])
+                row = rows[page_offset]
+                selected.append({k: plain(v) for k, v in row.items() if k != "record"})
+        for node in selected:
+            if "messages" not in node.get("fields", []) or "message_roles" in node:
+                continue
+            # Resolve the original node address even when the UI order was sorted.
+            position = int(str(node["node_id"]).split("_i")[-1])
+            record_page, record_offset = divmod(position, page_size)
+            record = self.node_record(self.reader.value(pages[record_page])[record_offset])
+            messages = record.get("messages")
+            if isinstance(messages, list):
+                node["message_count"] = len(messages)
+                node["message_roles"] = [
+                    {"index": i, "role": str(message.get("role") or "unknown")[:32]}
+                    for i, message in enumerate(messages[:50])
+                    if isinstance(message, dict)
+                ]
         return {
             "nodes": selected,
             "total": total,
             "offset": offset,
             "next_offset": offset + limit if offset + limit < total else None,
             "read_revision": self.revision,
+            "order_version": 2,
         }
 
     def content(
@@ -804,9 +944,11 @@ class SplitRunReader:
         page_number, page_offset = divmod(position, NODE_PAGE_SIZE)
         nodes = self.reader.value(group_index["pages"][page_number])
         row = nodes[page_offset]
-        value = row["record"]
+        value = self.node_record(row)
         if field:
-            value = self.reader.walk(value, [field])
+            value = self.reader.walk(
+                value, [int(part) if part.isdigit() else part for part in field.split(".")]
+            )
         return {
             **self.reader.content(value, offset, limit),
             "node_id": node_id,

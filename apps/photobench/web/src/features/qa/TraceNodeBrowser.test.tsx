@@ -56,21 +56,88 @@ it("每个用户轮次的相同步骤与重复前缀独立",()=>{
 });
 
 
-it("分块轨迹先取摘要，点击才取内容；按页获取更多节点", async () => {
+it("懒加载保留左右分栏与输入输出页签，仅展开字段才取正文，翻页不累计节点", async () => {
   const request = vi.spyOn(client, "api").mockImplementation(async (path) => {
     const url = String(path);
-    if (url.includes("/trace/t0_gcalls_i0")) return { text: "完整输入", offset: 0, next_offset: null };
-    if (url.includes("offset=50")) return { nodes: [{ node_id: "t0_gcalls_i50", kind: "tool", turn_index: 0 }], total: 51, next_offset: null };
-    return { nodes: [{ node_id: "t0_gcalls_i0", kind: "model", turn_index: 0, metadata: { step_id: "step-1" } }], total: 51, next_offset: 50 };
+    if (url.includes("/trace/t0_gcalls_i0")) return { text: JSON.stringify([{role:"user",content:"完整输入"}]), offset: 0, next_offset: null };
+    if (url.includes("offset=50")) return { nodes: [{ node_id: "t0_gcalls_i50", kind: "tool", turn_index: 0, metadata:{tool:"search_memories"} }], total: 51, offset:50, next_offset: null };
+    return { nodes: [{ node_id: "t0_gcalls_i0", kind: "model", turn_index: 0, metadata: { step_id: "step-1",duration_ms:1200 }, fields:["messages","response"] }], total: 51, next_offset: 50 };
   });
   const detail = { index: 0, run_id: "split-run", trace_storage: { version: 3, revision: "abc" }, runtime_turns: [{ index: 0 }] } as RunItemDetail;
-  render(<TraceNodeBrowser detail={detail} turnIndex={0} />);
+  const {container}=render(<TraceNodeBrowser detail={detail} turnIndex={0} />);
   await screen.findByRole("button", { name: /step-1/ });
+  expect(container.querySelector('.trace-node-workspace')?.children).toHaveLength(2);
+  expect(container.querySelector('.trace-view-tabs')?.parentElement?.className).toBe('trace-node-browser');
   expect(request).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText("完整输入")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /step-1/ }));
-  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-  fireEvent.click(screen.getByRole("button", { name: /加载更多节点/ }));
-  await screen.findByRole("button", { name: /t0_gcalls_i50/ });
+  expect(screen.getByRole('tab',{name:'输入'})).toBeTruthy();
+  expect(screen.getByRole('tab',{name:'输出'})).toBeTruthy();
+  expect(screen.getByRole('tab',{name:'耗时与指标'})).toBeTruthy();
+  expect(request).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByText('本次保存输入 · messages',{selector:'summary'}));
+  await screen.findByText('messages[0] · user');
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(String(request.mock.calls[1][0])).toContain('field=messages');
+  expect(container.querySelector('pre')).toBeNull();
+  await expand('messages[0] · user');
+  expect(container.textContent).toContain('完整输入');
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  await screen.findByRole("button", { name: /search_memories/ });
   expect(request).toHaveBeenCalledTimes(3);
+  expect(container.querySelector('pre')).toBeNull();
+  expect(screen.queryByText('完整输入')).toBeNull();
+});
+
+it('切换节点或正文段时释放旧内容，迟到响应不能覆盖当前节点', async()=>{
+  let resolveFirst: (value: unknown) => void = () => {};
+  const request=vi.spyOn(client,'api').mockImplementation(async path=>{
+    const url=String(path);
+    if(!url.includes('/trace/t')) return {nodes:[0,1].map(i=>({node_id:`t0_gcalls_i${i}`,kind:'model',turn_index:0,metadata:{step_id:`s${i}`},fields:['response']})),total:2};
+    if(url.includes('i0')) return new Promise(resolve=>{resolveFirst=resolve});
+    if(url.includes('offset=32768')) return {text:'尾段',offset:32768,next_offset:null};
+    return {text:'当前节点',offset:0,next_offset:32768};
+  });
+  const {container}=render(<TraceNodeBrowser detail={{index:0,run_id:'r',trace_storage:{version:3,revision:'rev'}}} turnIndex={0}/>);
+  await screen.findByRole('button',{name:/s0/});
+  choose(/s0/);fireEvent.click(screen.getByRole('tab',{name:'输出'}));
+  await waitFor(()=>expect(request).toHaveBeenCalledTimes(2));
+  choose(/s1/);fireEvent.click(screen.getByRole('tab',{name:'输出'}));
+  await screen.findByText('当前节点',{selector:'pre'});
+  resolveFirst({text:'已过期',offset:0});
+  await waitFor(()=>expect(container.textContent).not.toContain('已过期'));
+  fireEvent.click(screen.getByRole('button',{name:'下一段'}));
+  await screen.findByText('尾段',{selector:'pre'});
+  expect(container.textContent).not.toContain('当前节点');
+  expect(container.querySelectorAll('pre')).toHaveLength(1);
+});
+
+it('消息索引只按展开的一条读取，折叠消息和其他输入均不取正文', async()=>{
+  const request=vi.spyOn(client,'api').mockImplementation(async path=>{
+    const url=String(path);
+    if(url.includes('field=messages.1')) return {text:JSON.stringify({role:'user',content:'仅本条问题'}),offset:0};
+    return {nodes:[{node_id:'t0_gcalls_i0',kind:'planner',turn_index:0,metadata:{step_id:'planner_1'},fields:['messages','tools'],message_count:2,message_roles:[{index:0,role:'system'},{index:1,role:'user'}]}],total:1};
+  });
+  render(<TraceNodeBrowser detail={{index:0,run_id:'r',trace_storage:{version:3,revision:'rev'}}} turnIndex={0}/>);
+  await screen.findByRole('button',{name:/planner_1/});
+  choose(/planner_1/);
+  expect(request).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByText('messages[1] · user',{selector:'summary'}));
+  await screen.findByText(/仅本条问题/,{selector:'pre'});
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(String(request.mock.calls[1][0])).toContain('field=messages.1');
+  expect(String(request.mock.calls[1][0])).not.toContain('field=messages&');
+});
+
+it('带原始位置的节点直接读取同版本原文，兼容旧存档的节点引用', async()=>{
+  const request=vi.spyOn(client,'api').mockImplementation(async path=>{
+    const url=String(path);
+    if(url.includes('/content?')) return {text:JSON.stringify({content:'真实输入'}),offset:0};
+    return {nodes:[{node_id:'t0_gcalls_i0',kind:'model',turn_index:0,metadata:{step_id:'source-node'},source_path:['runtime_turns',0,'trace_bundle','debug_calls',0],fields:['messages'],message_count:1,message_roles:[{index:0,role:'user'}]}],total:1};
+  });
+  render(<TraceNodeBrowser detail={{index:0,run_id:'r',trace_storage:{version:3,revision:'pinned'}}} turnIndex={0}/>);
+  await screen.findByRole('button',{name:/source-node/});choose(/source-node/);
+  fireEvent.click(screen.getByText('messages[0] · user',{selector:'summary'}));
+  await screen.findByText(/真实输入/,{selector:'pre'});
+  expect(String(request.mock.calls[1][0])).toContain('path=runtime_turns.0.trace_bundle.debug_calls.0.messages.0');
+  expect(String(request.mock.calls[1][0])).toContain('revision=pinned');
 });

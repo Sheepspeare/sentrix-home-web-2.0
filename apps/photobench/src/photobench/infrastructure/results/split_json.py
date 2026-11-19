@@ -421,7 +421,7 @@ class ObjectWriter:
         if isinstance(value, ObjectRef):
             return value
         if isinstance(value, STORED_TYPES) and value.reader.path == self.path.resolve():
-            return value.ref
+            return ObjectRef(value.ref)
         immutable = isinstance(value, TRACE_TYPES)
         if immutable and (cached := self.identities.get(id(value))) is not None:
             return cached[1]

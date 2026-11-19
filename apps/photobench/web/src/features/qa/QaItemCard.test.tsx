@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as client from "../../api/client.ts";
 
 import type { RunItemDetail } from "../../api/types.ts";
 
 import { QaItemCard } from "./QaItemCard.tsx";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function renderCard(detail: RunItemDetail) {
   return render(
@@ -23,6 +24,20 @@ function renderCard(detail: RunItemDetail) {
     />,
   );
 }
+
+it('格式3统计直接展示，普通单题不展示或请求process_diagnostics', () => {
+  const request=vi.spyOn(client,'api');
+  const {container}=renderCard({index:0,run_id:'split-run',trace_storage:{version:3,revision:'rev'},
+    trace_read_summary:{model_call_count:25,tool_call_count:16,model_ms:83000,tool_ms:178300,timing_complete:false},
+    process_diagnostics:{status:'partial',secret_marker:'应留在分析和导出'},
+    content_fields:[{path:'process_diagnostics',characters:10000}],runtime_turns:[{index:0,conversation_id:'conv_hidden',message:'费用多少',answer:'799.74'}]});
+  expect(container.textContent).not.toContain('process_diagnostics');
+  expect(container.textContent).not.toContain('conv_hidden');
+  expect(container.textContent).not.toContain('应留在分析和导出');
+  expect(container.textContent).not.toContain('按块查看完整内容');
+  expect(container.textContent).toContain('部分调用未记录耗时');
+  expect(request).not.toHaveBeenCalled();
+});
 
 // 口径（1.0 App.vue:703-711 注释原文）：`toolRecallMedia` 是工具召回候选，
 // `itemEvidenceMedia` 是模型**显式交付**图，**未交付即空、绝不回退到候选**。

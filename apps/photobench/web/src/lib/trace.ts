@@ -453,7 +453,9 @@ export function itemTimingBreakdown(item: unknown): {
   other_ms: unknown;
 } {
   const i = dict(item);
-  const saved = dict(i.timing_breakdown);
+  const overview = dict(i.trace_read_summary);
+  const split = dict(i.trace_storage).version === 3;
+  const saved = { ...dict(i.timing_breakdown), ...overview };
   // **两个回退源都从原始轨迹求和。** 2.0 的 run 不写 `timing_breakdown`，也不写
   // `llm_summary`；如果只读这两个，`model_ms` / `tool_ms` / `other_ms` 恒为空——
   // 页面上「每一步骤耗时」的位置还在，数字是 `-`。数据其实一直在
@@ -469,10 +471,10 @@ export function itemTimingBreakdown(item: unknown): {
     saved.model_ms ??
     dict(i.llm_summary).total_ms_sum ??
     (modelFromCalls.length ? modelFromCalls.reduce((sum, value) => sum + value, 0) :
-      Array.isArray(i.model_call_metrics) && !i.model_call_metrics.length ? 0 : null);
+      !split && Array.isArray(i.model_call_metrics) && !i.model_call_metrics.length ? 0 : null);
   const toolMs =
     saved.tool_ms ?? (toolFromTrace.length ? toolFromTrace.reduce((sum, value) => sum + value, 0) :
-      Array.isArray(i.tool_trace) && !i.tool_trace.length ? 0 : null);
+      !split && Array.isArray(i.tool_trace) && !i.tool_trace.length ? 0 : null);
   const wallMs = saved.wall_clock_ms ?? i.wall_clock_ms ?? null;
   const judgeMs = saved.judge_ms ?? i.judge_ms ?? null;
   const currentContract = finiteMetric(i.metrics_contract_version) === 2;
@@ -481,7 +483,7 @@ export function itemTimingBreakdown(item: unknown): {
     wall != null && judge != null ? Math.max(0, wall - judge) : null));
   const model = finiteMetric(modelMs), tool = finiteMetric(toolMs);
   const otherMs = finiteMetric(saved.other_ms) ?? (
-    agentWallMs != null && model != null && tool != null && model + tool <= agentWallMs
+    overview.timing_complete !== false && agentWallMs != null && model != null && tool != null && model + tool <= agentWallMs
       ? agentWallMs - model - tool : null);
   return {
     wall_clock_ms: wallMs,
@@ -499,6 +501,18 @@ export function qaLatencySegments(item: unknown): LatencySegment[] {
   const current = finiteMetric(i.metrics_contract_version) === 2;
   const timing = itemTimingBreakdown(item);
   const wall = finiteMetric(current ? timing.agent_wall_ms : timing.wall_clock_ms);
+  const overview = dict(i.trace_read_summary);
+  if (dict(i.trace_storage).version === 3) {
+    const model = finiteMetric(timing.model_ms), tool = finiteMetric(timing.tool_ms);
+    if (model == null || tool == null || (wall != null && model + tool > wall + 0.5)) return [];
+    const segments: LatencySegment[] = [];
+    if (model > 0) segments.push({ kind: "model-request", label: "模型请求（不含工具内）", shortLabel: "模型", ms: model });
+    if (tool > 0) segments.push({ kind: "tool", label: "工具调用", shortLabel: "工具", ms: tool });
+    if (overview.timing_complete !== false && finiteMetric(timing.other_ms) != null && Number(timing.other_ms) > 0) segments.push({ kind: "other", label: "其他未归因时延", shortLabel: "其他", ms: Number(timing.other_ms) });
+    if (!current && finiteMetric(timing.judge_ms) != null && Number(timing.judge_ms) > 0) segments.push({ kind: "judge", label: "Judge", shortLabel: "Judge", ms: Number(timing.judge_ms) });
+    if (wall != null && segments.reduce((sum, value) => sum + value.ms, 0) > wall + 0.5) return [];
+    return overview.timing_complete === false ? [] : segments;
+  }
   const segments: LatencySegment[] = agentLoopGroups(item).flatMap(group =>
     group.calls.flatMap((call, index) => {
       const ms = callAgentLoopTiming(item, call).totalMs;

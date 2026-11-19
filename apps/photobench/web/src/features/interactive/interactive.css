@@ -51,9 +51,17 @@
 .interactive-modal-content > .btn { margin: 16px 0; }
 .item-footer { flex-wrap: wrap; gap: 10px; }
 .unified-media { margin: 16px 0; min-width: 0; }
-.source-grid details { padding: 10px 12px; margin: 6px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow-wrap: anywhere; }
-.source-grid summary { cursor: pointer; }
-.source-grid pre { max-height: 360px; overflow: auto; white-space: pre-wrap; }
+.source-grid { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.source-grid .source-card { padding:0; margin:0; border:1px solid var(--border); border-radius:6px; background:var(--surface); min-width:0; overflow:hidden; }
+.source-grid .source-card>summary { display:flex; align-items:baseline; gap:8px; cursor:pointer; padding:7px 10px; line-height:1.5; font-size:12px; }
+.source-card>summary::before { content:'▸'; flex:none; color:var(--muted); }
+.source-card[open]>summary::before { content:'▾'; }
+.source-card>summary .source-card-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+.source-card>summary time { flex:none; font-size:10px; color:var(--muted); }
+.source-grid .source-card-body { border-top:1px solid var(--border); padding:8px 10px; font-size:12px; overflow-wrap:anywhere; }
+.source-card-body p { margin:4px 0; }
+.source-card-body .source-card-id { font-size:10px; color:var(--muted); }
+.source-grid .source-card-body pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0 0; font-size:11px; line-height:1.6; }
 .execution-view { margin: 18px 0; min-width: 0; }
 .execution-state { color: var(--muted); font-size: 13px; }
 .execution-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
