@@ -862,6 +862,56 @@ def test_resume_carries_only_the_finished_items_and_reuses_the_scope(tmp_path: P
     assert result["resumed_items"] == 1
 
 
+def test_resume_keeps_quarantined_trace_out_of_agent_queue_and_preserves_the_item(tmp_path: Path):
+    import copy
+
+    quarantined = {
+        "qa_id": "q1",
+        "execution_status": "running",
+        "answer": "preserved answer",
+        "judge": {"score": 1},
+        "trace_quarantine": {"status": "execution_anomaly", "reason": "oversized_trace_requires_review"},
+    }
+    completed = {"qa_id": "q2", "execution_status": "completed", "answer": "kept"}
+    saved = _cancelled_state(items=[quarantined, completed, {"qa_id": "q3", "execution_status": "scheduled"}])
+    original = copy.deepcopy(saved)
+
+    captured = []
+    gate = threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        gate=gate,
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    try:
+        response = suites.resume_run("run-1")
+        request = captured[0]
+        assert response["trace_quarantined_items"] == 1
+        assert response["resumed_items"] == 2
+        assert [item["qa_id"] for item in request.prior_items] == ["q1", "q2"]
+        assert request.prior_items[0] == quarantined
+        assert request.resume_context["trace_quarantine"]["qa_ids"] == ["q1"]
+        assert saved == original
+    finally:
+        gate.set()
+
+
+def test_quarantined_trace_cannot_be_explicitly_retried(tmp_path: Path):
+    quarantined = {
+        "qa_id": "q1",
+        "execution_status": "failed",
+        "answer": "preserved",
+        "trace_quarantine": {"status": "execution_anomaly"},
+        "service_error": {"code": "upstream_timeout", "retryable": True},
+    }
+    saved = _cancelled_state(items=[quarantined])
+    with pytest.raises(InvalidRequestError, match="trace is quarantined"):
+        _suites(tmp_path, store=FakeRunStore({"run-1": saved})).resume_run(
+            "run-1", {"retry_qa_ids": ["q1"], "retry_reason": "manual request"}
+        )
+
+
 def test_explicit_service_resume_preserves_other_answers_scores_and_original(tmp_path):
     import copy
 

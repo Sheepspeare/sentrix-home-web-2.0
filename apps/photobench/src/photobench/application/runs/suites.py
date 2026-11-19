@@ -741,8 +741,17 @@ class RunSuites:
             raise InvalidRequestError("retry_reason is required for explicit service recovery")
         frozen_ids = {str(row.get("qa_id")) for row in snapshot["rows"]}
         items_by_id = {str(item.get("qa_id")): item for item in saved.get("items") or []}
+        quarantined_trace_ids = sorted(
+            str(item.get("qa_id"))
+            for item in saved.get("items") or []
+            if isinstance(item.get("trace_quarantine"), dict)
+            and item["trace_quarantine"].get("status") == "execution_anomaly"
+        )
+        quarantined_trace_set = set(quarantined_trace_ids)
         retry_evidence = {}
         for qa_id in retry_ids:
+            if qa_id in quarantined_trace_set:
+                raise InvalidRequestError(f"QA trace is quarantined and cannot be retried: {qa_id}")
             evidence = service_retry_evidence(items_by_id.get(qa_id) or {})
             if qa_id not in frozen_ids or evidence is None:
                 raise InvalidRequestError(f"QA has no retryable undelivered service failure: {qa_id}")
@@ -752,7 +761,10 @@ class RunSuites:
             item
             for item in (saved.get("items") or [])
             if isinstance(item, dict)
-            and str(item.get("execution_status") or "") not in {"scheduled", "running"}
+            and (
+                str(item.get("execution_status") or "") not in {"scheduled", "running"}
+                or str(item.get("qa_id")) in quarantined_trace_set
+            )
             and str(item.get("qa_id")) not in retry_set
         )
         prior_ids = [str(item.get("qa_id")) for item in prior_items]
@@ -854,6 +866,12 @@ class RunSuites:
                 "repair_missing_judges": repair_missing,
                 "selected_product_build_revision": target_revision or None,
                 "source_judge_use_gt_images": saved.get("judge_use_gt_images"),
+                "trace_quarantine": {
+                    "source_run_id": run_id,
+                    "qa_ids": quarantined_trace_ids,
+                }
+                if quarantined_trace_ids
+                else None,
                 "selected_judge_use_gt_images": self._gt_image_option(
                     payload, bool(saved.get("judge_use_gt_images"))
                 ),
@@ -936,6 +954,7 @@ class RunSuites:
             "resumed_items": len(prior_items),
             "retried_qa_ids": retry_ids,
             "repair_missing_judges": repair_missing,
+            "trace_quarantined_items": len(quarantined_trace_ids),
         }
 
     # ---- 取消 / 删除 --------------------------------------------------------

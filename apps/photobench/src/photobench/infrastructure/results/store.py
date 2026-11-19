@@ -337,6 +337,11 @@ class FileRunStore:
 
     def load_state(self, run_id: str) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)
+        from photobench.infrastructure.results.resume_quarantine import load_resume_quarantine_state
+
+        reduced = load_resume_quarantine_state(run_dir, run_id)
+        if reduced is not None:
+            return reduced
         with run_lock(run_dir):
             path = committed_path(run_dir, "run.json")
             if not path.is_file():

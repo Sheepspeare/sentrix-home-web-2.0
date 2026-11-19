@@ -2267,7 +2267,10 @@ class RunExecution:
         recovery_indices = {
             index
             for index, item in items.items()
-            if request.repair_missing_judges and judge is not None and judge.needs_judge_recovery(item)
+            if request.repair_missing_judges
+            and judge is not None
+            and (item.get("trace_quarantine") or {}).get("status") != "execution_anomaly"
+            and judge.needs_judge_recovery(item)
         }
         recovery_queue = iter(sorted(recovery_indices))
         judge_done = sum(

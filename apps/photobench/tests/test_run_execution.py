@@ -2179,7 +2179,7 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
 
     from photobench.application.run_execution.judge import JudgeRunner
 
-    keys = ["zero", "old-failed", "missing-a", "missing-b", "missing-c", "new"]
+    keys = ["zero", "old-failed", "missing-a", "missing-b", "missing-c", "quarantined", "new"]
     rows = [{"qa_id": key, "answer": "ref"} for key in keys]
     execution, _, _, _, _ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
     runner = JudgeRunner(http=FakeHttpClient([]), judge_url="fake", judge_model="fake")
@@ -2213,6 +2213,9 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
         1,
         {"qa_id": "old-failed", "execution_status": "failed", "judge_status": "skipped", "error": "original"},
     )
+    next(item for item in prior if item["qa_id"] == "quarantined")["trace_quarantine"] = {
+        "status": "execution_anomaly"
+    }
     before = copy.deepcopy(prior)
     called = []
 
@@ -2233,8 +2236,8 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
     assert prior == before
     assert state.data["items"][0] == before[0]
     assert state.data["items"][1] == before[1]
-    assert len(state.data["items"]) == 6
-    assert state.data["phases"]["qa_eval"]["judge_completed"] == 5
+    assert len(state.data["items"]) == 7
+    assert state.data["phases"]["qa_eval"]["judge_completed"] == 6
     assert state.data["run_valid"] is False  # inherited execution failure remains visible
 
 
