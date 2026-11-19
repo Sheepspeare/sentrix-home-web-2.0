@@ -246,18 +246,24 @@ class RunState:
                     writer = self._writer
                     assert writer is not None
                     writer.write_snapshot(self.run_id, stored)
+                    committed = time.monotonic()
+                    compact_locked = committed
                     if isinstance(writer, CommittedTraceCompactor):
                         with self._lock:
+                            compact_locked = time.monotonic()
                             writer.compact_committed_traces(self.run_id, self.data, stored)
                     elapsed = time.monotonic() - began
                     if elapsed >= 5:
                         log.warning(
-                            "Slow run snapshot: run=%s revision=%d items=%d copy=%.3fs write=%.3fs",
+                            "Slow run snapshot: run=%s revision=%d items=%d copy=%.3fs "
+                            "write=%.3fs compact_wait=%.3fs compact=%.3fs",
                             self.run_id,
                             target,
                             len(stored.get("items") or []),
                             copied - began,
-                            elapsed - (copied - began),
+                            committed - copied,
+                            compact_locked - committed,
+                            time.monotonic() - compact_locked,
                         )
                 except Exception as exc:  # noqa: BLE001 — publish failure and stop, never mark as written
                     log.exception("Run snapshot failed: %s", self.run_id)

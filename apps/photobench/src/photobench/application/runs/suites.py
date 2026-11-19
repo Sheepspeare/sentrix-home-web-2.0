@@ -2282,9 +2282,9 @@ class RunSuites:
 
         实测 2026-10-09：一轮 487 题的评测跑了一个多小时，界面上一直什么都没有。
 
-        The state lock is shared with checkpoint deep copies. If a write is holding it,
-        return the last detached list projection; otherwise calculate and detach the
-        compact list projection while the state is stable under the lock.
+        Copy metadata under the state lock, then calculate statistics after releasing
+        it. Immutable traces remain shared; SQL-backed trace traversal must not block
+        checkpoint publication or Agent/Judge state updates.
         """
         with self._lock:
             active = list(self._active.items())
@@ -2295,20 +2295,24 @@ class RunSuites:
                 continue
             lock = getattr(state, "lock", None)
             if lock is None:
-                entry = copy.deepcopy(analysis.run_list_entry(dict(state.data)))
+                detached = copy.deepcopy(state.data)
             elif lock.acquire(blocking=False):
                 try:
-                    entry = copy.deepcopy(analysis.run_list_entry(state.data))
+                    detached = state.snapshot()
                 finally:
                     lock.release()
-                with self._lock:
-                    self._live_entries[run_id] = copy.deepcopy(entry)
             else:
                 with self._lock:
                     cached = self._live_entries.get(run_id)
                 if cached is None:
                     continue
                 entry = copy.deepcopy(cached)
+                if entry.get("status") in DIRTY_STATUSES:
+                    states[run_id] = entry
+                continue
+            entry = copy.deepcopy(analysis.run_list_entry(detached))
+            with self._lock:
+                self._live_entries[run_id] = copy.deepcopy(entry)
             if entry and entry.get("status") in DIRTY_STATUSES:
                 states[run_id] = entry
         return states

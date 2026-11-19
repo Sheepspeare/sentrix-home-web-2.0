@@ -302,6 +302,37 @@ def test_active_run_list_uses_cached_projection_while_state_is_locked(tmp_path: 
     assert cached["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 2
 
 
+def test_live_list_statistics_release_state_lock_before_scanning_traces(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from types import SimpleNamespace
+    from photobench.application.runs import suites as suites_module
+
+    state = RunState({"run_id": "live-run", "status": "running", "items": []})
+    suites = _suites(tmp_path)
+    with suites._lock:
+        suites._register_active("live-run", SimpleNamespace(state=state))
+    entered, release = Event(), Event()
+    original = suites_module.analysis.run_list_entry
+
+    def scan(detached):
+        entered.set()
+        assert release.wait(3)
+        assert detached["status"] == "running"
+        return original(detached)
+
+    monkeypatch.setattr(suites_module.analysis, "run_list_entry", scan)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pending = pool.submit(suites.active_states)
+        try:
+            assert entered.wait(3)
+            pool.submit(state.set, "status", "cancelling").result(timeout=1)
+        finally:
+            release.set()
+        assert pending.result(timeout=3)["live-run"]["status"] == "running"
+    assert state.get("status") == "cancelling"
+
+
 class _StrictAlbums:
     """只认识一个 album 的 ``AlbumSource``：manifest 查不到就 ``KeyError``。
 
