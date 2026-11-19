@@ -67,6 +67,32 @@ def test_keyframe_of_the_gt_video_counts_as_hitting_that_video():
     assert out["retrieval"]["candidate_precision"] == 1.0
 
 
+def test_evidence_windows_require_successful_visual_inspection():
+    item = _one_item([{"asset_id": "k1"}])
+    item["evidence_v12"] = {"status": "verified", "segments": [{"start_seconds": 100, "end_seconds": 110}]}
+    item["tool_trace"] = [{"tool": "search_memories", "observation": {"preview": [{"asset_id": "k1", "media_kind": "video_keyframe"}]}}]
+    assets = [_video("v1"), _keyframe("k1", "v1", 135)]
+    out = keyframe_analysis.keyframe_analysis(_state(items=[item]), assets)["evidence_hits"]
+    assert out["candidate_video"] == 1
+    assert out["windows"]["candidate"]["2"]["hits"] == 0
+    assert out["windows"]["candidate"]["30"]["hits"] == 1
+    assert out["viewed_video"] == 0
+
+    item["tool_trace"].append({"tool": "inspect_photo", "status": "ok", "result": {"asset_id": "k1", "model_call_observations": [{"status": "complete", "diagnostics": {"request_sent": True}}]}})
+    out = keyframe_analysis.keyframe_analysis(_state(items=[item]), assets)["evidence_hits"]
+    assert out["viewed_video"] == 1
+    assert out["windows"]["viewed"]["2"]["hits"] == 0
+    assert out["windows"]["viewed"]["30"]["hits"] == 1
+
+
+def test_missing_or_ineligible_evidence_does_not_enter_time_metrics():
+    item = _one_item([{"asset_id": "k1"}])
+    item["evidence_v12"] = {"status": "verified", "segments": [{"start_seconds": 0, "end_seconds": 10}]}
+    item["keyframe_eval"] = {"eligible": False}
+    out = keyframe_analysis.keyframe_analysis(_state(items=[item, _one_item([])]), [_video("v1"), _keyframe("k1", "v1", 5)])["evidence_hits"]
+    assert out["annotated"] == 0
+
+
 def test_video_candidate_source_keyframe_id_drives_keyframe_metrics():
     """Persisted video candidates put the parent in asset_id and the frame separately."""
     candidate = {"asset_id": "v1", "source_keyframe_asset_id": "k1", "media_type": "video"}

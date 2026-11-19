@@ -170,6 +170,8 @@ _DEFAULT_SLEEP = time.sleep
 
 #: 顺带搬过来的 item 字段（1.0 ``:3379``）。这些是题库侧的标签，主链只负责带过去。
 PASSTHROUGH_FIELDS = (
+    "evidence_v12",
+    "keyframe_eval",
     "evaluation",
     "benchmark_id",
     "source_qa_id",

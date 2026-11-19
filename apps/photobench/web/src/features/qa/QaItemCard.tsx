@@ -194,6 +194,14 @@ function QaItemDetail({
   const recallMedia = toolRecallMedia(detail, albumId);
   const evidenceMedia = itemEvidenceMedia(detail, albumId);
   const gtMedia = itemMedia(detail, albumId, true);
+  const referenceEvidence = dict((detail as unknown as Dict).evidence_v12);
+  const referenceFrames = Array.isArray(referenceEvidence.frames) ? referenceEvidence.frames.map(dict).filter(frame =>
+    typeof frame.frame === "string" && /^keyframes\/[^/]+\/[^/]+\.(jpg|jpeg|png|webp)$/i.test(frame.frame)
+      && typeof frame.time_seconds === "number" && Number.isFinite(frame.time_seconds) && frame.time_seconds >= 0
+  ) : [];
+  const referenceSegments = Array.isArray(referenceEvidence.segments) ? referenceEvidence.segments.map(dict) : [];
+  const sourceType = (detail.tags ?? []).find(tag => ["question:audio", "question:visual", "question:audio_visual", "question:summary"].includes(tag));
+  const sourceTypeLabel: Record<string, string> = {"question:audio": "纯音频题", "question:visual": "视觉题", "question:audio_visual": "音画题", "question:summary": "总结题"};
   const timing = itemTimingBreakdown(detail);
   const qaSegments = qaLatencySegments(detail);
   const toolTrace = hasToolTrace(detail);
@@ -204,6 +212,7 @@ function QaItemDetail({
   return (
     <>
       <div className="qa-meta-tags">
+        {sourceType && <span>QA 来源：{sourceTypeLabel[sourceType]}</span>}
         {detail.benchmark_group && !detail.ability_family_ids?.some(id => id === "H" || id === "I") ? <span>{taxonomyLabel(detail.benchmark_group)}</span> : null}
         {(detail.ability_family_ids || []).filter(id => id === "H" || id === "I").map(id => <span key={id}>{abilityLabel(id, detail.ability_taxonomy_version)}</span>)}
         {(detail.ability_primary_ids || []).map(id => <span key={id}>{abilityLabel(id[0], detail.ability_taxonomy_version)} · {abilityLabel(id, detail.ability_taxonomy_version)}</span>)}
@@ -310,8 +319,20 @@ function QaItemDetail({
           <h4>正确答案</h4>
           <p>{esc(detail.reference_answer)}</p>
           <h4>检索 GT 媒体（{gtMedia.length}）</h4>
+          {referenceFrames.length === 0 && referenceEvidence.status === "not_required" && <p className="muted">{sourceType === "question:audio" ? "纯音频题：" : ""}本题不要求关键帧，无代表帧时间点。</p>}
+          {referenceFrames.length === 0 && referenceEvidence.status !== "not_required" && <p className="muted">{sourceType ? `${sourceTypeLabel[sourceType]}：` : ""}本题没有可用的代表帧时间点{referenceEvidence.reason ? `（${String(referenceEvidence.reason)}）` : ""}。</p>}
           <div className="image-grid">
-            {gtMedia.map((media, mediaIndex) => (
+            {gtMedia.flatMap((media, mediaIndex) => {
+              const videoStem = String(media.video_id || media.media_id || media.file_name || "").replace(/\.mp4$/i, "");
+              const frames = isVideoMedia(media) ? referenceFrames.filter(frame => String(frame.frame).split("/")[1] === videoStem) : [];
+              if (frames.length) return frames.map((frame, frameIndex) => {
+                const seconds = Number(frame.time_seconds);
+                const segment = referenceSegments.find(s => Number(s.start_seconds) <= seconds && seconds <= Number(s.end_seconds));
+                return <div key={`${mediaIndex}-${frameIndex}`}><MediaTile media={{...media, source_timestamp_sec: seconds}} onOpenImage={onOpenImage} />
+                  <small>代表帧 {seconds.toFixed(2)} 秒{segment ? ` · 标注时间段 ${String(segment.start_seconds)}–${String(segment.end_seconds)} 秒` : ""}</small>
+                </div>;
+              });
+              return [(
               <MediaTile
                 key={`${esc(media.asset_id) || `${esc(media.media_type)}-${esc(media.media_id)}`}-${mediaIndex}`}
                 media={media}
@@ -319,7 +340,8 @@ function QaItemDetail({
                 unmatchedLabel={Number(detail.metrics_contract_version) === 2 ? "未交付" : "未命中"}
                 onOpenImage={onOpenImage}
               />
-            ))}
+              )];
+            })}
           </div>
           {qualityReason && (
             <>

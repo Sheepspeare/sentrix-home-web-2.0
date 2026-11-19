@@ -164,3 +164,22 @@ it("QS视图不重复渲染匹配面板，错选与正确项分别标注", () =>
   expect(screen.getByText(/匹配错误 · QS 0\/1 分/)).toBeTruthy();
   expect(screen.getByText(/评分批次 selected-old/)).toBeTruthy();
 });
+
+describe("GT 代表帧", () => {
+  it("将视频定位到标注代表帧", () => {
+    const { container } = renderCard({
+      index: 0, question: "问题",
+      gt_media: [{ media_type: "video", media_id: "video1", video_id: "video1", file_name: "video1.mp4" }],
+      evidence_v12: { status: "verified", segments: [{ start_seconds: 10, end_seconds: 15 }], frames: [{ frame: "keyframes/video1/frame.jpg", time_seconds: 12 }] },
+    } as RunItemDetail);
+    const player = container.querySelector("video") as HTMLVideoElement;
+    expect(player).not.toBeNull();
+    fireEvent.loadedMetadata(player);
+    expect(player.currentTime).toBe(12);
+    expect(screen.getByText(/代表帧 12.00 秒/)).not.toBeNull();
+  });
+  it("说明纯音频题没有代表帧", () => {
+    renderCard({ index: 0, question: "音频问题", evidence_v12: { status: "not_required", frames: [] } } as RunItemDetail);
+    expect(screen.getByText("本题不要求关键帧，无代表帧时间点。")).not.toBeNull();
+  });
+});
