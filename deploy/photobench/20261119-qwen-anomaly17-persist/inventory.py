@@ -70,7 +70,8 @@ def main():
         marks = ','.join('?' for _ in targets)
         turns = [dict(r) for r in db.execute(
             'SELECT c.title AS qa_id,t.id,t.conversation_id,t.status,t.created_at,t.updated_at,'
-            'length(t.answer) AS answer_length FROM agent_turns t '
+            't.termination_reason,length(t.answer) AS answer_length,'
+            'length(t.trace_json) AS trace_json_bytes FROM agent_turns t '
             'JOIN agent_conversations c ON c.id=t.conversation_id '
             f'WHERE t.scope_id=? AND c.title IN ({marks}) AND julianday(t.created_at)>=julianday(?) '
             'ORDER BY t.created_at', (new['scope_id'], *targets, new['started_at']))]
