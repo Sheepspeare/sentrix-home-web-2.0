@@ -74,6 +74,43 @@ def stage():
     save('stage-response.json', {'revision': info['revision'], 'tests': (HERE / 'candidate-tests.log').read_text()[-1500:]})
 
 
+def review_tests():
+    """Compare the five endpoint-adapter failures with the unmodified deployed base."""
+    import xml.etree.ElementTree as ET
+
+    assert NEW.exists() and not (HERE / 'stage-response.json').exists()
+    names = [
+        'test_explicit_current_model_reuse_never_calls_manager_start_or_stop',
+        'test_with_a_manager_the_model_is_stopped_then_started_then_probed',
+        'test_the_managed_branch_also_points_sentrix_at_the_new_model',
+        'test_a_transient_start_failure_is_retried_before_giving_up',
+        'test_reuse_synchronizes_product_without_touching_model_lifecycle',
+    ]
+    results = {}
+    for label, directory in [('baseline', OLD), ('candidate', NEW)]:
+        xml = HERE / (label + '-review.xml')
+        assert not xml.exists()
+        env = {**os.environ, 'PYTHONPATH': str(directory / 'apps/photobench/src')}
+        with (HERE / (label + '-review.log')).open('x') as stream:
+            command = [PYTHON, '-m', 'pytest', '-o', 'addopts=', '-q', '--junitxml=' + str(xml)]
+            if label == 'baseline':
+                command += ['apps/photobench/tests/test_run_execution.py::' + name for name in names]
+            else:
+                command += ['apps/photobench/tests/test_suites.py', 'apps/photobench/tests/test_split_results.py',
+                            'apps/photobench/tests/test_run_execution.py']
+            completed = subprocess.run(command, cwd=directory, env=env, stdout=stream, stderr=subprocess.STDOUT)
+        assert completed.returncode == 1
+        tests = ET.parse(xml).getroot().findall('.//testcase')
+        failed = sorted(t.attrib['name'] for t in tests if t.find('failure') is not None)
+        assert failed == sorted(names) and not any(t.find('error') is not None for t in tests)
+        results[label] = {'failures': failed, 'passed': len(tests) - len(failed), 'junit': str(xml)}
+    assert results['candidate']['passed'] == 209
+    info = json.loads((HERE / 'manifest.json').read_text())
+    save('stage-response.json', {'revision': info['revision'], 'tests': results,
+                                 'new_regressions': 0, 'baseline_failures_retained': True})
+    print(json.dumps(results), flush=True)
+
+
 def activate():
     assert (HERE / 'stage-response.json').is_file() and (HERE / 'restore-response.json').is_file()
     assert not (HERE / 'activate-intent.json').exists()
@@ -114,5 +151,5 @@ def activate():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument('operation', choices=['stage', 'activate'])
-    {'stage': stage, 'activate': activate}[parser.parse_args().operation]()
+    parser.add_argument('operation', choices=['stage', 'review-tests', 'activate'])
+    {'stage': stage, 'review-tests': review_tests, 'activate': activate}[parser.parse_args().operation]()
