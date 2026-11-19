@@ -7,65 +7,112 @@ The source is retained; HTTP readers never launch this conversion themselves.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
-import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from photobench.infrastructure.results.split_json import ObjectReader, ObjectWriter, database, manifest, thaw
 from photobench.infrastructure.results.split_store import SplitResultWriter
 from photobench.infrastructure.results.store import committed_path
 
 
+class JsonObjectStream:
+    """Keep Python JSON scalar types while writing each completed container by reference."""
+
+    def __init__(self, source: TextIO, objects: ObjectWriter):
+        self.source, self.objects = source, objects
+        self.buffer = ""
+        self.position = 0
+        self.eof = False
+        self.decoder = json.JSONDecoder()
+
+    def fill(self) -> bool:
+        if self.eof:
+            return False
+        self.buffer = self.buffer[self.position :]
+        self.position = 0
+        chunk = self.source.read(65536)
+        self.eof = not chunk
+        self.buffer += chunk
+        return bool(chunk)
+
+    def peek(self) -> str:
+        while True:
+            while self.position < len(self.buffer):
+                char = self.buffer[self.position]
+                if char not in " \r\n\t":
+                    return char
+                self.position += 1
+            if not self.fill():
+                return ""
+
+    def take(self, expected: str) -> None:
+        if self.peek() != expected:
+            raise ValueError("invalid JSON container boundary")
+        self.position += 1
+
+    def scalar(self) -> Any:
+        first = self.peek()
+        if first == '"':
+            while True:
+                try:
+                    value, end = self.decoder.raw_decode(self.buffer, self.position)
+                    self.position = end
+                    return value
+                except json.JSONDecodeError:
+                    if not self.fill():
+                        raise
+        while True:
+            tail = self.buffer[self.position :]
+            end = next((i for i, char in enumerate(tail) if char in " \r\n\t,]}"), None)
+            if end is not None or self.eof:
+                length = end if end is not None else len(tail)
+                value = json.loads(tail[:length])
+                self.position += length
+                return value
+            self.fill()
+
+    def value(self) -> Any:
+        first = self.peek()
+        if first == "{":
+            self.take("{")
+            mapping = {}
+            if self.peek() != "}":
+                while True:
+                    key = self.scalar()
+                    if not isinstance(key, str):
+                        raise ValueError("JSON object key must be a string")
+                    self.take(":")
+                    mapping[key] = self.value()
+                    if self.peek() != ",":
+                        break
+                    self.take(",")
+            self.take("}")
+            return self.objects.put(mapping)
+        if first == "[":
+            self.take("[")
+            values = []
+            if self.peek() != "]":
+                while True:
+                    values.append(self.value())
+                    if self.peek() != ",":
+                        break
+                    self.take(",")
+            self.take("]")
+            return self.objects.put(values)
+        return self.objects.put(self.scalar())
+
+
 def ingest(source: Path, objects: ObjectWriter) -> Any:
-    decoder = subprocess.Popen(
-        ["gzip", "-dc", str(source)] if source.suffix == ".gz" else ["cat", str(source)],
-        stdout=subprocess.PIPE,
-    )
-    parser = subprocess.Popen(["jq", "--stream", "-c", "."], stdin=decoder.stdout, stdout=subprocess.PIPE)
-    assert decoder.stdout is not None and parser.stdout is not None
-    decoder.stdout.close()
-    frames: list[Any] = []
-    root = None
-
-    def assign(container: Any, key: Any, value: Any) -> None:
-        if isinstance(container, list):
-            if key != len(container):
-                raise ValueError("nonsequential JSON list")
-            container.append(value)
-        else:
-            container[key] = value
-
-    try:
-        for line in parser.stdout:
-            event = json.loads(line)
-            path = event[0]
-            if len(event) == 2:
-                if not path:
-                    root = objects.put(event[1])
-                    continue
-                while len(frames) < len(path):
-                    frames.append([] if isinstance(path[len(frames)], int) else {})
-                assign(frames[-1], path[-1], objects.put(event[1]))
-            else:
-                parent = path[:-1]
-                if len(frames) != len(parent) + 1:
-                    raise ValueError("unexpected JSON container boundary")
-                value = objects.put(frames.pop())
-                if parent:
-                    assign(frames[-1], parent[-1], value)
-                else:
-                    root = value
-        if parser.wait() or decoder.wait() or root is None or frames:
-            raise ValueError("legacy JSON stream did not finish")
+    opener = gzip.open if source.suffix == ".gz" else open
+    with opener(source, "rt", encoding="utf-8") as handle:
+        stream = JsonObjectStream(handle, objects)
+        root = stream.value()
+        if stream.peek():
+            raise ValueError("extra data after legacy JSON root")
         return root
-    finally:
-        parser.stdout.close()
-        for process in (parser, decoder):
-            if process.poll() is None:
-                process.terminate()
-            process.wait()
 
 
 def build_index(root: Path, run_id: str, source: Path | None = None) -> dict[str, Any]:

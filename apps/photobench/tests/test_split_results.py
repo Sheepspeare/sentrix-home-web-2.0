@@ -435,3 +435,41 @@ def test_large_diagnostics_are_previewed_without_losing_full_record(tmp_path):
         offset = chunk["next_offset"]
     assert json.loads("".join(pieces)) == full
     assert len(reader.core(0)["process_diagnostics"]["tool_events"]) == 240
+
+
+def test_legacy_stream_preserves_answer_fingerprints_and_numeric_types(tmp_path):
+    import gzip
+    import math
+
+    from photobench.domain.evaluation.profiles import answer_fingerprint
+    from photobench.infrastructure.results.index_legacy import ingest
+    from photobench.infrastructure.results.split_json import ObjectReader, ObjectWriter, database, thaw
+
+    record = {
+        "message": "题目",
+        "answer": '\\"' * 100000,
+        "predicted_media": [
+            {
+                "media_type": "video",
+                "start_s": 0.0,
+                "end_s": 30.0,
+                "offset": -0.0,
+                "big": 18446744073709551617,
+            }
+        ],
+        "empty": [{}, []],
+        "finite": 1.2345678901234567,
+        "tiny": 1e-100,
+    }
+    path = tmp_path / "original.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as f:
+        json.dump(record, f, ensure_ascii=False)
+    writer = ObjectWriter(tmp_path)
+    ref = ingest(path, writer)
+    writer.db.commit()
+    writer.close()
+    loaded = thaw(ObjectReader(database(tmp_path)).value(ref))
+    assert answer_fingerprint(loaded) == answer_fingerprint(record)
+    assert type(loaded["predicted_media"][0]["start_s"]) is float
+    assert math.copysign(1, loaded["predicted_media"][0]["offset"]) == -1
+    assert json.dumps(loaded, sort_keys=True) == json.dumps(record, sort_keys=True)
