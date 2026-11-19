@@ -1442,6 +1442,8 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 
 `ChatStore` 负责独立会话文件，`InteractiveSentrixClient` 在产品客户端上增加读取会话和取消回合。`ChatService` 与 RunSuites 共用任务占用和模型准备，固定会话的相册与模型；创建、发送、读取和取消接口位于 `/chat/sessions`。题库来源只发送问题，多轮顺序执行；标准答案及 GT 留在测评侧对照。恢复时对账已接受回合，保留调用事实，不重发生成请求。回合投影复用已有媒体与完整轨迹视图。
 
+`DELETE /api/v1/chat/sessions/{session_id}` 删除聊天及对应产品会话，成功204，不存在404；活动或执行状态未确认时409。产品删除成功或已不存在后才删除本地session，其他上游失败保留本地以便重试。产品 `DELETE /api/v1/assistant/conversations/{conversation_id}` 在同一事务检查活动回合并删除消息/轨迹，创建回合也在事务中确认会话仍有效。删除不影响相册资产或已保存测评答卷/评分。两端列表均提供二次确认。
+
 测评发布可通过 `PHOTOBENCH_BUILD_REVISION` 独立声明已提交版本，优先于产品根的 build-info；产品版本仍从 diagnostics 单独冻结。
 
 ### 2026-11-19 活动测评共享不可变轨迹

@@ -276,3 +276,4 @@
 {"capability": "文档token分块与删除清理", "origin_kind": "NEW-2.0", "target_path": "apps/api/src/sentrix/infrastructure/media/text_chunks.py", "verification": "apps/api/tests/contract/test_document_chunks.py", "status": "verified"}
 {"capability": "来源精确地址优先于GPS解析", "origin_kind": "NEW-2.0", "target_path": "apps/api/src/sentrix/infrastructure/media/source_address.py", "verification": "apps/api/tests/contract/test_document_sources.py", "status": "verified"}
 {"capability": "邮件引用与来源列表测评", "origin_kind": "NEW-2.0", "target_path": "apps/photobench/src/photobench/domain/evaluation/sources.py", "verification": "apps/photobench/tests/test_source_evaluation.py", "status": "verified"}
+{"capability": "产品与测评聊天的会话删除、活动回合保护及二次确认", "origin_kind": "NEW-2.0", "target_path": "apps/photobench/src/photobench/application/interactive/chat.py", "verification": "apps/photobench/tests/test_interactive.py", "status": "verified"}
