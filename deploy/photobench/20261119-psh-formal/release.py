@@ -158,9 +158,25 @@ def finish_activation():
     assert api('health/live',product=True)['build_revision']==staged['product_revision']
     config=api('config')['runtime_config']
     assert config['product_build_revision']==row['runtime_snapshot']['product_build_revision']
-    payload={'product_build_revision':staged['product_revision'],'product_settings':{**config['product_settings'],**LIMITS,'vlm_generation_profile':'qwen35_nonthinking'}}
-    save('config-intent.json',{'before':config,'payload':payload})
-    save('config-response.json',api('config',payload))
+    config_path=Path(api('config')['runtime_config_file'])
+    before=json.loads(config_path.read_text())
+    assert before['product_build_revision']==row['runtime_snapshot']['product_build_revision']
+    updated={**before,'product_build_revision':staged['product_revision'],'product_settings':{**before['product_settings'],**LIMITS,'vlm_generation_profile':'qwen35_nonthinking'}}
+    save('config-file-intent.json',{'path':str(config_path),'before':before,'after':updated,'before_sha256':sha(config_path)})
+    temporary=HERE/'runtime_connection.new.json'
+    temporary.write_text(json.dumps(updated,ensure_ascii=False,indent=2)+'\n')
+    os.replace(temporary,config_path)
+    subprocess.run(['systemctl','--user','restart',EVALUATION_UNIT],check=True)
+    deadline=time.monotonic()+90
+    while True:
+        try:
+            actual=api('config')['runtime_config'];break
+        except OSError:
+            if time.monotonic()>deadline:raise
+            time.sleep(1)
+    assert actual['product_build_revision']==staged['product_revision']
+    assert actual['product_settings']['vlm_generation_profile']=='qwen35_nonthinking'
+    save('config-response.json',{'product_build_revision':actual['product_build_revision'],'product_settings':actual['product_settings'],'sha256':sha(config_path)})
     assert source()['item_count']==row['item_count']
     assert {u:pid(u) for u in PROTECTED}==protected
     save('activate-response.json',{'source':row,'product_revision':staged['product_revision'],'product_pid':pid(PRODUCT_UNIT),'evaluation_pid':pid(EVALUATION_UNIT),'protected_pids':protected})
