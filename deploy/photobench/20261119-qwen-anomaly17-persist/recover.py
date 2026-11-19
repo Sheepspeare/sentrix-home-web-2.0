@@ -211,7 +211,8 @@ def recover():
     ) as db:
         for qa, turn in TURNS.items():
             row = db.execute(
-                "SELECT t.conversation_id,c.title,t.scope_id,t.question,t.status,t.created_at,t.updated_at,t.answer,t.termination_reason "
+                "SELECT t.conversation_id,c.title,t.scope_id,t.question,t.status,"
+                "t.created_at,t.updated_at,t.answer,t.termination_reason "
                 "FROM agent_turns t JOIN agent_conversations c ON c.id=t.conversation_id WHERE t.id=?",
                 (turn,),
             ).fetchone()
@@ -290,7 +291,10 @@ def recover():
         status="failed",
         current_phase=None,
         resumed_from=FAILED,
-        fatal_error="Three terminal product turns restored after persistence failure; original failure and attempts retained.",
+        fatal_error=(
+            "Three terminal product turns restored after persistence failure; "
+            "original failure and attempts retained."
+        ),
     )
     state["terminal_turn_recovery"] = {"source_run_id": FAILED, "turns": restored}
     freeze_item_traces(state["items"])
