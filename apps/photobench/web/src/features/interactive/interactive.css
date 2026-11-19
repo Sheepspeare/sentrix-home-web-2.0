@@ -8,6 +8,15 @@
 .chat-history-item strong, .chat-history-item small { display: block; }
 .chat-history-item small { margin-top: 6px; color: #758099; }
 .chat-history-item.selected, .chat-qa-option.selected { border-color: #918ac9; background: #f0eef9; }
+.chat-history-entry { position: relative; }
+.chat-history-entry .chat-history-item { padding-right: 54px; }
+.chat-history-delete { position: absolute; top: 8px; right: 6px; padding: 5px; border: none; border-radius: 5px; background: transparent; color: #a33542; cursor: pointer; font: inherit; font-size: 12px; }
+.chat-history-delete:hover:not(:disabled), .chat-history-delete:focus-visible { background: #fcecee; }
+.chat-history-delete:disabled { color: #8a93a9; cursor: not-allowed; }
+.chat-delete-confirm { padding: 10px; margin: -2px 0 10px; border: 1px solid #e7bcc2; border-radius: 8px; font-size: 12px; }
+.chat-delete-confirm p { margin: 0 0 8px; }
+.chat-delete-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-delete-confirm .danger { background: #a33542; color: #fff; border-color: #a33542; }
 .chat-main { min-width: 0; }
 .chat-state { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; font-size: 13px; color: #6d7790; }
 .chat-state details { width: 100%; }

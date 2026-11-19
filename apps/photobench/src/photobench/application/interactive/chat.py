@@ -19,7 +19,7 @@ from photobench.domain.chat.ports import ChatStore
 from photobench.domain.chat.projection import turn_item
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
-from photobench.domain.errors import InvalidRequestError
+from photobench.domain.errors import ChatBusyError, InvalidRequestError
 from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name
 from photobench.domain.runtime.ports import RunRuntimeSnapshot
@@ -47,6 +47,8 @@ class ChatService:
         self.workers: dict[str, tuple[threading.Thread, threading.Event]] = {}
 
     def list_chats(self) -> dict[str, Any]:
+        with self.lock:
+            sessions = self.store.list_sessions()
         return {
             "items": [
                 {
@@ -62,7 +64,7 @@ class ChatService:
                         "album_id",
                     )
                 }
-                for s in self.store.list_sessions()
+                for s in sessions
             ]
         }
 
@@ -274,9 +276,9 @@ class ChatService:
             self._patch(session_id, status="outcome_unknown" if unknown else "failed", error=str(exc))
         finally:
             with self.lock:
+                if self.store.load_session(session_id)["status"] != "outcome_unknown":
+                    self.suites.release_interactive(session_id)
                 self.workers.pop(session_id, None)
-            if self.store.load_session(session_id)["status"] != "outcome_unknown":
-                self.suites.release_interactive(session_id)
 
     def _register_turn(self, session_id: str, message: str, turn_id: str) -> dict[str, Any]:
         def register(s: dict[str, Any]) -> None:
@@ -367,6 +369,18 @@ class ChatService:
             "session_id": session_id,
             "cancel_requested": bool(worker) or session["status"] == "outcome_unknown",
         }
+
+    def delete_chat(self, session_id: str) -> None:
+        with self.lock:
+            session = self.store.load_session(session_id)
+            if session_id in self.workers or session["status"] in ACTIVE | {"outcome_unknown"}:
+                raise ChatBusyError("请先停止回答，等待回合结束后再删除对话")
+            conversation_id = session.get("conversation_id")
+            if conversation_id:
+                self.client_for(session["runtime_snapshot"]["sentrix_url"]).delete_conversation(
+                    conversation_id=conversation_id, timeout=5
+                )
+            self.store.delete_session(session_id)
 
     def recover_chats(self) -> None:
         for session in self.store.list_sessions():

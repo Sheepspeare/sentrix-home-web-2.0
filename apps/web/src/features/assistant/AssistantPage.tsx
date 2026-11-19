@@ -9,7 +9,7 @@
  * 执行器在安全检查点收尾；界面不会因为断流把同一次提问变成两次。
  */
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 
 import { useScope } from "../../app/ScopeProvider";
@@ -44,6 +44,8 @@ export function AssistantPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deletePending = useRef(false);
 
   const reload = useCallback(async () => {
     try {
@@ -129,6 +131,9 @@ export function AssistantPage() {
   }
 
   async function confirmDelete(id: string) {
+    if (deletePending.current) return;
+    deletePending.current = true;
+    setDeletingId(id);
     try {
       await deleteConversation(id);
       const remaining = conversations.filter((item) => item.id !== id);
@@ -147,6 +152,9 @@ export function AssistantPage() {
       setActiveId(created.id);
     } catch (cause) {
       setError((cause as Error).message);
+    } finally {
+      deletePending.current = false;
+      setDeletingId(null);
     }
   }
 
@@ -163,6 +171,7 @@ export function AssistantPage() {
           <button
             type="button"
             className="button primary full"
+            disabled={deletingId !== null}
             onClick={() => void newConversation()}
           >
             新建对话
@@ -193,16 +202,17 @@ export function AssistantPage() {
               if (confirmingId === conversation.id) {
                 return (
                   <div key={conversation.id} className="rail-confirm">
-                    <p>删除这个对话？</p>
+                    <p>删除此对话及消息、轨迹？此操作无法撤销。</p>
                     <div>
                       <button
                         type="button"
                         className="danger"
+                        disabled={deletingId !== null}
                         onClick={() => void confirmDelete(conversation.id)}
                       >
-                        确认删除
+                        {deletingId === conversation.id ? "正在删除…" : "确认删除"}
                       </button>
-                      <button type="button" onClick={() => setConfirmingId(null)}>
+                      <button type="button" disabled={deletingId !== null} onClick={() => setConfirmingId(null)}>
                         取消
                       </button>
                     </div>
@@ -217,15 +227,26 @@ export function AssistantPage() {
                       conversation.id === activeId ? "rail-item active" : "rail-item"
                     }
                     onClick={() => openConversation(conversation.id)}
+                    disabled={deletingId !== null}
                   >
                     <strong>{title}</strong>
                     <small>{conversation.last_message_at?.slice(0, 16) ?? ""}</small>
                   </button>
                   <button
                     type="button"
+                    className="rail-delete"
+                    aria-label={`删除对话：${title}`}
+                    disabled={deletingId !== null}
+                    onClick={() => beginDelete(conversation.id)}
+                  >
+                    删除
+                  </button>
+                  <button
+                    type="button"
                     className="rail-more"
                     aria-label={`更多操作：${title}`}
                     aria-expanded={menuId === conversation.id}
+                    disabled={deletingId !== null}
                     onClick={() =>
                       setMenuId((current) =>
                         current === conversation.id ? null : conversation.id,
@@ -238,13 +259,6 @@ export function AssistantPage() {
                     <div className="rail-menu">
                       <button type="button" onClick={() => beginRename(conversation)}>
                         重命名
-                      </button>
-                      <button
-                        type="button"
-                        className="danger"
-                        onClick={() => beginDelete(conversation.id)}
-                      >
-                        删除
                       </button>
                     </div>
                   ) : null}

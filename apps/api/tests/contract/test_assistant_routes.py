@@ -11,6 +11,7 @@ import io
 import json
 import time
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -18,7 +19,14 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from sentrix.domain.assistant.models import ChatMessage, ChatRole, ModelReply, ToolCall
+from sentrix.domain.assistant.models import (
+    ChatMessage,
+    ChatRole,
+    ModelReply,
+    ToolCall,
+    TurnRecord,
+    TurnStatus,
+)
 from sentrix.domain.assistant.tools import SOURCE_TEXT_PAGE_CHARS, TOOL_SPECS, ToolSpec
 from sentrix.domain.retrieval import scheme
 
@@ -162,6 +170,26 @@ def test_a_conversation_can_be_deleted(client: TestClient):
 
     assert client.get(f"/api/v1/assistant/conversations/{created['id']}").status_code == 404
     assert client.delete(f"/api/v1/assistant/conversations/{created['id']}").status_code == 404
+
+
+def test_active_conversation_delete_returns_conflict(client: TestClient):
+    created = make_conversation(client)
+    now = datetime.now(UTC)
+    client.app.state.container.turn_repository.create(
+        TurnRecord(
+            id="turn_delete_busy",
+            conversation_id=created["id"],
+            scope_id=created["scope_id"],
+            question="running",
+            status=TurnStatus.RUNNING,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    response = client.delete(f"/api/v1/assistant/conversations/{created['id']}")
+    assert response.status_code == 409
+    assert response.json()["code"] == "conversation_busy"
+    assert client.get(f"/api/v1/assistant/conversations/{created['id']}").status_code == 200
 
 
 def test_the_detail_view_carries_messages_and_turns(client: TestClient):

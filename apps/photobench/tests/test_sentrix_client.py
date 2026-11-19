@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 from fakes_read import FakeJsonHttpClient
 
+from photobench.domain.errors import ChatBusyError, HttpResponseError
 from photobench.infrastructure.sentrix.client import HttpxSentrixClient
 
 BASE = "http://sentrix:8191"
@@ -27,6 +28,27 @@ BASE = "http://sentrix:8191"
 def _client(responses: dict) -> tuple[HttpxSentrixClient, FakeJsonHttpClient]:
     http = FakeJsonHttpClient(responses)
     return HttpxSentrixClient(http, lambda: BASE), http
+
+
+def test_delete_conversation_encodes_id_and_accepts_no_content():
+    client, http = _client({"conversations/": None})
+    client.delete_conversation(conversation_id="a/b c")
+    assert http.calls == [(f"{BASE}/api/v1/assistant/conversations/a%2Fb%20c", None, "DELETE", 30)]
+
+
+@pytest.mark.parametrize("status", [404, 409, 500])
+def test_delete_conversation_keeps_upstream_error_semantics(status):
+    client, http = _client({})
+
+    def failure(*args, **kwargs):
+        raise HttpResponseError(status, "upstream")
+
+    http.request_json = failure
+    if status == 404:
+        client.delete_conversation(conversation_id="gone")
+    else:
+        with pytest.raises(ChatBusyError if status == 409 else HttpResponseError):
+            client.delete_conversation(conversation_id="one")
 
 
 def test_every_call_goes_through_the_v1_prefix():
@@ -163,8 +185,10 @@ def test_split_import_and_pipeline_use_the_explicit_endpoints():
     assert http.calls[1][:3] == (
         f"{BASE}/api/v1/pipeline/process",
         {
-            "scope_id": "s1", "asset_ids": ["a1", "a2"],
-            "operation_id": http.calls[1][1]["operation_id"], "graph_enabled": True,
+            "scope_id": "s1",
+            "asset_ids": ["a1", "a2"],
+            "operation_id": http.calls[1][1]["operation_id"],
+            "graph_enabled": True,
         },
         "POST",
     )

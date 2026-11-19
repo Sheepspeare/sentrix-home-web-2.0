@@ -13,6 +13,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any
 
+from sentrix.domain.assistant.errors import ConversationNotFoundError
 from sentrix.domain.assistant.models import (
     Attachment,
     ProgressEvent,
@@ -129,6 +130,12 @@ class SqliteTurnRepository:
         with self._database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                conversation = connection.execute(
+                    "SELECT 1 FROM agent_conversations WHERE id = ? AND state = 'active'",
+                    (record.conversation_id,),
+                ).fetchone()
+                if conversation is None:
+                    raise ConversationNotFoundError("conversation not found")
                 if record.idempotency_key:
                     existing = connection.execute(
                         f"SELECT {_TURN_COLUMNS} FROM agent_turns"

@@ -29,6 +29,12 @@ class FileChatStore:
             raise KeyError(session_id) from exc
         return value
 
+    def delete_session(self, session_id: str) -> None:
+        try:
+            self._path(session_id).unlink()
+        except FileNotFoundError as exc:
+            raise KeyError(session_id) from exc
+
     def save_session(self, session: dict[str, Any]) -> None:
         path = self._path(str(session["session_id"]))
         self.root.mkdir(parents=True, exist_ok=True)

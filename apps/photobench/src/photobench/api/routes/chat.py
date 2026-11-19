@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from starlette.concurrency import run_in_threadpool
 
 from photobench.api.deps import get_container
@@ -45,3 +45,9 @@ async def send_chat(request: Request, session_id: str, payload: ChatMessageReque
 @router.post("/chat/sessions/{session_id}/cancel")
 def cancel_chat(request: Request, session_id: str) -> dict[str, Any]:
     return get_container(request).chat.cancel_chat(session_id)
+
+
+@router.delete("/chat/sessions/{session_id}", status_code=204)
+def delete_chat(request: Request, session_id: str) -> Response:
+    get_container(request).chat.delete_chat(session_id)
+    return Response(status_code=204)

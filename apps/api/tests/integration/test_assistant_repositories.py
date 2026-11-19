@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sentrix.domain.assistant.errors import ConversationBusyError, ConversationNotFoundError
 from sentrix.domain.assistant.models import (
     Attachment,
     ChatRole,
@@ -145,6 +146,7 @@ def test_deleting_a_conversation_removes_its_messages_and_turns(conversations, t
         created_at=NOW,
     )
 
+    finish_turn(turns, "turn_1")
     conversations.delete(conversation.id, NOW)
 
     assert conversations.list_messages(conversation.id, 10) == []
@@ -178,6 +180,7 @@ def test_deleting_a_conversation_preserves_other_conversations_events(conversati
 
     preserved = turns.events_after("turn_1", 0)
     assert len(preserved) == 1
+    finish_turn(turns, "turn_0")
     assert conversations.delete(conversation_ids[0], NOW) is True
     assert conversations.delete(conversation_ids[0], NOW) is False
     assert turns.events_after("turn_0", 0) == []
@@ -187,6 +190,40 @@ def test_deleting_a_conversation_preserves_other_conversations_events(conversati
 
 
 # ---- 回合 -------------------------------------------------------------------
+
+
+def finish_turn(turns, turn_id):
+    turns.finish(
+        turn_id,
+        status="complete",
+        termination_reason="answered",
+        answer="answer",
+        attachments=(),
+        requirements=(),
+        retrieved_candidates=(),
+        trace={},
+        updated_at=NOW,
+    )
+
+
+@pytest.mark.parametrize("status", [TurnStatus.PENDING, TurnStatus.RUNNING])
+def test_deleting_active_conversation_preserves_its_turn(conversations, turns, status):
+    from dataclasses import replace
+
+    conversation = conversations.create(scope_id="album1", title="对话", created_at=NOW)
+    turns.create(replace(make_turn(conversation_id=conversation.id), status=status))
+    with pytest.raises(ConversationBusyError):
+        conversations.delete(conversation.id, NOW)
+    assert conversations.get(conversation.id) is not None
+    assert turns.get("turn_1").status == status
+
+
+def test_deleted_conversation_cannot_receive_a_turn_after_start_read(conversations, turns):
+    conversation = conversations.create(scope_id="album1", title="对话", created_at=NOW)
+    assert conversations.delete(conversation.id, NOW)
+    with pytest.raises(ConversationNotFoundError):
+        turns.create_with_user_message(make_turn(conversation_id=conversation.id), message_id="message")
+    assert turns.get("turn_1") is None
 
 
 def make_turn(turn_id: str = "turn_1", *, conversation_id: str = "conv_missing") -> TurnRecord:

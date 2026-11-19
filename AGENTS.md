@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20对话删除已完成本机实现与专项验证，待提交后仅发布空闲8294/8874；8872活动测评暂不切换。删除需二次确认，活动会话409，保留资产及测评答卷/评分；进度见T006及产品项目audit/20261120-conversation-delete。
+
 - 11/20 00:00轨迹查看4df9302前端在1008872/8874生效；后端已空闲启用8874/PID3854102并核cmdline/SHA/在线轻读，8872仍待自身空闲。见audit/20261119-qwen-anomaly17-persist及T006。
 
 - 11/20 Qwen170bf7写入超时后找回3份已完成产品答卷，继承1010仅续3题为0bbacb；wake6f788501/watch41342。原答卷/有效分/失败保持；Q4 3556c7原fd46ad08继续。当前入口为主实验state/checkpoint-watchers及audit/20261119-qwen-anomaly17-persist。

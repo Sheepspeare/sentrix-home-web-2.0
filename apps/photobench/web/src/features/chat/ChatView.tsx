@@ -25,6 +25,8 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
   const [sessions, setSessions] = useState<ChatSession[]>([]), [session, setSession] = useState<ChatSession | null>(null);
   const [message, setMessage] = useState(''), [error, setError] = useState(''), [sending, setSending] = useState(false);
   const [conversationOpen, setConversationOpen] = useState(false), [closing, setClosing] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(''), [deletingId, setDeletingId] = useState('');
+  const deletePending = useRef(false);
   const closeRequested = useRef(false), sendPromise = useRef<Promise<void> | null>(null);
   const sessionRef = useRef<ChatSession | null>(null);
   useEffect(() => { sessionRef.current = session; }, [session]);
@@ -74,9 +76,24 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
   useEffect(() => {
     if (picker && browser.qaBrowserAlbum && browser.qaBrowserOptions.includes(browser.qaBrowserSet)) void browser.loadQaBrowser();
   }, [picker, browser.qaBrowserAlbum, browser.qaBrowserSet]); // oxlint-disable-line react-hooks/exhaustive-deps
-  const reset = () => { selectedId.current = ''; setSession(null); setSelectedQa(null); setReasoning(true); localStorage.removeItem('photobench-chat-session'); };
+  const reset = () => { selectedId.current = ''; sessionRef.current = null; setSession(null); setSelectedQa(null); setReasoning(true); localStorage.removeItem('photobench-chat-session'); };
+  const deleteSession = async (target: string) => {
+    if (deletePending.current) return;
+    deletePending.current = true; setDeletingId(target); setError('');
+    try {
+      await api(`/chat/sessions/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      setSessions(previous => previous.filter(s => s.session_id !== target));
+      if (selectedId.current === target || sessionRef.current?.session_id === target) {
+        reset(); setMessage(''); setConversationOpen(false);
+      } else if (localStorage.getItem('photobench-chat-session') === target) {
+        localStorage.removeItem('photobench-chat-session');
+      }
+      setConfirmDeleteId('');
+    } catch (e) { setError(`删除失败：${(e as Error).message}`); }
+    finally { deletePending.current = false; setDeletingId(''); }
+  };
   const send = (row?: QaRow) => {
-    if (sending || closing || !modelReady) return;
+    if (sending || closing || deletingId || !modelReady) return;
     setSending(true); setError(''); setPicker(false); setConversationOpen(true);
     sendPromise.current = (async () => {
     try {
@@ -117,7 +134,7 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
   };
   const ownActive = Boolean(session && active(session.status));
   const conversation = <>
-        {error && <p className="error" role="alert">{error}</p>}
+        {conversationOpen && error && <p className="error" role="alert">{error}</p>}
         {session && <div className="chat-state"><strong>{session.model_name || '模型准备中'}</strong><span>{stateLabel(session.status)}</span><details><summary>运行配置</summary><pre>{JSON.stringify({ model: session.model_identity, configuration: session.runtime_snapshot, preparation: session.model_preparation }, null, 2)}</pre></details></div>}
         {session?.error && <p role="alert" className="error">{session.error}</p>}
         {source && <details className="chat-source" open><summary>题集对照 · {source.row.qa_id} · {source.qa_set}</summary><p>{source.row.question}</p><h4>标准答案</h4><p>{source.row.answer}</p><GroundTruthMedia item={source.row as RunItemDetail} albumId={source.album_id} fromDataset onOpenMedia={media => onOpenMedia({ url: imageUrl(media), name: String(media.file_name || media.media_id || '') })}/></details>}
@@ -127,21 +144,26 @@ export function ChatView({ sentrixUrl, manifests, models, busy, onOpenMedia }: {
             {item && <ExecutionView item={item} albumId={session.album_id} modelLabel={session.model_name || ''} running={active(session.status) && i === session.turns!.length - 1}/>}</div></article>;
         })}{!session && <p className="chat-empty">输入问题开始对话，也可以从题集中选择一道题。</p>}</div>
         <form className="chat-composer" onSubmit={e => { e.preventDefault(); void send(); }}>
-          <textarea aria-label="聊天问题" placeholder="输入问题，支持连续追问…" maxLength={2000} value={message} disabled={ownActive || sending || closing} onChange={e => setMessage(e.target.value)}/>
+          <textarea aria-label="聊天问题" placeholder="输入问题，支持连续追问…" maxLength={2000} value={message} disabled={ownActive || sending || closing || Boolean(deletingId)} onChange={e => setMessage(e.target.value)}/>
           <div className="chat-composer-actions">{conversationOpen && <label><input type="checkbox" aria-label="聊天推理模式" checked={reasoning} disabled={ownActive || sending || closing} onChange={e => setReasoning(e.target.checked)}/> 开启推理模式</label>}<button className="btn ghost" type="button" disabled={!scope || ownActive || sending || busy || closing} onClick={openPicker}>从题集选题</button>
-            {ownActive ? <button type="button" className="btn ghost" onClick={() => { void post(`/chat/sessions/${encodeURIComponent(id!)}/cancel`, {}).then(() => select(id!)).catch(e => setError((e as Error).message)); }}>停止回答</button> : <button className="btn" disabled={!scope || !message.trim() || sending || busy || closing || !modelReady}>{sending ? '正在发送…' : '发送'}</button>}
+            {ownActive ? <button type="button" className="btn ghost" onClick={() => { void post(`/chat/sessions/${encodeURIComponent(id!)}/cancel`, {}).then(() => select(id!)).catch(e => setError((e as Error).message)); }}>停止回答</button> : <button className="btn" disabled={!scope || !message.trim() || sending || busy || closing || Boolean(deletingId) || !modelReady}>{sending ? '正在发送…' : '发送'}</button>}
           </div>
         </form>
   </>;
   return <section className="chat-view">
-    <div className="section-head"><div><h2>聊天对话</h2><p className="muted">选择相册与模型，自由提问或运行题集中的一道题。</p></div><button className="btn ghost" disabled={ownActive || sending} onClick={reset}>新建对话</button></div>
+    <div className="section-head"><div><h2>聊天对话</h2><p className="muted">选择相册与模型，自由提问或运行题集中的一道题。</p></div><button className="btn ghost" disabled={ownActive || sending || Boolean(deletingId)} onClick={reset}>新建对话</button></div>
+    {!conversationOpen && error && <p className="error" role="alert">{error}</p>}
     <div className="chat-controls">
-      <label>相册<select aria-label="聊天相册" value={scope} disabled={ownActive || sending} onChange={e => { reset(); setScope(e.target.value); }}><option value="">选择相册</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name || s.id}{s.created_at ? ` · ${fmtTimestamp(s.created_at)}` : ''}</option>)}</select></label>
-      <ModelSelect key={session ? session.session_id : 'new'} options={models} value={model} onChange={value => { reset(); setModel(value); }} onReadyChange={setModelReady} disabled={ownActive || sending}/>
+      <label>相册<select aria-label="聊天相册" value={scope} disabled={ownActive || sending || Boolean(deletingId)} onChange={e => { reset(); setScope(e.target.value); }}><option value="">选择相册</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name || s.id}{s.created_at ? ` · ${fmtTimestamp(s.created_at)}` : ''}</option>)}</select></label>
+      <ModelSelect key={session ? session.session_id : 'new'} options={models} value={model} onChange={value => { reset(); setModel(value); }} onReadyChange={setModelReady} disabled={ownActive || sending || Boolean(deletingId)}/>
       {!conversationOpen && <label><span>推理模式</span><span><input type="checkbox" aria-label="聊天推理模式" checked={reasoning} disabled={ownActive || sending}
         onChange={e => setReasoning(e.target.checked)}/> 开启推理模式</span></label>}
     </div>
-    <div className="chat-layout"><aside className="chat-history"><h3>会话记录</h3>{sessions.map(s => <button key={s.session_id} className={'chat-history-item' + (s.session_id === id ? ' selected' : '')} disabled={sending || ownActive} onClick={() => void select(s.session_id)}><strong>{s.title}</strong><small>{s.model_name || '当前模型'} · {stateLabel(s.status)}</small></button>)}{!sessions.length && <p className="muted">暂无记录</p>}</aside>
+    <div className="chat-layout"><aside className="chat-history"><h3>会话记录</h3>{sessions.map(s => <div key={s.session_id} className="chat-history-entry">
+      <button className={'chat-history-item' + (s.session_id === id ? ' selected' : '')} disabled={sending || ownActive || Boolean(deletingId)} onClick={() => { setConfirmDeleteId(''); void select(s.session_id); }}><strong>{s.title}</strong><small>{s.model_name || '当前模型'} · {stateLabel(s.status)}</small></button>
+      <button type="button" className="chat-history-delete" aria-label={`删除对话：${s.title}`} title={active(s.status) || s.status === 'outcome_unknown' ? '请先停止回答，等待回合结束后再删除' : '删除对话'} disabled={sending || Boolean(deletingId) || active(s.status) || s.status === 'outcome_unknown'} onClick={() => { setConfirmDeleteId(s.session_id); setError(''); }}>删除</button>
+      {confirmDeleteId === s.session_id && <div className="chat-delete-confirm" role="group" aria-label={`确认删除对话：${s.title}`}><p>删除此对话及消息、轨迹？此操作无法撤销。</p><div><button type="button" className="btn danger" disabled={Boolean(deletingId)} onClick={() => void deleteSession(s.session_id)}>{deletingId === s.session_id ? '正在删除…' : '确认删除'}</button><button type="button" className="btn ghost" disabled={Boolean(deletingId)} onClick={() => setConfirmDeleteId('')}>取消</button></div></div>}
+    </div>)}{!sessions.length && <p className="muted">暂无记录</p>}</aside>
       <div className="chat-main">
         {!conversationOpen && (session ? <button className="btn ghost" onClick={() => setConversationOpen(true)}>打开对话与轨迹</button> : conversation)}
       </div>

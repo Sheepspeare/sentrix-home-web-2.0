@@ -12,7 +12,7 @@ from test_suites import FakeExecution, FakeRunStore, _suites, _wait_until
 
 from photobench.application.interactive.chat import ChatService
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
-from photobench.domain.errors import InvalidRequestError
+from photobench.domain.errors import ChatBusyError, InvalidRequestError
 from photobench.domain.runs.analysis import run_list_entry
 from photobench.domain.runs.task_history import task_families
 from photobench.infrastructure.chat.store import FileChatStore
@@ -130,6 +130,7 @@ class ChatClient:
     def __init__(self) -> None:
         self.messages: list[dict[str, Any]] = []
         self.conversations: list[str] = []
+        self.deleted_conversations: list[str] = []
         self.cancelled: set[str] = set()
         self.gate = threading.Event()
         self.gate.set()
@@ -156,6 +157,9 @@ class ChatClient:
     def cancel_turn(self, *, turn_id: str) -> dict[str, Any]:
         self.cancelled.add(turn_id)
         return {"status": "cancelled"}
+
+    def delete_conversation(self, *, conversation_id: str, timeout: int = 30) -> None:
+        self.deleted_conversations.append(conversation_id)
 
     def list_assets(self, **kwargs: Any) -> list[dict[str, Any]]:
         return []
@@ -205,6 +209,48 @@ def test_free_chat_continues_and_survives_new_reader(tmp_path: Path) -> None:
     assert result["source"] is None and len(requests) == 2
     assert FileChatStore(tmp_path / "chat").load_session(key)["turns"] == result["turns"]
     assert suites.work_status()["cleanup_status"] == "stopped"
+
+
+def test_delete_chat_removes_product_conversation_and_only_its_session(tmp_path: Path) -> None:
+    service, _, client, _ = chat_service(tmp_path)
+    other = service.create_chat({"scope_id": "space"})
+    first = service.create_chat({"scope_id": "space", "message": "hello"})
+    finished = wait_chat(service, first["session_id"])
+    service.delete_chat(first["session_id"])
+    assert client.deleted_conversations == [finished["conversation_id"]]
+    assert [s["session_id"] for s in service.list_chats()["items"]] == [other["session_id"]]
+    with pytest.raises(KeyError):
+        service.get_chat(first["session_id"])
+    with pytest.raises(KeyError):
+        service.delete_chat(first["session_id"])
+    service.delete_chat(other["session_id"])
+    assert not service.list_chats()["items"]
+
+
+@pytest.mark.parametrize("status", ["preparing", "running", "cancelling", "outcome_unknown"])
+def test_delete_chat_rejects_unfinished_work(tmp_path: Path, status: str) -> None:
+    service, _, client, _ = chat_service(tmp_path)
+    session = service.create_chat({"scope_id": "space"})
+    session["status"] = status
+    service.store.save_session(session)
+    with pytest.raises(ChatBusyError):
+        service.delete_chat(session["session_id"])
+    assert service.store.load_session(session["session_id"])["status"] == status
+    assert not client.deleted_conversations
+
+
+def test_failed_product_delete_keeps_chat_for_retry(tmp_path: Path, monkeypatch) -> None:
+    service, _, client, _ = chat_service(tmp_path)
+    session = service.create_chat({"scope_id": "space", "message": "hello"})
+    finished = wait_chat(service, session["session_id"])
+
+    def fail(**kwargs):
+        raise TimeoutError("product unreachable")
+
+    monkeypatch.setattr(client, "delete_conversation", fail)
+    with pytest.raises(TimeoutError):
+        service.delete_chat(session["session_id"])
+    assert service.get_chat(session["session_id"])["turns"] == finished["turns"]
 
 
 def test_chat_can_toggle_reasoning_per_turn_and_keeps_previous_modes(tmp_path: Path) -> None:

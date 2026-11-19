@@ -33,6 +33,26 @@ def test_chat_http_contract_and_gt_source(monkeypatch: pytest.MonkeyPatch, clien
     assert client.post("/api/v1/chat/sessions/chat-one/turns", json={"message": ""}).status_code == 422
 
 
+def test_chat_delete_http_contract(monkeypatch, client: TestClient) -> None:
+    from photobench.domain.errors import ChatBusyError
+
+    calls = []
+
+    def delete(session_id):
+        calls.append(session_id)
+        if session_id == "busy":
+            raise ChatBusyError("请先停止回答")
+        if session_id == "missing":
+            raise KeyError(session_id)
+
+    monkeypatch.setattr(client.app.state.container.chat, "delete_chat", delete)
+    response = client.delete("/api/v1/chat/sessions/chat-one")
+    assert response.status_code == 204 and response.content == b""
+    assert client.delete("/api/v1/chat/sessions/busy").status_code == 409
+    assert client.delete("/api/v1/chat/sessions/missing").status_code == 404
+    assert calls == ["chat-one", "busy", "missing"]
+
+
 def test_retest_http_passes_model_and_batch(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
     calls = []
 
@@ -84,6 +104,8 @@ def test_reasoning_http_default_and_explicit_false(monkeypatch, client: TestClie
         ]["reasoning"]["default"]
         is True
     )
+
+
 def test_retest_progress_http_dispatch(monkeypatch, client: TestClient) -> None:
     progress = {
         "run_id": "single",

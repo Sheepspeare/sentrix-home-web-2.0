@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
-from photobench.domain.errors import RequestOutcomeUnknownError
+from photobench.domain.errors import ChatBusyError, HttpResponseError, RequestOutcomeUnknownError
 from photobench.domain.http.ports import HttpStream, JsonHttpClient
 from photobench.domain.sentrix.ports import API_PREFIX
 
@@ -75,6 +75,20 @@ class HttpxSentrixClient:
                 self._url(f"/assistant/turns/{_quote(turn_id)}/cancel"), {}, "POST", timeout
             )
         )
+
+    def delete_conversation(self, *, conversation_id: str, timeout: int = 30) -> None:
+        try:
+            self._http.request_json(
+                self._url(f"/assistant/conversations/{_quote(conversation_id)}"),
+                method="DELETE",
+                timeout=timeout,
+            )
+        except HttpResponseError as exc:
+            if exc.status_code == 404:
+                return
+            if exc.status_code == 409:
+                raise ChatBusyError("请先停止回答，等待回合结束后再删除对话") from exc
+            raise
 
     def diagnostics(self, *, timeout: int = 10) -> dict[str, Any]:
         body: dict[str, Any] = self._http.request_json(self._url("/diagnostics"), timeout=timeout)

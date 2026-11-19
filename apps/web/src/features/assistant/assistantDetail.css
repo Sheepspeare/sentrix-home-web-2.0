@@ -7,7 +7,9 @@
 /* ---- 会话项：打开 / 更多操作 ------------------------------------------------ */
 
 .rail-entry { position: relative; }
-.rail-entry .rail-item { width: 100%; padding-right: 34px; }
+.rail-entry .rail-item { width: 100%; padding-right: 72px; }
+.rail-delete { position: absolute; top: 7px; right: 29px; padding: 4px; border: 0; border-radius: 5px; background: transparent; color: #b42318; font-size: 11px; }
+.rail-delete:hover:not(:disabled), .rail-delete:focus-visible { background: var(--soft); }
 .rail-more {
   position: absolute;
   top: 7px;
