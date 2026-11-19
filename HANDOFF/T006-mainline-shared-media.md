@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-19 15:59｜Q4正式采样生效，恢复GPU0后保留196题续评
+
+psh a5daf519与main 28ba9e6已是本分支祖先。只读1538772最新实际任务，产品连接8195，以local模式启用qwen35_nonthinking；磁盘q4km.json未被加载，8230属于实验副本，均不复制。正式采样temperature0.7/top_p0.8/top_k20/min_p0/presence_penalty1.5/seed42/enable_thinking=false；Agent reasoning、100/600/100/500及失败工具过滤保持。f75c105新增环境模板，并在显式产品升级续评时冻结采样开关；2e99113修产品版本配置持久化。两者均已验证并发布100Q4，Qwen产品配置不动。
+
+进一步发现Q4模型PID1583在启动时CUDA初始化失败、长期CPU推理。d0fc404的一次性脚本已提交后同步SHA验证，先取消精确b5c51a并核测评/产品空闲，再仅重启原模型unit。新PID1465949已在原GPU0，显存6038MiB、4槽各16K、型号/原启动脚本SHA正确；受保护产品/测评/WeMM/8772/8191进程保持。实际测评生成已恢复，日志随并发负载变化，不能把单点45token/s当稳定吞吐。
+
+新wake先于单次resume；Q4当前3556c7继承196题、18隔离，逐题答案/元数据/执行状态及154份完成评分全匹配。原scope/失败历史保留，retry_qa_ids=[]。Qwen f41436保持。Q4 wait fd46ad08-b7ee-4371-b882-3cf8fd304b0b/watcher6536；Qwen ce0022c2-ca23-48b8-8c0e-27f73c166e69/watcher91971。主实验state/checkpoint-watchers及正式配置watchers为现行映射；旧936ee9c3已cancel、2572已停止。正式发布stage/stop/activate/resume及GPU恢复stop/restore/resume均已消费，禁止重放。
+
+完整懒加载已上线，两端实际页面/节点/分块及完整两导出验收见下节；本轮不回退。QA4/3660、1013、reasoning/graph、ATM v5/豆包Judge保持，整轮终态评分及两导出待wake验收；Qwen全部验收后才接8874豆包独立full。不启动Hard、不发布16题包、不改153或1008772/8191。证据：产品项目audit/20261119-psh-formal-config/{README.md,delivery.json,watchers.json,gpu-restore/}。
+
 ## 2026-11-19 15:30｜完整懒加载已上线并通过长轨迹与在线验收
 
 18146f7/41546d8/c9fe1eb/c12f396均已提交并push。1008872/8874已启用格式3增量存储、指标/单题核心轻读、节点分页/正文分块、按需评分及固定版本流式两导出。真实浏览器已展开节点与内容分块；修复EnvironmentFile覆盖导致旧前端继续生效的问题，实际HTTP和进程环境均已核。
