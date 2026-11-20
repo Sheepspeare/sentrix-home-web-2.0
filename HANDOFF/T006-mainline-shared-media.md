@@ -10,7 +10,7 @@
 
 本机最终后端1725项、前端852项通过；此前复查一项1秒并发读取断言超时，单独及全量重跑均通过，失败日志保留。mypy10错、ruff2错和可达性1+3项已用起点HEAD归档复现；改动文件ruff、架构11契约、模块地图与check-docs通过。不能写全仓CI全绿。上游9170e6a只改README标题，交付时合入保留。
 
-100只读核8872/8874精确worker均running；对应PID1405124/351297，原监控不变，可用内存约66GiB、/home3.4GiB。当前尚未部署，本轮代码待提交、同步候选及空闲上线续接。审计入口产品项目audit/20261120-chat-trace-analysis；只读候选验收脚本deploy/photobench/20261120-chat-trace-analysis/inspect_candidate.py。不得重放旧发布/恢复脚本，不改8772/8191/153或运行预算。
+100只读核8872/8874精确worker均running；对应PID1405124/351297，原监控不变，可用内存约66GiB、/home3.4GiB。代码e7682d8及合上游README的99306be已提交；100独立候选chat-trace-analysis-99306be2共167文件SHA一致，未激活。真实Qwen0bbacb的1013题规则投影/聚合10.738秒完成，派生输入157029129字节临时流式处理后删除，原manifest保持；节点耗时读取通过。后续挂两服务各自空闲的精确wake再上线，不能把候选验收称线上生效。审计入口产品项目audit/20261120-chat-trace-analysis；只读候选验收脚本deploy/photobench/20261120-chat-trace-analysis/inspect_candidate.py。不得重放旧发布/恢复脚本，不改8772/8191/153或运行预算。
 
 
 ## 2026-11-20 09:06｜README补齐推理模式与psh配置
