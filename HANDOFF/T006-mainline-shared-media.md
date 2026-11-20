@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 09:06｜README补齐推理模式与psh配置
+
+用户要求README清楚说明推理模式，以及不提交Git的psh部署配置，按lieflat-less-ai-tone规范核稿。保留原有README，新增配置入口、local/cloud区别、Qwen采样预设与角色JSON字段；说明环境文件需显式加载、PhotoBench连接优先级、独立配置目录所需模板及生效核验。推理部分写明100模型/600工具（搜索100、其他500）、重试/收尾共享计数、3600秒墙钟与3660秒等待，区分Agent推理与原生thinking，标明普通及推理上下文来源。实际本机配置和密钥保持忽略。
+
+文档门禁发现既有request_budget漏模块登记和5条依赖边、PhotoBench懒加载及DELETE接口漏OpenAPI导出，已补齐两份文档；未改运行代码。当前源码路径显式加入PYTHONPATH后，完整check-docs通过，避免本机共享虚拟环境读取其他旧工作树。README新增链接/命令语法、模板采样/四项上限、cloud角色JSON及独立PhotoBench目录离线加载、Git忽略规则均通过；初次离线夹具缺少两份必需模板的失败已纠正，未涉及运行服务。审计readme-config-validation.txt、readme-docs-check.txt与validate_readme.py，原README正文逐字保持。本次继续原PR #43，不部署或重启，主开发树四份无关改动继续按SHA保护。
+
 ## 2026-11-20 08:48｜集成推送并向main提交PR
 
 用户授权核工作区并push、提交main PR。[PR #43](https://github.com/ysh12304124/sentrix-home-web-2.0/pull/43)由feature/photobench-evaluation指向main，未合并。创建时远端HEAD dfe0a88，相对main有202提交/465文件，范围包括邮件与混合来源测评、有限推理预算100/600/100/500、格式3增量检查点与节点/正文懒加载、轨迹与邮件UI、交互重测、对话删除、媒体共享及处理回执恢复。PR说明保留历史慢写/OOM尚未证明消除及实验未完成的边界。

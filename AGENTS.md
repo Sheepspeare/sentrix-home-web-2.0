@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/20集成已提交main PR #43（feature/photobench-evaluation），含邮件测评、有限推理预算、长轨迹增量存储/懒加载及对话管理；未合并。08:44核Q4 852题/豆包155题正常运行，见T006及产品项目audit/20261120-main-pr。
+- 11/20集成已提交main PR #43（feature/photobench-evaluation），含邮件测评、有限推理预算、长轨迹增量存储/懒加载及对话管理；README已补psh配置与推理说明，未合并。08:44核Q4 852题/豆包155题正常运行，见T006及产品项目audit/20261120-main-pr。
 
 - 11/20豆包独立副本已验原库14表/媒体/向量保持及6742邮件完整，8294/8874单次切至18107实际豆包/16K；新1013题reuse d52ecf/wake79d22271运行（不继承答卷）。Qwen已验收、Q4原监控继续；见产品项目audit/20261120-doubao-media-reuse及T006。
 

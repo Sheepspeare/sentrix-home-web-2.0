@@ -619,6 +619,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - chat
+      summary: Delete Chat
+      operationId: delete_chat_api_v1_chat_sessions__session_id__delete
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/chat/sessions/{session_id}/turns:
     post:
       tags:
@@ -896,6 +917,207 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RunItemResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/items/{item_index}/trace:
+    get:
+      tags:
+      - runs
+      summary: Get Trace Nodes
+      operationId: get_trace_nodes_api_v1_runs__run_id__items__item_index__trace_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: item_index
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Item Index
+      - name: turn
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Turn
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Kind
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '0'
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '50'
+          title: Limit
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Trace Nodes Api V1 Runs  Run Id  Items  Item Index  Trace
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/items/{item_index}/trace/{node_id}:
+    get:
+      tags:
+      - runs
+      summary: Get Trace Node Content
+      operationId: get_trace_node_content_api_v1_runs__run_id__items__item_index__trace__node_id__get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: item_index
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Item Index
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Id
+      - name: field
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Field
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '0'
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '65536'
+          title: Limit
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Trace Node Content Api V1 Runs  Run Id  Items  Item
+                  Index  Trace  Node Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runs/{run_id}/items/{item_index}/content:
+    get:
+      tags:
+      - runs
+      summary: Get Item Content
+      operationId: get_item_content_api_v1_runs__run_id__items__item_index__content_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: item_index
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Item Index
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Path
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '0'
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: string
+          default: '65536'
+          title: Limit
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Item Content Api V1 Runs  Run Id  Items  Item
+                  Index  Content Get
         '422':
           description: Validation Error
           content:
