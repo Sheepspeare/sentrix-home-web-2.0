@@ -765,9 +765,9 @@ class SplitRunReader:
     def state(self) -> dict[str, Any]:
         return cast(dict[str, Any], thaw(self.reader.value(self.manifest["root"])))
 
-    def entry(self) -> dict[str, Any]:
+    def entry(self, *, include_timing: bool = True) -> dict[str, Any]:
         result = cast(dict[str, Any], plain(self.reader.value(self.manifest["entry"])))
-        if (result.get("summary") or {}).get("agent_timing_version") != 2:
+        if include_timing and (result.get("summary") or {}).get("agent_timing_version") != 2:
             result.setdefault("summary", {}).update(self._agent_timing(self.variant()))
         return result
 

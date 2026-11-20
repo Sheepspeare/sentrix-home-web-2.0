@@ -45,7 +45,7 @@ class FileRunStartupRecovery:
 
                 if (run_dir / MANIFEST).is_file():
                     split = SplitRunReader(self._root, run_dir)
-                    entry = split.entry()
+                    entry = split.entry(include_timing=False)
                     if (
                         entry.get("status") not in {"running", "pending", "cancelling"}
                         and (entry.get("rejudge") or {}).get("status") != "running"
@@ -77,7 +77,7 @@ class FileRunStartupRecovery:
                     continue
                 path = committed_path(run_dir, "run.json")
                 try:
-                    entry = read_entry(run_dir)
+                    entry = read_entry(run_dir, include_timing=False)
                 except ValueError:
                     # Old recovery also accepts records without run_id.
                     entry = read_snapshot(path)

@@ -163,13 +163,27 @@ def _overview(state: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def read_entry(run_dir: Path) -> dict[str, Any]:
+def _hide_unprojected_timing(entry: dict[str, Any]) -> None:
+    # Legacy metadata has no per-item timing projection. Explicit detail reads
+    # recompute it; list/status reads must not hydrate multi-GB trajectories.
+    summary = entry.setdefault("summary", {})
+    if summary.get("agent_timing_version") != 2:
+        summary.update(
+            agent_timing_version=2,
+            agent_task_latency_mean_ms=None,
+            agent_throughput_latency_ms=None,
+            agent_throughput_latency_mode="unavailable",
+            agent_timing_scope="detail_required",
+        )
+
+
+def read_entry(run_dir: Path, *, include_timing: bool = True) -> dict[str, Any]:
     """Cheap committed metadata; legacy derived index is invalidated by file identity."""
     from photobench.infrastructure.results.split_json import MANIFEST
     from photobench.infrastructure.results.split_store import SplitRunReader
 
     if (run_dir / MANIFEST).is_file():
-        return SplitRunReader(run_dir.parent, run_dir).entry()
+        return SplitRunReader(run_dir.parent, run_dir).entry(include_timing=include_timing)
     with run_lock(run_dir):
         metadata = committed_path(run_dir, "metadata.json")
         if metadata.is_file():
@@ -190,24 +204,21 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
 
                 state = read_snapshot(committed_path(run_dir, "run.json"))
                 entry.setdefault("summary", {})["scoring"] = scoring_summary(state)
-            if (entry.get("summary") or {}).get("agent_timing_version") != 2:
-                state = read_snapshot(committed_path(run_dir, "run.json"))
-                entry.setdefault("summary", {}).update(
-                    agent_timing_summary(
-                        state.get("items") or [], state.get("phases"), state.get("resume_context")
-                    )
-                )
+            if include_timing:
+                _hide_unprojected_timing(entry)
             entry.update(execution_metadata(payload.get("overview") or {}))
             return entry
         path = run_dir / "run.json"
         stat = path.stat()
-        signature = [5, stat.st_ino, stat.st_size, stat.st_mtime_ns]
+        signature = [4, stat.st_ino, stat.st_size, stat.st_mtime_ns]
         index = run_dir / ".photobench-read-index.json"
         try:
             cached = json.loads(index.read_text(encoding="utf-8"))
             if cached.get("signature") == signature and isinstance(cached.get("entry"), dict):
                 entry = cached["entry"]
                 assert isinstance(entry, dict)
+                if include_timing:
+                    _hide_unprojected_timing(entry)
                 return entry
         except (OSError, ValueError, KeyError, TypeError):
             pass

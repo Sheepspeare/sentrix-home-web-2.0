@@ -642,6 +642,7 @@ export function memoryProfileRows(rawProfile: unknown = {}): MetricRow[] {
  *     这里改成 `(run, summary)`，`summary` 由调用方传 `effectiveRunSummary(run)` 的结果。
  */
 function agentThroughputNote(r: Record<string, any>, s: Record<string, any>): string {
+  if (s.agent_timing_scope === "detail_required") return "旧结果列表未计算时延，请打开任务详情查看重算值";
   if (s.agent_throughput_latency_mode === "not_applicable") return "本次没有执行 Agent 作答，仅继承答卷或补充评分";
   if (s.agent_throughput_latency_mode === "measured_agent_phase") {
     const scope = `本次实际墙钟 ÷ ${s.agent_phase_completed_count ?? s.total ?? 0} 题 · 并发 ${r.qa_concurrency ?? "-"}`;

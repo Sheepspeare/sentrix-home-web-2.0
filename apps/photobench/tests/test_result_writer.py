@@ -114,7 +114,64 @@ def test_old_committed_metadata_latency_recomputes_without_modifying_snapshot(tm
     directory = tmp_path / "legacy-latency"
     metadata = committed_path(directory, "metadata.json")
     before = metadata.read_bytes()
-    for result in [read_entry(directory), FileRunStore(tmp_path).load_overview("legacy-latency")]:
+    entry = read_entry(directory)
+    assert entry["summary"]["agent_task_latency_mean_ms"] is None
+    assert entry["summary"]["agent_throughput_latency_ms"] is None
+    assert entry["summary"]["agent_timing_scope"] == "detail_required"
+    for result in [FileRunStore(tmp_path).load_overview("legacy-latency")]:
         assert result["summary"]["agent_throughput_latency_ms"] == 4000
         assert result["summary"]["agent_task_latency_mean_ms"] == 6000
     assert metadata.read_bytes() == before
+
+
+@pytest.mark.parametrize("split", [False, True])
+def test_startup_recovery_does_not_load_historical_timing_or_trajectories(tmp_path, monkeypatch, split):
+    from photobench.domain.runs import analysis
+    from photobench.infrastructure.results import store
+    from photobench.infrastructure.results.recovery import FileRunStartupRecovery
+    from photobench.infrastructure.results.split_store import SplitRunReader
+
+    monkeypatch.setenv("PHOTOBENCH_SPLIT_RESULTS", "1" if split else "0")
+    monkeypatch.setattr(analysis, "agent_timing_summary", lambda *_: {})
+    FileResultWriter(tmp_path).write_snapshot("run_x", STATE)
+
+    def forbidden(*_, **__):
+        pytest.fail("Startup loaded terminal run trajectories/timing")
+
+    monkeypatch.setattr(store, "read_snapshot", forbidden)
+    monkeypatch.setattr(SplitRunReader, "_agent_timing", forbidden)
+    recovery = FileRunStartupRecovery(tmp_path)
+    try:
+        assert recovery.acquire_and_recover() == 0
+    finally:
+        recovery.close()
+
+
+def test_startup_retains_fast_legacy_status_cache_without_loading_run(tmp_path, monkeypatch):
+    from photobench.infrastructure.results import store
+    from photobench.infrastructure.results.recovery import FileRunStartupRecovery
+
+    directory = tmp_path / "run_x"
+    directory.mkdir()
+    path = directory / "run.json"
+    path.write_text(json.dumps(STATE))
+    stat = path.stat()
+    (directory / ".photobench-read-index.json").write_text(
+        json.dumps(
+            {
+                "signature": [4, stat.st_ino, stat.st_size, stat.st_mtime_ns],
+                "entry": {
+                    "run_id": "run_x",
+                    "status": "completed",
+                    "summary": {"agent_throughput_latency_ms": 123},
+                },
+            }
+        )
+    )
+    monkeypatch.setattr(store, "read_snapshot", lambda *_: pytest.fail("loaded full legacy run"))
+    recovery = FileRunStartupRecovery(tmp_path)
+    try:
+        assert recovery.acquire_and_recover() == 0
+        assert store.read_entry(directory)["summary"]["agent_throughput_latency_ms"] is None
+    finally:
+        recovery.close()

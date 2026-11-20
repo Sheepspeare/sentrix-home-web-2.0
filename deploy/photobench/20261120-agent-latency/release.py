@@ -52,6 +52,10 @@ def inspect():
     assert app == PREVIOUS / "apps/photobench/src", app
     for name, digest in value["baseline"].items():
         assert sha(app / name) == digest, f"Unrelated live source change: {name}"
+    if value.get("previous_inspection"):
+        before = json.loads(Path(value["previous_inspection"]).read_text())
+        assert probes.protected_files(environment) == before["protected_files"]
+        assert probes.pids() == before["protected_pids"]
     result = {
         "revision": value["revision"],
         "pid": pid,
