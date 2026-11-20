@@ -117,7 +117,13 @@ def main():
                     "from agent_turns where id=? and scope_id=?",
                     (turn["turn_id"], state["scope_id"]),
                 ).fetchone()
-                assert row is not None and row["status"] in {"completed", "failed", "cancelled"}, qa
+                assert row is not None and row["status"] in {
+                    "complete",
+                    "partial",
+                    "failed",
+                    "blocked",
+                    "cancelled",
+                }, qa
                 product_turns.append(dict(row))
             score = scores.get(result_key(BATCH, qa, 0)) or {}
             attempts.append(
