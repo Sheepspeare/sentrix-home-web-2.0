@@ -36,6 +36,27 @@ def test_delete_conversation_encodes_id_and_accepts_no_content():
     assert http.calls == [(f"{BASE}/api/v1/assistant/conversations/a%2Fb%20c", None, "DELETE", 30)]
 
 
+def test_get_one_asset_encodes_id_without_scanning_album():
+    client, http = _client({"assets/": {"id": "a/b"}})
+    assert client.get_asset(asset_id="a/b") == {"id": "a/b"}
+    assert http.calls == [(f"{BASE}/api/v1/assets/a%2Fb", None, "GET", 5)]
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_get_one_asset_only_treats_not_found_as_absent(status):
+    client, http = _client({})
+
+    def fail(*args, **kwargs):
+        raise HttpResponseError(status, "unavailable")
+
+    http.request_json = fail
+    if status == 404:
+        assert client.get_asset(asset_id="gone") is None
+    else:
+        with pytest.raises(HttpResponseError):
+            client.get_asset(asset_id="one")
+
+
 @pytest.mark.parametrize("status", [404, 409, 500])
 def test_delete_conversation_keeps_upstream_error_semantics(status):
     client, http = _client({})

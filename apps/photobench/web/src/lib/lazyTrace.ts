@@ -30,6 +30,11 @@ export interface TraceOverview {
   timing_complete: boolean;
 }
 
+export function traceItemBase(detail: RunItemDetail): string {
+  return String((detail.trace_storage as Dict | undefined)?.base_url ||
+    `/runs/${encodeURIComponent(String(detail.run_id))}/items/${detail.index}`);
+}
+
 export function traceNodeEntry(node: LazyTraceNode): TraceTimelineEntry {
   const metadata = node.metadata ?? {};
   if (node.kind === "tool") return { key: node.node_id, kind: "tool", tool: metadata };
@@ -42,7 +47,7 @@ export function traceNodeEntry(node: LazyTraceNode): TraceTimelineEntry {
 
 export function traceListUrl(detail: RunItemDetail, turn: number, kind: string): string {
   const revision = String((detail.trace_storage as Dict)?.revision ?? "");
-  return `/runs/${encodeURIComponent(String(detail.run_id))}/items/${detail.index}/trace?turn=${turn}&kind=${kind}&revision=${encodeURIComponent(revision)}`;
+  return `${traceItemBase(detail)}/trace?turn=${turn}&kind=${kind}&revision=${encodeURIComponent(revision)}`;
 }
 
 /** Older format-3 servers expose the same bounded metadata pages, without an aggregate yet. */

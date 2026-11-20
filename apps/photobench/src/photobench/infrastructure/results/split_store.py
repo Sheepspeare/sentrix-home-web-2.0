@@ -219,6 +219,11 @@ class SplitResultWriter:
         self._metric_values: OrderedDict[tuple[str, str], tuple[Any, int]] = OrderedDict()
         self._metric_bytes = 0
 
+    def close(self) -> None:
+        if self._objects is not None:
+            self._objects.close()
+            self._objects = None
+
     def metric_item(self, item: dict[str, Any], objects: ObjectWriter | None = None) -> dict[str, Any]:
         result = dict(item)
         for key in ITEM_TRACE_FIELDS:
@@ -915,16 +920,7 @@ class SplitRunReader:
             "order_version": 2,
         }
 
-    def content(
-        self,
-        index: int,
-        node_id: str,
-        field: str = "",
-        offset: int = 0,
-        limit: int = 65536,
-        scoring_profile: str = "",
-        scoring_batch: str = "",
-    ) -> dict[str, Any]:
+    def _node(self, index: int, node_id: str) -> Any:
         if not node_id.startswith("t"):
             raise KeyError("invalid node id")
         try:
@@ -943,7 +939,137 @@ class SplitRunReader:
             raise KeyError(node_id)
         page_number, page_offset = divmod(position, NODE_PAGE_SIZE)
         nodes = self.reader.value(group_index["pages"][page_number])
-        row = nodes[page_offset]
+        return nodes[page_offset]
+
+    def timing(self, index: int, node_id: str) -> dict[str, Any]:
+        """Read one loop's timings by saved identities, without hydrating its I/O."""
+        row = self._node(index, node_id)
+
+        def facts(node: Any) -> dict[str, Any]:
+            record = self.node_record(node)
+            value: dict[str, Any] = plain(node.get("metadata", {}))
+            for key in (
+                "agent_loop_total_ms",
+                "ttft_ms",
+                "model_generation_ms",
+                "preflight_prompt_tokens",
+                "effective_max_tokens",
+                "max_model_len",
+            ):
+                if record.get(key) is not None:
+                    value[key] = record[key]
+            loop = record.get("agent_loop_timing")
+            if isinstance(loop, dict):
+                value["agent_loop_timing"] = {
+                    key: loop[key] for key in ("tool_ms", "model_generation_ms") if key in loop
+                }
+            timing = record.get("retrieval_timing")
+            if isinstance(timing, dict):
+                value["retrieval_timing"] = {
+                    key: timing[key]
+                    for key in ("query_build_ms", "fusion_ms", "postprocess_ms", "total_ms")
+                    if key in timing
+                }
+                value["retrieval_timing"]["channels"] = {
+                    key: {"latency_ms": channel.get("latency_ms")}
+                    for key, channel in (timing.get("channels") or {}).items()
+                    if isinstance(channel, dict)
+                }
+            if node["kind"] == "tool":
+                result = record.get("result")
+                if not isinstance(result, dict):
+                    result = {}
+                channels = result.get("retrieval_channels") or []
+                if "retrieval_timing" not in value and channels:
+                    value["retrieval_timing"] = {
+                        "channels": {
+                            str(channel.get("channel") or i): {"latency_ms": channel.get("latency_ms")}
+                            for i, channel in enumerate(channels)
+                            if isinstance(channel, dict)
+                        }
+                    }
+                value["model_calls"] = [
+                    {
+                        key: observation[key]
+                        for key in (
+                            "call_id",
+                            "duration_ms",
+                            "total_ms",
+                            "ttft_ms",
+                            "status",
+                            "model",
+                            "prompt_tokens",
+                            "completion_tokens",
+                            "tokens_per_second",
+                            "streamed",
+                        )
+                        if key in observation and not isinstance(observation[key], (dict, list))
+                    }
+                    for observation in result.get("model_call_observations") or []
+                ]
+            return value
+
+        selected = facts(row)
+        turn = int(row["turn_index"])
+        calls, tools, metrics = [], [], []
+        directory = self.reader.value(self.item_ref(index)["nodes"])
+        groups = self.reader.value(directory["turns"]).get(str(turn), {})
+        for group in ("calls", "sources"):
+            for page in groups.get(group, {}).get("pages", []):
+                for node in self.reader.value(page):
+                    if node["kind"] == "tool":
+                        tools.append(node)
+                    elif node["kind"] == "metrics":
+                        metrics.append(node)
+                    elif node["kind"] in {"model", "planner", "judge"}:
+                        calls.append(node)
+        call_id, step = selected.get("call_id"), selected.get("step_id")
+        matching = [m for m in metrics if call_id and m["metadata"].get("call_id") == call_id]
+        if len(matching) == 1:
+            selected = {**facts(matching[0]), **{k: v for k, v in selected.items() if v is not None}}
+        peers = calls or metrics
+        successful = [
+            c
+            for c in peers
+            if c["metadata"].get("step_id") == step
+            and c["metadata"].get("call_type") != "tool_internal"
+            and c["metadata"].get("status") not in {"error", "failed", "cancelled"}
+        ]
+        unique_call = call_id and sum(c["metadata"].get("call_id") == call_id for c in peers) == 1
+        bound = []
+        tools_complete = True
+        if row["kind"] != "tool" and selected.get("status") not in {"error", "failed", "cancelled"}:
+            for tool in tools:
+                meta = tool["metadata"]
+                matches = (
+                    unique_call and meta["parent_call_id"] == call_id
+                    if meta.get("parent_call_id")
+                    else step and meta.get("parent_step_id") == step and len(successful) == 1
+                )
+                if matches:
+                    bound.append({**facts(tool), "node_id": tool["node_id"]})
+                elif not meta.get("parent_call_id") and (
+                    not meta.get("parent_step_id") or meta.get("parent_step_id") == step
+                ):
+                    tools_complete = False
+        return {
+            "node": selected,
+            "tools": bound,
+            "tools_complete": tools_complete,
+            "read_revision": self.revision,
+        }
+
+    def content(
+        self,
+        index: int,
+        node_id: str,
+        field: str = "",
+        offset: int = 0,
+        limit: int = 65536,
+        scoring_profile: str = "",
+        scoring_batch: str = "",
+    ) -> dict[str, Any]:
+        row = self._node(index, node_id)
         value = self.node_record(row)
         if field:
             value = self.reader.walk(

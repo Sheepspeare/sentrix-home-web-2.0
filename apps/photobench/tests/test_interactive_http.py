@@ -53,6 +53,35 @@ def test_chat_delete_http_contract(monkeypatch, client: TestClient) -> None:
     assert calls == ["chat-one", "busy", "missing"]
 
 
+def test_chat_light_read_and_lazy_trace_http_contract(monkeypatch, client: TestClient) -> None:
+    calls = []
+    service = client.app.state.container.chat
+
+    def read(session_id, *, include_items=True):
+        calls.append((session_id, include_items))
+        return {"session_id": session_id, "scope_id": "space", "status": "ready", "turns": []}
+
+    def trace(session_id, index, **options):
+        calls.append((session_id, index, options))
+        return {"read_revision": "pinned"}
+
+    monkeypatch.setattr(service, "get_chat", read)
+    monkeypatch.setattr(service, "get_chat_trace", trace)
+    assert client.get("/api/v1/chat/sessions/chat-one").status_code == 200
+    assert calls[-1] == ("chat-one", False)
+    assert client.get("/api/v1/chat/sessions/chat-one?include_items=true").status_code == 200
+    assert calls[-1] == ("chat-one", True)
+    base = "/api/v1/chat/sessions/chat-one/turns/2"
+    assert client.get(base + "/trace?revision=pinned&offset=50").json()["read_revision"] == "pinned"
+    assert calls[-1][1] == 2 and calls[-1][2]["offset"] == 50
+    assert client.get(base + "/trace/t0_gcalls_i0?view=timing&revision=pinned").status_code == 200
+    assert calls[-1][2]["node_id"] == "t0_gcalls_i0" and calls[-1][2]["view"] == "timing"
+    assert client.get(base + "/content?path=runtime_turns.0.answer").status_code == 200
+    assert calls[-1][2]["path"] == ["runtime_turns", 0, "answer"]
+    assert client.get(base + "/trace?limit=999").status_code == 422
+    assert client.get(base + "/trace/t0_gcalls_i0?view=invalid").status_code == 422
+
+
 def test_retest_http_passes_model_and_batch(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
     calls = []
 

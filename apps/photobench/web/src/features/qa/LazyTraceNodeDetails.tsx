@@ -3,10 +3,48 @@ import { api } from "../../api/client.ts";
 import type { RunItemDetail } from "../../api/types.ts";
 import { fmtMs } from "../../lib/format.ts";
 import type { Dict } from "../../lib/agentTrace.ts";
-import type { LazyTraceNode } from "../../lib/lazyTrace.ts";
+import { traceItemBase, type LazyTraceNode } from "../../lib/lazyTrace.ts";
+import { toolDurationMs, toolLatencySegments } from "../../lib/trace.ts";
+import { ModelPerformanceDetails, TimingSegments } from "./TracePerformance.tsx";
 import { RawTraceRecord } from "./TraceNodeDetails.tsx";
 
 interface ContentChunk { text: string; offset: number; next_offset?: number | null; total_characters?: number }
+interface TimingRead { node: Dict; tools: Dict[]; tools_complete?: boolean }
+
+function NodeTiming({ detail, node, url }: { detail: RunItemDetail; node: LazyTraceNode; url: string }) {
+  const [result, setResult] = useState<{ data?: TimingRead; error?: string }>();
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<TimingRead>(`${url}&view=timing`, { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) setResult({ data }); })
+      .catch(error => { if (!controller.signal.aborted) setResult({ error: String(error) }); });
+    return () => controller.abort();
+  }, [url]);
+  if (result?.error) return <p role="alert">耗时读取失败：{result.error}</p>;
+  if (!result?.data) return <p role="status">正在读取本步耗时…</p>;
+  const call = result.data.node;
+  const tools = node.kind === "tool" ? [call] : result.data.tools;
+  return <>
+    <div className="trace-node-metrics">
+      <span>请求耗时 {fmtMs(call.duration_ms ?? call.total_ms ?? (call.latency_s == null ? null : Number(call.latency_s) * 1000))}</span>
+      {node.kind !== "tool" ? <><span>TTFT {call.ttft_ms != null ? fmtMs(call.ttft_ms) : call.streamed === false ? "不适用（非流式）" : "未记录"}</span>
+        <span>Token 输入 {String(call.prompt_tokens ?? "未记录")} / 输出 {String(call.completion_tokens ?? "未记录")}</span>
+        {call.tokens_per_second != null ? <span>{String(call.tokens_per_second)} token/s</span> : null}</> : null}
+      {call.attempt != null ? <span>attempt {String(call.attempt)}</span> : null}
+    </div>
+    {node.kind !== "tool" ? <ModelPerformanceDetails detail={detail} call={call} tools={tools} toolsComplete={result.data.tools_complete}/> : null}
+    {tools.map((tool, index) => <section key={String(tool.node_id ?? index)} className="trace-call-performance">
+      <p>{String(tool.tool || tool.tool_name || "工具")} · {fmtMs(toolDurationMs(tool))}</p>
+      <TimingSegments title="工具内部耗时" total={toolDurationMs(tool)} segments={toolLatencySegments(tool)}/>
+      {Array.isArray(tool.model_calls) && tool.model_calls.length ? <>
+        <p className="muted small">以下模型请求包含在该工具耗时内。</p>
+        {tool.model_calls.map((nested: Dict, i: number) => <div className="trace-node-metrics" key={String(nested.call_id ?? i)}>
+          <span>内部模型 {i + 1} · {fmtMs(nested.duration_ms ?? nested.total_ms)}</span>
+          <span>TTFT {fmtMs(nested.ttft_ms)}</span><span>Token {String(nested.prompt_tokens ?? "未记录")} / {String(nested.completion_tokens ?? "未记录")}</span>
+        </div>)}</> : !toolLatencySegments(tool).length ? <p className="muted small">此工具未记录内部耗时细分。</p> : null}
+    </section>)}
+  </>;
+}
 
 /** One field and one text window stay mounted; switching nodes releases the previous body. */
 function TraceField({ base, field, label, defaultOpen = false, messages = false, sourcePath }: {
@@ -56,7 +94,8 @@ export function LazyTraceNodeDetails({ detail, node, modelLabel }: { detail: Run
   const revision = String((detail.trace_storage as Dict)?.revision ?? "");
   const sourcePath = node.source_path?.length && node.source_path[0] !== "scoring_results" ? node.source_path.join(".") : undefined;
   const route = sourcePath ? "content" : `trace/${encodeURIComponent(node.node_id)}`;
-  const base = `/runs/${encodeURIComponent(String(detail.run_id))}/items/${detail.index}/${route}?revision=${encodeURIComponent(revision)}`;
+  const base = `${traceItemBase(detail)}/${route}?revision=${encodeURIComponent(revision)}`;
+  const timingUrl = `${traceItemBase(detail)}/trace/${encodeURIComponent(node.node_id)}?revision=${encodeURIComponent(revision)}`;
   const field = (name: string, label: string, defaultOpen = false) => fields.includes(name) ?
     <TraceField key={name} base={base} sourcePath={sourcePath} field={name} label={label} defaultOpen={defaultOpen} messages={name === "messages"}/> : null;
   const model = ["model", "planner", "judge", "metrics"].includes(node.kind);
@@ -78,14 +117,7 @@ export function LazyTraceNodeDetails({ detail, node, modelLabel }: { detail: Run
         {!input.some(name => fields.includes(name)) ? <p className="trace-node-note">此节点未保存独立输入；可在原始记录中核对。</p> : null}</> : null}
       {tab === "output" ? <>{output.map(name => field(name, `已保存输出 · ${name}`, true))}
         {!output.some(name => fields.includes(name)) ? <p className="trace-node-note">此节点未保存独立输出。</p> : null}</> : null}
-      {tab === "metrics" ? <><div className="trace-node-metrics">
-        <span>请求耗时 {fmtMs(metadata.duration_ms ?? metadata.total_ms ?? (metadata.latency_s == null ? null : Number(metadata.latency_s) * 1000))}</span>
-        {model ? <><span>TTFT {metadata.ttft_ms != null ? fmtMs(metadata.ttft_ms) : metadata.streamed === false ? "不适用（非流式）" : "未记录"}</span>
-          <span>Token 输入 {String(metadata.prompt_tokens ?? "未记录")} / 输出 {String(metadata.completion_tokens ?? "未记录")}</span>
-          {metadata.tokens_per_second != null ? <span>{String(metadata.tokens_per_second)} token/s</span> : null}</> : null}
-        {metadata.attempt != null ? <span>attempt {String(metadata.attempt)}</span> : null}
-        {metadata.parent_step_id != null ? <span>父步骤 {String(metadata.parent_step_id)}</span> : null}
-      </div>{["retrieval_timing", "agent_loop_timing", "call_observation", "diagnostics"].map(name => field(name, name))}</> : null}
+      {tab === "metrics" ? <NodeTiming detail={detail} node={node} url={timingUrl}/> : null}
       {tab === "raw" ? <><code className="trace-source-path">{node.source_path?.join(".")}</code><TraceField base={base} sourcePath={sourcePath} field="" label="本节点完整记录" defaultOpen/></> : null}
     </div>
   </div>;

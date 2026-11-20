@@ -190,7 +190,10 @@ def get_trace_node_content(
     offset: str = "0",
     limit: str = "65536",
     revision: str = "",
+    view: str = "content",
 ) -> dict[str, Any]:
+    if view not in {"content", "timing"}:
+        raise InvalidRequestError("unknown trace view")
     try:
         index, page, size = int(item_index), int(offset), int(limit)
     except ValueError as exc:
@@ -205,6 +208,7 @@ def get_trace_node_content(
         revision=revision,
         scoring_profile="",
         scoring_batch="",
+        view=view,
     )
 
 

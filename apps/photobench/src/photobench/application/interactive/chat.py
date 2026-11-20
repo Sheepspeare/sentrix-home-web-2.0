@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Any
 
@@ -21,7 +22,12 @@ from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import ChatBusyError, InvalidRequestError
 from photobench.domain.runs.analysis import now_iso
-from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name
+from photobench.domain.runs.execution import (
+    RunCancelledError,
+    index_assets_by_name,
+    retrieved_candidate_asset_ids,
+    selected_asset_ids,
+)
 from photobench.domain.runtime.ports import RunRuntimeSnapshot
 from photobench.domain.sentrix.ports import InteractiveSentrixClient
 
@@ -45,6 +51,7 @@ class ChatService:
         self.client_for, self.execution_for = client_for, execution_for
         self.lock = threading.RLock()
         self.workers: dict[str, tuple[threading.Thread, threading.Event]] = {}
+        self.turn_reads = tuple(threading.Lock() for _ in range(64))
 
     def list_chats(self) -> dict[str, Any]:
         with self.lock:
@@ -332,9 +339,16 @@ class ChatService:
                         status=terminal["status"],
                         finished_at=now_iso(),
                         wall_clock_ms=round((time.monotonic() - started) * 1000),
+                        answer=(terminal.get("result") or {}).get("answer") or "",
+                        error=terminal.get("error"),
                     )
 
                 self._update(session_id, finish)
+                # Persist one terminal trace once; session polls read only the small message file.
+                try:
+                    self._cache_turn(session_id, record["index"], client, turn)
+                except Exception:
+                    log.exception("Chat trace cache failed: %s turn %s", session_id, record["index"])
                 if cancellation_sent or cancel.is_set():
                     raise RunCancelledError("已取消")
                 if turn["status"] not in {"complete", "partial"}:
@@ -342,18 +356,68 @@ class ChatService:
                 return
             cancel.wait(0.5) if not cancel.is_set() else time.sleep(0.5)
 
-    def get_chat(self, session_id: str) -> dict[str, Any]:
+    def get_chat(self, session_id: str, *, include_items: bool = True) -> dict[str, Any]:
         session = self.store.load_session(session_id)
-        client = self.client_for(session["runtime_snapshot"]["sentrix_url"])
-        assets = (
-            index_assets_by_name(client.list_assets(scope_id=session["scope_id"], limit=None))
-            if session["turns"]
-            else {}
-        )
-        session["items"] = [
-            turn_item(t, client.get_turn(turn_id=t["turn_id"]), assets) for t in session["turns"]
-        ]
+        session.pop("items", None)
+        if include_items:
+            session["items"] = [self.get_chat_turn(session_id, i) for i in range(len(session["turns"]))]
         return session
+
+    def _cache_turn(
+        self,
+        session_id: str,
+        index: int,
+        client: InteractiveSentrixClient,
+        turn: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self.turn_reads[hash((session_id, index)) % len(self.turn_reads)]:
+            session = self.store.load_session(session_id)
+            if index < 0 or index >= len(session["turns"]):
+                raise KeyError(index)
+            record = session["turns"][index]
+            cached = self.store.load_turn(session_id, index)
+            if cached and cached.get("execution_status") not in TURN_ACTIVE:
+                return cached
+            if turn is None:
+                turn = client.get_turn(turn_id=record["turn_id"])
+            result = turn.get("result") or {}
+            identifiers = list(
+                dict.fromkeys(
+                    [
+                        *selected_asset_ids(result),
+                        *retrieved_candidate_asset_ids(result),
+                        *[str(r["asset_id"]) for r in (result.get("trace") or {}).get("source_reads", [])],
+                    ]
+                )
+            )
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                assets = [a for a in pool.map(lambda key: client.get_asset(asset_id=key), identifiers) if a]
+                parents = list(
+                    dict.fromkeys(
+                        str(a["parent_asset_id"])
+                        for a in assets
+                        if a.get("parent_asset_id") and a["parent_asset_id"] not in identifiers
+                    )
+                )
+                assets.extend(a for a in pool.map(lambda key: client.get_asset(asset_id=key), parents) if a)
+            item = turn_item(record, turn, index_assets_by_name(assets))
+            self.store.save_turn(session_id, index, item)
+            saved = self.store.load_turn(session_id, index)
+            assert saved is not None
+            return saved
+
+    def get_chat_turn(self, session_id: str, index: int) -> dict[str, Any]:
+        session = self.store.load_session(session_id)
+        if index < 0 or index >= len(session["turns"]):
+            raise KeyError(index)
+        client = self.client_for(session["runtime_snapshot"]["sentrix_url"])
+        return self._cache_turn(session_id, index, client)
+
+    def get_chat_trace(self, session_id: str, index: int, **options: Any) -> dict[str, Any]:
+        session = self.store.load_session(session_id)
+        if index < 0 or index >= len(session["turns"]):
+            raise KeyError(index)
+        return self.store.read_turn_trace(session_id, index, **options)
 
     def cancel_chat(self, session_id: str) -> dict[str, Any]:
         with self.lock:

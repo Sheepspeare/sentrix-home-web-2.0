@@ -1336,7 +1336,7 @@ Judge一致性v3进一步限定为明确“模型/助手的回答/答案/结论�
 
 ## PhotoBench 错误分析（2026-10-24）
 
-`AnalysisBackend`为独立派生任务端口，`ErrorAnalysis`编排，bootstrap装配。分析不改变测评状态/评分/GT，单spawn进程并发1、测评优先，纳入取消/退出确认与重启恢复。API、事件/案例/报告类型、分母与来源契约见[错误分析设计](photobench-error-analysis.md)。Agent的`ModelReply`和`ModelServiceError`追加可选diagnostics，调用投影追加唯一ID及恢复关联，不更改现有执行策略。
+`AnalysisBackend`为独立派生任务端口，`ErrorAnalysis`编排，bootstrap装配。分析不改变测评状态/评分/GT，单spawn进程并发1，纳入取消/退出确认与重启恢复。AI诊断/比较在测评使用共享模型时排队或于逐题边界暂停；不调用模型的规则分析与规则比较可以读取另一已结束任务，队首等待中的AI任务不挡后续规则任务。API、事件/案例/报告类型、分母与来源契约见[错误分析设计](photobench-error-analysis.md)。Agent的`ModelReply`和`ModelServiceError`追加可选diagnostics，调用投影追加唯一ID及恢复关联，不更改现有执行策略。
 
 ### 2026-10-28 resident memory formula version
 
@@ -1440,7 +1440,7 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 
 `POST /runs/{id}/retest` 使用原任务冻结定义，仅选择指定 qa_id，复用 scope，显式切换所选模型，生成独立 run。`retest_context` 记录来源、源题号和评分规则；`GET /runs/{id}/retests` 返回关联记录。评分采用所选批次配置和 GT 元数据，执行使用当前产品与规则版本，原答卷和分数保留。
 
-`ChatStore` 负责独立会话文件，`InteractiveSentrixClient` 在产品客户端上增加读取会话和取消回合。`ChatService` 与 RunSuites 共用任务占用和模型准备，固定会话的相册与模型；创建、发送、读取和取消接口位于 `/chat/sessions`。题库来源只发送问题，多轮顺序执行；标准答案及 GT 留在测评侧对照。恢复时对账已接受回合，保留调用事实，不重发生成请求。回合投影复用已有媒体与完整轨迹视图。
+`ChatStore` 负责独立会话文件，`InteractiveSentrixClient` 在产品客户端上增加读取会话和取消回合。`ChatService` 与 RunSuites 共用任务占用和模型准备，固定会话的相册与模型；创建、发送、读取和取消接口位于 `/chat/sessions`。题库来源只发送问题，多轮顺序执行；标准答案及 GT 留在测评侧对照。恢复时对账已接受回合，保留调用事实，不重发生成请求。回合投影复用已有媒体与完整轨迹视图。HTTP会话GET默认`include_items=false`，仅返回本地消息和已存答案；兼容调用可显式请求全部回合。`/chat/sessions/{id}/turns/{index}`按回合生成/读取独立格式3派生缓存，`/trace`、`/trace/{node_id}`和`/content`分别分页读节点、单节点及正文。旧回合首次读取按引用ID调用`get_asset`，最多4并发，并补关键帧的父视频，不扫描相册。缓存失败保留回答，后续详情读取可重试，不重发生成。
 
 `DELETE /api/v1/chat/sessions/{session_id}` 删除聊天及对应产品会话，成功204，不存在404；活动或执行状态未确认时409。产品删除成功或已不存在后才删除本地session，其他上游失败保留本地以便重试。产品 `DELETE /api/v1/assistant/conversations/{conversation_id}` 在同一事务检查活动回合并删除消息/轨迹，创建回合也在事务中确认会话仍有效。删除不影响相册资产或已保存测评答卷/评分。两端列表均提供二次确认。
 
@@ -1451,3 +1451,10 @@ AI双次对比不再提供HTML导出，export_auxiliary(kind=ai_compare, format=
 ReadRuns 通过装配点注入 RunSuites.active_snapshot。活动任务的评分选择、题目及详情读取
 复用 RunState.snapshot 的一致视图，共享已完成不可变轨迹；可变评分元数据保持隔离。
 同一历史任务的并发完整读取共用在途解析，终态缓存仍限制64MiB。无新HTTP或存储契约。
+
+
+### 2026-11-20 节点耗时与格式3分析
+
+测评及聊天的`/trace/{node_id}?view=timing`读取本节点耗时、同轮模型metrics和唯一关联工具，跳过请求/响应正文。优先按`call_id/parent_call_id`绑定，旧数据仅在同轮成功步骤唯一时按`step_id`绑定；关联不完整时不展示本步合计。有独立`agent_loop_total_ms`时显示本步墙钟，其他记录显示模型与关联工具调用累计，并提示并行时长可能重叠。工具内部展示已存检索分量和内部模型观测，内部模型耗时包含在工具耗时内，不再次相加。
+
+格式3错误分析按固定manifest修订读取逐题规则事实，跳过模型与工具的输入输出正文，不调用整轮`state()`。题目定义和参考文本保持原文；证据查看或显式AI分析才按选中题读取片段，每条最多3000字符、每题合计最多32000字符。完整正文仍由固定修订的轨迹懒读接口提供。旧JSONL/run.json分析入口保持，规则分析不写原答卷或评分。

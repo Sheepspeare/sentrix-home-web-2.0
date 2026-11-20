@@ -285,7 +285,7 @@ def test_spawn_priority_cancellation_restart_staleness_and_raw_preservation(tmp_
         assert backend.get(j["job_id"])["status"] == "cancelled"
         j = backend.submit("r", "rules", {})
         assert backend.result(j["job_id"])["status"] == "queued"
-        busy.clear()
+        # Rules use no inference endpoint and run while another benchmark is busy.
         done = await_job(backend, j["job_id"])
         assert done["status"] == "completed", done
         assert done["worker_pid"] != __import__("os").getpid()

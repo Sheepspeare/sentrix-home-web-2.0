@@ -164,6 +164,9 @@ class ChatClient:
     def list_assets(self, **kwargs: Any) -> list[dict[str, Any]]:
         return []
 
+    def get_asset(self, *, asset_id: str, timeout: int = 5) -> dict[str, Any] | None:
+        return None
+
 
 class ModelPreparation:
     def __init__(self, requests: list[Any]) -> None:
@@ -209,6 +212,123 @@ def test_free_chat_continues_and_survives_new_reader(tmp_path: Path) -> None:
     assert result["source"] is None and len(requests) == 2
     assert FileChatStore(tmp_path / "chat").load_session(key)["turns"] == result["turns"]
     assert suites.work_status()["cleanup_status"] == "stopped"
+
+
+def test_chat_message_reads_and_cached_trace_need_no_product_requests(tmp_path, monkeypatch):
+    service, _, client, _ = chat_service(tmp_path)
+    key = service.create_chat({"scope_id": "space", "message": "hello"})["session_id"]
+    finished = wait_chat(service, key)
+
+    def unexpected(**kwargs):
+        pytest.fail("saved chat reads must not contact the product or scan the album")
+
+    monkeypatch.setattr(client, "get_turn", unexpected)
+    monkeypatch.setattr(client, "list_assets", unexpected)
+    light = service.get_chat(key, include_items=False)
+    assert "items" not in light
+    assert light["turns"][0]["answer"] == "answer"
+    assert light["turns"] == finished["turns"]
+    core = service.get_chat_turn(key, 0)
+    assert core["final_answer"] == "answer"
+    assert core["trace_storage"]["base_url"] == f"/chat/sessions/{key}/turns/0"
+    assert "trace_bundle" not in core["runtime_turns"][0]
+    assert service.get_chat_trace(key, 0, revision=core["trace_storage"]["revision"])["total"] == 0
+    with pytest.raises(KeyError):
+        service.get_chat_turn(key, -1)
+    service.delete_chat(key)
+    assert not (tmp_path / "chat" / key).exists()
+
+
+def test_legacy_chat_reads_only_one_turn_and_referenced_assets(tmp_path, monkeypatch):
+    service, _, client, _ = chat_service(tmp_path)
+    session = service.create_chat({"scope_id": "space"})
+    key = session["session_id"]
+    session["turns"] = [
+        {"index": i, "turn_id": f"old-{i}", "status": "complete", "message": str(i)} for i in range(3)
+    ]
+    service.store.save_session(session)
+    calls, asset_calls = [], []
+    assets = {
+        "frame": {
+            "id": "frame",
+            "file_name": "frame.jpg",
+            "media_type": "image",
+            "derived_kind": "video_keyframe",
+            "parent_asset_id": "video",
+        },
+        "video": {"id": "video", "file_name": "clip.mp4", "media_type": "video"},
+        "mail": {
+            "id": "mail",
+            "file_name": "mail.eml",
+            "media_type": "text",
+            "external_source_id": "email1",
+            "source_metadata": {"document_type": "email"},
+        },
+    }
+
+    def get_turn(**kwargs):
+        calls.append(kwargs["turn_id"])
+        return {
+            "status": "complete",
+            "result": {
+                "answer": "旧回答" * 3000,
+                "attachments": [{"asset_id": "frame"}],
+                "retrieved_candidates": ["frame", "mail"],
+                "trace": {
+                    "source_reads": [{"asset_id": "mail"}],
+                    "debug_calls": [
+                        {
+                            "call_id": "c1",
+                            "duration_ms": 1000,
+                            "messages": [{"role": "user", "content": "原始输入"}],
+                        }
+                    ],
+                },
+            },
+            "public_progress": [],
+        }
+
+    def get_asset(**kwargs):
+        asset_calls.append(kwargs["asset_id"])
+        return assets.get(kwargs["asset_id"])
+
+    monkeypatch.setattr(client, "get_turn", get_turn)
+    monkeypatch.setattr(client, "get_asset", get_asset)
+    monkeypatch.setattr(client, "list_assets", lambda **_: pytest.fail("no album scan"))
+    assert "items" not in service.get_chat(key, include_items=False)
+    assert not calls and not asset_calls
+    core = service.get_chat_turn(key, 1)
+    assert core["final_answer"] == "旧回答" * 3000
+    assert calls == ["old-1"] and sorted(asset_calls) == ["frame", "mail", "video"]
+    assert core["predicted_media"][0]["asset_id"] == "video"
+    assert core["read_source_refs"][0]["source_id"] == "email1"
+    revision = core["trace_storage"]["revision"]
+    page = service.get_chat_trace(key, 1, revision=revision)
+    node = next(n for n in page["nodes"] if n["kind"] == "model")
+    text = service.get_chat_trace(key, 1, revision=revision, node_id=node["node_id"], field="messages")
+    assert "原始输入" in text["text"]
+    assert (
+        service.get_chat_trace(key, 1, revision=revision, node_id=node["node_id"], view="timing")["node"][
+            "duration_ms"
+        ]
+        == 1000
+    )
+    assert service.get_chat_turn(key, 1)["index"] == 1
+    assert calls == ["old-1"]
+
+
+def test_light_chat_remains_readable_when_legacy_product_is_offline(tmp_path, monkeypatch):
+    service, _, client, _ = chat_service(tmp_path)
+    session = service.create_chat({"scope_id": "space"})
+    session["turns"] = [{"index": 0, "turn_id": "old", "status": "cancelled", "message": "saved question"}]
+    service.store.save_session(session)
+    monkeypatch.setattr(client, "get_turn", lambda **_: (_ for _ in ()).throw(TimeoutError("offline")))
+    assert (
+        service.get_chat(session["session_id"], include_items=False)["turns"][0]["message"]
+        == "saved question"
+    )
+    with pytest.raises(TimeoutError):
+        service.get_chat_turn(session["session_id"], 0)
 
 
 def test_delete_chat_removes_product_conversation_and_only_its_session(tmp_path: Path) -> None:

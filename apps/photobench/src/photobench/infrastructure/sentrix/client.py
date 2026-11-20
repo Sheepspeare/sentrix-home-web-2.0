@@ -348,6 +348,18 @@ class HttpxSentrixClient:
             self._http.request_json(self._url(prefix + _quote(operation_id) + "/cancel"), {}, "POST", timeout)
         )
 
+    def get_asset(self, *, asset_id: str, timeout: int = 5) -> dict[str, Any] | None:
+        try:
+            return dict(
+                self._http.request_json(
+                    self._url(f"/assets/{_quote(asset_id)}"), method="GET", timeout=timeout
+                )
+            )
+        except HttpResponseError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+
     def get_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]:
         """``GET /api/v1/assistant/turns/{turn_id}``（**复数**，``assistant.py:341``）。"""
         return dict(

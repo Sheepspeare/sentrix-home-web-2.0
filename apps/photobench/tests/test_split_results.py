@@ -45,6 +45,79 @@ def state() -> dict:
     }
 
 
+def test_loop_timing_is_lazy_and_binds_only_same_turn_successful_attempt(tmp_path, monkeypatch):
+    fixture = state()
+    item = fixture["items"][0]
+    debug = [
+        {"call_id": "failed", "step_id": "s1", "attempt": 1, "status": "error", "duration_ms": 300},
+        {
+            "call_id": "ok",
+            "step_id": "s1",
+            "attempt": 2,
+            "status": "complete",
+            "duration_ms": 1000,
+            "messages": [{"role": "user", "content": "DO_NOT_LOAD" * 10000}],
+        },
+    ]
+    item["runtime_turns"][0]["trace_bundle"]["debug_calls"] = debug
+    item["runtime_turns"].append(
+        {"index": 1, "trace_bundle": {"debug_calls": [{**debug[1], "call_id": "other-turn"}]}}
+    )
+    item["model_call_metrics"] = [
+        {"call_id": "ok", "conversation_turn": 0, "ttft_ms": 100, "completion_tokens": 20}
+    ]
+    item["tool_trace"] = [
+        {
+            "step_id": f"tool{i}",
+            "parent_call_id": "ok",
+            "parent_step_id": "s1",
+            "duration_ms": 10,
+            "tool": "search_memories",
+            "result": {
+                "text": "DO_NOT_LOAD" * 10000,
+                "retrieval_channels": [{"channel": "text", "latency_ms": 5}],
+            },
+        }
+        for i in range(55)
+    ] + [
+        {
+            "step_id": "legacy",
+            "parent_step_id": "s1",
+            "duration_ms": 50,
+            "tool": "inspect_photo",
+            "result": {
+                "model_call_observations": [
+                    {"duration_ms": 40, "prompt_tokens": 12, "messages": ["DO_NOT_LOAD"]}
+                ]
+            },
+        },
+        {"step_id": "foreign", "parent_call_id": "ok", "conversation_turn": 1, "duration_ms": 9999},
+    ]
+    directory = tmp_path / "run"
+    SplitResultWriter(tmp_path).write(directory, fixture)
+    reader = SplitRunReader(tmp_path, directory)
+    nodes = reader.nodes(0)["nodes"]
+    raw = reader.reader.raw
+
+    def no_io(ref):
+        value = raw(ref)
+        assert b"DO_NOT_LOAD" not in value
+        return value
+
+    monkeypatch.setattr(reader.reader, "raw", no_io)
+    success = next(n for n in nodes if n["metadata"].get("call_id") == "ok")
+    timing = reader.timing(0, success["node_id"])
+    assert timing["node"]["duration_ms"] == 1000 and timing["node"]["ttft_ms"] == 100
+    assert len(timing["tools"]) == 56
+    assert sum(t["duration_ms"] for t in timing["tools"]) == 600
+    assert timing["tools"][0]["retrieval_timing"]["channels"]["text"]["latency_ms"] == 5
+    assert timing["tools"][-1]["model_calls"] == [{"duration_ms": 40, "prompt_tokens": 12}]
+    failed = next(n for n in nodes if n["metadata"].get("call_id") == "failed")
+    assert reader.timing(0, failed["node_id"])["tools"] == []
+    tool_timing = reader.timing(0, timing["tools"][0]["node_id"])
+    assert tool_timing["node"]["duration_ms"] == 10 and tool_timing["tools"] == []
+
+
 def test_split_checkpoint_has_light_views_and_lazy_node_content(tmp_path: Path) -> None:
     root = tmp_path / "results"
     run_dir = root / "split-run"

@@ -553,7 +553,9 @@ def traces_from_progress(
             if row is None:
                 row = {
                     "step_id": step_id,
+                    "tool_call_id": payload.get("tool_call_id"),
                     "parent_step_id": payload.get("parent_step_id"),
+                    "parent_call_id": payload.get("parent_call_id"),
                     "conversation_turn": turn_index,
                     "tool": str(payload.get("tool")),
                     "status": None,

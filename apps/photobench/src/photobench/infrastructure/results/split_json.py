@@ -99,6 +99,11 @@ class ObjectReader:
             self._local.db.execute("PRAGMA query_only=ON")
         return cast(sqlite3.Connection, self._local.db)
 
+    def close(self) -> None:
+        if hasattr(self._local, "db"):
+            self._local.db.close()
+            del self._local.db
+
     def raw(self, ref: Mapping[str, Any]) -> bytes:
         kind, digest = ref[_MARKER]
         row = (

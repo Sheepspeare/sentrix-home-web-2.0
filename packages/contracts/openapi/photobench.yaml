@@ -606,6 +606,13 @@ paths:
         schema:
           type: string
           title: Session Id
+      - name: include_items
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Items
       responses:
         '200':
           description: Successful Response
@@ -634,6 +641,260 @@ paths:
       responses:
         '204':
           description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/turns/{index}:
+    get:
+      tags:
+      - chat
+      summary: Get Chat Turn
+      operationId: get_chat_turn_api_v1_chat_sessions__session_id__turns__index__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: index
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Index
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Chat Turn Api V1 Chat Sessions  Session Id  Turns  Index  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/turns/{index}/trace:
+    get:
+      tags:
+      - chat
+      summary: Get Chat Trace
+      operationId: get_chat_trace_api_v1_chat_sessions__session_id__turns__index__trace_get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: index
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Index
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      - name: turn
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Turn
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          default: calls
+          title: Kind
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Chat Trace Api V1 Chat Sessions  Session Id  Turns  Index  Trace
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/turns/{index}/trace/{node_id}:
+    get:
+      tags:
+      - chat
+      summary: Get Chat Trace Content
+      operationId: get_chat_trace_content_api_v1_chat_sessions__session_id__turns__index__trace__node_id__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: index
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Index
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Id
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      - name: field
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Field
+      - name: view
+        in: query
+        required: false
+        schema:
+          enum:
+          - content
+          - timing
+          type: string
+          default: content
+          title: View
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 65536
+          minimum: 1
+          default: 32768
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Chat Trace Content Api V1 Chat Sessions  Session
+                  Id  Turns  Index  Trace  Node Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/chat/sessions/{session_id}/turns/{index}/content:
+    get:
+      tags:
+      - chat
+      summary: Get Chat Turn Content
+      operationId: get_chat_turn_content_api_v1_chat_sessions__session_id__turns__index__content_get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: index
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Index
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Path
+      - name: revision
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Revision
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 65536
+          minimum: 1
+          default: 32768
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Chat Turn Content Api V1 Chat Sessions  Session
+                  Id  Turns  Index  Content Get
         '422':
           description: Validation Error
           content:
@@ -1046,6 +1307,13 @@ paths:
           type: string
           default: ''
           title: Revision
+      - name: view
+        in: query
+        required: false
+        schema:
+          type: string
+          default: content
+          title: View
       responses:
         '200':
           description: Successful Response

@@ -80,26 +80,24 @@ it('retests only the selected question and scoring batch with a different model'
   });
 });
 
-it('keeps a saved chat open while discovering its endpoint model', async () => {
+it('opens a saved chat without rediscovering or resetting its endpoint model', async () => {
   const session = {
     session_id: 'saved', title: '已保存的会话', scope_id: 'scope', album_id: 'album', status: 'ready',
     model_profile: '__current__', model_name: 'served-model', endpoint_model: 'served-model',
     runtime_snapshot: { model_base_url: 'http://saved/v1' },
-    turns: [{ index: 0, message: '以前的问题', turn_id: 't1', status: 'completed' }],
-    items: [{ answer: '以前的回答' }],
+    turns: [{ index: 0, message: '以前的问题', turn_id: 't1', status: 'completed', answer: '以前的回答' }],
   };
   api.mockImplementation((path: string) => Promise.resolve(path.startsWith('/memory-spaces')
     ? { spaces: [{ id: 'scope', name: '相册' }], reuse_bases: [] }
-    : path === '/chat/sessions/saved' ? session : { items: [session] }));
+    : path === '/chat/sessions/saved?include_items=false' ? session : { items: [session] }));
   post.mockResolvedValue({ served_models: ['served-model'] });
   render(<ChatView sentrixUrl="http://product" manifests={[]} models={models} busy={false} onOpenMedia={vi.fn()}/>);
   fireEvent.click(await screen.findByText('已保存的会话'));
   await screen.findByText('以前的回答');
-  await screen.findByRole('option', { name: 'served-model' });
+  expect(screen.getAllByText(/served-model/).length).toBeGreaterThan(0);
   expect(screen.getByText('以前的回答')).toBeTruthy();
   expect(localStorage.getItem('photobench-chat-session')).toBe('saved');
-  expect(post).toHaveBeenCalledTimes(1);
-  expect(post).toHaveBeenCalledWith('/current-model', { model_base_url: 'http://saved/v1', vllm_target_id: '' });
+  expect(post).not.toHaveBeenCalled();
 });
 
 it('sends free questions and continues the same conversation', async () => {

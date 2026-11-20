@@ -1003,6 +1003,6 @@ export interface ChatSession {
   reasoning?: boolean | null;
   error?: string;
   source?: { album_id: string; qa_set: string; row: QaRow; definition_sha256: string } | null;
-  turns?: Array<{ index: number; message: string; turn_id: string; status: string; reasoning?: boolean }>;
+  turns?: Array<{ index: number; message: string; turn_id: string; status: string; reasoning?: boolean; answer?: string; error?: string; wall_clock_ms?: number }>;
   items?: RunItemDetail[];
 }

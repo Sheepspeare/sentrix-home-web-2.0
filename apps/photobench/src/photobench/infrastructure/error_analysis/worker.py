@@ -26,7 +26,9 @@ from photobench.domain.evaluation.profile_view import profile_state, select_batc
 from photobench.domain.runs.judge import judge_chat_url
 from photobench.infrastructure.error_analysis.ai_comparison_worker import run_ai_comparison
 from photobench.infrastructure.error_analysis.ai_worker import run_ai
+from photobench.infrastructure.error_analysis.split_source import split_input
 from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
+from photobench.infrastructure.results.split_json import manifest
 from photobench.infrastructure.results.store import committed_path, run_lock
 
 
@@ -34,6 +36,12 @@ def source(
     root: Path, run_id: str, scoring_profile: str = "", scoring_batch: str = "", pinned: Path | None = None
 ) -> dict[str, Any]:
     directory = root / run_id
+    current = manifest(directory)
+    if current is not None:
+        state, selection, read_revision = split_input(root, run_id, scoring_profile, scoring_batch, pinned)
+        return describe_source(
+            state, selection, run_id, str(directory / "split-commit.json"), "split_facts_jsonl", read_revision
+        )
     with run_lock(directory):
         rows = committed_path(directory, "results.jsonl")
         # Resolve the atomic commit pointer once. Rejudge may publish a newer
@@ -97,52 +105,65 @@ def source(
         if pinned is not None and not scoring_profile and rows.is_file():
             with open_snapshot(rows) as incoming, pinned.open("w", encoding="utf-8") as out:
                 shutil.copyfileobj(incoming, out)
-        runtime = state.get("runtime_snapshot") or {}
-        return {
-            **selection,
-            "run_id": run_id,
-            "qa_snapshot": snapshot_metadata(state.get("qa_snapshot") or {}),
-            "_qa_rows": (state.get("qa_snapshot") or {}).get("rows") or [],
-            "path": str(rows if rows.is_file() else complete),
-            "format": "jsonl" if rows.is_file() else "legacy_run_json",
-            "revision": fingerprint(identity),
-            "status": state.get("status"),
-            "mode": state.get("mode"),
-            "build_revision": state.get("build_revision") or runtime.get("required_build_revision"),
-            "judge": {k: state[k] for k in ("judge_url", "judge_model", "judge_provider_id") if state.get(k)},
-            "model": state.get("model_name") or state.get("endpoint_model") or state.get("model"),
-            "budgets": {
-                "execution": state.get("execution_budgets") or runtime.get("execution_budgets"),
-                "product": runtime.get("product_settings"),
-            },
-            "device": {
-                "framework": runtime.get("runtime_framework") or state.get("runtime_framework"),
-                "telemetry_source": (state.get("phases", {}).get("gpu_metrics") or {}).get("source"),
-            },
-            "telemetry": {
-                k: v
-                for k, v in (state.get("phases", {}).get("gpu_metrics") or {}).items()
-                if k
-                in {
-                    "samples_count",
-                    "partial",
-                    "memory_complete",
-                    "component_validity",
-                    "sampling_diagnostics",
-                }
-            },
-            "phase_errors": {
-                k: {f: v[f] for f in ("status", "error", "error_details") if f in v}
-                for k, v in (state.get("phases") or {}).items()
-                if isinstance(v, dict) and (v.get("error") or v.get("status") in {"failed", "partial"})
-            },
-            "sampling_integrity": ((state.get("phases") or {}).get("gpu_metrics") or {}).get(
-                "sampling_integrity"
-            ),
-            "persistence": state.get("persistence"),
-            "cleanup": state.get("cleanup"),
-            "expected_items": state.get("qa_count") or state.get("item_count"),
-        }
+        return describe_source(
+            state,
+            selection,
+            run_id,
+            str(rows if rows.is_file() else complete),
+            "jsonl" if rows.is_file() else "legacy_run_json",
+            fingerprint(identity),
+        )
+
+
+def describe_source(
+    state: dict[str, Any], selection: dict[str, Any], run_id: str, path: str, format: str, read_revision: str
+) -> dict[str, Any]:
+    runtime = state.get("runtime_snapshot") or {}
+    return {
+        **selection,
+        "run_id": run_id,
+        "qa_snapshot": snapshot_metadata(state.get("qa_snapshot") or {}),
+        "_qa_rows": (state.get("qa_snapshot") or {}).get("rows") or [],
+        "path": path,
+        "format": format,
+        "revision": read_revision,
+        "status": state.get("status"),
+        "mode": state.get("mode"),
+        "build_revision": state.get("build_revision") or runtime.get("required_build_revision"),
+        "judge": {k: state[k] for k in ("judge_url", "judge_model", "judge_provider_id") if state.get(k)},
+        "model": state.get("model_name") or state.get("endpoint_model") or state.get("model"),
+        "budgets": {
+            "execution": state.get("execution_budgets") or runtime.get("execution_budgets"),
+            "product": runtime.get("product_settings"),
+        },
+        "device": {
+            "framework": runtime.get("runtime_framework") or state.get("runtime_framework"),
+            "telemetry_source": (state.get("phases", {}).get("gpu_metrics") or {}).get("source"),
+        },
+        "telemetry": {
+            k: v
+            for k, v in (state.get("phases", {}).get("gpu_metrics") or {}).items()
+            if k
+            in {
+                "samples_count",
+                "partial",
+                "memory_complete",
+                "component_validity",
+                "sampling_diagnostics",
+            }
+        },
+        "phase_errors": {
+            k: {f: v[f] for f in ("status", "error", "error_details") if f in v}
+            for k, v in (state.get("phases") or {}).items()
+            if isinstance(v, dict) and (v.get("error") or v.get("status") in {"failed", "partial"})
+        },
+        "sampling_integrity": ((state.get("phases") or {}).get("gpu_metrics") or {}).get(
+            "sampling_integrity"
+        ),
+        "persistence": state.get("persistence"),
+        "cleanup": state.get("cleanup"),
+        "expected_items": state.get("qa_count") or state.get("item_count"),
+    }
 
 
 def _identity(directory: Path) -> list[Any]:
@@ -161,6 +182,9 @@ def _selected_identity(selected: Path) -> list[Any]:
 
 def revision(root: Path, run_id: str) -> str:
     directory = root / run_id
+    current = manifest(directory)
+    if current is not None:
+        return str(current["revision"])
     with run_lock(directory):
         return fingerprint(_identity(directory))
 

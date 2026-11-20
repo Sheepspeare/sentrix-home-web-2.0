@@ -497,7 +497,10 @@ class FileRunStore:
         return self._split_reader(run_id, options.pop("revision", "")).nodes(index, **options)
 
     def load_trace_content(self, run_id: str, index: int, node_id: str, **options: Any) -> dict[str, Any]:
-        return self._split_reader(run_id, options.pop("revision", "")).content(index, node_id, **options)
+        reader = self._split_reader(run_id, options.pop("revision", ""))
+        if options.pop("view", "content") == "timing":
+            return reader.timing(index, node_id)
+        return reader.content(index, node_id, **options)
 
     def load_item_content(self, run_id: str, index: int, **options: Any) -> dict[str, Any]:
         return self._split_reader(run_id, options.pop("revision", "")).item_content(index, **options)

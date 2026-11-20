@@ -5,6 +5,23 @@ import { TraceNodeBrowser } from "./TraceNodeBrowser.tsx";
 import * as client from "../../api/client.ts";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it('懒加载节点按需恢复本轮模型与工具耗时，含工具内部耗时', async () => {
+  const request = vi.spyOn(client, 'api').mockImplementation(async path => {
+    if (String(path).includes('view=timing')) return { node: { call_type: 'agent', duration_ms: 1000, ttft_ms: 100 }, tools: [{ tool: 'search_memories', duration_ms: 500, retrieval_timing: { channels: { text: { latency_ms: 200 } } }, model_calls: [{ duration_ms: 150, prompt_tokens: 12 }] }] };
+    return { nodes: [{ node_id: 't0_gcalls_i0', kind: 'model', turn_index: 0, metadata: { step_id: 's1' }, fields: ['messages'] }], total: 1 };
+  });
+  render(<TraceNodeBrowser detail={{ index: 0, run_id: 'r', trace_storage: { version: 3, revision: 'rev', base_url: '/chat/sessions/chat1/turns/2' } }} turnIndex={0}/>);
+  await screen.findByRole('button', { name: /s1/ }); choose(/s1/);
+  expect(request).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('tab', { name: '耗时与指标' }));
+  expect(await screen.findByText('本步调用累计 · 模型与关联工具')).toBeTruthy();
+  expect(screen.getByText('1.5s')).toBeTruthy();
+  expect(screen.getByText('text 200ms')).toBeTruthy();
+  expect(screen.getByText('内部模型 1 · 150ms')).toBeTruthy();
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(String(request.mock.calls[1][0])).toContain('/chat/sessions/chat1/turns/2/trace/t0_gcalls_i0?revision=rev&view=timing');
+});
 const context=[{role:"system",content:"系统原文",extension:{zero:0,no:false,nil:null,empty:""}},{role:"user",content:"问题"}];
 const first={call_id:"c1",call_type:"agent",step_id:"step_1",seq:0,status:"complete",duration_ms:1200,streamed:false,model:"model-current",messages:context,tools:[{function:{name:"search"},future:null}],response:{content:"",thought:"原思考",tool_calls:[{arguments:"{broken"}],future:false}};
 const second={...first,call_id:"c2",step_id:"step_2",seq:1,attempt:2,duration_ms:0,messages:[...structuredClone(context),{role:"tool",content:"新增观察"}],response:{content:"答案"}};
