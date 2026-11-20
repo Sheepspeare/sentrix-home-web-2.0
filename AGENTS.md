@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20 Sentrix前端31项失败已逐项处理，全量191项/44文件通过、0跳过；TypeScript/构建通过，lint 0错误/45警告。修正旧测试上下文与界面断言，补时间线懒加载/定位和语音推理验证，修复无Fullscreen API时首页报错。继续PR #43，本轮不部署，见T006及产品项目audit/20261120-product-web-tests。
+
 - 11/20按用户要求合入upstream/main 42a1c58（导入三阶段、关键帧时间命中/QA代表帧），四处冲突已处理，邮件入口/统一GT及轨迹懒读保持。合并回归与PR #43推送跟进见T006及产品项目audit/20261120-main-sync；100候选仍99306be，本轮不部署。
 
 - 11/20聊天历史轻读/续接、节点耗时及格式3规则分析修复e7682d8已提交，100候选99306be已验1013题规则投影/原结果保持；PR #43已更新未合并；活动8872/8874不重启，两个空闲wake监控已挂，上线跟进见T006及产品项目audit/20261120-chat-trace-analysis。
@@ -29,4 +31,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Qwen已验收；豆包1013题独立reuse d52ecf与Q4并行，精确wake正常 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Sentrix前端191项通过；Qwen已验收，Q4/豆包原监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
