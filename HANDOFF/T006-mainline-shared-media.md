@@ -1,12 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
-## 2026-11-20 13:24｜Q4补评验收，启动完整流式导出
+## 2026-11-20 13:29｜Q4补评已验，按上线后的8872重固定导出
 
-134dea0d回调已处理；score_missing.py accept已单次消费。16份既有答卷新增15有效评分，共978；963原有效回执、全部1013答卷/attempt、34执行失败、12旧失败评分history及18隔离保持。唯一9b7cf030 Judge输出accuracy=false，但core_match=true且missing/contradictions为空，违反冻结v5的汇总公式；已保存error_details与原响应，保持failed/null，不人工改分或重跑Agent。有效样本均分44.8909338787%，total_score=null。
+134dea0d事件与score_missing.py accept已处理：16份既有答卷新增15有效评分，共978；963原有效回执、全部1013答卷/attempt、34执行失败、12旧失败评分history及18隔离保持。唯一9b7cf030 Judge输出accuracy=false，但core_match=true且missing/contradictions为空，违反冻结v5汇总公式；真实error_details/原响应已保存，保持failed/null，不人工改分或重跑Agent。有效样本均分44.8909338787%，total_score=null。
 
-新f763577导出脚本经本机语法/ruff/格式/导入/diff验证并提交，上传100逐SHA匹配；随后新wake fb58b683-0bed-4a3a-a870-57ea635c666d，再单次launch，远端worker3628227、watcher75319。逐题合同与在线trace/SFT双流SHA验收运行中，不落大正文；固定revision 5dd087fd98f14a009dd8160eaecbfe77/启动时8872PID1405124，首探均匹配。launch/verify已消费禁止重放，probe只读。回调先读exports-response/latest、worker日志及exports-acceptance；未有最终回执不称两导出通过。
+首次导出f763577/wakefb58b683/worker3628227在独立8872上线后检测到PID漂移，事件已处理；仅核cmdline后终止该校验进程，未有完整验收回执，原进度/日志/映射保存在exports-first-attempt-*。新001e0f2本机验证commit后同步100逐SHA核验，在新q4-terminal-exports-v2根据实际app-dir加载同版代码，阶段间核PID/app-dir/代码SHA及原read_revision。先新wake9eb8efb4-6498-437f-ad59-093ef7f20794，再单次launch，worker3643570/watcher76813，固定8872PID3631277及chat-trace-8872-7b34a75b/apps/photobench/src。首探worker/进程/修订匹配，完整在线trace/SFT双流SHA仍待最终回执。两次launch/verify均已消费禁止重放，probe只读。
 
-豆包只读280题/worker/型号/预算/独立库匹配、4真实turn；原79d22271/watcher79813保持。启动验收时8872旧app-dir，本轮未部署；独立空闲上线工作7b34a75刚提交，实际部署须看其回执，若改变PID则本验收将停止认定通过并回审，禁止盲重放。/home约2.74GiB、可用内存约64GiB。不改8772/8191/153，不启动Hard/16题包。详细入口产品项目audit/20261120-q4-terminal及主实验state/checkpoint-watchers。
+豆包只读280题/worker/型号/预算/独立库匹配、4真实turn；原79d22271/watcher79813保持。本轮未部署业务；8872切换属独立7b34a75已消费操作。回调先读exports-response/latest及新worker日志/exports-acceptance，不盲重跑；/home约2.73GiB、内存约65GiB，不落大正文。未证明全部慢写/OOM消除。不改8772/8191/153，不启动Hard/16题包。入口产品项目audit/20261120-q4-terminal及主实验state/checkpoint-watchers。
 
 ## 2026-11-20 12:54｜8872回调确认仍在评分，接续精确空闲监控
 
