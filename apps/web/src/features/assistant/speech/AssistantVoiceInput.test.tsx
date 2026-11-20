@@ -1,15 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ ask: vi.fn(), start: vi.fn(), stop: vi.fn(), cancel: vi.fn(),
+const mocks = vi.hoisted(() => ({ ask: vi.fn(), resume: vi.fn(), start: vi.fn(), stop: vi.fn(), cancel: vi.fn(),
   phase: "idle", active: false, transcript: null as null | ((text: string, autoSend: boolean) => Promise<string>) }));
 vi.mock("./useSpeechInput", () => ({ useSpeechInput: (options: { onTranscript: (text: string, autoSend: boolean) => Promise<string> }) => {
   mocks.transcript = options.onTranscript;
   return { ...mocks, message: "", error: null, unavailable: null };
 } }));
-vi.mock("../useTurnStream", () => ({ useTurnStream: () => ({
+vi.mock("../useTurnStream", () => ({ waitForTurnAcceptance: async () => {}, useTurnStream: () => ({
   progress: [], result: null, busy: false, error: null, ask: mocks.ask,
-  cancel: vi.fn(), cancelled: false, executionState: "", attemptNo: 0, turnId: "",
+  cancel: vi.fn(), resume: mocks.resume, cancelled: false, executionState: "", attemptNo: 0, turnId: "",
 }) }));
 vi.mock("../../../shared/api/client", async (original) => ({
   ...await original<typeof import("../../../shared/api/client")>(),

@@ -43,6 +43,7 @@ from sentrix.domain.identity.ports import (
     FaceRepository,
     FamilyGraphRepository,
     MomentRepository,
+    PersonAppearanceJobRepository,
     PersonCropRenderer,
     PersonMergeRepository,
     PersonPreviewRenderer,
@@ -144,6 +145,7 @@ from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.pipeline_receipts import SqlitePipelineReceipts
 from sentrix.infrastructure.persistence.repositories.appearance import SqliteAppearanceRepository
+from sentrix.infrastructure.persistence.repositories.appearance_jobs import SqlitePersonAppearanceJobs
 from sentrix.infrastructure.persistence.repositories.asset_places import SqliteAssetPlaceRepository
 from sentrix.infrastructure.persistence.repositories.assets import (
     SqliteAssetRepository,
@@ -355,6 +357,8 @@ class Container:
     # 外观证据与人物画像的三个模型入口（S5c）。与 ``vlm_observer`` 共用同一个端点与
     # 同一份 ``ServedModel`` 探测；**构造它不建连接**，模型不可用时各方法返回 ``None``。
     appearance_repository: AppearanceRepository
+    # 确认 / 合并之后的外观取样任务：请求只入队，后台线程调模型（2026-11-20）。
+    person_appearance_jobs: PersonAppearanceJobRepository
     person_vision: PersonVision
     # 头肩裁剪件（Task 85c）。按端口声明，不写具体类——装配点的可替换性只在类型上
     # 才算数（module-map 开头那条不变量）。
@@ -602,6 +606,7 @@ class Container:
         # 家庭图谱仓储被两个消费方用：容器自己的字段，以及人物目录——目录要靠它回答
         # 「这个人的归属与关系」（S7c）。拿在手上传两次，而不是就地 new 两个实例。
         family = SqliteFamilyGraphRepository(database, entities)
+        portraits = SqlitePortraitRepository(database)
         return cls(
             build_revision=read_build_revision(),
             model_profile=model_profile,
@@ -673,7 +678,7 @@ class Container:
             event_participant_repository=SqliteEventParticipantRepository(database),
             fact_repository=SqliteFactRepository(database),
             memory_graph=SqliteMemoryGraphRepository(database),
-            memory_corrections=SqliteMemoryCorrections(database),
+            memory_corrections=SqliteMemoryCorrections(database, entities),
             media_deletion=SqliteMediaDeletionRepository(database),
             causal_judge=OpenAICausalJudge(
                 chat_base_url,
@@ -695,6 +700,7 @@ class Container:
                 providers=settings.face_providers.split(","),
             ),
             appearance_repository=SqliteAppearanceRepository(database),
+            person_appearance_jobs=SqlitePersonAppearanceJobs(database),
             person_vision=OpenAIPersonVision(
                 vision_base_url,
                 vision_served,
@@ -712,7 +718,7 @@ class Container:
             relationship_repository=SqliteRelationshipRepository(database),
             family_graph_repository=family,
             person_merge_repository=SqlitePersonMergeRepository(database),
-            portrait_repository=SqlitePortraitRepository(database),
+            portrait_repository=portraits,
             chat_model=OpenAIChatModel(
                 chat_base_url,
                 chat_served,
@@ -750,7 +756,7 @@ class Container:
             conversation_repository=SqliteConversationRepository(database),
             turn_repository=SqliteTurnRepository(database),
             result_set_repository=SqliteResultSetRepository(database),
-            person_directory=EntityPersonDirectory(entities=entities, family=family),
+            person_directory=EntityPersonDirectory(entities=entities, family=family, portraits=portraits),
             import_jobs=SqliteImportJobRepository(database),
             memory_rotation=SqliteRotationRepository(database),
             turn_event_broker=InProcessTurnEventBroker(),

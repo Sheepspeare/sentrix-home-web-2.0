@@ -115,6 +115,9 @@ class EvidenceRequest:
     # 人物条件属于 S6 的查询解析），但 **entity 通道只在有人物条件时才给召回信号**——
     # 这个字段不存在的话，那条通道在类型上就没法被喂过，它会永远返回空，而不是「被接上了」。
     person: tuple[str, ...] = ()
+    # A resolved identity is a hard condition across every retrieval channel.
+    linked_person_assets: tuple[str, ...] | None = None
+    excluded_scopes: frozenset[str] = frozenset()
     # 结构化条件（时间 / 媒体 / 地点 / 人物）。**与上面几个字段不是一回事**：
     # 那几个是传给通道的**召回前筛**，它们影响「召回什么」，不保证结果满足条件；
     # 这一条走的是**融合后的排除**，那才是「硬条件」的全部含义。
@@ -488,6 +491,20 @@ class RetrieveEvidence:
             return EvidenceResult()
         limit = max(1, request.limit)
         recall_limit = limit * RECALL_OVERSAMPLE_FACTOR
+        person_assets = request.linked_person_assets
+        eligible = frozenset(person_assets) if person_assets is not None else None
+        visibility: dict[str, bool] = {}
+
+        def included(asset_id: str) -> bool:
+            if eligible is not None and asset_id not in eligible:
+                return False
+            if not request.excluded_scopes or self._assets is None:
+                return True
+            if asset_id not in visibility:
+                asset = self._assets.get(asset_id)
+                visibility[asset_id] = asset is not None and asset.scope_id not in request.excluded_scopes
+            return visibility[asset_id]
+
         channel_weights = {**DEFAULT_CHANNEL_WEIGHTS, GRAPH_CHANNEL: GRAPH_CHANNEL_WEIGHT}
         primary_weights = {name: weight for name, weight in channel_weights.items() if name != GRAPH_CHANNEL}
 
@@ -541,6 +558,34 @@ class RetrieveEvidence:
             """三条没有健康度的通道（metadata / entity / lexical）用这个包一下。"""
             return hits, "", False, ""
 
+        def person_hits() -> Sequence[CandidateHit]:
+            if person_assets is None:
+                return self._entity.execute(
+                    people=request.person, scope_id=request.scope_id, limit=recall_limit
+                )
+            candidates = person_assets[:recall_limit]
+            if self._conditions is not None and request.conditions:
+                # Apply qualifiers before truncating the entity channel, so an older
+                # matching photo survives even when the person has many newer photos.
+                kept: list[str] = []
+                for start in range(0, len(person_assets), recall_limit):
+                    kept.extend(
+                        self._conditions.filter(
+                            person_assets[start : start + recall_limit],
+                            request.conditions,
+                            scope_id=request.scope_id,
+                        ).kept
+                    )
+                    if len(kept) >= recall_limit:
+                        break
+                candidates = tuple(kept[:recall_limit])
+            return [
+                CandidateHit(
+                    asset_id=asset_id, channel=ENTITY_CHANNEL, rank=rank, raw_score=1.0, score_kind="discrete"
+                )
+                for rank, asset_id in enumerate(candidates, 1)
+            ]
+
         # 视觉通道的健康度**还要往上报一层**（``EvidenceResult.backend`` / ``degraded``
         # 是响应顶层的字段），而它的调用现在在 ``record`` 里面。用一个一格盒子把它带出来。
         # 通道挂了时盒子是空的 → 顶层回 ``none``/未降级，那正是 ``EvidenceResult`` 的
@@ -575,9 +620,7 @@ class RetrieveEvidence:
             # 候选就拿不到那 +1.0。
             ENTITY_CHANNEL: record(
                 ENTITY_CHANNEL,
-                lambda: plain(
-                    self._entity.execute(people=request.person, scope_id=request.scope_id, limit=recall_limit)
-                ),
+                lambda: plain(person_hits()),
             ),
             LEXICAL_CHANNEL: record(
                 LEXICAL_CHANNEL,
@@ -623,6 +666,8 @@ class RetrieveEvidence:
                 for channel, hits in channel_hits.items()
             }
         primary_fused = fuse(channel_hits, channel_weights=primary_weights)
+        if eligible is not None or request.excluded_scopes:
+            primary_fused = [candidate for candidate in primary_fused if included(candidate.asset_id)]
 
         # 图是由 primary 结果提供种子的 expander，不参与前面的并行召回。
         # 这样即使图尚未构建，原有五路检索仍然完整返回；图本身的降级会单独出现在
@@ -636,7 +681,9 @@ class RetrieveEvidence:
                     limit=max(recall_limit, limit * 2),
                     question=text,
                 )
-                channel_hits[GRAPH_CHANNEL] = graph_result.hits
+                channel_hits[GRAPH_CHANNEL] = tuple(
+                    hit for hit in graph_result.hits if included(hit.asset_id)
+                )
                 traces.append(
                     ChannelTrace(
                         channel=GRAPH_CHANNEL,
@@ -667,6 +714,10 @@ class RetrieveEvidence:
         # 「每条通道各自过滤」，而条件判定要的是「对整个候选集一次」，
         # 否则被 A 通道排除的候选还会从 B 通道进来。
         excluded_count = 0
+        if eligible is not None or request.excluded_scopes:
+            eligible_fused = [candidate for candidate in fused if included(candidate.asset_id)]
+            excluded_count = len(fused) - len(eligible_fused)
+            fused = eligible_fused
         if self._conditions is not None and request.conditions:
             outcome = self._conditions.filter(
                 [candidate.asset_id for candidate in fused],
@@ -676,7 +727,7 @@ class RetrieveEvidence:
             kept = set(outcome.kept)
             fused = [candidate for candidate in fused if candidate.asset_id in kept]
             primary_fused = [candidate for candidate in primary_fused if candidate.asset_id in kept]
-            excluded_count = outcome.excluded_count
+            excluded_count += outcome.excluded_count
 
         # **重排排在条件过滤之后、交付之前。** 条件判定是硬筛，先后顺序不影响筛的
         # 结果；而交付截断与图槽位选择都应该看到重排后的头部。图种子在上面已经按

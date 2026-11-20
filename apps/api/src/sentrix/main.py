@@ -47,7 +47,9 @@ from sentrix.api.routes import (
     timeline,
     videos,
 )
+from sentrix.application.memories.sync_corrections import CorrectionSyncExecutor
 from sentrix.bootstrap.container import Container
+from sentrix.bootstrap.import_wiring import build_appearance_sampling, build_correction_sync
 from sentrix.config import Settings, load_settings
 from sentrix.domain.assistant.ports import SpeechUnavailable
 from sentrix.domain.errors import DomainError
@@ -150,6 +152,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         for executor in (
             getattr(app.state, "import_executor", None),
             getattr(app.state, "turn_executor", None),
+            getattr(app.state, "person_name_sync_executor", None),
+            getattr(app.state, "appearance_sampling_executor", None),
         )
         if executor is not None
     ]
@@ -206,6 +210,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.import_executor = container.build_import_executor()
     app.state.turn_executor = container.build_turn_executor()
+    app.state.person_name_sync_executor = CorrectionSyncExecutor(build_correction_sync(container))
+    app.state.appearance_sampling_executor = build_appearance_sampling(container)
     app.add_exception_handler(DomainError, domain_error_handler)
 
     v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(internal_call_guard)])

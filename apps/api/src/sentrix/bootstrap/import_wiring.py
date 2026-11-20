@@ -15,9 +15,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sentrix.application.identity.appearance_sampling import AppearanceSamplingExecutor
 from sentrix.application.identity.enroll_face import EnrollFace, EnrollFaces
 from sentrix.application.identity.extract_moments import ExtractMoments
 from sentrix.application.identity.family_graph_service import FamilyGraphService
+from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.run_insights import RunInsights
 from sentrix.application.media.extract_video_scenes import ExtractVideoScenes, VideoSceneExtraction
 from sentrix.application.media.import_assets import ImportAssets, ImportResult, StagedImport
@@ -32,6 +34,7 @@ from sentrix.application.memories.assign_events import (
 from sentrix.application.memories.build_graph import BuildMemoryGraph
 from sentrix.application.memories.maintain_facts import MaintainFacts
 from sentrix.application.memories.summarize_event import SummarizeEvent
+from sentrix.application.memories.sync_corrections import ReindexCorrectedMemories, SyncCorrections
 from sentrix.application.retrieval.index_observation_text import IndexObservationText
 from sentrix.application.retrieval.index_visual import IndexAssetVisual
 from sentrix.domain.media.import_jobs import ImportJob
@@ -65,6 +68,42 @@ def build_memory_graph(container: Container) -> BuildMemoryGraph:
         causal_judge=container.causal_judge,
         vectors=container.vector_repository,
         causal_batch_size=causal_batch_size,
+        build_lock=lambda: container.database.advisory_lock("graph-build"),
+    )
+
+
+def build_correction_sync(container: Container) -> SyncCorrections:
+    reindex = ReindexCorrectedMemories(
+        container.observation_repository,
+        container.event_repository,
+        container.lexical_index,
+        container.text_embedder,
+        container.text_vector_repository,
+        container.memory_corrections,
+    ).reindex
+
+    def graph(scope: str) -> None:
+        stats = build_memory_graph(container).execute(scope)
+        if stats.causal_status == "degraded":
+            raise RuntimeError("因果边同步降级，请重试")
+
+    return SyncCorrections(container.memory_corrections, reindex, graph)
+
+
+def build_appearance_sampling(container: Container) -> AppearanceSamplingExecutor:
+    """确认 / 合并之后的外观取样：后台线程逐人调视觉模型（请求里只入队）。"""
+    observe = ObserveAppearance(
+        faces=container.face_repository,
+        entities=container.entity_repository,
+        observations=container.observation_repository,
+        appearances=container.appearance_repository,
+        crops=container.person_crop_renderer,
+        vision=container.person_vision,
+    )
+    return AppearanceSamplingExecutor(
+        jobs=container.person_appearance_jobs,
+        entities=container.entity_repository,
+        observe=observe,
     )
 
 
