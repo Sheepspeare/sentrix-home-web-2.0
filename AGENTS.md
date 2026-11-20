@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20用户新授权补Q4缺分；93efab已在8872继承979答卷/978有效分，仅34旧执行失败各一新attempt，wake d65adb3c/watcher23643监控。原3556c7及18历史隔离保持，四条隔离QA生成新轨迹；终态后仅Judge补继承的9b7cf030，再验两导出。见T006及产品项目audit/20261120-q4-supplement。
+
 - 11/20 PR #43已于11:47合入main/f439244；8872聊天/节点耗时/格式3分析已上线7b34a75，PID3631277，166文件SHA及线上API/隔离聊天/纯规则分析验收通过。26436efa已处理，8874原空闲监控保持，见T006及产品项目audit/20261120-chat-trace-8872-release。
 
 - 11/20 Sentrix前端31项失败已逐项处理，全量191项/44文件通过、0跳过；TypeScript/构建通过，lint 0错误/45警告。修正旧测试上下文与界面断言，补时间线懒加载/定位和语音推理验证，修复无Fullscreen API时首页报错。继续PR #43，本轮不部署，见T006及产品项目audit/20261120-product-web-tests。
@@ -33,4 +35,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | PR43已合main、8872已上线；Qwen/Q4保留失败验收完成，豆包原监控运行 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | PR43已合main；Qwen/Q4原验收保留，Q4缺分定点补做与豆包原监控运行 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

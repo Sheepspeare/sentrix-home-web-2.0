@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 16:23｜按新授权定点补Q4缺分
+
+用户要求补齐Q4尚无有效评分的题。原3556c7已验收的1013项/978有效ATM分及两导出继续保留；本轮授权34条执行失败各一新attempt（27 model_error、7 timeout），另1份现成答卷仅补Judge。34条产品turn逐项核实均failed，没有成功答卷可找回；标签本身不作为模型智能责任结论。
+
+新ops d56eb18/a4cac8b先本机语法/ruff/格式/diff通过、commit，再同步100逐SHA核验并push。新seed继承979份原答卷和978份有效分；原run manifest及继承对象引用指纹保持。原18条长轨迹继续隔离，其中4个QA本轮生成独立新轨迹，当前继承项保留14条隔离标记，原18条全部留在源run及审计映射中。没有解封或加载被隔离的旧轨迹。
+
+准备时Q4结果库WAL约1.2GB，/home降至约1.4GB。8872空闲时仅对该结果库执行一次wal_checkpoint(TRUNCATE)，回执[0,0,0]、WAL归零、/home恢复约2.49GiB，源run和seed manifest SHA保持；未删答卷/资产。该checkpoint及inspect/seed/resume均已消费，禁止重放。
+
+先注册wake d65adb3c-397d-4e41-821a-439f5cbac05a，再单次启动20261120-162112-2026.11.17-atm-sources-addresses-current-resume-93efab。继承979项，仅34题新执行，repair_missing_judges=false，保留原有Judge失败供终态后定点补评。watcher23643首探running/worker=true、型号/进程/预算/原manifest匹配；QA4/3660、100/600/100/500、reasoning/graph和冻结ATM v5/豆包Judge不变。8872PID3631277/8291PID1408374未重启，豆包d52ecf及原79d22271监控保持。
+
+接手先读产品项目audit/20261120-q4-supplement/{README.md,delivery.json,watchers.json,plan.json,resume-response.json,q4km-latest.json}及主实验state/checkpoint-watchers。终态逐QA验34新旧attempt、源manifest/979继承答卷/978有效分；新失败保持真实状态，不自动再跑Agent。然后对9b7cf030同冻结批次有限补一次Judge并保留旧失败history，其他现成答卷若缺Judge仅补Judge，辅助任务先新wake。最终验1013去向和两完整在线流式trace/SFT；不落大正文。远端新目录q4-supplement-v1，本轮未部署业务代码，不改8772/8191/153或其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20 13:34｜Q4完整导出验收通过，保留真实失败
 
 9eb8efb4终态回调已处理：worker3643570正常退出，两完整在线trace52,819,303字节/SFT1,356,343,176字节与独立流SHA逐字节匹配。逐题合同1013项，978有效分、34执行失败空分、1 Judge失败空分与18隔离均保持；原答卷/attempt及963旧有效回执和新增15分保持。固定revision 5dd087fd98f14a009dd8160eaecbfe77、8872PID3631277/app-dir/源码SHA前后一致。回执exports-acceptance、worker日志、terminal-probe与本地readback已收回产品项目audit/20261120-q4-terminal，未保存大正文。校验峰值RSS500388KiB，服务RSS281864→330892KiB；不能据单次通过断言全部OOM/慢写消除。
