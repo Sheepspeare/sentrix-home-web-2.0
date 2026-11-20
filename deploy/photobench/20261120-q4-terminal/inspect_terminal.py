@@ -125,7 +125,9 @@ def main():
     assert items.keys() == {q["qa_id"] for q in state["qa_snapshot"]["rows"]}
     parent_reader = SplitRunReader(ROOT, ROOT / PARENT)
     parent = parent_reader.state()
-    parent_items = {i["qa_id"]: i for i in parent["items"]}
+    inherited_ids = state["resume_context"]["inherited_qa_ids"]
+    assert len(inherited_ids) == len(set(inherited_ids)) == 196
+    parent_items = {i["qa_id"]: i for i in parent["items"] if i["qa_id"] in inherited_ids}
     assert len(parent_items) == 196 and state["scope_id"] == parent["scope_id"]
     # Inherited execution records may receive Judge fields; compare answers and trace references.
     fields = (
