@@ -992,6 +992,38 @@ class AppearanceRepository(Protocol):
         """
         ...
 
+    def is_sampled(self, person_id: str, face_instance_id: str, model_name: str) -> bool:
+        """这张脸是否已经由这个模型采过、且证据仍然有效（``status == 'confirmed'``）。
+
+        取样任务据此跳过已采过的脸：合并或重新确认只给新增的事件调模型。被驳回的证据
+        不算——重新采到之后它应当重新生效（``record`` 的原样行为）。
+        """
+        ...
+
+
+class PersonAppearanceJobRepository(Protocol):
+    """确认 / 合并之后的外观取样任务。一个人一行，重复入队合并；跑完即删。"""
+
+    def enqueue(self, person_id: str) -> None: ...
+
+    def claim_next(self) -> tuple[str, int] | None:
+        """取一个到期任务并标成 running，返回 ``(person_id, generation)``。"""
+        ...
+
+    def finish(self, person_id: str, generation: int) -> None:
+        """跑完。期间又入队过（generation 变了）就保留，留给下一轮。"""
+        ...
+
+    def fail(self, person_id: str, generation: int, error: str) -> None:
+        """失败：退避后重试，次数用完标为 failed。"""
+        ...
+
+    def requeue_running(self) -> int:
+        """启动时把上次进程退出时还在跑的任务放回队列。"""
+        ...
+
+    def status(self, person_id: str) -> str | None: ...
+
 
 class SemanticRepository(Protocol):
     """语义画像与声明。读侧是 S6 · T130，写侧是 S7a · T206。

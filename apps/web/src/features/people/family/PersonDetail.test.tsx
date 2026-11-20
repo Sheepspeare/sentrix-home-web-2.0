@@ -542,6 +542,27 @@ describe("PersonDetail 改名撞名时询问是否合并（隐藏式合并）", 
     expect(client.mergePeople).not.toHaveBeenCalled();
   });
 
+  it("确认身份在路上：按钮写「确认中…」，姓名与家庭角色锁住，回来后放开", async () => {
+    let resolve: (value: Awaited<ReturnType<typeof client.batchConfirmPeople>>) => void = () => undefined;
+    vi.mocked(client.batchConfirmPeople).mockReturnValue(new Promise((done) => { resolve = done; }));
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    mountFor(face, [face]);
+    typeName("老周");
+
+    const submit = await screen.findByRole("button", { name: "确认中…" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("家庭角色") as HTMLSelectElement).disabled).toBe(true);
+
+    resolve({
+      confirmed: [{ person_id: "face", entity_id: "face", name: "老周", family_role: null, merged: false }],
+      failed: [],
+      count: 1,
+    });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "确认中…" })).toBeNull());
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).disabled).toBe(false);
+  });
+
   it("取消：什么都不写，名字框保留刚输入的内容", async () => {
     mountFor(other(), [other(), wangA()]);
     typeName("王王");

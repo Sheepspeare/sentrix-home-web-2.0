@@ -18,6 +18,10 @@
  *
  * **只有身份段的写入锁整个侧栏**（改名 / 确认 / 合并 / 别名 / 移除）；关系与家庭归属按
  * 写入键各锁各的，保存一条关系时仍可以改名字。
+ *
+ * **确认身份只等身份本身**（2026-11-20）：外观取样（每个事件一次视觉模型调用）由后端在
+ * 请求之外跑，确认请求只剩写身份、挂提及、刷事件参与者。等待期间按钮写「确认中…」，姓名
+ * 与家庭角色一并锁住——此前框还能打字、按回车却静默无效，看起来像卡死。
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -129,6 +133,8 @@ export function PersonDetail({
 }: Props) {
   const pending = isPendingPerson(person);
   const [busy, setBusy] = useState(false);
+  // 确认身份在路上：按钮写「确认中…」。不复用 `busy`——标为路人、驳回也会锁侧栏。
+  const [confirming, setConfirming] = useState(false);
   const active = useRef(false);
   const [syncResult, setSyncResult] = useState<MemorySyncResult | null>(null);
   const [syncRetrying, setSyncRetrying] = useState(false);
@@ -305,6 +311,7 @@ export function PersonDetail({
     if (pending) {
       reportConfirm("started");
       let confirmedId = person.id;
+      setConfirming(true);
       void run(async () => {
         const outcome = await confirm(person.id, next, role);
         confirmedId = outcome.entity_id;
@@ -312,6 +319,7 @@ export function PersonDetail({
         if (confirmedId === person.id) onPersonPatched?.(person.id, { display_name: next, status: "confirmed" });
         return syncOfConfirm(outcome);
       }, { refresh: "none" }).then(async (ok) => {
+        setConfirming(false);
         reportConfirm(ok ? "ok" : "failed");
         if (!ok) return;
         // 并进了别人：先等图谱里有他，再跳过去；否则详情会因为找不到人短暂关掉。
@@ -361,6 +369,7 @@ export function PersonDetail({
   async function keepApart(current: NamesakePrompt) {
     active.current = true;
     setBusy(true);
+    setConfirming(current.mode === "confirm");
     try {
       if (current.mode === "confirm") {
         reportConfirm("started");
@@ -381,6 +390,7 @@ export function PersonDetail({
     } finally {
       active.current = false;
       setBusy(false);
+      setConfirming(false);
     }
   }
 
@@ -531,6 +541,7 @@ export function PersonDetail({
             <input
               value={name}
               placeholder={pending ? "这个人是谁？" : undefined}
+              disabled={busy}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={editKeyHandler({ onSubmit: () => submitName(), onCancel: () => setName(savedName) })}
             />
@@ -538,7 +549,12 @@ export function PersonDetail({
           {pending ? (
             <label>
               家庭角色（可选）
-              <select aria-label="家庭角色" value={familyRole} onChange={(event) => setFamilyRole(event.target.value)}>
+              <select
+                aria-label="家庭角色"
+                value={familyRole}
+                disabled={busy}
+                onChange={(event) => setFamilyRole(event.target.value)}
+              >
                 <option value="">暂不填写</option>
                 {FAMILY_ROLES.map((role) => (
                   <option key={role} value={role}>
@@ -551,7 +567,7 @@ export function PersonDetail({
           <div className="detail-actions">
             {pending ? (
               <button type="submit" className="button primary small" disabled={busy || name.trim() === ""}>
-                确认身份
+                {confirming ? "确认中…" : "确认身份"}
               </button>
             ) : (
               <button
@@ -563,7 +579,7 @@ export function PersonDetail({
               </button>
             )}
             {name === savedName ? null : (
-              <button type="button" className="button ghost small" onClick={() => setName(savedName)}>
+              <button type="button" className="button ghost small" disabled={busy} onClick={() => setName(savedName)}>
                 取消
               </button>
             )}

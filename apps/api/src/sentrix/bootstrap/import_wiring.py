@@ -15,9 +15,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sentrix.application.identity.appearance_sampling import AppearanceSamplingExecutor
 from sentrix.application.identity.enroll_face import EnrollFace, EnrollFaces
 from sentrix.application.identity.extract_moments import ExtractMoments
 from sentrix.application.identity.family_graph_service import FamilyGraphService
+from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.run_insights import RunInsights
 from sentrix.application.media.extract_video_scenes import ExtractVideoScenes, VideoSceneExtraction
 from sentrix.application.media.import_assets import ImportAssets, ImportResult, StagedImport
@@ -84,6 +86,23 @@ def build_correction_sync(container: Container) -> SyncCorrections:
             raise RuntimeError("因果边同步降级，请重试")
 
     return SyncCorrections(container.memory_corrections, reindex, graph)
+
+
+def build_appearance_sampling(container: Container) -> AppearanceSamplingExecutor:
+    """确认 / 合并之后的外观取样：后台线程逐人调视觉模型（请求里只入队）。"""
+    observe = ObserveAppearance(
+        faces=container.face_repository,
+        entities=container.entity_repository,
+        observations=container.observation_repository,
+        appearances=container.appearance_repository,
+        crops=container.person_crop_renderer,
+        vision=container.person_vision,
+    )
+    return AppearanceSamplingExecutor(
+        jobs=container.person_appearance_jobs,
+        entities=container.entity_repository,
+        observe=observe,
+    )
 
 
 def refresh_memory_graph(container: Container, scope_id: str) -> GraphBuildStats | None:

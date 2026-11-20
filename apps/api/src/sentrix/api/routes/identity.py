@@ -66,9 +66,9 @@ from sentrix.api.schemas.identity import (
     SeedIdentityResponse,
     SplitClusterRequest,
 )
+from sentrix.application.identity.appearance_sampling import QueueAppearance
 from sentrix.application.identity.merge_people import MergePeople
 from sentrix.application.identity.name_person import NamePerson
-from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.read_entity_detail import EntityDetail, ReadEntityDetail
 from sentrix.application.identity.read_entity_groups import (
     EntityGroup,
@@ -156,15 +156,10 @@ def _confirmed_person_events(container: Container) -> ConfirmedPersonEvents:
     )
 
 
-def _observe_appearance(container: Container) -> ObserveAppearance:
-    return ObserveAppearance(
-        faces=container.face_repository,
-        entities=container.entity_repository,
-        observations=container.observation_repository,
-        appearances=container.appearance_repository,
-        crops=container.person_crop_renderer,
-        vision=container.person_vision,
-    )
+def _request_appearance(container: Container) -> QueueAppearance:
+    """确认 / 合并之后的外观取样只入队：每个事件一次视觉模型调用（约 10 秒），
+    由 ``AppearanceSamplingExecutor`` 在请求之外跑（2026-11-20）。"""
+    return QueueAppearance(container.person_appearance_jobs)
 
 
 def _review_cluster(container: Container) -> ReviewCluster:
@@ -173,7 +168,7 @@ def _review_cluster(container: Container) -> ReviewCluster:
         entities=container.entity_repository,
         facts=container.fact_repository,
         events=_confirmed_person_events(container),
-        appearance=_observe_appearance(container),
+        appearance=_request_appearance(container),
     )
 
 
@@ -192,7 +187,7 @@ def _merge_people(container: Container) -> MergePeople:
         faces=container.face_repository,
         merges=container.person_merge_repository,
         events=_confirmed_person_events(container),
-        appearance=_observe_appearance(container),
+        appearance=_request_appearance(container),
     )
 
 

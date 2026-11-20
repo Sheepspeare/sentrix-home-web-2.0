@@ -38,6 +38,7 @@ from sentrix.domain.identity.ports import (
     FaceRepository,
     FamilyGraphRepository,
     MomentRepository,
+    PersonAppearanceJobRepository,
     PersonCropRenderer,
     PersonMergeRepository,
     PersonPreviewRenderer,
@@ -133,6 +134,7 @@ from sentrix.infrastructure.models.visual_utility import OpenAIVisualEvidenceUti
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.repositories.appearance import SqliteAppearanceRepository
+from sentrix.infrastructure.persistence.repositories.appearance_jobs import SqlitePersonAppearanceJobs
 from sentrix.infrastructure.persistence.repositories.asset_places import SqliteAssetPlaceRepository
 from sentrix.infrastructure.persistence.repositories.assets import (
     SqliteAssetRepository,
@@ -343,6 +345,8 @@ class Container:
     # 外观证据与人物画像的三个模型入口（S5c）。与 ``vlm_observer`` 共用同一个端点与
     # 同一份 ``ServedModel`` 探测；**构造它不建连接**，模型不可用时各方法返回 ``None``。
     appearance_repository: AppearanceRepository
+    # 确认 / 合并之后的外观取样任务：请求只入队，后台线程调模型（2026-11-20）。
+    person_appearance_jobs: PersonAppearanceJobRepository
     person_vision: PersonVision
     # 头肩裁剪件（Task 85c）。按端口声明，不写具体类——装配点的可替换性只在类型上
     # 才算数（module-map 开头那条不变量）。
@@ -677,6 +681,7 @@ class Container:
                 providers=settings.face_providers.split(","),
             ),
             appearance_repository=SqliteAppearanceRepository(database),
+            person_appearance_jobs=SqlitePersonAppearanceJobs(database),
             person_vision=OpenAIPersonVision(
                 vision_base_url,
                 vision_served,

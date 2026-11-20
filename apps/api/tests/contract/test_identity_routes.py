@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.person_directory import EntityPersonDirectory
 from sentrix.application.memories.sync_corrections import SyncCorrections
 from sentrix.bootstrap.assistant_wiring import build_run_turn
@@ -669,6 +670,52 @@ def test_batch_confirm_reports_each_item_and_keeps_going(identity_client: TestCl
     # 记忆图不在请求里重建：确认只排一条后台任务，进度按任务 id 查。
     job = identity_client.get(f"/api/v1/memories/corrections/jobs/{job_id}")
     assert job.json() == {"id": job_id, "status": "pending", "error": ""}
+
+
+def _forbid_appearance_in_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """外观取样（每个事件一次视觉模型调用）不许在请求里跑：一跑就炸。"""
+
+    def boom(self: ObserveAppearance, person_id: str) -> int:
+        raise AssertionError("外观取样不该在请求里跑")
+
+    monkeypatch.setattr(ObserveAppearance, "__call__", boom)
+
+
+def test_batch_confirm_queues_appearance_sampling_instead_of_running_it(
+    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """2026-11-20：确认一个出现在 16 个事件里的人，请求里串行调 18 次视觉模型、196 秒。"""
+    _forbid_appearance_in_request(monkeypatch)
+    add_entity(identity_client, "ent_ok", name="待确认人物簇 · cluster_1")
+    add_cluster(identity_client, "cluster_ok", entity_id="ent_ok", member_count=1)
+    add_instance(identity_client, "face_ok", cluster_id="cluster_ok")
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm", json={"items": [{"person_id": "ent_ok", "name": "妈妈"}]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert identity_client.app.state.container.person_appearance_jobs.status("ent_ok") == "pending"
+
+
+def test_merging_people_queues_appearance_sampling_instead_of_running_it(
+    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    _forbid_appearance_in_request(monkeypatch)
+    add_entity(identity_client, "ent_a", name="妈妈", status="confirmed")
+    add_entity(identity_client, "ent_b", name="母亲", status="confirmed")
+    add_cluster(identity_client, "cluster_a", status="confirmed", entity_id="ent_a", member_count=1)
+    add_cluster(identity_client, "cluster_b", status="confirmed", entity_id="ent_b", member_count=1)
+    add_instance(identity_client, "face_a", cluster_id="cluster_a")
+    add_instance(identity_client, "face_b", cluster_id="cluster_b")
+
+    response = identity_client.post(
+        "/api/v1/people/merge", json={"target_person_id": "ent_a", "source_person_ids": ["ent_b"]}
+    )
+
+    assert response.status_code == 200
+    assert identity_client.app.state.container.person_appearance_jobs.status("ent_a") == "pending"
 
 
 def test_batch_confirm_with_no_items_is_422(identity_client: TestClient):

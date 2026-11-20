@@ -26,7 +26,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sentrix.application.identity.observe_appearance import ObserveAppearance
+from sentrix.application.identity.observe_appearance import RequestAppearance
 from sentrix.application.memories.assign_events import ConfirmedPersonEvents
 from sentrix.domain.errors import DomainError
 from sentrix.domain.identity.models import (
@@ -123,13 +123,14 @@ class ReviewCluster:
         entities: EntityRepository,
         facts: FactRepository,
         events: ConfirmedPersonEvents,
-        appearance: ObserveAppearance,
+        appearance: RequestAppearance,
     ) -> None:
         self._faces = faces
         self._entities = entities
         self._facts = facts
         # 确认之后的外观取样（Task 85d）。与 ``events`` 同理，**不是可选回调**——
-        # 1.0 的 ``_refresh_confirmed_person`` 无条件调它。
+        # 1.0 的 ``_refresh_confirmed_person`` 无条件调它。生产装配的是「入队」：
+        # 每个事件一次视觉模型调用（约 10 秒），不能让确认请求等它（2026-11-20）。
         self._appearance = appearance
         # 确认之后的事件侧（参与者投影 + 重分段）。**不是可选参数**：一次确认如果不刷
         # 投影，事件里就查不到这个人，而那是「按人找照片」唯一的桥——少接一处不会报错。
