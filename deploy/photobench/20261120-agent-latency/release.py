@@ -81,6 +81,20 @@ def accept():
     probes = prior()
     _, environment = probes.process(UNIT)
     root = Path(environment["PHOTOBENCH_RESULTS_ROOT"])
+    from photobench.infrastructure.results.store import read_entry
+
+    status_started = time.perf_counter()
+    status_count = 0
+    for directory in sorted(root.iterdir()):
+        if (
+            directory.is_dir()
+            and not directory.name.startswith(".")
+            and ((directory / "split-commit.json").exists() or (directory / "run.json").exists())
+        ):
+            read_entry(directory, include_timing=False)
+            status_count += 1
+    status_elapsed = time.perf_counter() - status_started
+    assert status_elapsed < 20, f"Status-only startup scan took {status_elapsed}s"
     pointer = root / RUN / "split-commit.json"
     before = sha(pointer)
     reader = SplitRunReader(root, root / RUN)
@@ -103,6 +117,8 @@ def accept():
             "judge_valid_count": summary["judge_valid_count"],
             "evaluation_summary": summary["evaluation_summary"],
             "source_manifest_sha256": before,
+            "status_scan_seconds": round(status_elapsed, 3),
+            "status_scan_count": status_count,
         }
     finally:
         reader.reader.close()

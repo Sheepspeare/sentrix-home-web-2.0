@@ -196,9 +196,13 @@ def read_entry(run_dir: Path, *, include_timing: bool = True) -> dict[str, Any]:
             if evaluation is not None:
                 entry.setdefault("summary", {})["evaluation_summary"] = evaluation
             scoring = (entry.get("summary") or {}).get("scoring") or {}
-            if os.environ.get("PHOTOBENCH_SPLIT_RESULTS") != "1" and any(
-                batch.get("profile_id") == "atm_qs_v1" and "tool_list_qs" not in batch
-                for batch in (scoring.get("batches") or {}).values()
+            if (
+                include_timing
+                and os.environ.get("PHOTOBENCH_SPLIT_RESULTS") != "1"
+                and any(
+                    batch.get("profile_id") == "atm_qs_v1" and "tool_list_qs" not in batch
+                    for batch in (scoring.get("batches") or {}).values()
+                )
             ):
                 from photobench.domain.evaluation.profiles import scoring_summary
 
