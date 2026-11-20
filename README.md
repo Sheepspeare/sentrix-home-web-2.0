@@ -119,7 +119,7 @@ PHOTOBENCH_QA_CONCURRENCY=4 ...
 153 不设 profile（默认 `server`）；158 只需在启动时设
 `SENTRIX_DEPLOYMENT_PROFILE=mac`，再补齐上面这些部署项。
 
-### psh 合并后的模型与测评配置
+### 模型与测评配置
 
 拉取代码后，需在部署机器上补齐实际配置。仓库保留 `.example` 模板；本机配置和密钥单独保存。
 模型接入方式由 `SENTRIX_LLM_PROFILE=local|cloud` 选择，与上面的 `server|mac` 部署形态分别设置。
