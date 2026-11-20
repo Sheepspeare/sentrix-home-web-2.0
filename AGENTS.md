@@ -10,13 +10,13 @@
 
 - 11/20集成已提交main PR #43（feature/photobench-evaluation），含邮件测评、有限推理预算、长轨迹增量存储/懒加载及对话管理；README已补psh配置与推理说明，11:47已合并。08:44核Q4 852题/豆包155题正常运行，见T006及产品项目audit/20261120-main-pr。
 
-- 11/20 Q4仅Judge16补评已验：新增15有效分，总978；963原回执/答卷/34执行失败/18隔离保持，1 Judge自相矛盾留failed/null。8872独立上线后，原导出验收已留证终止；新同版流式验收worker3643570已先挂wake9eb8efb4（watch76813），尚待验收；豆包d52ecf原监控继续。见T006及产品项目audit/20261120-q4-terminal。
+- 11/20 Q4 3556c7已完成终态及完整在线trace/SFT验收：1013项/979执行完成/978有效ATM分，34执行失败和1 Judge失败保留空分，18隔离/原答卷与分保持。两完整流SHA一致且未落正文，wake9eb8efb4已处理；豆包d52ecf最新289题、原79d22271监控继续。见T006及产品项目audit/20261120-q4-terminal。
 
 - 11/20对话删除9363d4b已在1008294/8874上线并验空会话204/404及原数据保持；两端列表二次确认/活动会话409。8872测评端现已随7b34a75集成上线，8291产品保持原版。见T006与产品项目audit/20261120-conversation-delete。
 
 - 11/20 00:00轨迹查看4df9302前端在1008872/8874生效；8874当时已启后端，8872现已随7b34a75集成上线。后续版本与验收见audit/20261120-chat-trace-8872-release及T006。
 
-- 11/20 Qwen0bbacb的1013项/1012有效分/1真实失败及完整trace/SFT两导出已验收，原答卷与分/历史保持；Q4 3556c7原fd46ad08继续。豆包改复用历史媒体+新版邮件增量，入口audit/20261120-doubao-media-reuse及主实验state/checkpoint-watchers。
+- 11/20 Qwen0bbacb的1013项/1012有效分/1真实失败及完整trace/SFT两导出已验收，原答卷与分/历史保持；Q4 3556c7亦已验收（978有效分，34执行失败及1 Judge失败保留空分）；豆包继续复用历史媒体+新版邮件增量，入口audit/20261120-doubao-media-reuse及主实验state/checkpoint-watchers。
 
 
 - 默认中文、精炼客观。代码根目录为本文件所在目录。
@@ -33,4 +33,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | PR43已合main；8872聊天/节点耗时/分析已上线验收，8874原监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | PR43已合main、8872已上线；Qwen/Q4保留失败验收完成，豆包原监控运行 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
