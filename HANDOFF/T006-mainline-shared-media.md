@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 17:45｜Q4补做34题已验，仅剩一题Judge补评
+
+93efab的34个新attempt逐题核验通过，原979答卷及978有效回执、3556c7 manifest和18历史隔离保持。新增34份有效评分，当前1012/1013；新终止原因为17有缺口、9已回答、7步骤上限、1模型错误。2a22220b产品仍failed/model_error，返回153字且现有Judge自动评0，真实失败与分均保留，不把测评completed当产品成功，不再跑Agent。当前继承14隔离标记，另4个历史隔离QA使用独立新轨迹。
+
+02fd2b9/4215d86操作脚本先本机语法/ruff/格式/diff通过、commit，再同步100逐SHA验收并push。验收脚本初版误用产品completed枚举，按实际complete/partial等终态修正后通过，未写测评结果。仅继承9b7cf030缺Judge，预览1题1分；先新wake052e67ba-3934-4045-906c-d615d2ecaa04，再单次scoring-d202e367b4214b2db73735a03e9286fb，watcher45465首探running/worker_alive。
+
+8872/8291 PID3631277/1408374及实际目录/型号/100-600-100-500/QA4-3660保持，17:42/home约1.58GiB、内存约62GiB；未重启部署或再次checkpoint。豆包48727066/watcher25358原任务继续。新远端q4-supplement-terminal-v1的inspect/plan/launch已消费，accept未消费；回调单次验1012原有效分/全部答卷与失败history，若仍失败先读error_details，不改分、不再补Judge。之后新wake验完整在线trace/SFT两流，不落大正文。入口产品项目audit/20261120-q4-supplement/{README.md,delivery.json,watchers.json,terminal-inventory.json,terminal-outcome-review.json,scoring-plan.json,scoring-response.json}。不改8772/8191/153，不启动Hard/16题包。
+
 ## 2026-11-20 16:29｜豆包旧磁盘告警已解除，接续原run监控
 
 79d22271事件实际发生在16:19:44，当时豆包仍running，/home约1.38GiB。Q4 seed产生约1.2GB已提交WAL，16:20:43的单次checkpoint已经回收；16:27只读核/home约2.38GiB、WAL约56MiB、豆包356/1013及347有效分，四turn事件继续前进，worker/模型/独立库/预算/16K及两服务PID351254/351297保持。本轮未重启/重提交/切库，也未再次checkpoint。旧事件/触发快照及实际核对保留在产品项目audit/20261120-doubao-media-reuse/disk-alert-{trigger-snapshot,current-probe,review}.json。
