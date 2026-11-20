@@ -28,7 +28,7 @@ from photobench.infrastructure.results.store import FileRunStore
 
 HERE = Path(__file__).resolve().parent
 ACCEPT_DIR = Path("/home/realmagic/xy/experiments/atm1013-20261118/q4-supplement-terminal-v1")
-ARCHIVE_DIR = ACCEPT_DIR.parent / "doubao-disk-recovery-v1"
+ARCHIVE_DIR = ACCEPT_DIR.parent / "doubao-disk-recovery-v2"
 
 
 def save(name, value):
