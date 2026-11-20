@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from photobench.domain.datasets.qa_taxonomy import snapshot_metadata
-from photobench.domain.runs.analysis import effective_summary, run_list_entry
+from photobench.domain.runs.analysis import agent_timing_summary, effective_summary, run_list_entry
 from photobench.domain.runs.frozen_trace import TRACE_TYPES
 from photobench.domain.runs.task_history import execution_metadata
 from photobench.infrastructure.results.encoding import open_snapshot, read_snapshot, snapshot_file
@@ -190,11 +190,18 @@ def read_entry(run_dir: Path) -> dict[str, Any]:
 
                 state = read_snapshot(committed_path(run_dir, "run.json"))
                 entry.setdefault("summary", {})["scoring"] = scoring_summary(state)
+            if (entry.get("summary") or {}).get("agent_timing_version") != 2:
+                state = read_snapshot(committed_path(run_dir, "run.json"))
+                entry.setdefault("summary", {}).update(
+                    agent_timing_summary(
+                        state.get("items") or [], state.get("phases"), state.get("resume_context")
+                    )
+                )
             entry.update(execution_metadata(payload.get("overview") or {}))
             return entry
         path = run_dir / "run.json"
         stat = path.stat()
-        signature = [4, stat.st_ino, stat.st_size, stat.st_mtime_ns]
+        signature = [5, stat.st_ino, stat.st_size, stat.st_mtime_ns]
         index = run_dir / ".photobench-read-index.json"
         try:
             cached = json.loads(index.read_text(encoding="utf-8"))
@@ -409,6 +416,13 @@ class FileRunStore:
                     raise ValueError("invalid committed overview")
                 if "scoring" not in (overview.get("summary") or {}):
                     overview = _overview(self.load_state(run_id))
+                elif (overview.get("summary") or {}).get("agent_timing_version") != 2:
+                    state = self.load_state(run_id)
+                    overview.setdefault("summary", {}).update(
+                        agent_timing_summary(
+                            state.get("items") or [], state.get("phases"), state.get("resume_context")
+                        )
+                    )
             else:
                 overview = _overview(self.load_state(run_id))
             live_path = run_dir / "telemetry-live.json"

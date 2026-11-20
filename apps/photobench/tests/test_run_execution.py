@@ -422,6 +422,9 @@ def test_resume_judge_progress_counts_prior_terminal_results_and_new_skips(monke
     assert phase["progress"]["judge_skipped"] == 1
     assert phase["progress"]["judge_total"] == 3
     assert len(state.data["items"]) == 3
+    assert phase["agent_execution_total"] == 1
+    assert phase["agent_inherited_count"] == 2
+    assert phase["agent_executed_qa_ids"] == ["new-failed"]
 
 
 def test_cancelled_unscheduled_qa_is_not_reported_as_a_completed_agent_or_judge(monkeypatch):
@@ -2305,6 +2308,8 @@ def test_completed_judging_does_not_make_partial_import_valid(monkeypatch):
     assert state["items"][0]["judge_status"] == "completed"
     assert state["status"] == "completed_with_errors"
     assert state["run_valid"] is state["summary"]["run_valid"] is False
+
+
 def test_retest_publishes_real_events_during_poll_and_preserves_each_turn(monkeypatch):
     import copy
 
@@ -2377,3 +2382,112 @@ def test_retest_cancellation_keeps_last_real_progress(monkeypatch):
         )
     assert state.data["interactive_item"]["runtime_turns"][0]["trace"] == [{"text": "last event"}]
     assert state.data["phases"]["qa_eval"]["cancelled_operations"][0]["operation_id"] == "turn_1"
+
+
+@pytest.mark.parametrize("judge_only", [False, True])
+def test_agent_phase_excludes_judge_tail_and_keeps_exact_execution_scope(monkeypatch, judge_only):
+    rows = [{"qa_id": "q1"}]
+    execution, *_ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
+    judge_started = threading.Event()
+    release = threading.Event()
+
+    def judge_item(item, *_, **__):
+        judge_started.set()
+        assert release.wait(5)
+        return {**item, "judge_status": "completed"}
+
+    monkeypatch.setattr(
+        execution, "_judge", SimpleNamespace(judge_item=judge_item, needs_judge_recovery=lambda _: True)
+    )
+    monkeypatch.setattr(
+        execution,
+        "_evaluate_one",
+        lambda row, *_: {
+            "qa_id": row["qa_id"],
+            "execution_status": "completed",
+            "wall_clock_ms": 123,
+            "metrics_contract_version": 2,
+        },
+    )
+    prior = (
+        [
+            {
+                "qa_id": "q1",
+                "execution_status": "completed",
+                "wall_clock_ms": 999,
+                "metrics_contract_version": 2,
+            }
+        ]
+        if judge_only
+        else []
+    )
+    state = RunState({"scope_id": "s", "qa_snapshot": {"rows": rows}})
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            execution._phase_qa_eval, state, _request(prior_items=prior, repair_missing_judges=judge_only)
+        )
+        try:
+            assert judge_started.wait(2)
+            phase = dict(state.data["phases"]["qa_eval"])
+            assert phase["agent_execution_total"] == (0 if judge_only else 1)
+            assert phase["agent_executed_qa_ids"] == ([] if judge_only else ["q1"])
+            assert "agent_phase_finished_at" in phase
+            wall = phase["agent_phase_wall_ms"]
+            finished = phase["agent_phase_finished_at"]
+        finally:
+            release.set()
+        future.result(timeout=5)
+    assert state.data["phases"]["qa_eval"]["agent_phase_wall_ms"] == wall
+    assert state.data["phases"]["qa_eval"]["agent_phase_finished_at"] == finished
+    if judge_only:
+        assert wall == 0
+
+
+def test_throughput_subtracts_only_idle_agent_wait_for_judge_backpressure(monkeypatch):
+    from photobench.application.run_execution import service
+    from photobench.domain.runs.analysis import agent_timing_summary
+
+    clock = [0.0]
+    monkeypatch.setattr(service.time, "perf_counter", lambda: clock[0])
+    rows = [{"qa_id": f"q{i}"} for i in range(5)]
+    execution, *_ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
+    waiting = threading.Event()
+    release = threading.Event()
+
+    def evaluate(row, *_):
+        clock[0] += 1
+        return {
+            "qa_id": row["qa_id"],
+            "execution_status": "completed",
+            "wall_clock_ms": 1000,
+            "metrics_contract_version": 2,
+        }
+
+    def judge_item(item, *_):
+        assert release.wait(5)
+        return {**item, "judge_status": "completed"}
+
+    monkeypatch.setattr(execution, "_evaluate_one", evaluate)
+    monkeypatch.setattr(execution, "_judge", SimpleNamespace(judge_item=judge_item))
+    state = RunState({"scope_id": "s", "qa_snapshot": {"rows": rows}})
+
+    def persist(*_, **__):
+        if state.data["phases"]["qa_eval"].get("agent_completed") == 3:
+            waiting.set()
+
+    monkeypatch.setattr(state, "persist", persist)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            execution._phase_qa_eval, state, _request(qa_concurrency=1, judge_backpressure=True)
+        )
+        try:
+            assert waiting.wait(2)
+            clock[0] += 10
+        finally:
+            release.set()
+        future.result(timeout=5)
+    phase = state.data["phases"]["qa_eval"]
+    assert phase["agent_phase_wall_ms"] == 15000
+    assert phase["agent_judge_only_wait_ms"] == 10000
+    result = agent_timing_summary(state.data["items"], state.data["phases"])
+    assert result["agent_throughput_latency_ms"] == 1000

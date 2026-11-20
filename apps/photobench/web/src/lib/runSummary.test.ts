@@ -188,3 +188,12 @@ it("JSON对象新指标汇总真实解析分母，零成功保持0，历史无�
   expect(result.structured_json_rate).toBe(0);
   expect(effectiveRunSummary({ items: [] } as unknown as Run).structured_json_rate).toBeNull();
 });
+
+it("仅补评分时保留后端明确的空时延，不从继承答卷补值", () => {
+  const result = effectiveRunSummary({
+    summary: { agent_timing_version: 2, agent_task_latency_mean_ms: null, agent_phase_completed_count: 0, agent_throughput_latency_mode: "not_applicable" },
+    items: [{ metrics_contract_version: 2, wall_clock_ms: 8000 }],
+  } as unknown as Run);
+  expect(result.agent_task_latency_mean_ms).toBeNull();
+  expect(result.agent_phase_completed_count).toBe(0);
+});

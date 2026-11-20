@@ -2265,6 +2265,47 @@ class RunExecution:
             if (prior := prior_by_qa.get(str(row.get("qa_id")))) is not None
         }
         pending_rows = [(index, row) for index, row in enumerate(rows) if index not in items]
+        state.record_phase("qa_eval", "agent_timing_version", 2)
+        state.record_phase("qa_eval", "agent_execution_total", len(pending_rows))
+        state.record_phase("qa_eval", "agent_inherited_count", len(items))
+        state.record_phase("qa_eval", "agent_executed_qa_ids", [])
+        state.record_phase("qa_eval", "agent_judge_only_wait_ms", 0.0)
+        timing_lock = threading.Lock()
+        last_agent_finished: float | None = None
+        agent_finished_count = 0
+        last_agent_finished_at: str | None = None
+        agent_finished_at: str | None = None
+        judge_wait_started: float | None = None
+        judge_wait_seconds = 0.0
+
+        def record_agent_timing(*, finished: bool = False) -> None:
+            nonlocal agent_finished_at
+            end = last_agent_finished if finished else time.perf_counter()
+            elapsed = max(0.0, (end or agent_phase_started) - agent_phase_started)
+            waiting = judge_wait_seconds
+            if judge_wait_started is not None:
+                waiting += max(0.0, (end or agent_phase_started) - judge_wait_started)
+            state.record_phase("qa_eval", "agent_phase_wall_ms", round(elapsed * 1000, 1))
+            state.record_phase("qa_eval", "agent_judge_only_wait_ms", round(waiting * 1000, 1))
+            if finished:
+                agent_finished_at = agent_finished_at or last_agent_finished_at or now_iso()
+                state.record_phase("qa_eval", "agent_phase_finished_at", agent_finished_at)
+
+        def evaluate_agent(row: dict[str, Any]) -> dict[str, Any]:
+            nonlocal last_agent_finished, last_agent_finished_at, agent_finished_count
+            with timing_lock, state.lock:
+                state.data["phases"]["qa_eval"]["agent_executed_qa_ids"].append(row.get("qa_id"))
+            try:
+                return self._evaluate_one(row, scope_id, assets_by_name, request)
+            finally:
+                with timing_lock:
+                    last_agent_finished = time.perf_counter()
+                    last_agent_finished_at = now_iso()
+                    agent_finished_count += 1
+                    record_agent_timing(finished=agent_finished_count == len(pending_rows))
+
+        if not pending_rows:
+            record_agent_timing(finished=True)
         judge_futures: dict[concurrent.futures.Future[dict[str, Any]], int] = {}
         recovery_indices = {
             index
@@ -2386,13 +2427,18 @@ class RunExecution:
                 max_workers=concurrency, thread_name_prefix="qa-agent"
             ) as executor:
                 queue = iter(pending_rows)
-                queue_exhausted = False
+                queue_exhausted = not pending_rows
+                submitted_count = 0
                 futures: dict[concurrent.futures.Future[dict[str, Any]], int] = {}
 
                 def fill_agent_slots() -> None:
-                    nonlocal queue_exhausted
+                    nonlocal queue_exhausted, submitted_count, judge_wait_started, judge_wait_seconds
+                    if judge_wait_started is not None:
+                        judge_wait_seconds += time.perf_counter() - judge_wait_started
+                        judge_wait_started = None
                     while (
-                        len(futures) < concurrency
+                        not queue_exhausted
+                        and len(futures) < concurrency
                         and (
                             not request.judge_backpressure
                             or len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
@@ -2404,16 +2450,16 @@ class RunExecution:
                             queue_exhausted = True
                             break
                         index, row = next_row
-                        futures[
-                            executor.submit(self._evaluate_one, row, scope_id, assets_by_name, request)
-                        ] = index
+                        submitted_count += 1
+                        queue_exhausted = submitted_count == len(pending_rows)
+                        futures[executor.submit(evaluate_agent, row)] = index
+
+                    if not futures and not queue_exhausted and not state.cancelled:
+                        judge_wait_started = time.perf_counter()
 
                 fill_agent_slots()
                 # Drain both pools as work completes. Waiting only on Agent futures
                 # withholds scores for the whole album when one Agent is slow.
-                if not futures:
-                    state.record_phase("qa_eval", "agent_phase_finished_at", now_iso())
-                    state.record_phase("qa_eval", "agent_phase_wall_ms", 0.0)
                 while futures or judge_futures:
                     if state.cancelled:
                         for pending in (*futures, *judge_futures):
@@ -2491,16 +2537,11 @@ class RunExecution:
                                 judge_futures[judge_pool.submit(run_judge, item, rows[index])] = index
                         items[index] = item
                         fill_agent_slots()
-                        if not futures and queue_exhausted:
-                            state.record_phase("qa_eval", "agent_phase_finished_at", now_iso())
-                            state.record_phase(
-                                "qa_eval",
-                                "agent_phase_wall_ms",
-                                round((time.perf_counter() - agent_phase_started) * 1000, 1),
-                            )
                         record_progress()
                         state.persist()
         finally:
+            with timing_lock:
+                record_agent_timing(finished=True)
             if judge_pool is not None:
                 judge_pool.shutdown(wait=True)
             if judge_bounds:

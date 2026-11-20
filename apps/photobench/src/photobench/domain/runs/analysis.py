@@ -1177,8 +1177,102 @@ def aggregate_delivery(items: Sequence[dict[str, Any]]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def agent_timing_summary(
+    items: Sequence[dict[str, Any]],
+    phases: Mapping[str, Any] | None = None,
+    resume_context: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Use one execution batch for both Agent latency metrics, including historical resumes."""
+
+    def _flat_ms(item: Mapping[str, Any], key: str) -> float | None:
+        return numeric_ms(item.get(key))
+
+    agent_throughput_ms = None
+    agent_phase_wall_ms = numeric_ms((phases or {}).get("qa_eval", {}).get("agent_phase_wall_ms"))
+    phase = (phases or {}).get("qa_eval") or {}
+    inherited_ids = set((resume_context or {}).get("inherited_qa_ids") or [])
+    executed_ids = phase.get("agent_executed_qa_ids")
+    if isinstance(executed_ids, list):
+        executed_set = set(executed_ids)
+        batch_items = [item for item in items if item.get("qa_id") in executed_set]
+        inherited_count = phase.get("agent_inherited_count", len(inherited_ids))
+    else:
+        batch_items = [item for item in items if item.get("qa_id") not in inherited_ids]
+        inherited_count = len(inherited_ids)
+    batch_items = [
+        item
+        for item in batch_items
+        if item.get("execution_status") not in {"scheduled", "running", "pending"}
+    ]
+    agent_phase_count = len(batch_items)
+    judge_wait_ms = numeric_ms(phase.get("agent_judge_only_wait_ms"))
+    agent_observed_wall_ms = agent_phase_wall_ms
+    if agent_phase_wall_ms is not None and judge_wait_ms is not None:
+        agent_phase_wall_ms = max(0.0, agent_phase_wall_ms - judge_wait_ms)
+    if agent_phase_wall_ms is not None and agent_phase_wall_ms > 0 and agent_phase_count > 0:
+        agent_throughput_ms = round(agent_phase_wall_ms / agent_phase_count, 1)
+        agent_throughput_mode = "measured_agent_phase"
+    # Overlapping Judge intervals cannot be subtracted from Agent wall time.
+    # Legacy runs without a measured Agent stage have no defensible throughput.
+    else:
+        agent_throughput_mode = "unavailable"
+    if not agent_phase_count and (
+        phase.get("agent_execution_total") == 0 or (not isinstance(executed_ids, list) and inherited_ids)
+    ):
+        agent_throughput_mode = "not_applicable"
+    agent_wall_times: list[float] = []
+    batch_wall_times: list[float] = []
+    batch_item_ids = {id(item) for item in batch_items}
+    for item in items:
+        saved = item.get("timing_breakdown")
+        if isinstance(saved, dict) and isinstance(saved.get("agent_wall_ms"), (int, float)):
+            agent_wall_times.append(float(saved["agent_wall_ms"]))
+            if id(item) in batch_item_ids:
+                batch_wall_times.append(agent_wall_times[-1])
+            continue
+        previous_count = len(agent_wall_times)
+        wall = _flat_ms(item, "wall_clock_ms")
+        judge = _flat_ms(item, "judge_ms")
+        # PhotoBench 2.0 records the Agent before submitting its asynchronous Judge.
+        if wall is not None and ("agent2_trace" in item or item.get("metrics_contract_version") == 2):
+            agent_wall_times.append(wall)
+        elif wall is not None and judge is not None:
+            agent_wall_times.append(max(0.0, wall - judge))
+        elif wall is not None:
+            agent_wall_times.append(wall)
+        if id(item) in batch_item_ids and len(agent_wall_times) > previous_count:
+            batch_wall_times.append(agent_wall_times[-1])
+    return {
+        "agent_task_latency_mean_ms": round(sum(batch_wall_times) / len(batch_wall_times), 1)
+        if batch_wall_times
+        else None,
+        "agent_timing_version": 2,
+        "agent_timing_scope": "current_execution",
+        "agent_task_latency_sample_count": len(batch_wall_times),
+        "agent_inherited_count": inherited_count,
+        "agent_all_answers_latency_mean_ms": round(sum(agent_wall_times) / len(agent_wall_times), 1)
+        if agent_wall_times
+        else None,
+        "agent_all_answers_latency_sample_count": len(agent_wall_times),
+        "agent_observed_phase_wall_ms": agent_observed_wall_ms,
+        "agent_judge_only_wait_ms": judge_wait_ms,
+        "agent_judge_wait_accounted": judge_wait_ms is not None,
+        "agent_throughput_latency_ms": agent_throughput_ms,
+        "agent_throughput_latency_mode": agent_throughput_mode,
+        "agent_phase_wall_ms": agent_phase_wall_ms,
+        "agent_phase_completed_count": agent_phase_count if agent_phase_wall_ms is not None else None,
+        "agent_throughput_qa_per_s": round(1000 * agent_phase_count / agent_phase_wall_ms, 3)
+        if agent_phase_wall_ms and agent_phase_count
+        else None,
+        "agent_throughput_latency_sample_count": agent_phase_count,
+        "agent_throughput_latency_total_count": len(items),
+    }
+
+
 def capability_summary(
-    items: Sequence[dict[str, Any]], phases: dict[str, Any] | None = None
+    items: Sequence[dict[str, Any]],
+    phases: dict[str, Any] | None = None,
+    resume_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """1.0 ``:4639`` 的 ``BenchmarkRun._capability_summary``。"""
     answer_judges = [item.get("judge") or {} for item in items]
@@ -1296,14 +1390,7 @@ def capability_summary(
         float(item["wall_clock_ms"]) for item in items if isinstance(item.get("wall_clock_ms"), (int, float))
     ]
 
-    # **`timing_breakdown` 是 1.0 的存档字段，2.0 的 run 从来不写它。** 只读它的话，
-    # `judge_llm_latency_mean_ms` / `agent_task_latency_mean_ms` 恒为 None——
-    # 8772 页面上那两行有位置、没数字。2.0 的真实来源是 item 级的 `judge_ms`
-    # 与 `wall_clock_ms`（后者减去前者就是 agent 的墙钟）。
-    def _flat_ms(item: Mapping[str, Any], key: str) -> float | None:
-        value = item.get(key)
-        return float(value) if isinstance(value, (int, float)) else None
-
+    # Legacy nested timings and current flat timings remain readable.
     judge_times: list[float] = []
     for item in items:
         saved = item.get("timing_breakdown")
@@ -1312,12 +1399,6 @@ def capability_summary(
         elif isinstance(item.get("judge_ms"), (int, float)):
             judge_times.append(float(item["judge_ms"]))
     judge_exclusive_ms = None
-    agent_throughput_ms = None
-    agent_throughput_mode = "historical_interval_estimate"
-    agent_phase_wall_ms = numeric_ms((phases or {}).get("qa_eval", {}).get("agent_phase_wall_ms"))
-    agent_phase_count = (phases or {}).get("qa_eval", {}).get("agent_completed")
-    if not isinstance(agent_phase_count, int) or agent_phase_count <= 0:
-        agent_phase_count = len(items)
     timelines = [(item.get("timing_breakdown") or {}).get("timeline") or {} for item in items]
     spans = [
         (tl.get("started_at_epoch"), tl.get("judge_started_at_epoch"), tl.get("judge_finished_at_epoch"))
@@ -1357,30 +1438,6 @@ def capability_summary(
             else:
                 merged.append([a, b])
         judge_exclusive_ms = round(sum(b - a for a, b in merged) * 1000, 1)
-    if agent_phase_wall_ms is not None and agent_phase_wall_ms > 0 and agent_phase_count > 0:
-        agent_throughput_ms = round(agent_phase_wall_ms / agent_phase_count, 1)
-        agent_throughput_mode = "measured_agent_phase"
-    # Overlapping Judge intervals cannot be subtracted from Agent wall time.
-    # Legacy runs without a measured Agent stage have no defensible throughput.
-    else:
-        agent_throughput_mode = "unavailable"
-    judge_phase = (phases or {}).get("qa_eval") or {}
-    judge_phase_wall_ms = numeric_ms(judge_phase.get("judge_phase_wall_ms"))
-    agent_wall_times: list[float] = []
-    for item in items:
-        saved = item.get("timing_breakdown")
-        if isinstance(saved, dict) and isinstance(saved.get("agent_wall_ms"), (int, float)):
-            agent_wall_times.append(float(saved["agent_wall_ms"]))
-            continue
-        wall = _flat_ms(item, "wall_clock_ms")
-        judge = _flat_ms(item, "judge_ms")
-        # PhotoBench 2.0 records the Agent before submitting its asynchronous Judge.
-        if wall is not None and ("agent2_trace" in item or item.get("metrics_contract_version") == 2):
-            agent_wall_times.append(wall)
-        elif wall is not None and judge is not None:
-            agent_wall_times.append(max(0.0, wall - judge))
-        elif wall is not None:
-            agent_wall_times.append(wall)
     agent_loop_counts = [
         sum(
             1
@@ -1519,24 +1576,11 @@ def capability_summary(
         "e2e_latency_p50_ms": nearest_rank_percentile(wall_times, 0.5),
         "e2e_latency_p95_ms": nearest_rank_percentile(wall_times, 0.95),
         "e2e_latency_max_ms": max(wall_times) if wall_times else None,
-        "agent_task_latency_mean_ms": round(sum(agent_wall_times) / len(agent_wall_times), 1)
-        if agent_wall_times
-        else None,
+        **agent_timing_summary(items, phases, resume_context),
         "judge_llm_latency_mean_ms": round(sum(judge_times) / len(judge_times), 1) if judge_times else None,
         "judge_exclusive_wall_ms": judge_exclusive_ms,
-        "judge_phase_wall_ms": judge_phase_wall_ms,
-        "judge_concurrency": judge_phase.get("judge_concurrency"),
-        "agent_throughput_latency_ms": agent_throughput_ms,
-        "agent_throughput_latency_mode": agent_throughput_mode,
-        "agent_phase_wall_ms": agent_phase_wall_ms,
-        "agent_phase_completed_count": agent_phase_count if agent_phase_wall_ms is not None else None,
-        "agent_throughput_qa_per_s": round(1000 * agent_phase_count / agent_phase_wall_ms, 3)
-        if agent_phase_wall_ms and agent_phase_count
-        else None,
-        "agent_throughput_latency_sample_count": agent_phase_count
-        if agent_phase_wall_ms is not None
-        else len(judge_spans),
-        "agent_throughput_latency_total_count": len(items),
+        "judge_phase_wall_ms": numeric_ms(((phases or {}).get("qa_eval") or {}).get("judge_phase_wall_ms")),
+        "judge_concurrency": ((phases or {}).get("qa_eval") or {}).get("judge_concurrency"),
         "agent_loop_calls_mean": round(sum(agent_loop_counts) / len(agent_loop_counts), 3)
         if agent_loop_counts
         else None,
@@ -1611,9 +1655,12 @@ def list_summary(state: dict[str, Any]) -> dict[str, Any]:
             "answer_quality_mean": round(sum(scores) / len(scores), 3) if scores else None,
         }
     )
-    for key, value in capability_summary(items, state.get("phases") or {}).items():
+    for key, value in capability_summary(
+        items, state.get("phases") or {}, state.get("resume_context")
+    ).items():
         if (
-            key == "retrieval_recall_mean"
+            key.startswith("agent_")
+            or key == "retrieval_recall_mean"
             or key.startswith(
                 (
                     "retrieval_",
@@ -1824,9 +1871,12 @@ def effective_summary(state: dict[str, Any]) -> dict[str, Any]:
             "graph_qa_by_type": aggregate_graph_qa_by_type(items),
         }
     )
-    for key, value in capability_summary(items, state.get("phases") or {}).items():
+    for key, value in capability_summary(
+        items, state.get("phases") or {}, state.get("resume_context")
+    ).items():
         if (
-            key == "retrieval_recall_mean"
+            key.startswith("agent_")
+            or key == "retrieval_recall_mean"
             or key.startswith(
                 (
                     "retrieval_",

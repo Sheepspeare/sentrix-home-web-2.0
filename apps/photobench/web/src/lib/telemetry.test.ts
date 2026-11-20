@@ -562,3 +562,17 @@ it("取消后的partial遥测保持部分采集标记", () => {
     status: "partial", partial: true, samples_count: 10, collection_end_reason: "cancelled",
   } } })).toMatchObject({ status: "partial", partial: true, collection_end_reason: "cancelled" });
 });
+
+
+it("续跑两处吞吐说明一致并标出继承范围，补评分显示不适用", () => {
+  const summary = { agent_timing_version: 2, agent_throughput_latency_mode: "measured_agent_phase", agent_phase_completed_count: 34, agent_inherited_count: 979, agent_judge_wait_accounted: false };
+  const aggregate = aggregateMetricRows({ qa_concurrency: 4 }, summary).find(row => row[0] === "Agent 并发吞吐折算时延");
+  const card = keyMetricRows({ qa_concurrency: 4 }, summary).find(row => row.label === "Agent 并发吞吐折算时延");
+  expect(aggregate?.[2]).toBe(card?.note);
+  expect(card?.note).toContain("34 题");
+  expect(card?.note).toContain("继承 979 题不计入");
+  expect(card?.note).toContain("无法扣除");
+  const judgeOnly = aggregateMetricRows({}, { agent_throughput_latency_mode: "not_applicable" });
+  expect(judgeOnly.find(row => row[0] === "平均任务完成时间")?.[1]).toBe("不适用");
+  expect(judgeOnly.find(row => row[0] === "Agent 并发吞吐折算时延")?.[1]).toBe("不适用");
+});

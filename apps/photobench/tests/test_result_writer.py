@@ -90,3 +90,31 @@ def test_a_run_id_that_escapes_the_results_root_is_refused(tmp_path: Path, run_i
         writer.write_snapshot(run_id, STATE)
     with pytest.raises(KeyError):
         writer.append_gpu_sample(run_id, {"index": 0})
+
+
+def test_old_committed_metadata_latency_recomputes_without_modifying_snapshot(tmp_path, monkeypatch):
+    from photobench.domain.runs import analysis
+    from photobench.infrastructure.results.store import FileRunStore, committed_path, read_entry
+
+    fixture = {
+        "run_id": "legacy-latency",
+        "status": "completed",
+        "items": [
+            {"qa_id": "old", "wall_clock_ms": 9000, "metrics_contract_version": 2},
+            {"qa_id": "new", "wall_clock_ms": 6000, "metrics_contract_version": 2},
+        ],
+        "resume_context": {"inherited_qa_ids": ["old"]},
+        "phases": {"qa_eval": {"agent_phase_wall_ms": 4000, "agent_completed": 2}},
+    }
+    monkeypatch.setenv("PHOTOBENCH_SPLIT_RESULTS", "0")
+    original = analysis.agent_timing_summary
+    monkeypatch.setattr(analysis, "agent_timing_summary", lambda *_: {"agent_throughput_latency_ms": 2000})
+    FileResultWriter(tmp_path).write_snapshot("legacy-latency", fixture)
+    monkeypatch.setattr(analysis, "agent_timing_summary", original)
+    directory = tmp_path / "legacy-latency"
+    metadata = committed_path(directory, "metadata.json")
+    before = metadata.read_bytes()
+    for result in [read_entry(directory), FileRunStore(tmp_path).load_overview("legacy-latency")]:
+        assert result["summary"]["agent_throughput_latency_ms"] == 4000
+        assert result["summary"]["agent_task_latency_mean_ms"] == 6000
+    assert metadata.read_bytes() == before

@@ -641,19 +641,26 @@ export function memoryProfileRows(rawProfile: unknown = {}): MetricRow[] {
  *     真正用的是 `effectiveRunSummary(activeRun.value)` 与 `activeRun.value.qa_concurrency`。
  *     这里改成 `(run, summary)`，`summary` 由调用方传 `effectiveRunSummary(run)` 的结果。
  */
+function agentThroughputNote(r: Record<string, any>, s: Record<string, any>): string {
+  if (s.agent_throughput_latency_mode === "not_applicable") return "本次没有执行 Agent 作答，仅继承答卷或补充评分";
+  if (s.agent_throughput_latency_mode === "measured_agent_phase") {
+    const scope = `本次实际墙钟 ÷ ${s.agent_phase_completed_count ?? s.total ?? 0} 题 · 并发 ${r.qa_concurrency ?? "-"}`;
+    const inherited = Number(s.agent_inherited_count) > 0 ? ` · 继承 ${s.agent_inherited_count} 题不计入` : "";
+    const judge = s.agent_judge_wait_accounted
+      ? ` · 已排除裁判收尾及仅等待裁判的 ${fmtMs(s.agent_judge_only_wait_ms)}`
+      : " · 不含裁判收尾；历史记录未单独记录裁判积压等待，无法扣除";
+    return scope + inherited + judge;
+  }
+  return "历史记录未保存 Agent 独立阶段墙钟，不能视为实测";
+}
+
 export function aggregateMetricRows(run: unknown, summary: unknown): MetricRow[] {
   const r = dict(run);
   const s = dict(summary);
   const evaluation = dict(s.evaluation_summary);
   const dist = dict(s.judge_distribution);
   const evidenceDist = dict(s.evidence_distribution);
-  const throughputSamples = Number(s.agent_throughput_latency_sample_count);
-  const throughputTotal = Number(s.agent_throughput_latency_total_count ?? s.total);
-  const throughputNote = s.agent_throughput_latency_mode === "measured_agent_phase"
-    ? `Agent 阶段实际墙钟 ÷ ${s.agent_phase_completed_count ?? throughputTotal} 题 · 并发 ${r.qa_concurrency ?? "-"} · 不含 Judge，Judge 可与 Agent 并行`
-    : Number.isFinite(throughputSamples) && Number.isFinite(throughputTotal)
-      ? `历史记录按 Agent/Judge 时间线回退估算 · ${throughputSamples}/${throughputTotal} 题，不能视为实测`
-      : "历史记录未保存 Agent 独立阶段墙钟";
+  const throughputNote = agentThroughputNote(r, s);
   const typedMediaMetrics = s.retrieval_metric_scope === "all_media";
   return [
     [typedMediaMetrics ? "媒体检索 Precision" : "历史图片检索 Precision", fmtPct(s.retrieval_precision_macro), `交付准确率：模型拿出来交付的图里有多少属于 GT · 逐 QA 求值后平均 · ${s.retrieval_metric_count ?? 0} 题有 GT · 排除 ${s.retrieval_excluded_unanswerable_count ?? 0} 道不可回答题`, true],
@@ -663,13 +670,12 @@ export function aggregateMetricRows(run: unknown, summary: unknown): MetricRow[]
     ["工具参数 JSON 解析率", fmtPct(s.tool_argument_json_rate), s.tool_argument_json_total == null ? "未记录或未调用原生工具；普通文本回答不进入分母" : `${s.tool_argument_json_success}/${s.tool_argument_json_total} 次原生工具参数`, true],
     ["JSON 对象解析率", s.structured_json_rate == null ? "未记录" : fmtPct(s.structured_json_rate), s.structured_json_requested == null ? "未记录：历史调用未采集 JSON 输出契约；自由文本不计入分母" : `明确要求 JSON 对象的规划、核验、工具内部及 Judge 调用；每次重试单独统计 · 解析成功 ${s.structured_json_success ?? 0}/${s.structured_json_total ?? 0} · 要求 JSON ${s.structured_json_requested} 次；无响应不计解析分母`, true],
     ["旧 JSON 动作解析率", fmtPct(s.json_parse_success_rate), s.json_parse_total == null ? "旧 JSON 动作协议；原生工具模式未适用，旧结果缺失事实时未记录" : `需要结构化输出的调用里一次解析成功的比例，衡量格式稳定性 · ${s.json_parse_success ?? 0}/${s.json_parse_total} 个`, true],
-    ["Agent 并发吞吐折算时延", fmtMs(s.agent_throughput_latency_ms), throughputNote, true],
+    ["Agent 并发吞吐折算时延", s.agent_throughput_latency_mode === "not_applicable" ? "不适用" : fmtMs(s.agent_throughput_latency_ms), throughputNote, true],
     ["平均调用轮数", s.agent_loop_calls_mean == null ? "未记录" : `${Number(s.agent_loop_calls_mean).toFixed(2)} 轮`, `每道题平均经历几轮模型调用，轮数越高越可能在反复试探 · 仅 Agent/Recovery，不含 L2 Judge、Final Writer 和工具内部模型`, true],
     ["累计输入 token", fmtTokens(s.prompt_tokens_total), "所有主 Agent 调用喂进去的 prompt token 总量，用于估算上下文成本", true],
     ["累计输出 token", fmtTokens(s.completion_tokens_total), "所有主 Agent 调用生成的 token 总量，用于估算生成成本与耗时", true],
-    ["平均任务完成时间", fmtMs(s.agent_task_latency_mean_ms), r.qa_concurrency > 1
-      ? `每道 QA 各自计时的平均值（输入→最终回答，不含 Judge）；并发 ${r.qa_concurrency} 负载下含排队与批内干扰，勿与串行 run 直接对比`
-      : "每道 QA 各自计时的平均值（输入→最终回答，不含 Judge）", true],
+    ["平均任务完成时间", s.agent_throughput_latency_mode === "not_applicable" ? "不适用" : fmtMs(s.agent_task_latency_mean_ms),
+      `本次作答 ${s.agent_task_latency_sample_count ?? "-"} 题的平均耗时；从取得测评执行槽位到收齐回答，不含裁判。包含产品和模型服务内排队，不含等待测评槽位。${Number(s.agent_inherited_count) > 0 ? `继承 ${s.agent_inherited_count} 题；全部答卷平均 ${fmtMs(s.agent_all_answers_latency_mean_ms)}。` : ""}`, true],
     [typedMediaMetrics ? "媒体检索 F1" : "历史图片检索 F1", fmtPct(s.retrieval_f1_macro), "Precision 与 Recall 的调和平均，任一侧失衡都会明显拉低 · 逐 QA 计算后等权平均"],
     ["图片检索 P / R / F1", `${fmtPct(s.image_retrieval_precision_macro)} / ${fmtPct(s.image_retrieval_recall_macro)} / ${fmtPct(s.image_retrieval_f1_macro)}`, typedMediaMetrics ? `只看图片的交付口径 P/R/F1 · ${s.image_retrieval_metric_count ?? 0} 题含图片 GT · 逐 QA 平均` : "只看图片的交付口径 · 历史图片口径 · 逐 QA 平均"],
     ["视频检索 P / R / F1", typedMediaMetrics ? `${fmtPct(s.video_retrieval_precision_macro)} / ${fmtPct(s.video_retrieval_recall_macro)} / ${fmtPct(s.video_retrieval_f1_macro)}` : "未记录", typedMediaMetrics ? `只看视频的交付口径 P/R/F1 · ${s.video_retrieval_metric_count ?? 0} 题含视频 GT · 逐 QA 平均` : "只看视频的交付口径 · 历史 run 无 typed media，禁止推测"],
@@ -730,9 +736,7 @@ export function keyMetricRows(run: unknown, summary: unknown): KeyMetric[] {
     : isOrin
       ? "主模型 GPU/UMA 分配采样峰值；来源以原采样记录为准，与进程内存可能重叠，不相加"
       : "主模型进程组显存采样峰值 · NVML 按模型 PID 汇总；与主机内存分开记录";
-  const throughputNote = s.agent_throughput_latency_mode === "measured_agent_phase"
-    ? `Agent 阶段实际墙钟 ÷ ${s.agent_phase_completed_count ?? s.total ?? 0} 题 · 并发 ${r.qa_concurrency ?? "-"} · 不含 Judge（Judge 与 Agent 并行）`
-    : "历史记录按时间线回退估算，不是实测值";
+  const throughputNote = agentThroughputNote(r, s);
   return [
     {
       label: String(dict(s.selected_scoring).label || s.legacy_scoring_label || "评分汇总"),
@@ -741,7 +745,7 @@ export function keyMetricRows(run: unknown, summary: unknown): KeyMetric[] {
     },
     {
       label: "Agent 并发吞吐折算时延",
-      value: fmtMs(s.agent_throughput_latency_ms),
+      value: s.agent_throughput_latency_mode === "not_applicable" ? "不适用" : fmtMs(s.agent_throughput_latency_ms),
       note: throughputNote,
     },
     {

@@ -198,7 +198,7 @@ export function effectiveRunSummary(run: Run | null | undefined): RunSummary {
     json_parse_success_rate: saved.json_parse_success_rate ?? (parseTotals.length ? parseSuccesses.reduce((sum, value) => sum + value, 0) / parseTotals.reduce((sum, value) => sum + value, 0) : null),
     qa_completion_valid_count: native ? completion.length : saved.qa_completion_valid_count ?? completion.length,
     qa_completion_within_steps_rate: native ? (completion.length ? completion.filter(Boolean).length / completion.length : null) : saved.qa_completion_within_steps_rate ?? (completion.length ? completion.filter(Boolean).length / completion.length : null),
-    agent_task_latency_mean_ms: saved.agent_task_latency_mean_ms ?? averageMetric(agentTaskLatencies),
+    agent_task_latency_mean_ms: saved.agent_timing_version === 2 ? saved.agent_task_latency_mean_ms : saved.agent_task_latency_mean_ms ?? averageMetric(agentTaskLatencies),
     agent_loop_calls_mean: saved.agent_loop_calls_mean ?? averageMetric(agentLoopCounts),
     llm_ttft_ms_mean: saved.llm_ttft_ms_mean ?? averageMetric(llm.map((item) => item.ttft_ms_avg)),
     llm_tokens_per_second_mean: saved.llm_tokens_per_second_mean ?? averageMetric(llm.map((item) => item.tokens_per_second_avg)),
@@ -214,7 +214,7 @@ export function effectiveRunSummary(run: Run | null | undefined): RunSummary {
     agent_throughput_latency_mode: saved.agent_throughput_latency_mode
       ?? (run?.phases?.qa_eval?.agent_phase_wall_ms != null ? "measured_agent_phase" : "historical_interval_estimate"),
     agent_phase_wall_ms: saved.agent_phase_wall_ms ?? run?.phases?.qa_eval?.agent_phase_wall_ms ?? null,
-    agent_phase_completed_count: saved.agent_phase_completed_count ?? run?.phases?.qa_eval?.agent_completed ?? null,
+    agent_phase_completed_count: saved.agent_timing_version === 2 ? saved.agent_phase_completed_count : saved.agent_phase_completed_count ?? run?.phases?.qa_eval?.agent_completed ?? null,
     agent_throughput_qa_per_s: saved.agent_throughput_qa_per_s ?? null,
     judge_phase_wall_ms: saved.judge_phase_wall_ms ?? run?.phases?.qa_eval?.judge_phase_wall_ms ?? null,
     judge_concurrency: saved.judge_concurrency ?? run?.phases?.qa_eval?.judge_concurrency ?? run?.judge_concurrency ?? null,

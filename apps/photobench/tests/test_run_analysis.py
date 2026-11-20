@@ -645,3 +645,61 @@ def test_tool_binding_uses_successful_attempt_in_same_turn_only():
     assert "model_call_index" not in result[1]
     assert result[1]["round_binding_source"] == "unresolved"
     assert tools[0]["model_call_index"] == 1
+
+
+@pytest.mark.parametrize("read", [analysis.effective_summary, analysis.list_summary])
+def test_resume_latency_replaces_cached_metrics_with_current_execution(read):
+    items = [
+        _item(qa_id="inherited", wall_clock_ms=9000, metrics_contract_version=2),
+        _item(qa_id="new", wall_clock_ms=6000, metrics_contract_version=2),
+    ]
+    state = {
+        "items": items,
+        "resume_context": {"inherited_qa_ids": ["inherited"]},
+        "phases": {"qa_eval": {"agent_phase_wall_ms": 4000, "agent_completed": 2}},
+        "summary": {"agent_throughput_latency_ms": 2000, "agent_task_latency_mean_ms": 7500},
+    }
+    result = read(state)
+    assert result["agent_throughput_latency_ms"] == 4000
+    assert result["agent_task_latency_mean_ms"] == 6000
+    assert result["agent_all_answers_latency_mean_ms"] == 7500
+    assert result["agent_phase_completed_count"] == 1
+    assert result["agent_inherited_count"] == 1
+    assert result["agent_judge_wait_accounted"] is False
+    assert state["summary"]["agent_throughput_latency_ms"] == 2000
+
+
+def test_judge_only_latency_is_not_inherited_and_null_clears_old_cache():
+    result = analysis.list_summary(
+        {
+            "items": [_item(qa_id="old", wall_clock_ms=8000)],
+            "resume_context": {"inherited_qa_ids": ["old"]},
+            "phases": {"qa_eval": {"agent_phase_wall_ms": 0, "agent_completed": 1}},
+            "summary": {"agent_task_latency_mean_ms": 8000, "agent_throughput_latency_ms": 1000},
+        }
+    )
+    assert result["agent_throughput_latency_mode"] == "not_applicable"
+    assert result["agent_task_latency_mean_ms"] is None
+    assert result["agent_throughput_latency_ms"] is None
+
+
+def test_execution_ids_override_inheritance_and_exclude_unstarted_cancelled_items():
+    result = analysis.agent_timing_summary(
+        [
+            _item(qa_id="retry", wall_clock_ms=8000, metrics_contract_version=2),
+            _item(qa_id="unstarted", execution_status="scheduled", wall_clock_ms=None),
+        ],
+        {
+            "qa_eval": {
+                "agent_executed_qa_ids": ["retry", "unstarted"],
+                "agent_phase_wall_ms": 10000,
+                "agent_judge_only_wait_ms": 2000,
+            }
+        },
+        {"inherited_qa_ids": ["retry"]},
+    )
+    assert result["agent_throughput_latency_ms"] == 8000
+    assert result["agent_task_latency_mean_ms"] == 8000
+    assert result["agent_phase_completed_count"] == 1
+    assert result["agent_observed_phase_wall_ms"] == 10000
+    assert result["agent_judge_wait_accounted"] is True

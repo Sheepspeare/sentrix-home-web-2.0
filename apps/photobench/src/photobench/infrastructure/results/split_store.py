@@ -766,7 +766,10 @@ class SplitRunReader:
         return cast(dict[str, Any], thaw(self.reader.value(self.manifest["root"])))
 
     def entry(self) -> dict[str, Any]:
-        return cast(dict[str, Any], plain(self.reader.value(self.manifest["entry"])))
+        result = cast(dict[str, Any], plain(self.reader.value(self.manifest["entry"])))
+        if (result.get("summary") or {}).get("agent_timing_version") != 2:
+            result.setdefault("summary", {}).update(self._agent_timing(self.variant()))
+        return result
 
     def variant(self, profile: str = "", batch: str = "") -> Any:
         variants = self.reader.value(self.manifest["views"])["variants"]
@@ -783,12 +786,37 @@ class SplitRunReader:
             raise ValueError("Unknown scoring batch")
         return self.reader.value(variants[key])
 
+    def _agent_timing(self, variant: Any) -> dict[str, Any]:
+        overview = variant["overview"]
+        # Read only timing fields. Full trajectories and diagnostic payloads stay lazy.
+        fields = (
+            "qa_id",
+            "execution_status",
+            "wall_clock_ms",
+            "judge_ms",
+            "timing_breakdown",
+            "metrics_contract_version",
+        )
+        items = []
+        for core in variant["cores"]:
+            item = {key: plain(core.get(key)) for key in fields}
+            if "agent2_trace" in core:
+                item["agent2_trace"] = {}
+            items.append(item)
+        return analysis.agent_timing_summary(
+            items, plain(overview.get("phases")), plain(overview.get("resume_context"))
+        )
+
     def overview(self, profile: str = "", batch: str = "") -> dict[str, Any]:
-        return {
-            **plain(self.variant(profile, batch)["overview"]),
+        variant = self.variant(profile, batch)
+        result = {
+            **plain(variant["overview"]),
             "read_revision": self.revision,
             "storage_format": 3,
         }
+        if (result.get("summary") or {}).get("agent_timing_version") != 2:
+            result.setdefault("summary", {}).update(self._agent_timing(variant))
+        return result
 
     def index(self, profile: str = "", batch: str = "") -> list[dict[str, Any]]:
         return cast(list[dict[str, Any]], plain(self.variant(profile, batch)["index"]))

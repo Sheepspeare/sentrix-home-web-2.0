@@ -663,3 +663,34 @@ def test_old_descriptor_wrapped_nodes_read_without_rewriting_manifest(tmp_path, 
     assert reader.trace_overview(0)["tool_call_count"] == 1
     assert (tmp_path / "source" / "split-commit.json").read_bytes() == before
     objects.close()
+
+
+def test_historical_split_latency_is_recomputed_without_trace_hydration(tmp_path, monkeypatch):
+    fixture = state()
+    fixture["items"][0].update(wall_clock_ms=9000, metrics_contract_version=2)
+    fixture["items"].append(
+        {
+            "qa_id": "new",
+            "execution_status": "completed",
+            "wall_clock_ms": 6000,
+            "metrics_contract_version": 2,
+        }
+    )
+    fixture["resume_context"] = {"inherited_qa_ids": ["q1"]}
+    fixture["phases"] = {"qa_eval": {"agent_phase_wall_ms": 4000, "agent_completed": 2}}
+    from photobench.domain.runs import analysis
+
+    original = analysis.agent_timing_summary
+    monkeypatch.setattr(analysis, "agent_timing_summary", lambda *_: {"agent_throughput_latency_ms": 2000})
+    directory = tmp_path / "split-run"
+    SplitResultWriter(tmp_path).write(directory, fixture)
+    before = (directory / "split-commit.json").read_bytes()
+    monkeypatch.setattr(analysis, "agent_timing_summary", original)
+    monkeypatch.setattr(
+        SplitRunReader, "state", lambda *_: (_ for _ in ()).throw(AssertionError("full state read"))
+    )
+    reader = SplitRunReader(tmp_path, directory)
+    for result in [reader.overview(), reader.entry()]:
+        assert result["summary"]["agent_throughput_latency_ms"] == 4000
+        assert result["summary"]["agent_task_latency_mean_ms"] == 6000
+    assert (directory / "split-commit.json").read_bytes() == before
