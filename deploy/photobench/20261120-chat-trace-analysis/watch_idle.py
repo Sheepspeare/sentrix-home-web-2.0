@@ -27,6 +27,7 @@ def main():
     event_path = directory / f"idle-{intent['port']}-event.json"
     failures = 0
     ready = 0
+    work_finished = 0
     started = time.monotonic()
     while True:
         try:
@@ -53,19 +54,29 @@ def main():
             observed = json.loads(response.stdout)
             failures = 0
             ready = ready + 1 if observed["idle"] else 0
+            work_finished = work_finished + 1 if not observed["work"] else 0
             changed = observed["service_pids"] != intent["service_pids"]
-            unexpected = any(work["id"] != intent["run_id"] for work in observed["work"])
-            snapshot = {"observed": observed, "ready_probes": ready, "consecutive_failures": failures}
+            expected_work = intent.get("work_id") or intent["run_id"]
+            unexpected = any(work["id"] != expected_work for work in observed["work"])
+            snapshot = {
+                "observed": observed,
+                "ready_probes": ready,
+                "consecutive_failures": failures,
+                "work_finished_probes": work_finished,
+            }
             reason = (
                 "Candidate service became idle; recheck before activation"
                 if ready >= 3
                 else "Service or work identity changed; inspect before deployment"
                 if changed or unexpected
+                else "Exact work finished; product activity still blocks deployment"
+                if intent.get("review_when_work_finished") and work_finished >= 3
                 else None
             )
         except Exception as error:
             failures += 1
             ready = 0
+            work_finished = 0
             snapshot = {"error": str(error), "consecutive_failures": failures, "ready_probes": ready}
             reason = "Three consecutive idle probes failed" if failures >= 3 else None
         snapshot.update(port=intent["port"], candidate=intent["candidate"], observed_at=time.time())
