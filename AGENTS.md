@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20豆包第二次磁盘告警核401题/391分、4turn运行，/home约1.32GiB；a0b415f旧快照无损压缩已先wake43418412再启动，验收后接原run监控，未重启重提，见T006及产品项目audit/20261120-doubao-disk-recovery。
+
 - 11/20 16:19豆包旧低磁盘告警已核解除，原d52ecf持续运行（356题/347有效分）；新wake48727066/watcher25358接续，未重启或重提交。Q4补做已终态，后续见下条，见T006及audit/20261120-doubao-media-reuse/disk-alert-review.json。
 
 - 11/20 Q4补做93efab的34新attempt已逐题验收，当前1012有效分，原979答卷/978分及18历史隔离保持；1产品model_error及既有Judge 0分如实保留。仅9b7cf030在052e67ba/watcher45465下补一次Judge，随后验新两导出；豆包48727066监控继续，见T006及产品项目audit/20261120-q4-supplement。

@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20｜豆包第二次磁盘告警，旧快照压缩已启动
+
+48727066触发后只读核豆包401题/391有效分、四turn运行，精确worker/型号/独立库/16K/预算与PID351254/351297保持。/home约1.32GiB，Q4 WAL约116MiB，本轮不重放旧checkpoint。新a0b415f仅压缩旧终态Q4 90f21f两个generation的四份run/results快照，原文共约8.68GB；流式gzip完整解压SHA与源SHA一致才移除plain副本，兼容根文件/metadata/pointer保持。两线上encoding.py原生gzip支持SHA已核；本机往返、低空间原件保持、冲突拒绝及ruff/语法/diff通过，先commit→同步100 SHA/语法→push。
+
+先新wake43418412-2e61-4437-9b25-f0bc6559ac4f，单次launch worker318753/watcher48886；当前最终验收待回调，不称已释放空间。原豆包watcher25358已退出，本次wake只监控存储任务，压缩结束立即新wake接原d52ecf监控，不重启重提。Q4补做1012有效分保持，最后一题有限Judge在052e67ba已终态failed1，accept未消费，后续读真实error_details并验旧分/答卷保持，不再补Judge或Agent。新run两导出尚待新wake流式验收。审计产品项目audit/20261120-doubao-disk-recovery，旧487事件已登记处理，第一磁盘告警证据保持；不改8772/8191/153或其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20 17:45｜Q4补做34题已验，仅剩一题Judge补评
 
 93efab的34个新attempt逐题核验通过，原979答卷及978有效回执、3556c7 manifest和18历史隔离保持。新增34份有效评分，当前1012/1013；新终止原因为17有缺口、9已回答、7步骤上限、1模型错误。2a22220b产品仍failed/model_error，返回153字且现有Judge自动评0，真实失败与分均保留，不把测评completed当产品成功，不再跑Agent。当前继承14隔离标记，另4个历史隔离QA使用独立新轨迹。
