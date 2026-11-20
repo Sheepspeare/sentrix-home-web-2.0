@@ -655,6 +655,7 @@ def test_batch_confirm_reports_each_item_and_keeps_going(identity_client: TestCl
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
+    job_id = body["confirmed"][0].pop("sync_job_id")
     assert body["confirmed"] == [
         {
             "person_id": "ent_ok",
@@ -665,6 +666,9 @@ def test_batch_confirm_reports_each_item_and_keeps_going(identity_client: TestCl
         }
     ]
     assert body["failed"] == [{"person_id": "ent_missing", "name": "爸爸", "error": "person not found"}]
+    # 记忆图不在请求里重建：确认只排一条后台任务，进度按任务 id 查。
+    job = identity_client.get(f"/api/v1/memories/corrections/jobs/{job_id}")
+    assert job.json() == {"id": job_id, "status": "pending", "error": ""}
 
 
 def test_batch_confirm_with_no_items_is_422(identity_client: TestClient):

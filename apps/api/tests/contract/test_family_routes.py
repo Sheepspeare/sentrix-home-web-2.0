@@ -704,3 +704,101 @@ def test_the_run_key_belongs_to_the_scope_in_the_request(family_client: TestClie
 
     assert body["scope_ids"] == [HOME, OTHER]
     assert body["run"]["id"] == "run_other"
+
+
+# ---- 派生同步在请求之外（关系写入不再等记忆图重建） ------------------------------------
+
+
+def _sync(client: TestClient, graph_calls: list[str], *, fail: bool = False):
+    from sentrix.application.memories.sync_corrections import CorrectionSyncExecutor, SyncCorrections
+
+    def graph(scope: str) -> None:
+        graph_calls.append(scope)
+        if fail:
+            raise RuntimeError("图谱暂不可用")
+
+    sync = SyncCorrections(client.app.state.container.memory_corrections, lambda _scope: None, graph)
+    return CorrectionSyncExecutor(sync)
+
+
+def _job(client: TestClient, job_id: str) -> dict:
+    return client.get(f"/api/v1/memories/corrections/jobs/{job_id}").json()
+
+
+def test_a_relationship_write_returns_before_the_memory_graph_is_rebuilt(
+    family_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """重建记忆图（含因果 LLM 判定）要十几秒；写入只登记任务，请求里绝不调用同步。"""
+    from sentrix.api.routes import corrections
+
+    monkeypatch.setattr(corrections, "synchronizer", lambda _container: pytest.fail("请求里不应同步派生数据"))
+    body = _put_relationship(family_client).json()
+
+    assert body["sync_status"] == "pending"
+    assert body["sync_error"] == ""
+    assert _job(family_client, body["sync_job_id"]) == {
+        "id": body["sync_job_id"],
+        "status": "pending",
+        "error": "",
+    }
+
+    graph_calls: list[str] = []
+    assert _sync(family_client, graph_calls).run_once()
+    assert graph_calls == [HOME]
+    assert _job(family_client, body["sync_job_id"])["status"] == "synced"
+
+
+def test_writes_to_one_album_are_derived_once(family_client: TestClient) -> None:
+    """连续改几次关系，后台只重建一次：同一相册的到期任务是一批。"""
+    first = _put_relationship(family_client).json()["sync_job_id"]
+    second = _patch_membership(family_client, scope_id=HOME, membership="family").json()["sync_job_id"]
+
+    graph_calls: list[str] = []
+    assert _sync(family_client, graph_calls).run_once()
+
+    assert graph_calls == [HOME]
+    assert {_job(family_client, job)["status"] for job in (first, second)} == {"synced"}
+
+
+def test_a_write_still_in_progress_is_not_claimed(family_client: TestClient) -> None:
+    """写入提交之前任务不可领取，否则会按旧值重建、却把任务标成已同步。"""
+    jobs = family_client.app.state.container.memory_corrections
+    graph_calls: list[str] = []
+    executor = _sync(family_client, graph_calls)
+
+    with jobs.track(HOME, "family", "mom") as job_id:
+        assert not executor.run_once()
+        assert _job(family_client, job_id)["status"] == "pending"
+
+    assert executor.run_once()
+    assert graph_calls == [HOME]
+    assert _job(family_client, job_id)["status"] == "synced"
+
+
+def test_a_failing_sync_backs_off_and_then_fails(family_client: TestClient) -> None:
+    """派生失败不热循环：退避重试，三次后标 failed，用户可在页面上重试。"""
+    job_id = _put_relationship(family_client).json()["sync_job_id"]
+    graph_calls: list[str] = []
+    executor = _sync(family_client, graph_calls, fail=True)
+
+    assert executor.run_once()
+    pending = _job(family_client, job_id)
+    assert pending["status"] == "pending"
+    assert "图谱暂不可用" in pending["error"]
+    assert not executor.run_once()  # 退避期内不再领取
+    for _ in range(2):
+        with _db(family_client).connect() as connection, connection:
+            connection.execute("UPDATE memory_corrections SET next_attempt_at='' WHERE id=?", (job_id,))
+        assert executor.run_once()
+    assert _job(family_client, job_id)["status"] == "failed"
+    assert len(graph_calls) == 3
+
+    retried = family_client.post(f"/api/v1/memories/corrections/jobs/{job_id}/retry")
+    assert retried.status_code == 202
+    assert retried.json()["status"] == "pending"
+    assert _sync(family_client, graph_calls).run_once()
+    assert _job(family_client, job_id)["status"] == "synced"
+
+
+def test_an_unknown_sync_job_is_404(family_client: TestClient) -> None:
+    assert family_client.get("/api/v1/memories/corrections/jobs/nope").status_code == 404

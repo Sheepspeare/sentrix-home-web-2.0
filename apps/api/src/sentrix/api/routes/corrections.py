@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sentrix.api.deps import get_container
 from sentrix.api.errors import InvalidRequestError, NotFoundError
-from sentrix.application.memories.sync_corrections import SYNC_LOCK
+from sentrix.application.memories.sync_corrections import SYNC_LOCK, wake_correction_sync
 from sentrix.bootstrap.container import Container
 from sentrix.bootstrap.import_wiring import build_correction_sync as synchronizer
 
@@ -46,18 +46,17 @@ def memory_write(kind: str, key: str) -> Callable[..., Any]:
                     scope = str(data["scope_id"]) if data else ""
             if not scope:
                 return function(*args, **kwargs)
-            with SYNC_LOCK:
-                with container.memory_corrections.track(scope, kind, target):
-                    result = function(*args, **kwargs)
-                sync_error = synchronizer(container).execute(scope)
-                model_fields = getattr(type(result), "model_fields", {})
-                if {"sync_status", "sync_error"}.issubset(model_fields):
-                    result = result.model_copy(
-                        update={
-                            "sync_status": "pending" if sync_error else "synced",
-                            "sync_error": sync_error,
-                        }
-                    )
+            # 派生同步（记忆图、因果判定、向量）交给后台执行器：它要十几秒，请求只负责
+            # 写权威数据与登记持久任务。前端拿 ``sync_job_id`` 查进度。
+            with container.memory_corrections.track(scope, kind, target) as job_id:
+                result = function(*args, **kwargs)
+            wake_correction_sync()
+            model_fields = getattr(type(result), "model_fields", {})
+            if {"sync_status", "sync_error"}.issubset(model_fields):
+                update: dict[str, Any] = {"sync_status": "pending", "sync_error": ""}
+                if "sync_job_id" in model_fields:
+                    update["sync_job_id"] = job_id
+                result = result.model_copy(update=update)
             return result
 
         wrapped.__dict__["__signature__"] = signature
@@ -97,11 +96,31 @@ def latest_name_sync(entity_id: str, container: Container = Depends(get_containe
     return NameSyncStatus.model_validate(status) if status is not None else None
 
 
+@router.get("/memories/corrections/jobs/{job_id}")
+def correction_job(job_id: str, container: Container = Depends(get_container)) -> NameSyncStatus:
+    """一条修正同步任务的进度（关系、归属、改名、确认身份都用它查）。"""
+    status = container.memory_corrections.sync_job(job_id)
+    if status is None:
+        raise NotFoundError("sync job not found")
+    return NameSyncStatus.model_validate(status)
+
+
 @router.post("/memories/corrections/name-sync/{job_id}/retry", status_code=202)
 def retry_name_sync(job_id: str, container: Container = Depends(get_container)) -> NameSyncStatus:
     status = container.memory_corrections.retry_name_sync(job_id)
     if status is None:
         raise NotFoundError("name sync job not found")
+    wake_correction_sync()
+    return NameSyncStatus.model_validate(status)
+
+
+@router.post("/memories/corrections/jobs/{job_id}/retry", status_code=202)
+def retry_correction_job(job_id: str, container: Container = Depends(get_container)) -> NameSyncStatus:
+    """让一条失败或在退避中的同步任务立即重新入队，由后台执行器处理。"""
+    status = container.memory_corrections.retry_name_sync(job_id)
+    if status is None:
+        raise NotFoundError("sync job not found")
+    wake_correction_sync()
     return NameSyncStatus.model_validate(status)
 
 

@@ -702,6 +702,19 @@ export function retryPersonNameSync(jobId: string): Promise<PersonNameSyncStatus
   return request(`/memories/corrections/name-sync/${encodeURIComponent(jobId)}/retry`, { method: "POST" });
 }
 
+/**
+ * 一条修正同步任务的进度。关系、家庭归属、改名、别名、确认身份的写回执都带 `sync_job_id`：
+ * 写入本身已提交，记忆图与检索索引在后台重建，用它查是否已同步。
+ */
+export function getCorrectionJob(jobId: string): Promise<PersonNameSyncStatus> {
+  return request(`/memories/corrections/jobs/${encodeURIComponent(jobId)}`);
+}
+
+/** 让一条失败或在退避中的同步任务立即重试（任意类型的任务都可以）。 */
+export function retryCorrectionJob(jobId: string): Promise<PersonNameSyncStatus> {
+  return request(`/memories/corrections/jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST" });
+}
+
 export async function retryMemoryCorrections(scopeId: string): Promise<{ error: string }> {
   return request<{ error: string }>(
     `/memories/corrections/retry?scope_id=${encodeURIComponent(scopeId)}`,
@@ -731,6 +744,8 @@ export interface BatchConfirmOutcome {
   name: string;
   family_role: string | null;
   merged: boolean;
+  /** 确认后重建记忆图的后台任务。 */
+  sync_job_id?: string | null;
 }
 
 export interface BatchConfirmFailure {
@@ -858,8 +873,8 @@ export async function setEntityProperty(
  * 标为路人 / 取消。存成通用实体属性 `hidden`（后端 `PERSON_HIDDEN_PROPERTY_KEY`），
  * 不拒绝人脸分组、不删任何数据；`GET /family-graph` 把它读回成 `FamilyPerson.hidden`。
  */
-export async function setPersonHidden(entityId: string, hidden: boolean): Promise<void> {
-  await setEntityProperty(entityId, "hidden", hidden);
+export function setPersonHidden(entityId: string, hidden: boolean): Promise<EntityPropertyWriteResponse> {
+  return setEntityProperty(entityId, "hidden", hidden);
 }
 
 // ---- 人物证据 -------------------------------------------------------------------

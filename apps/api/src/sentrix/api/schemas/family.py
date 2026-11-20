@@ -144,6 +144,7 @@ class FamilyMembershipResponse(BaseModel):
     membership: FamilyMembershipPayload | None
     sync_status: str = "synced"
     sync_error: str = ""
+    sync_job_id: str | None = None
 
 
 class FamilyRelationshipRequest(BaseModel):
@@ -164,6 +165,7 @@ class FamilyRelationshipResponse(BaseModel):
     relationships: list[FamilyRelationshipPayload]
     sync_status: str = "synced"
     sync_error: str = ""
+    sync_job_id: str | None = None
 
 
 class FamilyRetractRequest(BaseModel):
@@ -184,6 +186,7 @@ class FamilyRetractResponse(BaseModel):
     retracted: list[FamilyRelationshipPayload]
     sync_status: str = "synced"
     sync_error: str = ""
+    sync_job_id: str | None = None
 
 
 class FamilyPortraitRequest(BaseModel):
@@ -199,6 +202,7 @@ class FamilyPortraitResponse(BaseModel):
     portrait: FamilyPortraitPayload | None
     sync_status: str = "synced"
     sync_error: str = ""
+    sync_job_id: str | None = None
 
 
 class FamilyScopeMergeRequest(BaseModel):

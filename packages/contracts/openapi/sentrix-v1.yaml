@@ -107,12 +107,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/memories/corrections/jobs/{job_id}:
+    get:
+      tags:
+      - memory-corrections
+      summary: Correction Job
+      description: 一条修正同步任务的进度（关系、归属、改名、确认身份都用它查）。
+      operationId: correction_job_api_v1_memories_corrections_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NameSyncStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/memories/corrections/name-sync/{job_id}/retry:
     post:
       tags:
       - memory-corrections
       summary: Retry Name Sync
       operationId: retry_name_sync_api_v1_memories_corrections_name_sync__job_id__retry_post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NameSyncStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/memories/corrections/jobs/{job_id}/retry:
+    post:
+      tags:
+      - memory-corrections
+      summary: Retry Correction Job
+      description: 让一条失败或在退避中的同步任务立即重新入队，由后台执行器处理。
+      operationId: retry_correction_job_api_v1_memories_corrections_jobs__job_id__retry_post
       parameters:
       - name: job_id
         in: path
@@ -3438,6 +3492,11 @@ components:
         merged:
           type: boolean
           title: Merged
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - person_id
@@ -5339,6 +5398,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - ok
@@ -5505,6 +5569,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - ok
@@ -5651,6 +5720,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - ok
@@ -5723,6 +5797,11 @@ components:
           type: string
           title: Sync Error
           default: ''
+        sync_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sync Job Id
       type: object
       required:
       - ok

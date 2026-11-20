@@ -15,6 +15,9 @@ from sentrix.domain.identity.models import ALIAS_PROPERTY_KEY, EntityPropertyRec
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.repositories.entities import SqliteEntityRepository
 
+# 写入还没提交的同步任务：它比任何 ISO 时间都大，所以永远不会被当成「到期」。
+WRITING = "~writing"
+
 
 class CorrectionConflict(DomainError):
     code = "conflict"
@@ -154,13 +157,14 @@ class SqliteMemoryCorrections:
 
     def retry_name_sync(self, job_id: str) -> dict[str, object] | None:
         with self._database.connect() as conn, conn:
+            # 任意类型的任务都能重试；写入还没提交的任务不动（它本来就会在写完后入队）。
             conn.execute(
                 "UPDATE memory_corrections SET status='pending',error='',attempts=0,next_attempt_at='' "
-                "WHERE sync_mode='person_names' AND id=? AND status!='synced'",
-                (job_id,),
+                "WHERE id=? AND status!='synced' AND next_attempt_at!=?",
+                (job_id, WRITING),
             )
             row = conn.execute(
-                "SELECT id,status,error FROM memory_corrections WHERE sync_mode='person_names' AND id=?",
+                "SELECT id,status,error FROM memory_corrections WHERE id=?",
                 (job_id,),
             ).fetchone()
         return dict(row) if row is not None else None
@@ -244,23 +248,29 @@ class SqliteMemoryCorrections:
         return {"id": record_id, "scope_id": before["scope_id"], "revision": after["revision"]}
 
     @contextmanager
-    def track(self, scope_id: str, kind: str, target_id: str) -> Iterator[None]:
+    def track(self, scope_id: str, kind: str, target_id: str) -> Iterator[str]:
+        """登记一条持久同步任务，产出它的 id。
+
+        任务在写入进行中**不可领取**（``next_attempt_at`` 是 ``WRITING``）：后台同步不再
+        持有请求的锁，若在写入提交前就领走这条任务，派生数据会基于旧值重建、任务却被标成
+        已同步。写完（含写入抛错，那时也要核验）才把它放进队列。
+        """
         record_id = uuid.uuid4().hex
         now = datetime.now(UTC).isoformat()
         before = self._snapshot(scope_id, kind, target_id)
         with self._database.connect() as conn, conn:
             conn.execute(
                 "INSERT INTO memory_corrections(id,scope_id,target_kind,target_id,"
-                "before_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-                (record_id, scope_id, kind, target_id, json.dumps(before), now, now),
+                "before_json,created_at,updated_at,next_attempt_at) VALUES(?,?,?,?,?,?,?,?)",
+                (record_id, scope_id, kind, target_id, json.dumps(before), now, now, WRITING),
             )
         try:
-            yield
+            yield record_id
         finally:
             after = self._snapshot(scope_id, kind, target_id)
             with self._database.connect() as conn, conn:
                 conn.execute(
-                    "UPDATE memory_corrections SET after_json=?,updated_at=? WHERE id=?",
+                    "UPDATE memory_corrections SET after_json=?,updated_at=?,next_attempt_at='' WHERE id=?",
                     (json.dumps(after), datetime.now(UTC).isoformat(), record_id),
                 )
 
@@ -312,7 +322,9 @@ class SqliteMemoryCorrections:
                 str(row[0])
                 for row in conn.execute(
                     "SELECT DISTINCT scope_id FROM memory_corrections "
-                    "WHERE status='pending' AND sync_mode='legacy' LIMIT 100"
+                    "WHERE status IN ('pending','failed') AND sync_mode='legacy' "
+                    "AND next_attempt_at!=? LIMIT 100",
+                    (WRITING,),
                 )
             ]
 
@@ -484,10 +496,72 @@ class SqliteMemoryCorrections:
                 )
             ]
 
-    def finish(self, scope_id: str, error: str) -> None:
+    def next_legacy_sync_batch(self, scope_id: str | None, now: str) -> tuple[str, tuple[str, ...]] | None:
+        """领取一个相册里到期的同步任务（不给 ``scope_id`` 时取最早到期的那个相册）。
+
+        返回**具体的任务 id**，而不是「这个相册的全部」：重建期间新提交的写入不在这一批，
+        它们留给下一轮，不会被这次基于旧快照的重建标成已同步。
+        """
+        with self._database.connect() as conn:
+            if scope_id is None:
+                row = conn.execute(
+                    "SELECT scope_id FROM memory_corrections WHERE sync_mode='legacy' "
+                    "AND status='pending' AND next_attempt_at<=? ORDER BY rowid LIMIT 1",
+                    (now,),
+                ).fetchone()
+                if row is None:
+                    return None
+                scope_id = str(row[0])
+            ids = tuple(
+                str(r[0])
+                for r in conn.execute(
+                    "SELECT id FROM memory_corrections WHERE sync_mode='legacy' AND scope_id=? "
+                    "AND status='pending' AND next_attempt_at<=? ORDER BY rowid",
+                    (scope_id, now),
+                )
+            )
+        return scope_id, ids
+
+    def finish_legacy_sync_batch(self, ids: Sequence[str], error: str) -> None:
+        if not ids:
+            return
+        now = datetime.now(UTC).isoformat()
+        marks = ",".join("?" for _ in ids)
+        with self._database.connect() as conn, conn:
+            if error:
+                conn.execute(
+                    "UPDATE memory_corrections SET attempts=attempts+1, error=?, updated_at=?, "
+                    "status=CASE WHEN attempts>=2 THEN 'failed' ELSE 'pending' END, "
+                    "next_attempt_at=strftime('%Y-%m-%dT%H:%M:%f+00:00','now',"
+                    " (5 * (1 << attempts)) || ' seconds') "
+                    f"WHERE id IN ({marks}) AND status='pending'",
+                    (error, now, *ids),
+                )
+            else:
+                conn.execute(
+                    "UPDATE memory_corrections SET status='synced',error='',next_attempt_at='',updated_at=? "
+                    f"WHERE id IN ({marks}) AND status!='synced'",
+                    (now, *ids),
+                )
+
+    def requeue_legacy_sync(self, scope_id: str) -> None:
+        """用户点「重试同步」：失败或在退避中的任务立即重新到期。写入中的任务不动。"""
         with self._database.connect() as conn, conn:
             conn.execute(
-                "UPDATE memory_corrections SET status=?,error=?,updated_at=? "
-                "WHERE scope_id=? AND status='pending' AND sync_mode='legacy'",
-                ("pending" if error else "synced", error, datetime.now(UTC).isoformat(), scope_id),
+                "UPDATE memory_corrections SET status='pending',attempts=0,next_attempt_at='' "
+                "WHERE sync_mode='legacy' AND scope_id=? AND status IN ('pending','failed') "
+                "AND next_attempt_at!=?",
+                (scope_id, WRITING),
             )
+
+    def sync_job(self, job_id: str) -> dict[str, object] | None:
+        with self._database.connect() as conn:
+            row = conn.execute(
+                "SELECT id,status,error FROM memory_corrections WHERE id=?", (job_id,)
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def enqueue_graph_sync(self, scope_id: str, entity_id: str) -> str:
+        """给一次已提交的人物确认排一条「只重建记忆图」的任务（与改名同一条队列）。"""
+        with self._database.connect() as conn, conn:
+            return self._enqueue_name_sync(conn, scope_id, entity_id, self._entity_snapshot(conn, entity_id))

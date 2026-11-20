@@ -44,7 +44,7 @@ const TABS: readonly { value: View; label: string }[] = [
 
 export function PeoplePage() {
   const { scopeId } = useScope();
-  const { state, people, relationships, error, refresh, applySavedNames } = useFamilyGraph(scopeId);
+  const { state, people, relationships, error, refresh, applyPersonPatch, applyRelationships } = useFamilyGraph(scopeId);
   const [view, setView] = useState<View>("roster");
   const [searchParams, setSearchParams] = useSearchParams();
   const [drop, setDrop] = useState<{ subject: string; target: string; attempt: number } | null>(null);
@@ -161,6 +161,7 @@ export function PeoplePage() {
               onSelect={(id) => selectPerson(id)}
               onRelate={(subjectId, objectId) => selectPerson(subjectId, objectId)}
               onChanged={refresh}
+              onRelationsChanged={applyRelationships}
             />
           )}
         </Section>
@@ -182,7 +183,8 @@ export function PeoplePage() {
           }}
           onClose={() => selectPerson(null)}
           onChanged={refresh}
-          onNamesSaved={applySavedNames}
+          onPersonPatched={applyPersonPatch}
+          onRelationsChanged={applyRelationships}
           onRedirect={(id) => selectPerson(id)}
         />
       )}

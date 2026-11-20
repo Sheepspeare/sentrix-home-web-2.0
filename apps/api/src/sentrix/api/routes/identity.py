@@ -83,6 +83,7 @@ from sentrix.application.identity.seed_identity import (
     SeedPhoto,
 )
 from sentrix.application.memories.assign_events import ConfirmedPersonEvents, EventVisualSimilarity
+from sentrix.application.memories.sync_corrections import wake_correction_sync
 from sentrix.bootstrap.container import Container
 from sentrix.bootstrap.import_wiring import refresh_memory_graph
 from sentrix.domain.identity.decoration import is_reviewable, is_single_sample, private_place
@@ -694,6 +695,7 @@ def set_entity_property(
         )
     except KeyError as error:
         raise NotFoundError("entity not found") from error
+    wake_correction_sync()
     return _property_payload(written).model_copy(update={"sync_status": "pending", "sync_job_id": job_id})
 
 
@@ -863,6 +865,8 @@ def rename_person(
     result = _name_person(container).rename(person_id, payload.name)
     if result is None:
         raise NotFoundError("person not found")
+    if result.sync_job_id:
+        wake_correction_sync()
     return RenamePersonResponse(
         entity=_person_payload(container, result.entity),
         aliases=list(result.aliases),
@@ -879,7 +883,6 @@ def batch_confirm_people(
     use_case = _name_person(container)
     confirmed: list[BatchConfirmOutcome] = []
     failed: list[BatchConfirmFailure] = []
-    scopes: set[str] = set()
     for item in payload.items:
         try:
             result = use_case.confirm_entity(
@@ -898,6 +901,8 @@ def batch_confirm_people(
                 BatchConfirmFailure(person_id=item.person_id, name=item.name, error="person not found")
             )
             continue
+        # 确认已经提交；记忆图（含因果判定）交给后台重建，不让用户在请求里等。
+        job_id = container.memory_corrections.enqueue_graph_sync(result.entity.scope_id, result.entity.id)
         confirmed.append(
             BatchConfirmOutcome(
                 person_id=item.person_id,
@@ -905,11 +910,11 @@ def batch_confirm_people(
                 name=item.name,
                 family_role=item.family_role,
                 merged=result.merged_into is not None,
+                sync_job_id=job_id,
             )
         )
-        scopes.add(result.entity.scope_id)
-    for scope_id in sorted(scopes):
-        refresh_memory_graph(container, scope_id)
+    if confirmed:
+        wake_correction_sync()
     return BatchConfirmResponse(confirmed=confirmed, failed=failed, count=len(confirmed))
 
 

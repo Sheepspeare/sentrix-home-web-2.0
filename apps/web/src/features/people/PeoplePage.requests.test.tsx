@@ -301,3 +301,65 @@ it("ignores a graph drop over someone in another album", async () => {
   expect(screen.queryByRole("complementary")).toBeNull();
   expect(writes()).toEqual([]);
 });
+
+// ---- 写回执先落本地；记忆同步在后台（2026-11-19） ------------------------------------
+
+/** 第一次图谱读取照常返回，之后的重拉一直挂着：断言界面不靠重拉也能反应。 */
+const holdRefetch = (rest?: Options["override"]): Options["override"] => {
+  let reads = 0;
+  return (request) => {
+    if (request.path.endsWith("/family-graph") && ++reads > 1) return new Promise<Response>(() => {});
+    return rest?.(request);
+  };
+};
+
+it("4 a saved relationship shows from the PUT receipt while the graph refetch is still out, without locking identity edits",async()=>{
+  let release: (response: Response) => void = () => {};
+  let checks = 0;
+  mount({rows:[],override:holdRefetch((request)=>{
+    if (request.method==="PUT") return new Promise<Response>((resolve)=>{ release=resolve; });
+    if (request.path.endsWith("/jobs/job1")) return json({id:"job1",status:++checks > 1 ? "synced" : "pending",error:""});
+    return undefined;
+  })});
+  await detail(); pick("b"); fields("同事");
+  fireEvent.click(button("建立关系"));
+  // 关系在保存中：只锁这一对人，身份段照常可编辑。
+  expect(button("建立关系").disabled).toBe(true);
+  expect(button("编辑别名").disabled).toBe(false);
+  expect((screen.getByLabelText("姓名") as HTMLInputElement).disabled).toBe(false);
+
+  release(json({ok:true,relationships:[rel("b","a","同事","同事"),rel("a","b","同事","同事")],
+    sync_status:"pending",sync_error:"",sync_job_id:"job1"}));
+  const sentence=(text: string)=>(_: string, element: Element | null)=>
+    element?.className==="relation-sentence" && element.textContent===text;
+  expect(await screen.findByText(sentence("小周 是 老周 的同事"))).toBeTruthy();
+  expect(await screen.findByText("修改已保存，正在同步关联记忆。")).toBeTruthy();
+  expect(await screen.findByText("修改已保存，关联记忆已同步。",{},{timeout:3000})).toBeTruthy();
+});
+
+it("4 deleting an edge from the graph removes it from the receipt and reports background sync",async()=>{
+  const {container}=mount({person:null,override:holdRefetch((request)=>{
+    if (request.method==="DELETE") return json({ok:true,retracted:pair("a","b",{state:"retracted"}),
+      sync_status:"pending",sync_error:"",sync_job_id:"job2"});
+    if (request.path.endsWith("/jobs/job2")) return json({id:"job2",status:"pending",error:""});
+    return undefined;
+  })});
+  await screen.findByText("老周"); openGraph();
+  editEdge(container); fireEvent.click(button("删除关系"));
+  expect(await screen.findByText("关系已保存，正在后台同步图谱与检索索引。")).toBeTruthy();
+  expect(container.querySelector('[data-edge-id="a->b"]')).toBeNull();
+  expect(screen.getByText(/0 条已确认关系/)).toBeTruthy();
+});
+
+it("4 changing membership updates the roster from the receipt",async()=>{
+  mount({override:holdRefetch((request)=>{
+    if (request.path.endsWith("/membership")) return json({ok:true,membership:{id:"m",scope_id:"album1",entity_id:"a",
+      membership:"family",source:"user_override",confidence:1,evidence_refs:[],inference_run_id:null,state:"effective",
+      locked:true,revision:1,supersedes_id:null,created_at:"",updated_at:""},sync_status:"pending",sync_error:"",sync_job_id:"job3"});
+    if (request.path.endsWith("/jobs/job3")) return json({id:"job3",status:"pending",error:""});
+    return undefined;
+  })});
+  await detail();
+  fireEvent.change(screen.getByRole("combobox",{name:/家庭归属/}),{target:{value:"family"}});
+  await waitFor(()=>expect((screen.getByRole("combobox",{name:/家庭归属/}) as HTMLSelectElement).value).toBe("family"));
+});

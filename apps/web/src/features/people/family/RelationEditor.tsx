@@ -37,15 +37,26 @@ interface Props {
   readonly people: readonly FamilyPerson[];
   readonly relationships: readonly FamilyRelationship[];
   readonly busy: boolean;
-  /** 详情的统一写入口：管 busy / 错误提示，成功后重拉图谱。 */
+  /** 详情的写入口：管错误提示与同步进度。关系写入不锁整个侧栏，只锁这一对人。 */
   readonly run: (action: () => Promise<unknown>) => Promise<boolean>;
+  /** 写回执先落本地：这对人之间写完后生效的行（删除时为空）。 */
+  readonly onRelationsChanged?: (scopeId: string, a: string, b: string, rows: readonly FamilyRelationship[]) => void;
   /** 图上拖拽落到人身上时预选的对方。 */
   readonly relateTarget?: string | null;
   /** 排在关系列表之前的内容（详情把「家庭归属」放在这里：它也是「他和这个家的关系」）。 */
   readonly header?: ReactNode;
 }
 
-export function RelationEditor({ person, people, relationships, busy, run, relateTarget = null, header = null }: Props) {
+export function RelationEditor({
+  person,
+  people,
+  relationships,
+  busy,
+  run,
+  onRelationsChanged,
+  relateTarget = null,
+  header = null,
+}: Props) {
   const [targetId, setTargetId] = useState<string | null>(relateTarget);
   const labels = useRelationLabels();
   const { pending, write } = usePeopleWrites();
@@ -81,15 +92,17 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
     if (saving || !ready || target === undefined || targetKey === null) return;
     // 「对方是我的 role」：subject 对方，object 我。
     void write(targetKey, async () => {
-      const ok = await run(() =>
-        putFamilyRelationship({
+      const ok = await run(async () => {
+        const result = await putFamilyRelationship({
           scopeId: person.scope_id,
           subjectEntityId: target.id,
           predicate: labels.cleanRole,
           objectEntityId: person.id,
           inversePredicate: labels.cleanReverse,
-        }),
-      );
+        });
+        onRelationsChanged?.(person.scope_id, target.id, person.id, result.relationships);
+        return result;
+      });
       if (ok) {
         labels.reset();
         setTargetId(null);
@@ -121,11 +134,15 @@ export function RelationEditor({ person, people, relationships, busy, run, relat
                   aria-label={`删除关系：${nameOf(otherId)} 是 ${selfName} 的${otherRole}`}
                   onClick={() =>
                     void write(key, async () => {
-                      await run(() => deleteFamilyRelationship({
-                        scopeId: person.scope_id,
-                        subjectEntityId: edge.subject_entity_id,
-                        objectEntityId: edge.object_entity_id,
-                      }));
+                      await run(async () => {
+                        const result = await deleteFamilyRelationship({
+                          scopeId: person.scope_id,
+                          subjectEntityId: edge.subject_entity_id,
+                          objectEntityId: edge.object_entity_id,
+                        });
+                        onRelationsChanged?.(person.scope_id, edge.subject_entity_id, edge.object_entity_id, []);
+                        return result;
+                      });
                     })
                   }
                 >

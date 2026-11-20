@@ -10,8 +10,14 @@
  * **没有任何合并按钮**：改名或确认身份时，名字撞上同一相册里另一个人的名字或别名，才弹出
  * 「是同一个人吗？」（`SameNameDialog`）。合并只发生在这一个入口。
  *
- * **写操作全部走 client，成功后调 `onChanged()` 重拉**——不做本地乐观更新：改名的
- * 别名历史、成员身份的 `locked`/`revision`、关系的正反两行都是服务端算的。
+ * **写回执先落本地，重拉在后台对账**（2026-11-19）：改名的别名历史、成员身份的
+ * `locked`/`revision`、关系的正反两行都是服务端算的，但它们**都在写回执里**，所以用回执
+ * 更新本地（`onPersonPatched` / `onRelationsChanged`），不等一份完整图谱回来。这仍然不是
+ * 乐观更新——落本地的是服务端已提交的值。记忆图与检索索引在后台同步，侧栏按
+ * `sync_job_id` 显示进度。
+ *
+ * **只有身份段的写入锁整个侧栏**（改名 / 确认 / 合并 / 别名 / 移除）；关系与家庭归属按
+ * 写入键各锁各的，保存一条关系时仍可以改名字。
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -19,18 +25,20 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   batchConfirmPeople,
   deliveredPhotoThumbUrl,
+  getCorrectionJob,
   getPerson,
   getPersonNameSync,
   getPersonPortrait,
   mergePeople,
   rejectFaceCluster,
   renamePerson,
+  retryCorrectionJob,
   retryMemoryCorrections,
-  retryPersonNameSync,
   sendPortraitFeedback,
   setEntityProperty,
   setFamilyMembership,
   setPersonHidden,
+  type BatchConfirmOutcome,
   type FamilyMembershipValue,
   type FamilyPerson,
   type FamilyRelationship,
@@ -55,6 +63,7 @@ import { RelationEditor } from "./RelationEditor";
 import { findNamesakes } from "./sameName";
 import { usePeopleWrites } from "./usePeopleWrites";
 import { SameNameDialog } from "./SameNameDialog";
+import type { PersonPatch } from "./useFamilyGraph";
 
 const LIKE = "像他";
 const DISLIKE = "不像他";
@@ -65,7 +74,10 @@ interface Props {
   readonly relationships: FamilyRelationship[];
   readonly onClose: () => void;
   readonly onChanged: () => Promise<void>;
-  readonly onNamesSaved?: (id: string, names: Partial<Pick<FamilyPerson, "display_name" | "aliases">>) => void;
+  /** 写回执里已提交的人物字段先落本地（页面再在后台对账）。不给就等 `onChanged()` 重拉。 */
+  readonly onPersonPatched?: (id: string, patch: PersonPatch) => void;
+  /** 关系写回执先落本地。不给就等 `onChanged()` 重拉。 */
+  readonly onRelationsChanged?: (scopeId: string, a: string, b: string, rows: readonly FamilyRelationship[]) => void;
   /** 图上拖拽落到人身上时预选的对方；普通点开是 null。 */
   readonly relateTarget?: string | null;
   readonly relateAttempt?: number;
@@ -89,13 +101,26 @@ interface NamesakePrompt {
   readonly mode: "rename" | "confirm";
 }
 
+/**
+ * 写入之后怎么让图谱跟上：`await` 等重拉完（要跳到另一个人、或者没有本地落地的入口时）；
+ * `background` 发出重拉不等；`none` 已经用回执落了本地（落本地时页面自己会在后台对账）。
+ */
+type RefreshMode = "await" | "background" | "none";
+
+function syncOfConfirm(outcome: BatchConfirmOutcome): MemorySyncResult | undefined {
+  return outcome.sync_job_id
+    ? { sync_status: "pending", sync_error: "", sync_job_id: outcome.sync_job_id }
+    : undefined;
+}
+
 export function PersonDetail({
   person,
   people,
   relationships,
   onClose,
   onChanged,
-  onNamesSaved,
+  onPersonPatched,
+  onRelationsChanged,
   relateTarget = null,
   relateAttempt = 0,
   mergeConfirmation = null,
@@ -109,6 +134,9 @@ export function PersonDetail({
   const [syncRetrying, setSyncRetrying] = useState(false);
   const { pending: pendingWrites, write } = usePeopleWrites();
   const feedbackKey = "feedback:" + person.id;
+  const membershipKey = "membership:" + person.id;
+  // 有本地落地的入口就不必等重拉；单独渲染（测试、别处复用）时退回到等重拉。
+  const patched: RefreshMode = onPersonPatched === undefined ? "await" : "none";
   const [error, setError] = useState<string | null>(null);
   // 未命名的人不把占位文案「未确认姓名人物」预填进输入框——那句话不是名字。
   const savedName = isNamed(person) ? personDisplayName(person) : "";
@@ -144,36 +172,47 @@ export function PersonDetail({
     if (aliasesOpen) aliasInput.current?.focus();
   }, [aliasesOpen]);
 
-  const nameSyncJob = syncResult?.sync_job_id;
+  const syncJob = syncResult?.sync_job_id;
   const syncStatus = syncResult?.sync_status;
   useEffect(() => {
-    if (syncStatus !== undefined && (!nameSyncJob || syncStatus !== "pending")) return;
+    if (syncStatus !== undefined && (!syncJob || syncStatus !== "pending")) return;
     let alive = true;
     let timer: number | undefined;
     const check = async () => {
       try {
-        const job = await getPersonNameSync(person.id);
+        // 有任务 id 就按 id 查（关系、归属、确认身份、改名都有）；刚打开侧栏时查这个人
+        // 最近一次改名的同步，没同步完就接着显示。
+        const job = syncJob ? await getCorrectionJob(syncJob) : await getPersonNameSync(person.id);
         if (!alive || job === null) return;
-        if (nameSyncJob || job.status !== "synced") {
+        if (syncJob || job.status !== "synced") {
           setSyncResult((current) => {
-            if (current?.sync_job_id && current.sync_job_id !== nameSyncJob) return current;
+            if (current?.sync_job_id && current.sync_job_id !== syncJob) return current;
             return { sync_job_id: job.id, sync_status: job.status, sync_error: job.error };
           });
         }
         if (job.status !== "pending") return;
       } catch {
-        if (!nameSyncJob) return;
+        if (!syncJob) return;
       }
       if (alive) timer = window.setTimeout(() => void check(), 1200);
     };
     void check();
     return () => { alive = false; window.clearTimeout(timer); };
-  }, [nameSyncJob, person.id, syncStatus]);
+  }, [syncJob, person.id, syncStatus]);
 
-  async function run(action: () => Promise<unknown>, refresh = true): Promise<boolean> {
-    if (active.current) return false;
-    active.current = true;
-    setBusy(true);
+  /**
+   * 详情的写入口。`exclusive`（默认）锁整个侧栏、同一时间只跑一件——身份段的写入用它；
+   * 关系与家庭归属传 `false`，由调用方用写入键各锁各的。
+   */
+  async function run(
+    action: () => Promise<unknown>,
+    { refresh = "background", exclusive = true }: { refresh?: RefreshMode; exclusive?: boolean } = {},
+  ): Promise<boolean> {
+    if (exclusive) {
+      if (active.current) return false;
+      active.current = true;
+      setBusy(true);
+    }
     setError(null);
     setSyncResult(null);
     try {
@@ -182,14 +221,17 @@ export function PersonDetail({
         && (result.sync_status === "synced" || result.sync_status === "pending")) {
         setSyncResult(result as MemorySyncResult);
       }
-      if (refresh) await onChanged();
+      if (refresh === "await") await onChanged();
+      else if (refresh === "background") void onChanged();
       return true;
     } catch (cause) {
       setError(describeReviewError(cause));
       return false;
     } finally {
-      active.current = false;
-      setBusy(false);
+      if (exclusive) {
+        active.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -197,8 +239,8 @@ export function PersonDetail({
     if (syncRetrying || active.current) return;
     setSyncRetrying(true);
     try {
-      if (nameSyncJob) {
-        const job = await retryPersonNameSync(nameSyncJob);
+      if (syncJob) {
+        const job = await retryCorrectionJob(syncJob);
         setSyncResult({ sync_job_id: job.id, sync_status: job.status, sync_error: job.error });
         return;
       }
@@ -206,7 +248,7 @@ export function PersonDetail({
       setSyncResult({ sync_status: syncError ? "pending" : "synced", sync_error: syncError });
       if (!syncError) await onChanged();
     } catch (cause) {
-      setSyncResult({ sync_job_id: nameSyncJob, sync_status: "pending", sync_error: describeReviewError(cause) });
+      setSyncResult({ sync_job_id: syncJob, sync_status: "pending", sync_error: describeReviewError(cause) });
     } finally {
       setSyncRetrying(false);
     }
@@ -218,7 +260,7 @@ export function PersonDetail({
     const result = await renamePerson(person.id, next);
     setName(result.entity.canonical_name);
     setAliasUpdate({ base: person.aliases, value: result.aliases });
-    onNamesSaved?.(person.id, { display_name: result.entity.canonical_name, aliases: result.aliases });
+    onPersonPatched?.(person.id, { display_name: result.entity.canonical_name, aliases: result.aliases });
     return result;
   }
 
@@ -227,7 +269,7 @@ export function PersonDetail({
    * 没有事件参与者，问答与按人找照片都看不到他（2026-11-11 「王王」就是这么丢的）。
    * 走 `POST /people/batch-confirm` 的单件形式。
    */
-  async function confirm(personId: string, next: string, role: string | null): Promise<string> {
+  async function confirm(personId: string, next: string, role: string | null): Promise<BatchConfirmOutcome> {
     const result = await batchConfirmPeople([
       { person_id: personId, name: next, family_role: role, merge_same_name: false },
     ]);
@@ -235,7 +277,7 @@ export function PersonDetail({
     if (failure !== undefined) throw new Error(failure.error);
     const outcome = result.confirmed[0];
     if (outcome === undefined) throw new Error("身份确认没有返回结果");
-    return outcome.entity_id;
+    return outcome;
   }
 
   function reportConfirm(result: "started" | "ok" | "failed") {
@@ -264,14 +306,24 @@ export function PersonDetail({
       reportConfirm("started");
       let confirmedId = person.id;
       void run(async () => {
-        confirmedId = await confirm(person.id, next, role);
+        const outcome = await confirm(person.id, next, role);
+        confirmedId = outcome.entity_id;
         setName(next);
-      }).then((ok) => {
+        if (confirmedId === person.id) onPersonPatched?.(person.id, { display_name: next, status: "confirmed" });
+        return syncOfConfirm(outcome);
+      }, { refresh: "none" }).then(async (ok) => {
         reportConfirm(ok ? "ok" : "failed");
-        if (ok && confirmedId !== person.id) onRedirect?.(confirmedId);
+        if (!ok) return;
+        // 并进了别人：先等图谱里有他，再跳过去；否则详情会因为找不到人短暂关掉。
+        if (confirmedId !== person.id) {
+          await onChanged();
+          onRedirect?.(confirmedId);
+        } else if (onPersonPatched === undefined) {
+          await onChanged();
+        }
       });
     } else {
-      void run(() => rename(next), onNamesSaved === undefined);
+      void run(() => rename(next), { refresh: patched });
     }
   }
 
@@ -291,7 +343,7 @@ export function PersonDetail({
       const recovery = { personId: entity.id, name: current.name, role: current.role };
       if (current.mode === "confirm" && entity.status === "pending") {
         try {
-          confirmedId = await confirm(entity.id, current.name, current.role);
+          confirmedId = (await confirm(entity.id, current.name, current.role)).entity_id;
         } catch {
           onMergeConfirmation?.(recovery);
           await onChanged();
@@ -334,7 +386,7 @@ export function PersonDetail({
 
   function retryConfirmation(recovery: MergeConfirmation) {
     void run(async () => {
-      const confirmedId = await confirm(recovery.personId, recovery.name, recovery.role);
+      const confirmedId = (await confirm(recovery.personId, recovery.name, recovery.role)).entity_id;
       setName(recovery.name);
       onMergeConfirmation?.(null);
       if (confirmedId !== person.id) onRedirect?.(confirmedId);
@@ -368,20 +420,21 @@ export function PersonDetail({
       const result = await setEntityProperty(person.id, "aliases", next);
       const saved = Array.isArray(result.value) ? result.value.map(String) : next;
       setAliasUpdate({ base: person.aliases, value: saved });
-      onNamesSaved?.(person.id, { aliases: saved });
+      onPersonPatched?.(person.id, { aliases: saved });
       setAliasesOpen(false);
       return result;
-    }, onNamesSaved === undefined);
+    }, { refresh: patched });
   }
 
   // ---- 介绍 / 整理 -------------------------------------------------------------------
 
   function sendFeedback(verdict: string) {
     void write(feedbackKey, async () => {
+      // 画像反馈不改图谱里的任何字段，不必重拉。
       await run(async () => {
         await sendPortraitFeedback(person.id, verdict);
         setPortrait(await getPersonPortrait(person.id));
-      });
+      }, { refresh: "none", exclusive: false });
     });
   }
 
@@ -395,10 +448,32 @@ export function PersonDetail({
       const cluster = detail.clusters.find((item) => item.status !== "rejected");
       if (cluster === undefined) throw new Error("这个人物没有可移除的人脸分组");
       return rejectFaceCluster(cluster.id);
-    });
+    }, { refresh: "await" });
     setRejecting(false);
     if (ok) onClose();
   }
+
+  function changeMembership(next: FamilyMembershipValue) {
+    void write(membershipKey, async () => {
+      await run(async () => {
+        const result = await setFamilyMembership(person.id, person.scope_id, next);
+        if (result.membership !== null) onPersonPatched?.(person.id, { membership: result.membership });
+        return result;
+      }, { refresh: onPersonPatched === undefined ? "background" : "none", exclusive: false });
+    });
+  }
+
+  function toggleHidden() {
+    const next = !person.hidden;
+    void run(async () => {
+      const result = await setPersonHidden(person.id, next);
+      onPersonPatched?.(person.id, { hidden: next });
+      return result;
+    }, { refresh: onPersonPatched === undefined ? "background" : "none" });
+  }
+
+  const relationRun = (action: () => Promise<unknown>) =>
+    run(action, { refresh: onRelationsChanged === undefined ? "background" : "none", exclusive: false });
 
   const currentMembership: FamilyMembershipValue = membershipOf(person);
   const portraitText = portrait === undefined ? null : (portrait?.portrait_text ?? "").trim();
@@ -433,7 +508,7 @@ export function PersonDetail({
             : syncResult.sync_error || syncResult.sync_status === "failed"
               ? "修改已保存，同步失败。 " + syncResult.sync_error
               : "修改已保存，正在同步关联记忆。"}</span>
-          {syncResult.sync_status !== "synced" && (!nameSyncJob || syncResult.sync_error || syncResult.sync_status === "failed") ? (
+          {syncResult.sync_status !== "synced" && (!syncJob || syncResult.sync_error || syncResult.sync_status === "failed") ? (
             <button type="button" className="button ghost small" disabled={busy || syncRetrying}
               onClick={() => void syncMemories()}>重试同步</button>
           ) : null}
@@ -546,18 +621,16 @@ export function PersonDetail({
         people={people}
         relationships={relationships}
         busy={busy}
-        run={run}
+        run={relationRun}
+        onRelationsChanged={onRelationsChanged}
         relateTarget={relateTarget}
         header={
           <label className="detail-field">
             家庭归属
             <select
               value={currentMembership}
-              disabled={busy}
-              onChange={(event) => {
-                const next = event.target.value as FamilyMembershipValue;
-                void run(() => setFamilyMembership(person.id, person.scope_id, next));
-              }}
+              disabled={busy || pendingWrites.has(membershipKey)}
+              onChange={(event) => changeMembership(event.target.value as FamilyMembershipValue)}
             >
               {MEMBERSHIP_VALUES.map((value) => (
                 <option key={value} value={value}>
@@ -622,7 +695,7 @@ export function PersonDetail({
         <section className="detail-section detail-tidy">
           <h3>整理</h3>
           <div className="detail-actions">
-            <button type="button" className="button ghost small" disabled={busy} onClick={() => void run(() => setPersonHidden(person.id, !person.hidden))}>
+            <button type="button" className="button ghost small" disabled={busy} onClick={toggleHidden}>
               {person.hidden ? "取消路人标记" : "标为路人"}
             </button>
             {pending && !rejecting ? (

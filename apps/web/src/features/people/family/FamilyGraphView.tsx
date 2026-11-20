@@ -30,6 +30,7 @@ import {
   deleteFamilyRelationship,
   faceInstanceCropUrl,
   putFamilyRelationship,
+  retryCorrectionJob,
   retryMemoryCorrections,
   type FamilyPerson,
   type FamilyRelationship,
@@ -38,6 +39,7 @@ import {
 import { EmptyState } from "../../../shared/ui/EmptyState";
 import { describeReviewError } from "../reviewErrors";
 import { edgeKind, forceLayout, radialLayout, relationDistances } from "./forceLayout";
+import { useCorrectionJobPolling } from "./useCorrectionJob";
 import {
   confirmedRelationships,
   fitTransform,
@@ -79,6 +81,8 @@ interface Props {
   readonly onRelate: (subjectId: string, objectId: string) => void;
   /** 写完关系后重拉图谱（不闪 loading）。 */
   readonly onChanged: () => Promise<void>;
+  /** 关系写回执先落本地（一对人之间的行整体替换），重拉在后台对账。不给就等重拉。 */
+  readonly onRelationsChanged?: (scopeId: string, a: string, b: string, rows: readonly FamilyRelationship[]) => void;
 }
 
 /** 点中的边。方向保留去重后的方向；编辑时用它作为 PUT 的 subject → object。 */
@@ -107,6 +111,14 @@ function shortLabel(label: string): string {
   return label.length > LABEL_MAX_CHARS ? `${label.slice(0, LABEL_MAX_CHARS)}…` : label;
 }
 
+/** 布局的结构签名：人（id + 出现次数，`stableOrder` 用它排序）与边（两端 + 两个称谓）。 */
+function layoutSignature(people: readonly FamilyPerson[], edges: readonly RelationEdge[]): string {
+  return [
+    ...people.map((person) => `p:${person.id}:${person.appearance_count}`),
+    ...edges.map((edge) => `e:${edge.subject_entity_id}:${edge.object_entity_id}:${edge.predicate}:${edge.inverse_predicate}`),
+  ].join("\n");
+}
+
 /** 线段上 `t` 处的点（0 = from，1 = to）。 */
 function along(from: LayoutPoint, to: LayoutPoint, t: number): LayoutPoint {
   return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
@@ -119,6 +131,7 @@ export function FamilyGraphView({
   onSelect,
   onRelate,
   onChanged,
+  onRelationsChanged,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -163,12 +176,19 @@ export function FamilyGraphView({
   const graphIds = useMemo(() => new Set(graphPeople.map((person) => person.id)), [graphPeople]);
   const focusId = mode === "focus" && selectedId !== null && graphIds.has(selectedId) ? selectedId : null;
 
+  // 布局只取决于「谁在图上、出现几次、哪几条边」。改名、改别名、后台对账重拉都会换一份新的
+  // `people` 数组，但这些都不改变结构——不能每次都把 320 步的力导向模拟重跑一遍。
+  const layoutKey = useMemo(() => layoutSignature(graphPeople, edges), [edges, graphPeople]);
+  const layoutInputs = useRef({ key: layoutKey, people: graphPeople, edges });
+  if (layoutInputs.current.key !== layoutKey) layoutInputs.current = { key: layoutKey, people: graphPeople, edges };
+  const layoutPeople = layoutInputs.current.people;
+  const layoutEdges = layoutInputs.current.edges;
   const layout = useMemo(
     () =>
       focusId !== null
-        ? radialLayout(focusId, graphPeople, edges)
-        : forceLayout(graphPeople, edges, { pins, previous: previousRef.current }),
-    [edges, focusId, graphPeople, pins],
+        ? radialLayout(focusId, layoutPeople, layoutEdges)
+        : forceLayout(layoutPeople, layoutEdges, { pins, previous: previousRef.current }),
+    [focusId, layoutEdges, layoutPeople, pins],
   );
   const distances = useMemo(
     () => (focusId === null ? null : relationDistances(focusId, edges)),
@@ -608,6 +628,7 @@ export function FamilyGraphView({
           objectName={nameOf(selectedEdge.object)}
           suggestions={relationLabelSuggestions(edges.flatMap((item) => [item.predicate, item.inverse_predicate]))}
           onChanged={onChanged}
+          onRelationsChanged={onRelationsChanged}
           onClose={() => setSelectedEdge(null)}
         />
       )}
@@ -628,6 +649,7 @@ function EdgeEditor({
   objectName,
   suggestions,
   onChanged,
+  onRelationsChanged,
   onClose,
 }: {
   edge: EdgeSelection;
@@ -635,6 +657,7 @@ function EdgeEditor({
   objectName: string;
   suggestions: readonly string[];
   onChanged: () => Promise<void>;
+  onRelationsChanged?: (scopeId: string, a: string, b: string, rows: readonly FamilyRelationship[]) => void;
   onClose: () => void;
 }) {
   // 「subject 是 object 的 predicate」：subject 是对方、object 是「我」，与详情里建关系同一种说法。
@@ -647,13 +670,18 @@ function EdgeEditor({
   const [syncResult, setSyncResult] = useState<MemorySyncResult | null>(null);
   const readOnly = busy || syncResult !== null;
 
-  function submit(action: () => Promise<MemorySyncResult>) {
+  useCorrectionJobPolling(syncResult, setSyncResult);
+
+  /** 写入；`rows` 是这对人之间写完后生效的行（删除时为空），先落本地再后台对账。 */
+  function submit(action: () => Promise<{ result: MemorySyncResult; rows: readonly FamilyRelationship[] }>) {
     if (scopeId === "" || readOnly) return;
     void write(key, async () => {
       setError(null);
       try {
-        setSyncResult(await action());
-        await onChanged();
+        const { result, rows } = await action();
+        setSyncResult(result);
+        if (onRelationsChanged === undefined) await onChanged();
+        else onRelationsChanged(scopeId, edge.subject, edge.object, rows);
       } catch (cause) {
         setError(describeReviewError(cause));
       }
@@ -664,6 +692,12 @@ function EdgeEditor({
     void write(key, async () => {
       setError(null);
       try {
+        const jobId = syncResult?.sync_job_id;
+        if (jobId) {
+          const job = await retryCorrectionJob(jobId);
+          setSyncResult({ sync_job_id: job.id, sync_status: job.status, sync_error: job.error });
+          return;
+        }
         const { error: syncError } = await retryMemoryCorrections(scopeId);
         setSyncResult({ sync_status: syncError ? "pending" : "synced", sync_error: syncError });
         if (!syncError) await onChanged();
@@ -691,10 +725,13 @@ function EdgeEditor({
         disabled={readOnly || !labels.ready || scopeId === ""}
         onClick={() => {
           if (!labels.ready) return;
-          submit(() => putFamilyRelationship({
-            scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
-            predicate: labels.cleanRole, inversePredicate: labels.cleanReverse,
-          }));
+          submit(async () => {
+            const result = await putFamilyRelationship({
+              scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
+              predicate: labels.cleanRole, inversePredicate: labels.cleanReverse,
+            });
+            return { result, rows: result.relationships };
+          });
         }}
       >
         保存关系
@@ -703,8 +740,11 @@ function EdgeEditor({
         type="button"
         className="button ghost small"
         disabled={readOnly || scopeId === ""}
-        onClick={() => submit(() => deleteFamilyRelationship({
-          scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
+        onClick={() => submit(async () => ({
+          result: await deleteFamilyRelationship({
+            scopeId, subjectEntityId: edge.subject, objectEntityId: edge.object,
+          }),
+          rows: [],
         }))}
       >
         删除关系
@@ -716,8 +756,10 @@ function EdgeEditor({
         <div className={`memory-sync-feedback is-${syncResult.sync_status}`} role="status" aria-live="polite">
           <span>{syncResult.sync_status === "synced"
             ? "关系已保存，图谱与检索索引已同步。"
-            : `关系已保存，但关联数据待同步${syncResult.sync_error ? `：${syncResult.sync_error}` : "。"}`}</span>
-          {syncResult.sync_status === "pending" ? (
+            : syncResult.sync_error || syncResult.sync_status === "failed"
+              ? `关系已保存，但关联数据待同步${syncResult.sync_error ? `：${syncResult.sync_error}` : "。"}`
+              : "关系已保存，正在后台同步图谱与检索索引。"}</span>
+          {syncResult.sync_status !== "synced" && (syncResult.sync_error || syncResult.sync_status === "failed") ? (
             <button type="button" className="button ghost small" disabled={busy} onClick={retrySync}>
               {busy ? "正在重试…" : "重试同步"}
             </button>

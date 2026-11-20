@@ -167,6 +167,8 @@ class BatchConfirmOutcome(BaseModel):
     family_role: str | None
     # 这一次确认是不是走了同名合并。1.0 回的是 ``native.get("merged_into")`` 的真假。
     merged: bool
+    # 确认后重建记忆图的后台任务；前端用它查同步进度。
+    sync_job_id: str | None = None
 
 
 class BatchConfirmFailure(BaseModel):
