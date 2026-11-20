@@ -1,12 +1,14 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20 PR #43已于11:47合入main/f439244；8872仍在仅Judge评分，聊天/耗时候选尚未激活且需更新。新精确空闲监控26436efa已接续，旧pending/pipeline记录保留，见T006及产品项目audit/20261120-chat-trace-idle-review。
+
 - 11/20 Sentrix前端31项失败已逐项处理，全量191项/44文件通过、0跳过；TypeScript/构建通过，lint 0错误/45警告。修正旧测试上下文与界面断言，补时间线懒加载/定位和语音推理验证，修复无Fullscreen API时首页报错。继续PR #43，本轮不部署，见T006及产品项目audit/20261120-product-web-tests。
 
 - 11/20按用户要求合入upstream/main 42a1c58（导入三阶段、关键帧时间命中/QA代表帧），四处冲突已处理，邮件入口/统一GT及轨迹懒读保持。合并回归与PR #43推送跟进见T006及产品项目audit/20261120-main-sync；100候选仍99306be，本轮不部署。
 
-- 11/20聊天历史轻读/续接、节点耗时及格式3规则分析修复e7682d8已提交，100候选99306be已验1013题规则投影/原结果保持；PR #43已更新未合并；活动8872/8874不重启，两个空闲wake监控已挂，上线跟进见T006及产品项目audit/20261120-chat-trace-analysis。
+- 11/20聊天历史轻读/续接、节点耗时及格式3规则分析修复e7682d8已提交，100候选99306be已验1013题规则投影/原结果保持；PR #43后于11:47合并；活动8872/8874不重启，两个空闲wake监控已挂，上线跟进见T006及产品项目audit/20261120-chat-trace-analysis。
 
-- 11/20集成已提交main PR #43（feature/photobench-evaluation），含邮件测评、有限推理预算、长轨迹增量存储/懒加载及对话管理；README已补psh配置与推理说明，未合并。08:44核Q4 852题/豆包155题正常运行，见T006及产品项目audit/20261120-main-pr。
+- 11/20集成已提交main PR #43（feature/photobench-evaluation），含邮件测评、有限推理预算、长轨迹增量存储/懒加载及对话管理；README已补psh配置与推理说明，11:47已合并。08:44核Q4 852题/豆包155题正常运行，见T006及产品项目audit/20261120-main-pr。
 
 - 11/20 Q4 3556c7终态1013项：979执行完成/27 model_error/7超时；963有效分保持，仅Judge补16份现成答卷（wake134dea0d/辅助abaf0d6f/watcher64444），两导出待验。18隔离保持，未重启业务；豆包d52ecf/79d22271继续。接T006与产品项目audit/20261120-q4-terminal。
 
@@ -31,4 +33,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Sentrix前端191项通过；Qwen已验收，Q4/豆包原监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | main已合入PR43；8872评分中、上线监控已续接，豆包原监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

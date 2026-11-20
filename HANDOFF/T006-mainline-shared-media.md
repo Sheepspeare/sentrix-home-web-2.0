@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 12:54｜8872回调确认仍在评分，接续精确空闲监控
+
+旧wake8175bf15由run转辅助评分触发，8872/8291 PID1405124/1408374保持。精确scoring-abaf0d6f99184dcf83b65654f49da228仍worker=true；原评分watcher64444和8874空闲watcher16372保持。本轮不接管主线程评分验收，无模型请求、重启、部署或历史状态写入。
+
+新增9c3c783只读probe始终查全库turn/流水线/导入/后处理与进程最终环境，语法/ruff/diff及同步SHA通过。10条11/10 pending均已请求取消，旧47886b流水线仍running回执，均未改；不能只凭测评列表空就切后端。原候选99306be的167SHA一致，但不含后续main。PR #43已于11:47由外部合入main/f439244，本轮未合并，不再称OPEN。
+
+新wait 26436efa-fcb9-4726-8f6f-6c1f97bcab78/watcher65930绑定当前评分。连续3次真正空闲唤醒审查；评分消失但产品记录仍阻塞也唤醒核对，不自动清理或重启。listener healthy/queue/dry_run=false、首轮探测成功。旧8872意图/事件保留，当前映射见产品项目audit/20261120-chat-trace-idle-review/{README.md,delivery.json,watchers.json,idle-8872-intent.json}；原chat-trace-analysis索引同步更新。
+
+下一次先核评分/所有产品回合与pipeline真实活动，真正空闲后从最新已提交适用代码准备新候选并验SHA，再编写新的单次8872测评app-dir与静态目录一起切换，产品不重启。不得重放评分plan/launch/accept或旧发布恢复脚本；不动8874活动后端及8772/8191/153。/home约2.79GiB，避免大正文重复落盘。未证明全部OOM/慢写消除。
+
 ## 2026-11-20 12:50｜Q4终态逐题核验并仅Judge补16份答卷
 
 精确3556c7于12:32:04 completed_with_errors；1013唯一QA与冻结题库对应，979执行完成、27 model_error/7 timeout执行失败保持。196继承记录/154继承有效回执及18隔离标记逐项验过。963有效ATM分保持，缺16份现成答卷评分（10历史持久化失败/4未生成/1取消/1Judge结构校验失败）；其中3条隔离只补现有答案的Judge。状态标签不作为模型智能或代码责任结论。
