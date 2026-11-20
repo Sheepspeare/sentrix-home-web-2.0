@@ -179,7 +179,17 @@ class FakeSentrixClient:
         )
         return {**self.pipeline_result, "scope_id": scope_id}
 
-    def list_assets(self, *, scope_id: str, limit: int, timeout: int = 60) -> list[dict[str, Any]]:
+    def finalize_pipeline(self, *, scope_id: str, asset_ids: Sequence[str], timeout: int) -> dict[str, Any]:
+        self._record("finalize_pipeline", scope_id=scope_id, asset_ids=list(asset_ids), timeout=timeout)
+        return {**self.pipeline_result, "scope_id": scope_id}
+
+    def recover_pipeline(
+        self, *, scope_id: str, asset_ids: Sequence[str], timeout: int, graph_enabled: bool = True
+    ) -> dict[str, Any]:
+        self._record("recover_pipeline", scope_id=scope_id, asset_ids=list(asset_ids), timeout=timeout)
+        return {**self.pipeline_result, "scope_id": scope_id}
+
+    def list_assets(self, *, scope_id: str, limit: int | None, timeout: int = 60) -> list[dict[str, Any]]:
         self._record("list_assets", scope_id=scope_id, limit=limit)
         self.poll_count += 1
         if self.poll_limit and self.poll_count > self.poll_limit:
@@ -208,6 +218,7 @@ class FakeSentrixClient:
         conversation_id: str,
         message: str,
         include_debug: bool = False,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         self._record(
@@ -215,6 +226,7 @@ class FakeSentrixClient:
             conversation_id=conversation_id,
             message=message,
             include_debug=include_debug,
+            reasoning=reasoning,
             timeout=timeout,
         )
         self._turn_seq += 1
@@ -430,6 +442,9 @@ class FakeAlbums:
     def qa_rows(self, album_id: str, qa_set: str) -> list[dict[str, Any]]:
         self.calls.append(("qa_rows", qa_set))
         return [dict(row) for row in self.rows]
+
+    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
+        return next(row for row in self.qa_rows(album_id, qa_set) if str(row.get("qa_id")) == qa_id)
 
     def gt_metadata_snapshot(self, album_id: str) -> dict[str, Any]:
         from photobench.domain.evaluation.gt_context import empty_context

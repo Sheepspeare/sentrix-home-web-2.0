@@ -33,14 +33,14 @@ import json
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 from urllib.parse import quote
 
 from photobench.domain.datasets.ports import AlbumSource
 from photobench.domain.evaluation.profile_view import primary_profile_state, profile_state
 from photobench.domain.http.ports import JsonHttpClient
-from photobench.domain.results.ports import RunRevisions, RunStore, RunVideoComparisonStore
+from photobench.domain.results.ports import RunIndexedViews, RunRevisions, RunStore, RunVideoComparisonStore
 from photobench.domain.runs import exports, graph_quality, keyframe_analysis, memory_effectiveness
 
 #: 2.0 的 REST 前缀。1.0 是 ``/api``。
@@ -331,23 +331,22 @@ class RunReports:
         scope_id = str(state.get("scope_id") or "").strip()
         items = [item for item in (state.get("items") or []) if isinstance(item, dict)]
         baseline_id, pairing_source, baseline, pairing_error = self._graph_baseline(state)
-        baseline_items = [
-            item for item in (baseline or {}).get("items", []) if isinstance(item, dict)
-        ]
-        summary = state.get("summary") if isinstance(state.get("summary"), dict) else {}
-        baseline_summary = (baseline or {}).get("summary")
-        baseline_summary = baseline_summary if isinstance(baseline_summary, dict) else None
+        baseline_items = [item for item in (baseline or {}).get("items", []) if isinstance(item, dict)]
+        summary_value = state.get("summary")
+        summary: dict[str, Any] = summary_value if isinstance(summary_value, dict) else {}
+        raw_baseline_summary = (baseline or {}).get("summary")
+        baseline_summary: dict[str, Any] = (
+            raw_baseline_summary if isinstance(raw_baseline_summary, dict) else {}
+        )
         graph_valid = bool(state.get("run_valid", summary.get("run_valid", False)))
         baseline_valid = bool(
             (baseline or {}).get(
                 "run_valid",
-                baseline_summary.get("run_valid", False) if baseline_summary else False,
+                baseline_summary.get("run_valid", False),
             )
         )
         graph_media_valid = self._has_complete_media_summary(state, summary)
-        baseline_media_valid = bool(
-            baseline and self._has_complete_media_summary(baseline, baseline_summary or {})
-        )
+        baseline_media_valid = bool(baseline and self._has_complete_media_summary(baseline, baseline_summary))
         overall = graph_quality.aggregate_graph_qa_overall(
             items,
             baseline_items,
@@ -528,10 +527,53 @@ class RunReports:
         scoring_batch: str = "",
     ) -> list[dict[str, Any]]:
         return exports.export_traces(
-            profile_state(self._state(run_id), scoring_profile, scoring_batch),
+            {
+                **primary_profile_state(profile_state(self._state(run_id), scoring_profile, scoring_batch)),
+                "scoring_reviews": self._store.read_reviews(run_id).get("scoring_reviews") or [],
+            },
             scores=scores,
             min_score=min_score,
         )
+
+    def stream_export(
+        self,
+        run_id: str,
+        *,
+        sft: bool = False,
+        scores: Sequence[int] | None = None,
+        min_score: int | None = None,
+        scoring_profile: str = "",
+        scoring_batch: str = "",
+    ) -> Iterator[str]:
+        from photobench.domain.runs.stream_exports import sft_json, trace_json
+
+        # The export and its diagnostics share one immutable read revision.
+        indexed = isinstance(self._store, RunIndexedViews) and self._store.use_read_index(run_id)
+        revision = ""
+        if indexed:
+            revision = self._store.load_selected_overview(run_id, scoring_profile, scoring_batch)[
+                "read_revision"
+            ]
+            saved = self._store.load_indexed_state(run_id, revision=revision)
+        else:
+            saved = self._state(run_id)
+        state = {
+            **primary_profile_state(profile_state(saved, scoring_profile, scoring_batch)),
+            "scoring_reviews": self._store.read_reviews(run_id).get("scoring_reviews") or [],
+        }
+        if indexed:
+            state["_process_diagnostics"] = {
+                str(item.get("qa_id")): self._store.load_item_core(
+                    run_id,
+                    index,
+                    str(state.get("selected_scoring_profile") or ""),
+                    str(state.get("selected_scoring_batch") or ""),
+                    revision=revision,
+                )["process_diagnostics"]
+                for index, item in enumerate(state.get("items") or [])
+            }
+        export = sft_json if sft else trace_json
+        return export(state, scores=scores, min_score=min_score)
 
     def export_sft(
         self,
@@ -543,7 +585,10 @@ class RunReports:
         scoring_batch: str = "",
     ) -> dict[str, Any]:
         return exports.export_sft(
-            profile_state(self._state(run_id), scoring_profile, scoring_batch),
+            {
+                **primary_profile_state(profile_state(self._state(run_id), scoring_profile, scoring_batch)),
+                "scoring_reviews": self._store.read_reviews(run_id).get("scoring_reviews") or [],
+            },
             scores=scores,
             min_score=min_score,
         )

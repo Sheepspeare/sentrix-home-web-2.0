@@ -23,10 +23,12 @@ from fakes_execution import FakeAlbums, FakeHttpClient, FakeResultWriter, judge_
 
 from photobench.application.config.service import ConfigService
 from photobench.application.run_execution.service import RunRequest
+from photobench.application.run_execution.state import RunState
 from photobench.application.runs.index import RunIndex
 from photobench.application.runs.suites import RunSuites
 from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 from photobench.domain.errors import InvalidRequestError
+from photobench.domain.runs.analysis import run_list_entry
 from photobench.infrastructure.config.env import DotenvSecretStore
 from photobench.infrastructure.config.files import JsonConfigStore
 
@@ -250,6 +252,115 @@ def test_reuse_is_accepted_with_an_existing_scope(tmp_path: Path):
     assert suite["existing_scope_id"] == "PhotoBench-20260101-000000-album-qwen"
 
 
+def test_active_run_list_uses_cached_projection_while_state_is_locked(tmp_path: Path):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    state = RunState(
+        {
+            "run_id": "live-run",
+            "status": "running",
+            "started_at": "2026-11-18T00:00:00+08:00",
+            "qa_count": 2,
+            "items": [
+                {"qa_id": "q1", "judge": {"score": 2}, "execution_status": "completed"},
+                {"qa_id": "q2", "judge": {"score": 0}, "execution_status": "completed"},
+            ],
+            "phases": {"qa_eval": {"status": "running", "progress": {"agent_completed": 1}}},
+        }
+    )
+    suites = _suites(tmp_path)
+    with suites._lock:
+        suites._register_active("live-run", SimpleNamespace(state=state))
+    assert suites.active_states()["live-run"] == run_list_entry(state.data)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        state.lock.acquire()
+        try:
+            work_future = pool.submit(suites.work_status)
+            entries_future = pool.submit(suites.active_states)
+            work = work_future.result(timeout=1)
+            entries = entries_future.result(timeout=1)
+        finally:
+            state.lock.release()
+
+    assert work["work"][0]["status"] == "running"
+    assert work["cleanup_status"] == "pending"
+    assert entries["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 1
+
+    state.record_phase("qa_eval", "progress", {"agent_completed": 2})
+    refreshed = suites.active_states()["live-run"]
+    assert refreshed["phases"]["qa_eval"]["progress"]["agent_completed"] == 2
+    assert refreshed["summary"]["judge_distribution"] == {"0": 1, "1": 0, "2": 1}
+    refreshed["phases"]["qa_eval"]["progress"]["agent_completed"] = 999
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        state.lock.acquire()
+        try:
+            cached = pool.submit(suites.active_states).result(timeout=1)
+        finally:
+            state.lock.release()
+    assert cached["live-run"]["phases"]["qa_eval"]["progress"]["agent_completed"] == 2
+
+
+def test_live_list_statistics_release_state_lock_before_scanning_traces(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from types import SimpleNamespace
+    from photobench.application.runs import suites as suites_module
+
+    state = RunState({"run_id": "live-run", "status": "running", "items": []})
+    suites = _suites(tmp_path)
+    with suites._lock:
+        suites._register_active("live-run", SimpleNamespace(state=state))
+    entered, release = Event(), Event()
+    original = suites_module.analysis.run_list_entry
+
+    def scan(detached):
+        entered.set()
+        assert release.wait(3)
+        assert detached["status"] == "running"
+        return original(detached)
+
+    monkeypatch.setattr(suites_module.analysis, "run_list_entry", scan)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pending = pool.submit(suites.active_states)
+        try:
+            assert entered.wait(3)
+            pool.submit(state.set, "status", "cancelling").result(timeout=1)
+        finally:
+            release.set()
+        assert pending.result(timeout=3)["live-run"]["status"] == "running"
+    assert state.get("status") == "cancelling"
+
+
+def test_live_list_uses_committed_scores_and_live_progress_without_trace_scan(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    state = RunState({'run_id': 'live-run', 'status': 'running', 'qa_count': 1013,
+                      'items': [{'qa_id': 'q1', 'execution_status': 'completed'}],
+                      'phases': {'qa_eval': {'status': 'running', 'progress': {'agent_completed': 1}}}})
+    suites = _suites(tmp_path)
+    with suites._lock:
+        suites._register_active('live-run', SimpleNamespace(state=state))
+    monkeypatch.setattr(suites._store, 'load_entry', lambda run_id: {
+        'run_id': run_id, 'status': 'pending', 'item_count': 0,
+        'summary': {'judge_valid_count': 1002, 'answer_quality_mean': .65},
+    }, raising=False)
+    monkeypatch.setattr(state, 'snapshot', lambda: (_ for _ in ()).throw(AssertionError('full state snapshot')))
+    from photobench.application.runs import suites as module
+    original = module.analysis.run_list_entry
+
+    def without_items(data):
+        assert not data.get('items'), 'list request scanned live answers'
+        return original(data)
+
+    monkeypatch.setattr(module.analysis, 'run_list_entry', without_items)
+    entry = suites.active_states()['live-run']
+    assert entry['status'] == 'running' and entry['item_count'] == 1
+    assert entry['phases']['qa_eval']['progress']['agent_completed'] == 1
+    assert entry['summary'] == {'judge_valid_count': 1002, 'answer_quality_mean': .65}
+
+
 class _StrictAlbums:
     """只认识一个 album 的 ``AlbumSource``：manifest 查不到就 ``KeyError``。
 
@@ -312,6 +423,32 @@ def test_graph_switch_reaches_run_request_and_baseline(tmp_path: Path):
 def test_graph_switch_rejects_non_boolean(tmp_path: Path):
     with pytest.raises(InvalidRequestError, match="graph_enabled must be a boolean"):
         _suites(tmp_path).start_suite(_payload(graph_enabled="false"))
+
+
+@pytest.mark.parametrize(
+    "options,enabled,timeout",
+    [
+        ({}, True, 3660),
+        ({"reasoning": False}, False, 900),
+        ({"reasoning": True, "turn_timeout": 42}, True, 42),
+    ],
+)
+def test_reasoning_default_and_override_are_frozen_in_run(tmp_path, options, enabled, timeout):
+    captured = []
+    suites = _suites(tmp_path, new_execution=lambda r: captured.append(r) or FakeExecution(r))
+    result = suites.start_suite(_payload(**options))
+    request = captured[0]
+    assert result["reasoning"] is request.reasoning is enabled
+    assert request.turn_timeout == timeout
+    budgets = request.runtime_snapshot.connection()["execution_budgets"]
+    assert budgets["reasoning"] is enabled and budgets["turn_timeout"] == timeout
+    assert _wait_until(lambda: not suites.work_status()["work"])
+
+
+@pytest.mark.parametrize("invalid", ["false", 0, None])
+def test_reasoning_rejects_non_boolean(tmp_path, invalid):
+    with pytest.raises(InvalidRequestError, match="reasoning must be a boolean"):
+        _suites(tmp_path).start_suite(_payload(reasoning=invalid))
 
 
 # ---- 取消 -----------------------------------------------------------------
@@ -597,20 +734,48 @@ def test_memory_profile_requires_a_manager_and_known_runs(tmp_path: Path):
     assert "model manager" in str(excinfo.value)
 
 
-def test_memory_profile_replays_questions_without_touching_the_answers(tmp_path: Path):
+@pytest.mark.parametrize(
+    "options,enabled,timeout",
+    [
+        ({}, False, 900),
+        ({"reasoning": False}, False, 900),
+        ({"reasoning": True, "execution_budgets": {"turn_timeout": 4000}}, True, 4000),
+    ],
+)
+def test_memory_profile_replays_questions_without_touching_the_answers(
+    tmp_path: Path, monkeypatch, options, enabled, timeout
+):
     """``items_sha256_before/after`` 相等是这条不变量的机械证据（1.0 ``:5175``）。
 
     **区分力**：一个顺手把重放答案写回 items 的实现会让两个哈希不同——那时
     ``items_integrity_ok`` 是 False，而这正是界面上要看到的那件事。
     """
-    state = _judged_state()
+    import photobench.application.runs.suites as suites_module
+
+    state = {**_judged_state(), **options}
+    calls, waits = [], []
+    client = _FakeSentrix()
+    monkeypatch.setattr(
+        client,
+        "start_turn",
+        lambda **kwargs: calls.append(kwargs) or {"turn_id": "turn_1", "status": "running"},
+    )
+    original_await = suites_module._await_turn
+
+    def await_turn(*args, **kwargs):
+        waits.append(args[2])
+        return original_await(*args, **kwargs)
+
+    monkeypatch.setattr(suites_module, "_await_turn", await_turn)
     store = FakeRunStore({"run-1": state})
     writer = FakeResultWriter()
-    suites = _suites(tmp_path, store=store, writer=writer)
+    suites = _suites(tmp_path, store=store, writer=writer, sentrix=client)
     result = suites.start_memory_profile({"run_ids": ["run-1"], "vllm_manager_url": "http://manager:8500"})
     assert result["status"] == "running"
     assert _wait_until(lambda: (state.get("memory_profile") or {}).get("status") == "completed")
     record = state["memory_profile"]
+    assert calls and all(call["reasoning"] is enabled for call in calls)
+    assert waits and all(value == timeout for value in waits)
     assert record["items_integrity_ok"] is True
     assert record["answers_persisted"] is False
     # 内存画像这条路径仍然不换模型（1.0 的 bind-runtime 在 2.0 是「重启 2.0」，
@@ -671,6 +836,73 @@ def test_resume_rejects_a_run_without_a_scope_checkpoint(tmp_path: Path):
     assert "no memory-space checkpoint" in str(excinfo.value)
 
 
+def test_resume_rejects_unfinished_pipeline_before_starting_agents(tmp_path):
+    saved = _cancelled_state(scope_build={"status": "incomplete"}, items=[])
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    with pytest.raises(InvalidRequestError, match="incomplete build"):
+        suites.resume_run("run-1")
+    assert not suites._active
+
+
+@pytest.mark.parametrize(
+    "checkpoint_fields",
+    [
+        {"scope_build": {"status": "incomplete"}},
+        {"status": "interrupted", "mode": "full"},
+        {"status": "interrupted", "mode": "build"},
+        {
+            "status": "interrupted",
+            "mode": "reuse",
+            "resume_context": {"finish_incomplete_build": True},
+        },
+    ],
+)
+def test_explicit_pipeline_recovery_freezes_source_ids_and_qa_without_touching_original(
+    tmp_path, checkpoint_fields
+):
+    import copy
+
+    saved = _cancelled_state(
+        pipeline_asset_ids=["a", "b"],
+        items=[],
+        phases={"identity_seed": {"status": "done"}, "photo_import": {"status": "done"}},
+        **checkpoint_fields,
+    )
+    original = copy.deepcopy(saved)
+    captured = []
+    gate = threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=(lambda request: captured.append(request) or FakeExecution(request, gate)),
+    )
+    try:
+        suites.resume_run("run-1", {"finish_incomplete_build": True})
+        request = captured[0]
+        assert request.recover_pipeline and request.recovery_asset_ids == ("a", "b")
+        assert request.frozen_qa_snapshot == original["qa_snapshot"]
+        assert saved == original
+    finally:
+        gate.set()
+
+
+def test_abrupt_full_build_interruption_requires_explicit_pipeline_recovery(tmp_path):
+    saved = _cancelled_state(status="interrupted", mode="full", items=[])
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    with pytest.raises(InvalidRequestError, match="incomplete build"):
+        suites.resume_run("run-1")
+    assert not suites._active
+
+
+@pytest.mark.parametrize("checkpoint", [[], ["a"]])
+def test_pipeline_recovery_requires_completed_import_checkpoint(tmp_path, checkpoint):
+    saved = _cancelled_state(scope_build={"status": "incomplete"}, pipeline_asset_ids=checkpoint)
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    with pytest.raises(InvalidRequestError, match="complete asset import checkpoint"):
+        suites.resume_run("run-1", {"finish_incomplete_build": True})
+    assert not suites._active
+
+
 def test_resume_carries_only_the_finished_items_and_reuses_the_scope(tmp_path: Path):
     """续跑只带**跑完的**题；``scheduled`` / ``running`` 的留给这一轮重跑。
 
@@ -687,6 +919,128 @@ def test_resume_carries_only_the_finished_items_and_reuses_the_scope(tmp_path: P
     assert result["resumed_from"] == "run-1"
     # 三题里只有 q1 是 completed；另外两题留给这一轮。
     assert result["resumed_items"] == 1
+
+
+def test_resume_keeps_quarantined_trace_out_of_agent_queue_and_preserves_the_item(tmp_path: Path):
+    import copy
+
+    quarantined = {
+        "qa_id": "q1",
+        "execution_status": "running",
+        "answer": "preserved answer",
+        "judge": {"score": 1},
+        "trace_quarantine": {"status": "execution_anomaly", "reason": "oversized_trace_requires_review"},
+    }
+    completed = {"qa_id": "q2", "execution_status": "completed", "answer": "kept"}
+    saved = _cancelled_state(items=[quarantined, completed, {"qa_id": "q3", "execution_status": "scheduled"}])
+    original = copy.deepcopy(saved)
+
+    captured = []
+    gate = threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        gate=gate,
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    try:
+        response = suites.resume_run("run-1")
+        request = captured[0]
+        assert response["trace_quarantined_items"] == 1
+        assert response["resumed_items"] == 2
+        assert [item["qa_id"] for item in request.prior_items] == ["q1", "q2"]
+        assert request.prior_items[0] == quarantined
+        assert request.resume_context["trace_quarantine"]["qa_ids"] == ["q1"]
+        assert saved == original
+    finally:
+        gate.set()
+
+
+def test_quarantined_trace_cannot_be_explicitly_retried(tmp_path: Path):
+    quarantined = {
+        "qa_id": "q1",
+        "execution_status": "failed",
+        "answer": "preserved",
+        "trace_quarantine": {"status": "execution_anomaly"},
+        "service_error": {"code": "upstream_timeout", "retryable": True},
+    }
+    saved = _cancelled_state(items=[quarantined])
+    with pytest.raises(InvalidRequestError, match="trace is quarantined"):
+        _suites(tmp_path, store=FakeRunStore({"run-1": saved})).resume_run(
+            "run-1", {"retry_qa_ids": ["q1"], "retry_reason": "manual request"}
+        )
+
+
+def test_explicit_service_resume_preserves_other_answers_scores_and_original(tmp_path):
+    import copy
+
+    from test_service_recovery import service_failure
+
+    kept = {"qa_id": "q1", "execution_status": "completed", "answer": "valid zero-score answer"}
+    retry = service_failure("q2")
+    saved = _cancelled_state(
+        items=[kept, retry, {"qa_id": "q3", "execution_status": "scheduled"}],
+        scoring_results={
+            "kept": {"qa_id": "q1", "status": "completed", "score": 0, "requests": [{"raw": "keep"}]},
+            # A service-error placeholder may itself receive 1; eligibility ignores the score.
+            "retry": {"qa_id": "q2", "status": "completed", "score": 1, "requests": [{"raw": "error"}]},
+        },
+        diagnostic_results={"d1": {"qa_id": "q1"}, "d2": {"qa_id": "q2"}},
+    )
+    before = copy.deepcopy(saved)
+    captured, gate = [], threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    try:
+        plan = suites.recovery_plan("run-1")
+        assert [r["qa_id"] for r in plan["retryable_service_failures"]] == ["q2"]
+        response = suites.resume_run(
+            "run-1", {"retry_qa_ids": ["q2"], "retry_reason": "provider quota error"}
+        )
+        request = captured[0]
+        assert request.run_id != "run-1"
+        assert response["resumed_items"] == 1
+        assert request.prior_items == (kept,)
+        assert request.prior_scoring["scoring_results"] == {"kept": saved["scoring_results"]["kept"]}
+        assert request.prior_scoring["diagnostic_results"] == {"d1": {"qa_id": "q1"}}
+        assert request.resume_context["retry_qa_ids"] == ["q2"]
+        assert request.resume_context["replaced_scoring_result_keys"] == ["retry"]
+        assert request.resume_context["source_retried_items_sha256"]["q2"]
+        assert request.frozen_qa_snapshot == saved["qa_snapshot"]
+        assert saved == before
+    finally:
+        gate.set()
+
+
+def test_service_failure_only_run_can_be_resumed_without_unstarted_rows(tmp_path):
+    from test_service_recovery import service_failure
+
+    saved = _cancelled_state(items=[service_failure(f"q{i}") for i in range(1, 4)])
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}))
+    plan = suites.recovery_plan("run-1")
+    assert plan["remaining_qa_count"] == 0
+    assert len(plan["retryable_service_failures"]) == 3
+    assert plan["can_resume"] is True
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"retry_qa_ids": "q1"},
+        {"retry_qa_ids": ["q1", "q1"], "retry_reason": "x"},
+        {"retry_qa_ids": ["q1"]},
+        {"retry_qa_ids": ["q1"], "retry_reason": "x"},
+        {"retry_qa_ids": ["unknown"], "retry_reason": "x"},
+    ],
+)
+def test_explicit_service_resume_rejects_invalid_or_non_failure_selection(tmp_path, payload):
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": _cancelled_state()}))
+    with pytest.raises(InvalidRequestError):
+        suites.resume_run("run-1", payload)
+    assert not suites._active
 
 
 def test_queued_requests_freeze_topology_before_configuration_changes(tmp_path):
@@ -733,7 +1087,12 @@ def test_resume_inherits_topology_and_budgets_instead_of_current_configuration(t
         "embedding": {"mode": "split_text_image", "image_url": "http://original:8103"},
         "product_settings": {"deployment_profile": "mac"},
         "product_build_revision": "original-product-release",
-        "execution_budgets": {"import_timeout": 86400, "qa_concurrency": 2, "turn_timeout": 700},
+        "execution_budgets": {
+            "import_timeout": 86400,
+            "pipeline_timeout": 43200,
+            "qa_concurrency": 2,
+            "turn_timeout": 700,
+        },
     }
 
     def factory(request):
@@ -747,10 +1106,31 @@ def test_resume_inherits_topology_and_budgets_instead_of_current_configuration(t
         assert request.sentrix_url == "http://original:8291"
         assert request.runtime_snapshot.connection()["embedding"] == saved["runtime_snapshot"]["embedding"]
         assert (request.import_timeout, request.qa_concurrency, request.turn_timeout) == (86400, 2, 700)
+        assert request.pipeline_timeout == 43200
+        assert request.reasoning is False
         assert request.snapshot_source == "resumed_run"
         assert request.runtime_snapshot.connection()["required_build_revision"] == "original-product-release"
     finally:
         gate.set()
+
+
+def test_resume_preserves_saved_reasoning_mode(tmp_path):
+    saved = _cancelled_state()
+    saved["reasoning"] = True
+    saved["runtime_snapshot"] = {
+        "sentrix_url": "http://original:8291",
+        "model_base_url": "http://original:8106/v1",
+        "execution_budgets": {"reasoning": True, "turn_timeout": 3660},
+    }
+    captured = []
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda r: captured.append(r) or FakeExecution(r),
+    )
+    suites.resume_run("run-1")
+    assert captured[0].reasoning is True and captured[0].turn_timeout == 3660
+    assert _wait_until(lambda: not suites.work_status()["work"])
 
 
 def test_build_does_not_select_qa_even_when_manifest_has_qa(tmp_path):
@@ -966,6 +1346,59 @@ def test_resume_rejects_unconfigured_product_revision_and_non_boolean_recovery(t
         suites.resume_run("run-1", {"product_build_revision": "unchecked"})
     with pytest.raises(InvalidRequestError, match="boolean"):
         suites.resume_run("run-1", {"repair_missing_judges": "yes"})
+
+
+@pytest.mark.parametrize("select_revision", [False, True])
+def test_reasoning_resume_freezes_limits_and_sampling_only_for_explicit_product_upgrade(
+    tmp_path, monkeypatch, select_revision
+):
+    captured = []
+    gate = threading.Event()
+    saved = _cancelled_state()
+    saved["reasoning"] = True
+    prior_settings = {
+        "chat_timeout_s": 120,
+        "reasoning_max_model_calls": 999,
+        "vlm_generation_profile": "legacy",
+    }
+    saved["runtime_snapshot"] = {
+        "sentrix_url": "http://original:8291",
+        "model_base_url": "http://original:8100/v1",
+        "product_build_revision": "old-product",
+        "product_settings": prior_settings,
+    }
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    limits = {
+        "reasoning_max_model_calls": 100,
+        "reasoning_max_tool_calls": 600,
+        "reasoning_max_search_calls": 100,
+        "reasoning_max_other_tool_calls": 500,
+    }
+    configured = {
+        **suites._config.public_runtime_connection_config(),
+        "product_build_revision": "bounded",
+        "product_settings": {
+            **limits,
+            "vlm_generation_profile": "qwen35_nonthinking",
+            "chat_timeout_s": 30,
+        },
+    }
+    monkeypatch.setattr(suites._config, "public_runtime_connection_config", lambda: configured)
+    try:
+        suites.resume_run("run-1", {"product_build_revision": "bounded"} if select_revision else {})
+        effective = captured[0].runtime_snapshot.connection()["product_settings"]
+        assert effective == (
+            {**prior_settings, **limits, "vlm_generation_profile": "qwen35_nonthinking"}
+            if select_revision
+            else prior_settings
+        )
+        assert saved["runtime_snapshot"]["product_settings"] == prior_settings
+    finally:
+        gate.set()
 
 
 def test_missing_rejudge_preserves_valid_zero_and_only_repairs_failed_subscore(tmp_path):
@@ -1188,3 +1621,43 @@ def test_typed_rejudge_keeps_final_turn_result_when_earlier_turn_finishes_last(t
     assert [t["judge"]["score"] for t in row["runtime_turns"]] == [0, 1]
     assert row["judge"]["reason"] == row["evaluation_result"]["reason"] == "final"
     assert row["evaluation_result"]["normalized_score"] == 1
+
+
+def test_scoring_review_append_preserves_legacy_reviews_and_formal_scores(tmp_path):
+    from test_scoring_reviews import fixture
+
+    state, raw = fixture()
+    state.update(run_id="r", status="completed", items=[{"qa_id": "q"}])
+    store = FakeRunStore({"r": state})
+    previous = {"reviews": {"q": {"verdict": "wrong", "note": "保留旧审核"}}, "scoring_reviews": []}
+    store.read_reviews = lambda run_id: previous
+    writer = FakeResultWriter()
+    suites = _suites(tmp_path, store=store, writer=writer)
+    import copy
+
+    original = copy.deepcopy(state)
+    first = suites.save_reviews("r", {"scoring_reviews": [raw]})
+    assert first["reviews"]["q"]["note"] == "保留旧审核"
+    previous.update(writer.reviews[-1][1])
+    second = suites.save_reviews("r", {"scoring_reviews": [raw | {"note": "补充审核依据"}]})
+    assert len(second["scoring_reviews"]) == 2 and state == original
+    previous.update(writer.reviews[-1][1])
+    suites.save_reviews("r", {"reviews": {}})
+    assert len(writer.reviews[-1][1]["scoring_reviews"]) == 2
+    count = len(writer.reviews)
+    with pytest.raises(InvalidRequestError, match="fingerprint"):
+        suites.save_reviews("r", {"scoring_reviews": [raw | {"answer_fingerprint": "changed"}]})
+    assert len(writer.reviews) == count and state == original
+
+
+def test_invalid_media_definition_is_refused_before_any_work_is_registered(tmp_path):
+    albums = FakeAlbums(
+        manifest=MANIFEST,
+        qa_rows=[
+            {"qa_id": "bad", "retrieval_media_refs": [{"media_type": "image", "media_id": "unknown.jpg"}]}
+        ],
+    )
+    suites = _suites(tmp_path, albums=albums)
+    with pytest.raises(InvalidRequestError, match="QA bad retrieval_media_refs"):
+        suites.start_suite(_payload())
+    assert suites.active_run_ids() == []

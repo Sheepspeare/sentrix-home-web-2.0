@@ -57,6 +57,12 @@ class ToolPolicy:
     """无状态：所有计数都在 ``TaskState`` 上。"""
 
     def decide(self, call: ToolCall, state: TaskState) -> ToolDecision:
+        if state.request_budget is not None and not state.request_budget.admit_tool(call.name):
+            return ToolDecision(
+                action=ToolAction.DENY,
+                code=state.request_budget.stop_code,
+                reason="本轮该类工具额度已用完，请使用其他可用工具或提交已有结论。",
+            )
         spec = TOOLS_BY_NAME.get(call.name)
         if spec is None:
             return ToolDecision(
@@ -135,6 +141,7 @@ class ToolPolicy:
 
         if (
             call.name == "search_memories"
+            and state.request_budget is None
             and state.profile.max_search_calls is not None
             and state.search_calls >= state.profile.max_search_calls
         ):
@@ -166,7 +173,7 @@ class ToolPolicy:
                 ),
             )
 
-        if not state.can_call_tool():
+        if (state.request_budget is None and not state.can_call_tool()) or not state.has_final_reserve():
             return ToolDecision(
                 action=ToolAction.DENY,
                 code="tool_budget_exhausted",

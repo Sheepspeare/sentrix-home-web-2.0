@@ -323,8 +323,20 @@ def keyframe_analysis(
         return list(refs_seen.values())
 
     items = state.get("items") or []
-    evidence_counts = {"annotated": 0, "candidate_video": 0, "candidate_time": 0, "viewed_video": 0, "viewed_time": 0, "candidate_time_unknown": 0, "viewed_time_unknown": 0, "unmapped_video": 0}
-    evidence_windows = {label: {str(window): {"hits": 0, "unknown": 0} for window in (2, 30, 60)} for label in ("candidate", "viewed")}
+    evidence_counts = {
+        "annotated": 0,
+        "candidate_video": 0,
+        "candidate_time": 0,
+        "viewed_video": 0,
+        "viewed_time": 0,
+        "candidate_time_unknown": 0,
+        "viewed_time_unknown": 0,
+        "unmapped_video": 0,
+    }
+    evidence_windows = {
+        label: {str(window): {"hits": 0, "unknown": 0} for window in (2, 30, 60)}
+        for label in ("candidate", "viewed")
+    }
     evidence_counts["candidate_empty"] = 0
     evidence_counts["viewed_trace_missing"] = 0
     candidate_total = candidate_relevant = predicted_total = predicted_relevant = 0
@@ -341,14 +353,27 @@ def keyframe_analysis(
         gt_video_ids = {asset_id for asset_id in gt_ids if asset_id in source_video_ids}
         evidence = item.get("evidence_v12")
         evaluation = item.get("keyframe_eval")
-        if isinstance(evidence, Mapping) and evidence.get("status") == "verified" and not (isinstance(evaluation, Mapping) and evaluation.get("eligible") is False):
-            segments = [(seg.get("start_seconds"), seg.get("end_seconds")) for seg in (evidence.get("segments") or []) if isinstance(seg, Mapping) and isinstance(seg.get("start_seconds"), (int, float)) and isinstance(seg.get("end_seconds"), (int, float)) and seg["start_seconds"] <= seg["end_seconds"]]
+        if (
+            isinstance(evidence, Mapping)
+            and evidence.get("status") == "verified"
+            and not (isinstance(evaluation, Mapping) and evaluation.get("eligible") is False)
+        ):
+            segments = [
+                (float(seg["start_seconds"]), float(seg["end_seconds"]))
+                for seg in (evidence.get("segments") or [])
+                if isinstance(seg, Mapping)
+                and isinstance(seg.get("start_seconds"), (int, float))
+                and isinstance(seg.get("end_seconds"), (int, float))
+                and seg["start_seconds"] <= seg["end_seconds"]
+            ]
             if segments:
                 evidence_counts["annotated"] += 1
                 if not gt_video_ids:
                     evidence_counts["unmapped_video"] += 1
                 else:
-                    candidate_refs = refs(item, "retrieved_candidate_media") or refs(item, "retrieved_candidate_images")
+                    candidate_refs = refs(item, "retrieved_candidate_media") or refs(
+                        item, "retrieved_candidate_images"
+                    )
                     viewed_refs = []
                     if not candidate_refs:
                         evidence_counts["candidate_empty"] += 1
@@ -358,27 +383,52 @@ def keyframe_analysis(
                         if not isinstance(trace, Mapping):
                             continue
                         result = trace.get("result")
-                        if trace.get("tool") == "inspect_photo" and trace.get("status") == "ok" and isinstance(result, Mapping) and any(isinstance(call, Mapping) and isinstance(call.get("diagnostics"), Mapping) and call["diagnostics"].get("request_sent") is True and call.get("status") == "complete" for call in (result.get("model_call_observations") or [])):
+                        if (
+                            trace.get("tool") == "inspect_photo"
+                            and trace.get("status") == "ok"
+                            and isinstance(result, Mapping)
+                            and any(
+                                isinstance(call, Mapping)
+                                and isinstance(call.get("diagnostics"), Mapping)
+                                and call["diagnostics"].get("request_sent") is True
+                                and call.get("status") == "complete"
+                                for call in (result.get("model_call_observations") or [])
+                            )
+                        ):
                             viewed_refs.append({"asset_id": result.get("asset_id")})
-                    for label, values in (("candidate", candidate_refs), ("viewed", viewed_refs)):
+                    for label, evidence_refs in (("candidate", candidate_refs), ("viewed", viewed_refs)):
                         matches = []
-                        for value in values:
+                        for value in evidence_refs:
                             asset = resolve_asset(value)
-                            if not asset or _derived_kind(asset) != KEYFRAME_KIND or _parent_asset_id(asset) not in gt_video_ids:
+                            if (
+                                not asset
+                                or _derived_kind(asset) != KEYFRAME_KIND
+                                or _parent_asset_id(asset) not in gt_video_ids
+                            ):
                                 continue
-                            stamp = _metadata(asset).get("source_timestamp_sec", asset.get("source_timestamp_sec"))
+                            stamp = _metadata(asset).get(
+                                "source_timestamp_sec", asset.get("source_timestamp_sec")
+                            )
                             if stamp is None and isinstance(value, Mapping):
                                 stamp = value.get("source_timestamp_sec")
                             matches.append(stamp)
                         if matches:
                             for window in (2, 30, 60):
-                                hit = any(isinstance(t, (int, float)) and any(start - window <= t <= end + window for start, end in segments) for t in matches)
+                                hit = any(
+                                    isinstance(t, (int, float))
+                                    and any(start - window <= t <= end + window for start, end in segments)
+                                    for t in matches
+                                )
                                 if hit:
                                     evidence_windows[label][str(window)]["hits"] += 1
                                 elif any(not isinstance(t, (int, float)) for t in matches):
                                     evidence_windows[label][str(window)]["unknown"] += 1
                             evidence_counts[label + "_video"] += 1
-                            if any(isinstance(t, (int, float)) and any(start <= t <= end for start, end in segments) for t in matches):
+                            if any(
+                                isinstance(t, (int, float))
+                                and any(start <= t <= end for start, end in segments)
+                                for t in matches
+                            ):
                                 evidence_counts[label + "_time"] += 1
                             elif any(not isinstance(t, (int, float)) for t in matches):
                                 evidence_counts[label + "_time_unknown"] += 1

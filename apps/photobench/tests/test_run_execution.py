@@ -49,6 +49,71 @@ def test_runtime_freezes_product_revision_separately_from_benchmark_revision(pro
     assert request.runtime_snapshot.connection()["product_build_revision"] == product_revision
 
 
+def test_pipeline_timeout_is_separate_from_asset_import_and_frozen():
+    request = freeze_runtime_request(_request(import_timeout=30, pipeline_timeout=43200), {}, "release")
+    assert request.runtime_snapshot.connection()["execution_budgets"]["pipeline_timeout"] == 43200
+    client = FakeSentrixClient(
+        explicit_pipeline=True, assets=_assets(), pipeline_result={"processed": 2, "memory_graph": {}}
+    )
+    execution, *_ = _execution(client=client)
+    state = RunState(
+        {"run_id": "run_test", "scope_id": "s", "pipeline_asset_ids": ["asset_a", "asset_b"], "phases": {}}
+    )
+    execution._phase_processing_explicit(state, request)
+    calls = [args for name, args in client.calls if name == "process_pipeline"]
+    assert len(calls) == 1 and calls[0]["timeout"] == 43200
+
+
+def test_pipeline_unknown_outcome_preserves_failure_without_replay():
+    from photobench.domain.errors import RequestOutcomeUnknownError
+
+    class UnknownPipeline(FakeSentrixClient):
+        calls_count = 0
+
+        def process_pipeline(self, **kwargs):
+            self.calls_count += 1
+            raise RequestOutcomeUnknownError(method="POST", cause_type="ReadTimeout", attempts=1)
+
+    client = UnknownPipeline(explicit_pipeline=True, assets=_assets())
+    execution, *_ = _execution(client=client)
+    state = RunState(
+        {"run_id": "run_test", "scope_id": "s", "pipeline_asset_ids": ["asset_a", "asset_b"], "phases": {}}
+    )
+    with pytest.raises(RequestOutcomeUnknownError):
+        execution._phase_processing_explicit(state, _request())
+    assert client.calls_count == 1
+
+
+@pytest.mark.parametrize("graph", [{"node_count": 1}, None])
+def test_recovery_finishes_existing_sources_before_qa_and_preserves_receipt(graph):
+    client = FakeSentrixClient(
+        explicit_pipeline=True,
+        assets=_assets(),
+        pipeline_result={"processed": 0, "skipped": 2, "memory_graph": graph, "operation_id": "receipt-1"},
+        turns={"turn_1": [_completed_turn()]},
+    )
+    execution, *_ = _execution(client=client)
+    result = execution.execute(
+        _request(
+            mode="reuse",
+            scope_id="existing",
+            recover_pipeline=True,
+            recovery_asset_ids=("asset_a", "asset_b"),
+        )
+    )
+    names = client.call_names()
+    assert names.count("recover_pipeline") == 1
+    assert not set(names) & {"process_pipeline", "import_album", "import_assets", "seed_person"}
+    phase = result["phases"]["pipeline_processing"]
+    assert phase["response"]["operation_id"] == "receipt-1"
+    if graph is None:
+        assert result["status"] == "failed" and "start_turn" not in names
+        assert result["scope_build"]["status"] == "incomplete"
+    else:
+        assert result["scope_build"]["status"] == "ready"
+        assert names.index("recover_pipeline") < names.index("start_turn")
+
+
 def _manifest() -> dict[str, Any]:
     return {
         "album_id": ALBUM,
@@ -384,9 +449,14 @@ def test_cancelled_unscheduled_qa_is_not_reported_as_a_completed_agent_or_judge(
     assert state.data["items"][0]["execution_status"] == "scheduled"
 
 
-def test_the_chain_runs_every_phase_in_order_and_completes():
+@pytest.mark.parametrize("reasoning", [True, False])
+def test_the_chain_runs_every_phase_in_order_and_completes(reasoning):
     execution, _client, writer, _lifecycle, _albums = _execution()
-    state = execution.execute(_request())
+    state = execution.execute(_request(reasoning=reasoning))
+    assert state["reasoning"] is reasoning
+    turns = [args for name, args in _client.calls if name == "start_turn"]
+    assert turns and all(args["reasoning"] is reasoning for args in turns)
+    assert state["items"][0]["runtime_turns"][0]["reasoning"] is reasoning
     phases = state["phases"]
     # S9b-3 补上遥测聚合的两个收尾相位（1.0 ``:2356`` 的 ``all_phases`` 末两项）。
     assert list(phases) == [
@@ -644,6 +714,33 @@ def test_explicit_pipeline_moves_memory_keyframes_and_graph_out_of_photo_import(
     assert pipeline["pipeline_metrics"]["image_count"] == 2
     assert pipeline["pipeline_metrics"]["event_count"] == 1
     assert pipeline["pipeline_metrics"]["event_summary_call_count"] == 1
+
+
+def test_explicit_pipeline_keeps_large_directory_and_complete_asset_inventory():
+    count = 1533
+    manifest = {
+        **_manifest(),
+        "photos": _manifest()["photos"]
+        + [f"photos/extra-{i}.jpg" for i in range(count - len(_manifest()["photos"]))],
+    }
+    albums = FakeAlbums(
+        manifest=manifest, qa_rows=_rows(), files={"faces/1.jpg": b"J"}, directory_entries={"photos": count}
+    )
+    ids = [f"asset_{i}" for i in range(count)]
+    client = FakeSentrixClient(
+        explicit_pipeline=True,
+        assets=_assets(),
+        turns={"turn_1": [_completed_turn()]},
+        import_result={"imported": count, "deduplicated": 0, "asset_ids": ids, "failures": []},
+    )
+    execution, *_ = _execution(client=client, albums=albums)
+    state = execution.execute(_request())
+    imports = [values for name, values in client.calls if name == "import_assets"]
+    assert imports[0]["limit"] == count
+    assert state["phases"]["photo_import"]["scanned_count"] == count
+    pipeline = [values for name, values in client.calls if name == "process_pipeline"]
+    assert pipeline[0]["asset_ids"] == ids
+    assert all(values["limit"] is None for name, values in client.calls if name == "list_assets")
 
 
 def test_pipeline_metrics_count_images_without_videos_or_derived_assets():
@@ -1369,6 +1466,7 @@ def test_sampling_writes_labelled_samples_and_is_stopped_at_the_end():
         system_memory={"system_memory_used_mib": 4096},
     )
     execution, _client, writer, _lifecycle, _albums = _execution(telemetry=telemetry)
+    execution.telemetry_history_enabled = True
     import photobench.application.run_execution.gpu_sampler as sampler_module
 
     original = sampler_module.GpuSampler.start
@@ -1444,6 +1542,7 @@ def test_partial_publication_does_not_replace_final_metrics(status):
 
 def test_cancelled_run_keeps_partial_telemetry_and_persistence_failure(monkeypatch):
     execution, _client, writer, *_ = _execution()
+    execution.telemetry_history_enabled = True
 
     def fail_write(*args):
         raise OSError("disk full")
@@ -1472,6 +1571,7 @@ def test_a_sample_carries_the_label_of_the_phase_that_was_running():
     from photobench.application.run_execution.state import RunState
 
     execution, _client, writer, _lifecycle, _albums = _execution()
+    execution.telemetry_history_enabled = True
     state = RunState({"current_phase": "qa_eval"}, run_id="run_test")
     execution._sample_writer(state)({"index": 0, "temperature_c": 50.0})
     assert writer.gpu_samples == [
@@ -2079,7 +2179,7 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
 
     from photobench.application.run_execution.judge import JudgeRunner
 
-    keys = ["zero", "old-failed", "missing-a", "missing-b", "missing-c", "new"]
+    keys = ["zero", "old-failed", "missing-a", "missing-b", "missing-c", "quarantined", "new"]
     rows = [{"qa_id": key, "answer": "ref"} for key in keys]
     execution, _, _, _, _ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
     runner = JudgeRunner(http=FakeHttpClient([]), judge_url="fake", judge_model="fake")
@@ -2113,6 +2213,9 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
         1,
         {"qa_id": "old-failed", "execution_status": "failed", "judge_status": "skipped", "error": "original"},
     )
+    next(item for item in prior if item["qa_id"] == "quarantined")["trace_quarantine"] = {
+        "status": "execution_anomaly"
+    }
     before = copy.deepcopy(prior)
     called = []
 
@@ -2133,8 +2236,8 @@ def test_resume_recovers_missing_judges_without_reexecuting_prior_agents(monkeyp
     assert prior == before
     assert state.data["items"][0] == before[0]
     assert state.data["items"][1] == before[1]
-    assert len(state.data["items"]) == 6
-    assert state.data["phases"]["qa_eval"]["judge_completed"] == 5
+    assert len(state.data["items"]) == 7
+    assert state.data["phases"]["qa_eval"]["judge_completed"] == 6
     assert state.data["run_valid"] is False  # inherited execution failure remains visible
 
 
@@ -2202,3 +2305,75 @@ def test_completed_judging_does_not_make_partial_import_valid(monkeypatch):
     assert state["items"][0]["judge_status"] == "completed"
     assert state["status"] == "completed_with_errors"
     assert state["run_valid"] is state["summary"]["run_valid"] is False
+def test_retest_publishes_real_events_during_poll_and_preserves_each_turn(monkeypatch):
+    import copy
+
+    client = FakeSentrixClient(
+        turns={
+            "turn_1": [
+                {"status": "running", "public_progress": [{"text": "first running"}]},
+                {
+                    "status": "completed",
+                    "result": {"answer": "first answer"},
+                    "public_progress": [{"text": "first done"}],
+                },
+            ],
+            "turn_2": [
+                {"status": "running", "public_progress": [{"text": "second running"}]},
+                {
+                    "status": "completed",
+                    "result": {"answer": "final answer"},
+                    "public_progress": [{"text": "second done"}],
+                },
+            ],
+        }
+    )
+    execution, *_ = _execution(client=client)
+    execution._state = RunState({"status": "running", "items": []})
+    snapshots = []
+    monkeypatch.setattr(
+        execution._state, "persist", lambda: snapshots.append(copy.deepcopy(execution._state.data))
+    )
+    item = execution._evaluate_one(
+        {
+            "qa_id": "multi",
+            "question": "second",
+            "conversation": [{"message": "first"}, {"message": "second"}],
+        },
+        "space",
+        {},
+        _request(retest_context={"source_run_id": "original"}),
+    )
+    assert len(snapshots) == 4
+    assert snapshots[0]["interactive_item"]["runtime_turns"][0]["trace"] == [{"text": "first running"}]
+    second_live = snapshots[2]["interactive_item"]
+    assert [turn["index"] for turn in second_live["runtime_turns"]] == [0, 1]
+    assert second_live["runtime_turns"][0]["answer"] == "first answer"
+    assert second_live["runtime_turns"][1]["trace"] == [{"text": "second running"}]
+    assert second_live["runtime_turns"][1]["context_turn_count"] == 1
+    assert snapshots[0]["items"] == []  # Live projection never writes a premature scored item.
+    assert item["answer"] == "final answer"
+
+
+def test_retest_cancellation_keeps_last_real_progress(monkeypatch):
+    client = FakeSentrixClient(
+        turns={"turn_1": [{"status": "running", "public_progress": [{"text": "last event"}]}]}
+    )
+    execution, *_ = _execution(client=client)
+    state = execution._state = RunState({"status": "running"})
+    original_publish = execution._publish_retest_progress
+
+    def publish_and_cancel(polled, **kwargs):
+        original_publish(polled, **kwargs)
+        state.cancel_event.set()
+
+    monkeypatch.setattr(execution, "_publish_retest_progress", publish_and_cancel)
+    with pytest.raises(RunCancelledError):
+        execution._evaluate_one(
+            {"qa_id": "q", "question": "question"},
+            "space",
+            {},
+            _request(retest_context={"source_run_id": "original"}),
+        )
+    assert state.data["interactive_item"]["runtime_turns"][0]["trace"] == [{"text": "last event"}]
+    assert state.data["phases"]["qa_eval"]["cancelled_operations"][0]["operation_id"] == "turn_1"

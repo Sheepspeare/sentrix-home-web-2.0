@@ -8,6 +8,7 @@ import {
   type ImportProgress,
 } from "../../shared/api/client";
 import { useUploads } from "./UploadsProvider";
+import { DocumentImport } from "./DocumentImport";
 
 // 与后端固定阶段顺序一致；这些都算「建库仍在进行」。
 const ACTIVE_JOB_STATUSES = new Set([
@@ -337,6 +338,8 @@ export function ImportsPage() {
               <b>{batchFailed}</b>
             </article>
           </div>
+
+          <DocumentImport scopeId={scopeId} onImported={() => void refreshJobs()} />
 
           <div className="import-add-grid">
             <section

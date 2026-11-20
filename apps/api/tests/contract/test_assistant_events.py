@@ -204,7 +204,7 @@ def test_the_first_progress_event_is_the_plan(client: TestClient):
     """规划是 S3 的第一步，也是「为什么这一轮要取证」的书面记录。"""
     _conversation_id, turn_id = run_turn(client)
 
-    first = read_events(client, turn_id)[0]
+    first = next(event for event in read_events(client, turn_id) if event["event"] == "progress")
 
     assert first["data"]["kind"] == "plan"
     assert first["data"]["stage"] == "planning"
@@ -493,6 +493,6 @@ def test_terminal_transition_between_history_read_and_check_cannot_drop_progress
 
     monkeypatch.setattr(turns, "events_after", read_before_commit)
     events = read_events(client, turn_id)
-    assert [e["id"] for e in events if e["event"] == "progress"] == [e.step_index for e in expected]
+    assert [e["id"] for e in events if e["event"] == "progress"] == [seq for seq, _, _ in expected]
     assert events[0]["data"]["kind"] == "plan"
     assert events[-1]["event"] == "complete"

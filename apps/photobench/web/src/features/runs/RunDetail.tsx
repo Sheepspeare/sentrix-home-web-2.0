@@ -1,3 +1,4 @@
+import { ProcessDiagnosticsOverview } from "../qa/ProcessDiagnostics.tsx";
 import { scoreChoices } from "../analysis/presentation.ts";
 import { OPEN_PROFILE, PROFILE_LABELS } from "../../lib/scoring.ts";
 /**
@@ -156,7 +157,8 @@ export function RunDetail({
           {memory ? <KeyframeAnalysisPanel keyframeAnalysis={memory.keyframeAnalysis} keyframeAnalysisLoading={memory.keyframeAnalysisLoading ?? false} keyframeAnalysisError={memory.keyframeAnalysisError ?? ""} /> : null}
           <VideoComparisonPanel key={activeRun.run_id} runId={activeRun.run_id} />
           <ExecutionHistory run={activeRun} />
-          <ErrorAnalysisPanel key={[activeRun.run_id,activeRun.selected_scoring_profile,activeRun.selected_scoring_batch].join(":")} scoringProfile={OPEN_PROFILE} scoringBatch={String(activeRun.selected_scoring_batch || "")} runId={activeRun.run_id} terminal={["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status || "")} />
+          <ProcessDiagnosticsOverview key={[activeRun.run_id,activeRun.selected_scoring_profile,activeRun.selected_scoring_batch].join(":")} runId={activeRun.run_id} scoringProfile={String(activeRun.selected_scoring_profile || "")} scoringBatch={String(activeRun.selected_scoring_batch || "")} />
+          <ErrorAnalysisPanel key={[activeRun.run_id,activeRun.selected_scoring_profile,activeRun.selected_scoring_batch].join(":")} scoringProfile={String(activeRun.selected_scoring_profile || "")} scoringBatch={String(activeRun.selected_scoring_batch || "")} runId={activeRun.run_id} terminal={["completed", "completed_with_errors", "failed", "cancelled", "interrupted"].includes(activeRun.status || "")} />
           {memory ? <MemoryLayerPanel key={`memory-${activeRun.run_id}`} {...memory} /> : null}
           <GraphQualityPanel quality={graphQuality ?? null} />
           <h3 className="result-heading">结果指标</h3>

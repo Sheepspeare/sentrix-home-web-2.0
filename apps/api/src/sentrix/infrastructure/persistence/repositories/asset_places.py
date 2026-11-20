@@ -22,7 +22,8 @@ from sentrix.infrastructure.persistence.database import Database
 _COLUMNS = (
     "asset_id, admin_province, admin_city, admin_district, nearest_township,"
     " nearest_locality, nearest_distance_m, precision, source, confidence,"
-    " gps_latitude, gps_longitude, nearest_evidence_json"
+    " gps_latitude, gps_longitude, nearest_evidence_json,"
+    " precise_address, address_source, address_source_sha256"
 )
 
 
@@ -42,6 +43,9 @@ def _row_to_place(row: sqlite3.Row) -> Place:
         source=PlaceSource(row["source"]),
         gps=(GpsPoint(latitude, longitude) if latitude is not None and longitude is not None else None),
         confidence=row["confidence"],
+        precise_address=row["precise_address"],
+        address_source=row["address_source"],
+        address_source_sha256=row["address_source_sha256"],
     )
 
 
@@ -55,8 +59,9 @@ class SqliteAssetPlaceRepository:
                 "INSERT INTO asset_places (asset_id, scope_id, admin_province, admin_city,"
                 " admin_district, nearest_township, nearest_locality, nearest_distance_m,"
                 " precision, source, confidence, gps_latitude, gps_longitude,"
-                " resolved_at, nearest_evidence_json)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " resolved_at, nearest_evidence_json,"
+                " precise_address, address_source, address_source_sha256)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(asset_id) DO UPDATE SET"
                 " scope_id = excluded.scope_id,"
                 " admin_province = excluded.admin_province,"
@@ -71,7 +76,9 @@ class SqliteAssetPlaceRepository:
                 " gps_latitude = excluded.gps_latitude,"
                 " gps_longitude = excluded.gps_longitude,"
                 " resolved_at = excluded.resolved_at,"
-                " nearest_evidence_json = excluded.nearest_evidence_json",
+                " nearest_evidence_json = excluded.nearest_evidence_json,"
+                " precise_address = excluded.precise_address, address_source = excluded.address_source,"
+                " address_source_sha256 = excluded.address_source_sha256",
                 (
                     asset_id,
                     scope_id,
@@ -94,6 +101,9 @@ class SqliteAssetPlaceRepository:
                             if k not in {"township", "locality", "distance_m"}
                         }
                     ),
+                    place.precise_address,
+                    place.address_source,
+                    place.address_source_sha256,
                 ),
             )
 

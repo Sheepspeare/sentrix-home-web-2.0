@@ -20,7 +20,8 @@ from sentrix.application.retrieval.retrieve_lexical import RetrieveLexical
 from sentrix.application.retrieval.retrieve_metadata import RetrieveMetadata
 from sentrix.application.retrieval.retrieve_text_ann import RetrieveTextAnn
 from sentrix.application.retrieval.retrieve_visual import RetrieveVisual
-from sentrix.domain.assistant.profile import CLOUD_PROFILE, DEFAULT_PROFILE, TurnProfile
+from sentrix.domain.assistant.ports import ReasoningChatModel
+from sentrix.domain.assistant.profile import CLOUD_PROFILE, DEFAULT_PROFILE, REASONING_PROFILE, TurnProfile
 
 if TYPE_CHECKING:
     from sentrix.bootstrap.container import Container
@@ -128,9 +129,26 @@ def _tool_limits(container: Container) -> ToolLimits:
     )
 
 
-def build_run_turn(container: Container) -> RunTurn:
+def build_run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
+    profile = _turn_profile(container)
+    model = container.chat_model
+    if reasoning:
+        if isinstance(model, ReasoningChatModel):
+            model = model.for_reasoning()
+        profile = replace(
+            profile,
+            name=REASONING_PROFILE.name,
+            max_steps=container.settings.reasoning_max_model_calls,
+            max_model_calls=container.settings.reasoning_max_model_calls,
+            max_tool_calls=container.settings.reasoning_max_tool_calls,
+            max_search_calls=container.settings.reasoning_max_search_calls,
+            max_other_tool_calls=container.settings.reasoning_max_other_tool_calls,
+            max_page_calls=REASONING_PROFILE.max_page_calls,
+            max_inspections=REASONING_PROFILE.max_inspections,
+            wall_time_s=max(profile.wall_time_s, REASONING_PROFILE.wall_time_s),
+        )
     return RunTurn(
-        model=container.chat_model,
+        model=model,
         operation_control=container.operation_control,
         conversations=container.conversation_repository,
         turns=container.turn_repository,
@@ -152,7 +170,8 @@ def build_run_turn(container: Container) -> RunTurn:
             limits=_tool_limits(container),
         ),
         observations=container.observation_repository,
-        profile=_turn_profile(container),
+        profile=profile,
+        use_all_tools=reasoning,
     )
 
 

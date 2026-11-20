@@ -57,9 +57,7 @@ def test_result_set_attempt_migration_repairs_stale_numeric_marker(tmp_path):
             "CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL "
             "DEFAULT (datetime('now')))"
         )
-        connection.execute(
-            "INSERT INTO schema_migrations(version) VALUES('0020')"
-        )
+        connection.execute("INSERT INTO schema_migrations(version) VALUES('0020')")
         connection.execute(
             "CREATE TABLE agent_result_sets (id TEXT PRIMARY KEY, scope_id TEXT NOT NULL, "
             "query TEXT NOT NULL DEFAULT '', asset_ids_json TEXT NOT NULL DEFAULT '[]', "
@@ -166,7 +164,18 @@ def test_duplicate_migration_versions_fail_before_creating_database(tmp_path):
     assert not database.path.exists()
 
 
-@pytest.mark.parametrize("baseline", ["fresh", "our_branch", "main"])
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        "fresh",
+        "our_branch",
+        "main",
+        "evaluation_20261114",
+        "main_20261116",
+        "evaluation_20261117",
+        "psh_20261117",
+    ],
+)
 def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
     source = Path(__file__).resolve().parents[2] / "src/sentrix/infrastructure/persistence/migrations"
     old_scripts = tmp_path / "old"
@@ -187,6 +196,26 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             (source / "0026_video_job_config_hash.sql").read_bytes()
         )
         (old_scripts / "0018_capture_time.sql").write_bytes((source / "0027_capture_time.sql").read_bytes())
+    elif baseline in {"evaluation_20261114", "main_20261116", "evaluation_20261117", "psh_20261117"}:
+        for script in source.glob("*.sql"):
+            if baseline == "main_20261116" and script.name[:4] >= "0032":
+                continue
+            if baseline.startswith("evaluation_") and script.name == "0032_text_sources.sql":
+                continue
+            if baseline == "psh_20261117" and script.name == "0033_pipeline_receipts.sql":
+                continue
+            if baseline == "evaluation_20261114":
+                if script.name.startswith("0019_") or "0028" <= script.name[:4] <= "0030":
+                    continue
+                name = {
+                    "0031_import_control.sql": "0019_import_control.sql",
+                    "0033_pipeline_receipts.sql": "0028_pipeline_receipts.sql",
+                }.get(script.name, script.name)
+            elif baseline == "evaluation_20261117" and script.name == "0033_pipeline_receipts.sql":
+                name = "0032_pipeline_receipts.sql"
+            else:
+                name = script.name
+            (old_scripts / name).write_bytes(script.read_bytes())
     path = tmp_path / "t.db"
     if baseline != "fresh":
         old = Database(path, old_scripts)
@@ -198,6 +227,11 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
                 connection.execute(
                     "CREATE TABLE capture_audit AS SELECT applied_at FROM schema_migrations"
                     " WHERE version='0018'"
+                )
+            if baseline in {"evaluation_20261117", "psh_20261117"}:
+                connection.execute(
+                    "CREATE TABLE revision_audit AS SELECT applied_at FROM schema_migrations"
+                    " WHERE version='0032'"
                 )
             connection.commit()
     current = Database(path, source)
@@ -213,6 +247,9 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             "import_jobs",
             "scope_postprocess",
             "memory_rotation_sequences",
+            "media_cleanup_jobs",
+            "memory_corrections",
+            "pipeline_receipts",
         ):
             assert (
                 connection.execute(
@@ -241,6 +278,17 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
                 ).fetchone()[0]
                 == connection.execute("SELECT applied_at FROM capture_audit").fetchone()[0]
             )
+        assert "external_source_id" in {row[1] for row in connection.execute("PRAGMA table_info(assets)")}
+        assert "source_text" in {row[1] for row in connection.execute("PRAGMA table_info(observations)")}
+        if baseline in {"evaluation_20261117", "psh_20261117"}:
+            assert (
+                connection.execute(
+                    "SELECT applied_at FROM schema_migrations WHERE version='0032'"
+                ).fetchone()[0]
+                == connection.execute("SELECT applied_at FROM revision_audit").fetchone()[0]
+            )
+            assert "0033" in versions
+            assert ("0032_text_sources" in versions) is (baseline == "evaluation_20261117")
         if baseline == "our_branch":
             assert "0027" in versions
         assert connection.execute("SELECT capture_sort_key('2026-11-06T12:00:00+08:00')").fetchone()[0]

@@ -41,6 +41,14 @@ class AttachmentSummary(BaseModel):
     handle: str
     asset_id: str
     file_name: str
+    media_type: str = ""
+    source_type: str = ""
+    source_id: str = ""
+    title: str = ""
+    source_timestamp: str = ""
+    offset: int = 0
+    end_offset: int = 0
+    excerpt: str = ""
 
 
 class TurnSummary(BaseModel):
@@ -82,6 +90,11 @@ class StartTurnRequest(BaseModel):
     graph_enabled: bool = Field(
         default=True,
         description="是否启用图记忆拓展检索；评测对照 run 可关闭",
+    )
+    # 按回合持久化；产品默认关闭，测评客户端默认显式开启。
+    reasoning: bool = Field(
+        default=False,
+        description="是否开启推理模式（全工具、不限步骤和工具次数、至少3600秒墙钟，产品默认关闭）",
     )
 
 

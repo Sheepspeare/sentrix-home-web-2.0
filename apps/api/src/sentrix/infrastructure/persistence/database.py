@@ -132,6 +132,25 @@ class Database:
                 "SELECT 1 FROM schema_migrations WHERE version = ?", (version,)
             ).fetchone()
             record_version = version
+            # Published evaluation and main branches reused numeric migration revisions.
+            # Inspect those schemas before recording their distinct migration identity.
+            shared_revisions = {
+                "0019_media_cleanup.sql": ("media_cleanup_jobs", "asset_id"),
+                "0028_media_deletion_history.sql": ("media_cleanup_jobs", "scope_id"),
+                "0031_import_control.sql": ("import_jobs", "cancel_requested"),
+                "0032_text_sources.sql": ("observations", "source_text"),
+                "0033_pipeline_receipts.sql": ("pipeline_receipts", "operation_id"),
+            }
+            if script.name in shared_revisions:
+                table, column = shared_revisions[script.name]
+                schema_exists = Database._column_exists(connection, table, column)
+                if schema_exists:
+                    if done is None:
+                        connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+                    connection.execute("COMMIT")
+                    return done is None
+                if done is not None:
+                    done, record_version = None, script.stem
             # A prior database can contain the numeric 0020 marker while
             # agent_result_sets still lacks the attempt ownership columns.
             # Validate the schema as well as the ledger and repair idempotently.

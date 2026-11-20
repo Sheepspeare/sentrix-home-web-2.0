@@ -19,9 +19,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from sentrix.api.routes import corrections as correction_routes
 from sentrix.application.identity.person_directory import EntityPersonDirectory
 from sentrix.domain.identity.models import PENDING_CLUSTER_NAME
-from sentrix.api.routes import corrections as correction_routes
 
 NOW = "2026-09-23T10:00:00+00:00"
 
@@ -521,12 +521,8 @@ def test_rename_with_a_blank_name_is_400(identity_client: TestClient):
     assert _error(response) == ("invalid_request", "person name is required")
 
 
-def test_renaming_a_pending_candidate_exposes_name_without_confirming_it(identity_client: TestClient):
-    """改名不等于确认这个人（1.0 ``db.py:4459`` 只动 ``name_state``）。
-
-    pending 实体改名后会显示用户写入的名字，但 status/confirmed 仍表示它尚未被确认。
-    这条钉住的是「改名」与「确认」是两件事。
-    """
+def test_renaming_a_pending_candidate_shows_its_name_without_confirming_identity(identity_client: TestClient):
+    """用户命名后显示新名字，身份仍保持未确认。"""
     add_entity(identity_client, "ent_1", name="待确认人物簇 · cluster_1")
 
     response = identity_client.patch("/api/v1/people/ent_1/name", json={"name": "妈妈"})

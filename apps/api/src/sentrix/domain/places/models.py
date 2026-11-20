@@ -51,6 +51,7 @@ class PlacePrecision(StrEnum):
     CITY = "city"
     TOWNSHIP = "township"
     LOCALITY = "locality"
+    ADDRESS = "address"
 
 
 class PlaceSource(StrEnum):
@@ -58,6 +59,7 @@ class PlaceSource(StrEnum):
 
     PYGEOCN = "pygeocn"
     GEONAMES = "geonames"
+    PROVIDED = "provided"
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,9 +136,12 @@ class Place:
     source: PlaceSource
     gps: GpsPoint | None = None
     confidence: float = 0.0
+    precise_address: str = ""
+    address_source: str = ""
+    address_source_sha256: str = ""
 
     def __post_init__(self) -> None:
-        if self.admin.is_empty and self.nearest.is_empty:
+        if not self.precise_address.strip() and self.admin.is_empty and self.nearest.is_empty:
             raise ValueError("地点解析结果两个槽位都为空——这种情况必须返回 None，不是 Place")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(f"confidence 越界: {self.confidence!r}")
@@ -147,6 +152,8 @@ class Place:
         ``nearest`` 始终带「附近」——那是它唯一的诚实说法；``admin`` 是权威
         归属，加「附近」会把确定性说没。
         """
+        if self.precise_address:
+            return self.precise_address
         head = self.admin.label()
         tail = self.nearest.label()
         if tail:
@@ -163,6 +170,7 @@ class Place:
         return " ".join(
             part
             for part in (
+                self.precise_address,
                 self.admin.province,
                 self.admin.city,
                 self.admin.district,

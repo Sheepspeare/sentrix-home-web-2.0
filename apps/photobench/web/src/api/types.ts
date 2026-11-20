@@ -19,7 +19,11 @@
 // 媒体
 // ---------------------------------------------------------------------------
 
+import type { ScoringConfig } from '../lib/scoring.ts';
+
 export type MediaType = "image" | "video";
+
+export interface SourceRef { source_type?: unknown; source_id?: unknown; asset_id?: unknown; title?: unknown; summary?: unknown; source_timestamp?: unknown; excerpt?: unknown; file_name?: unknown }
 
 /** 一处媒体引用。1.0 `mediaRefs`（`App.vue:394`）与 run item 的 `*_media_refs` 同形。 */
 export interface MediaRef {
@@ -142,6 +146,11 @@ export type RunPhases = Record<string, Phase | undefined>;
  * 下存在的可空字段。
  */
 export interface TelemetryLive {
+  history_enabled?: boolean;
+  statistics_mode?: string;
+  devices?: Record<string, TelemetryLive>;
+  device_index?: number | null;
+  raw_samples_count?: number;
   memory_observation_version?: number;
   memory_observations?: Record<string, MemorySourceObservation>;
   memory_dependencies?: Record<string, string[]>;
@@ -378,7 +387,8 @@ export interface Run {
   task_run_ids?: string[];
   execution_versions?: ExecutionVersion[];
   read_revision?: string | null;
-  history_mode?: "full" | "checkpoint" | null;
+  history_mode?: "full" | "checkpoint" | "latest" | null;
+  telemetry_history_enabled?: boolean;
   persistence?: { status?: string; error?: string } | null;
   metrics_contract_version?: number;
   build_revision?: string;
@@ -394,6 +404,7 @@ export interface Run {
   model_name?: string | null;
   endpoint_model?: string;
   graph_enabled?: boolean;
+  reasoning?: boolean | null;
   graph_baseline_run_id?: string | null;
   model_identity?: Record<string, unknown> | null;
   execution_budgets?: Record<string, unknown> | null;
@@ -401,6 +412,8 @@ export interface Run {
   model_source?: string;
   model_backend?: string;
   qa_set?: string;
+  scoring_profiles?: string[];
+  scoring_configs?: Record<string, ScoringConfig>;
   qa_name?: string;
   qa_count?: number | null;
   status?: string;
@@ -420,6 +433,9 @@ export interface Run {
   /** 详情响应的可选内嵌条目；`effectiveRunSummary` 会读它（`App.vue:430`）。 */
   items?: RunItemSummary[];
   [key: string]: unknown;
+  retest_context?: RetestContext;
+  retest_summary?: { wall_clock_ms?: number; delivery_recall?: number; candidate_recall?: number; answer?: string };
+
 }
 
 /** `GET /api/runs` 的信封（`loadRuns` `App.vue:2233`）。 */
@@ -519,6 +535,13 @@ export interface RetrievalCounts {
 
 /** 一题的完整记录（`/api/v1/runs/{id}/items/{index}` 的 `item`）。 */
 export interface RunItemDetail extends RunItemSummary {
+  retrieval_source_refs?: SourceRef[];
+  answer_evidence_source_refs?: SourceRef[];
+  predicted_source_refs?: SourceRef[];
+  retrieved_source_refs?: SourceRef[];
+  read_source_refs?: SourceRef[];
+  attachments?: SourceRef[];
+  source_metrics?: Record<string, unknown>;
   conversation?: ConversationTurn[];
   conversation_id?: string;
   runtime_turns?: Array<Record<string, unknown>>;
@@ -803,6 +826,8 @@ export interface ManifestPage {
  * `application/datasets/service.py:93`）。QA 浏览页只读其中少数几列，其余原样带过。
  */
 export interface QaRow {
+  retrieval_source_refs?: SourceRef[];
+  answer_evidence_source_refs?: SourceRef[];
   qa_id?: string;
   question?: string;
   answer?: string;
@@ -846,6 +871,7 @@ export interface MediaResolution {
 
 /** `GET /api/qa-dataset` 的信封（`loadQaBrowser` `App.vue:2778`）。 */
 export interface QaDatasetResponse {
+  validation?: {can_start:boolean;error_count:number;warning_count:number;issues:Record<string,unknown>[]};
   album_id: string;
   qa_set: string;
   items: QaRow[];
@@ -945,4 +971,39 @@ export interface ActiveWorkStatus {
   }>;
   cleanup_status: string;
   errors?: Record<string, string>;
+}
+
+/** One actual endpoint/profile, shared by retests and chat. */
+export interface InteractiveModel {
+  profile?: string;
+  target_id?: string;
+  base_url?: string;
+  manager_url?: string;
+  endpoint_model?: string;
+}
+export interface RetestContext {
+  source_run_id: string;
+  qa_id: string;
+  source_item_index: number;
+  source_scoring_batch_ids: string[];
+  source_rule_versions?: string[];
+}
+export interface ChatSession {
+  session_id: string;
+  created_at: string;
+  title: string;
+  scope_id: string;
+  album_id: string;
+  model_name?: string;
+  endpoint_model?: string;
+  model_profile?: string;
+  model_identity?: Record<string, unknown>;
+  model_preparation?: Record<string, unknown>;
+  runtime_snapshot?: Record<string, unknown>;
+  status: string;
+  reasoning?: boolean | null;
+  error?: string;
+  source?: { album_id: string; qa_set: string; row: QaRow; definition_sha256: string } | null;
+  turns?: Array<{ index: number; message: string; turn_id: string; status: string; reasoning?: boolean; answer?: string; error?: string; wall_clock_ms?: number }>;
+  items?: RunItemDetail[];
 }
