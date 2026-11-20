@@ -46,20 +46,25 @@ afterEach(() => {
 });
 
 describe("事件详情", () => {
-  it("用 GET /events/{id} 的数据展示摘要、时间地点、封面与原始照片", async () => {
+  it("用事件数据展示摘要、时间地点与全部照片，点照片打开预览", async () => {
     vi.mocked(client.fetchEvent).mockResolvedValue(EVENT);
-    render(<TimelineEventDetail eventId="event1" onClose={vi.fn()} />);
+    const onOpenImage = vi.fn();
+    render(<TimelineEventDetail eventId="event1" onClose={vi.fn()} onOpenImage={onOpenImage} />);
 
     expect(await screen.findByRole("heading", { name: "湖边散步" })).not.toBeNull();
     expect(client.fetchEvent).toHaveBeenCalledWith("event1");
     expect(screen.getByText("一家人沿湖走了一圈。")).not.toBeNull();
     expect(screen.getByText("2026-01-02 10:00 → 2026-01-02 12:00")).not.toBeNull();
     expect(screen.getAllByText("杭州市西湖区").length).toBeGreaterThan(0);
-    expect(screen.getByText("86%")).not.toBeNull();
-    expect(screen.getByRole("img", { name: "湖边散步的封面" })).not.toBeNull();
-    expect(screen.getByText("原始证据（2 个媒体）")).not.toBeNull();
-    // 后端没有的三块如实说明，而不是渲染空壳。
-    expect(screen.getByText(/不返回人物、实体或关联事实/)).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "全部资料（2 份）" })).toBeTruthy();
+    const photos = screen.getAllByRole("img", { name: "事件照片" });
+    expect(photos.map((photo) => photo.getAttribute("src"))).toEqual([
+      "/api/v1/assets/asset1/thumbnail", "/api/v1/assets/asset2/thumbnail",
+    ]);
+    fireEvent.click(photos[1]);
+    expect(onOpenImage).toHaveBeenCalledExactlyOnceWith("/api/v1/assets/asset2/preview", "杭州市西湖区");
+    expect(screen.getByRole("region", { name: "事件记忆修正" })).toBeTruthy();
+    expect(screen.queryByText(/不返回人物、实体或关联事实/)).toBeNull();
   });
 
   it("关闭按钮与 Escape 都能关闭", async () => {
