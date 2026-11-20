@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 12:50｜Q4终态逐题核验并仅Judge补16份答卷
+
+精确3556c7于12:32:04 completed_with_errors；1013唯一QA与冻结题库对应，979执行完成、27 model_error/7 timeout执行失败保持。196继承记录/154继承有效回执及18隔离标记逐项验过。963有效ATM分保持，缺16份现成答卷评分（10历史持久化失败/4未生成/1取消/1Judge结构校验失败）；其中3条隔离只补现有答案的Judge。状态标签不作为模型智能或代码责任结论。
+
+本机新ops 97d39fa/10a136f/98c3747先语法/ruff/diff验证、commit，再同步100逐SHA核验和精确16题预览。父run含1013占位项，初检错误假设其仅196项而断言退出；改按resume_context的196精确ID后通过，无正式结果改写。后续指纹对不可变引用ID计算，避免展开历史正文。
+
+先新wake134dea0d-56d4-4724-82f3-2235ee2dfe6f，再单次仅Judge任务scoring-abaf0d6f99184dcf83b65654f49da228；watcher64444首轮running/worker=true、0/16。原fd46ad08本事件已处理；score_missing.py plan/launch已消费不可重放，accept尚未消费。终态验原963有效回执/全部答卷/34失败/失败评分history与新分，再验固定revision在线完整trace/SFT流式导出。/home约2.8GiB，勿重复落大正文；失败不补0，不自动重跑Agent。
+
+8872/8291仍原psh-formal-f75c105/PID1405124/1408374，等待仍180秒，本轮不部署重启，未证明慢写/OOM消除。实际100/600/100/500、QA4/3660与模型8100/GPU0匹配。当前scope无活动turn，但全库10条11/10 pending和历史pipeline running回执保持，不据此宣告整个产品可切换。豆包d52ecf只读268题/4实际turn/worker与型号预算正常，原79d22271/watcher79813不动。旧99306be候选不含后续main，独立空闲wake只唤醒审查，不重放旧activate。新ops已push origin的codex/q4-trace-quarantine-20261119，未覆盖其他协作分支/PR。审计与后续入口：产品项目audit/20261120-q4-terminal及主实验state/checkpoint-watchers。
+
 ## 2026-11-20 10:45｜修复Sentrix前端31项测试失败
 
 用户侧聊明确授权修复既有31项失败，并提交、push及更新原main PR #43。起点1a56385工作树干净；本机复现158通过/31失败。逐项根因与当前源码依据保存在产品项目audit/20261120-product-web-tests/failure-inventory.json。缺认证/上传Provider与matchMedia的测试已补齐运行上下文；导航与路由按现行六入口/七路由检查，旧相册切换/命令/QA入口保持隐藏；过程卡片、媒体标签和预览按当前界面核验。
