@@ -51,6 +51,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Any
 
 from photobench.application.deploy.service import SentrixModelSwitch
@@ -70,6 +71,11 @@ from photobench.domain.deploy.ports import (
 from photobench.domain.errors import RequestOutcomeUnknownError
 from photobench.domain.evaluation.profiles import uses_readable_metadata
 from photobench.domain.evaluation.prompts import evaluation_prompts
+from photobench.domain.evaluation.sources import (
+    resolve_sources,
+    source_mapping_complete,
+    source_metrics_for_record,
+)
 from photobench.domain.http.ports import JsonHttpClient
 from photobench.domain.results.ports import RunResultWriter
 from photobench.domain.runs.analysis import (
@@ -115,6 +121,9 @@ PIPELINE_FAILED_STATUSES = frozenset({"failed"})
 
 #: 2.0 的 ``TurnStatus``（``domain/assistant/models.py:40``）里非终态的两种。
 TURN_PENDING_STATUSES = frozenset({"pending", "running"})
+DEFAULT_TURN_TIMEOUT = 900
+#: 推理模式的一小时执行预算，另留一分钟接收终态。
+REASONING_TURN_TIMEOUT = 3660
 #: 单次轮询请求的超时不能与整条回合等待上限混为一谈。Mac 上做视频视觉取证时，
 #: Sentrix 的轮询端点偶尔会被同一进程里的重计算拖到 30 秒以上；原先沿用
 #: ``SentrixClient.get_turn`` 的 30 秒默认值，会把一个随后已经落库的回合误记成
@@ -170,6 +179,11 @@ _DEFAULT_SLEEP = time.sleep
 
 #: 顺带搬过来的 item 字段（1.0 ``:3379``）。这些是题库侧的标签，主链只负责带过去。
 PASSTHROUGH_FIELDS = (
+    "retrieval_source_refs",
+    "answer_evidence_source_refs",
+    "source_protocol",
+    "evidence_v12",
+    "keyframe_eval",
     "evaluation",
     "benchmark_id",
     "source_qa_id",
@@ -247,12 +261,19 @@ class RunRequest:
     prior_items: tuple[Mapping[str, Any], ...] = ()
     repair_missing_judges: bool = False
     resume_context: Mapping[str, Any] | None = None
+    retest_context: Mapping[str, Any] | None = None
+    switch_model: bool = False
     frozen_qa_snapshot: Mapping[str, Any] | None = None
     import_timeout: int = 7200
-    turn_timeout: int = 900
+    pipeline_timeout: int = 86400
+    recover_pipeline: bool = False
+    recovery_asset_ids: tuple[str, ...] = ()
+    turn_timeout: int = REASONING_TURN_TIMEOUT
     qa_concurrency: int = 0
     #: 是否启用图记忆检索；关闭时仍保留同一相册和同一 QA 流程，用于最终媒体指标对照。
     graph_enabled: bool = True
+    #: 推理模式开放全工具与调用次数；历史续跑需显式继承原值。
+    reasoning: bool = True
     #: 有图 run 可填写对应的无图完整 run，用于配对最终媒体召回率。
     graph_baseline_run_id: str = ""
     judge_backpressure: bool = True
@@ -302,9 +323,11 @@ def freeze_runtime_request(
         runtime_framework=request.runtime_framework,
         execution_budgets={
             "import_timeout": request.import_timeout,
+            "pipeline_timeout": request.pipeline_timeout,
             "turn_timeout": request.turn_timeout,
             "qa_concurrency": request.qa_concurrency,
             "judge_backpressure": request.judge_backpressure,
+            "reasoning": request.reasoning,
         },
         required_build_revision=connection.get("product_build_revision")
         or (revision if revision != "development" else None),
@@ -358,6 +381,7 @@ class RunExecution:
     #: 供读侧与运维判断这轮的数字是什么口径（1.0 ``:1977`` 的 ``telemetry_source``）。
     runtime_snapshot: RunRuntimeSnapshot | None = None
     telemetry_source: str = ""
+    telemetry_history_enabled: bool = False
     #: 召回图 → data URL 的实现（要用 PIL）。由装配点注入，application 不许 import PIL。
     inline_images: InlineImages | None = None
     #: 换模型 = 重启 2.0（S9c · T923）：把 2.0 的 ``vlm_base_url`` 对准本轮的端点。
@@ -428,6 +452,17 @@ class RunExecution:
             except Exception as exc:  # noqa: BLE001
                 state.set("cancel_vllm_stop_error", str(exc)[:300])
 
+    def prepare_interactive_model(self, request: RunRequest, cancel: threading.Event) -> dict[str, Any]:
+        """Prepare and verify a model without creating an evaluation result."""
+        state = RunState({"phases": {}})
+        state.cancel_event = cancel
+        self._state, self._request = state, request
+        self._cancel_wait(0)
+        state.phase_start("model_deploy")
+        self._phase_model_deploy(state, request)
+        self._cancel_wait(0)
+        return state.snapshot()
+
     def prepare(self, request: RunRequest) -> RunState:
         """创建并持久化 ``pending`` 状态，供后台线程开始前的读侧使用。
 
@@ -464,8 +499,10 @@ class RunExecution:
                 "sentrix_url": request.sentrix_url,
                 "model_base_url": request.model_base_url,
                 "input_integrity": None,
+                "retest_context": copy.deepcopy(request.retest_context),
                 "status": "failed",
                 "failed_phase": "initialization",
+                "telemetry_history_enabled": self.telemetry_history_enabled,
                 "fatal_error": str(exc),
                 "created_at": now_iso(),
                 "finished_at": now_iso(),
@@ -482,6 +519,8 @@ class RunExecution:
             run_id=run_id,
             writer=self.writer,
         )
+        if request.recover_pipeline:
+            state.set("pipeline_asset_ids", list(request.recovery_asset_ids))
         # 取消回收模型时要读它（``_reclaim_model_after_cancel``）。存在 self 上而不是
         # state 里：state 要被 json.dumps 落盘，见 ``_request`` 的注释。
         self._request = request
@@ -507,6 +546,7 @@ class RunExecution:
             on_sample=self._sample_writer(state),
             on_aggregate=lambda metrics: self._publish_partial_gpu_metrics(state, metrics),
             publish_interval=GPU_METRICS_PUBLISH_SECONDS,
+            history_enabled=bool(state.get("telemetry_history_enabled")),
         )
         self._sampler = sampler
         sampling = self._sampling_enabled() and self.telemetry_source != "unavailable"
@@ -538,6 +578,8 @@ class RunExecution:
             ]
         if request.mode == "build":
             phases = [(name, phase) for name, phase in phases if name != "qa_eval"]
+        if request.recover_pipeline:
+            phases.insert(2, ("pipeline_processing", self._phase_processing))
         state.set("status", "running")
         state.set("started_at", now_iso())
         state.set("hardware_snapshots", {"start": self._hardware_snapshot(), "end": None})
@@ -557,6 +599,12 @@ class RunExecution:
                     sampler.sample_once()
                 phase(state, request)
                 state.persist()
+                if (
+                    request.recover_pipeline
+                    and name == "pipeline_processing"
+                    and (state.get("phases") or {}).get(name, {}).get("status") != "done"
+                ):
+                    raise RuntimeError("pipeline recovery is incomplete; QA has not started")
             partial = any(
                 bucket.get("status") == "partial" for bucket in (state.get("phases") or {}).values()
             )
@@ -600,11 +648,15 @@ class RunExecution:
                                 "collection_end_reason": terminal_status,
                             },
                         )
-                if request.mode in {"full", "build"}:
+                if request.mode in {"full", "build"} or request.recover_pipeline:
                     build_phases = state.get("phases") or {}
                     build_ready = all(
                         (build_phases.get(key) or {}).get("status") == "done"
-                        for key in ("identity_seed", "photo_import", "pipeline_processing")
+                        for key in (
+                            ("pipeline_processing",)
+                            if request.recover_pipeline
+                            else ("identity_seed", "photo_import", "pipeline_processing")
+                        )
                     )
                     state.set(
                         "scope_build",
@@ -678,6 +730,12 @@ class RunExecution:
                 "definition_sha256": qa_fingerprint(rows),
                 "rows": copy.deepcopy(rows),
             }
+        from photobench.domain.datasets.validation import require_valid_targets
+
+        # Validate new input before import/Agent work. Recovery keeps its frozen protocol.
+        preflight = (
+            require_valid_targets(snapshot["rows"], manifest) if request.frozen_qa_snapshot is None else None
+        )
         metadata = {}
         if request.frozen_qa_snapshot is None and any(
             uses_readable_metadata(c) for c in request.scoring_configs.values()
@@ -686,7 +744,9 @@ class RunExecution:
         return {
             **metadata,
             "qa_snapshot": snapshot,
+            "qa_validation": preflight,
             "resume_context": copy.deepcopy(request.resume_context),
+            "retest_context": copy.deepcopy(request.retest_context),
             "metrics_contract_version": 2,
             "build_revision": self.runtime_snapshot.build_revision
             if self.runtime_snapshot
@@ -705,6 +765,7 @@ class RunExecution:
             "album_name": manifest.get("album_name"),
             "model_profile": request.model_profile,
             "graph_enabled": request.graph_enabled,
+            "reasoning": request.reasoning,
             "graph_baseline_run_id": request.graph_baseline_run_id or None,
             "model_name": None,
             "endpoint_model": request.endpoint_model or None,
@@ -723,6 +784,7 @@ class RunExecution:
             # 1.0 ``:1977``：这两个是读侧与运维判断「这轮的数字是什么口径」的入口
             # （``run_list_entry`` 会取它们）。
             "telemetry_source": self.telemetry_source or None,
+            "telemetry_history_enabled": self.telemetry_history_enabled,
             "runtime_framework": request.runtime_framework or "generic",
             "judge_url": request.judge_url
             or (self.judge_settings.judge_url if self.judge_settings else "")
@@ -807,15 +869,9 @@ class RunExecution:
         )
 
     def _sample_writer(self, state: RunState) -> Callable[[dict[str, Any]], None]:
-        """采样回调：打相位标签、追加 JSONL、更新内存实时视图。
+        """更新最新值与全程峰值；仅在本轮启用历史时追加原始 JSONL。
 
-        1.0 ``_persist_gpu_sample``（``:2110``）的三段在这里逐段对应：
-
-        1. **追加 JSONL**（立即落盘，取消/崩溃时才不丢）——``gpu_samples.jsonl`` 是
-           完整曲线的权威来源。
-        2. **更新 ``telemetry_live``**（``domain.runs.analysis.apply_live_sample``）：
-           latest/peak/history/phase_snapshots 的滚动视图，给实时 GPU 卡片看。
-        滚动聚合由采样器的独立发布线程回调，避免空holder绑定及采样锁内全量统计。
+        实时窗口随记录模式关闭或限制为 240 点；独立发布线程覆盖保存瘦快照。
         """
 
         def on_sample(sample: dict[str, Any]) -> None:
@@ -825,13 +881,23 @@ class RunExecution:
             label = PHASE_LABELS.get(phase, phase)
             sample.setdefault("phase", phase)
             sample.setdefault("phase_label", label)
-            persisted = dict(sample)
-            self.writer.append_gpu_sample(state.run_id, persisted)
+            history_enabled = bool(state.get("telemetry_history_enabled", self.telemetry_history_enabled))
+            if history_enabled:
+                self.writer.append_gpu_sample(state.run_id, dict(sample))
             live = state.mutate("telemetry_live")
             with state.lock:
                 if state.data.get("finished_at"):
                     return
-                apply_live_sample(live, sample, phase, label, tail=LIVE_TELEMETRY_TAIL_POINTS)
+                live["history_enabled"] = history_enabled
+                live["statistics_mode"] = "streaming_v1"
+                apply_live_sample(
+                    live,
+                    sample,
+                    phase,
+                    label,
+                    tail=LIVE_TELEMETRY_TAIL_POINTS,
+                    record_history=history_enabled,
+                )
                 if sample.get("llama_server_args") and not state.data.get("llama_server_args"):
                     state.data["llama_server_args"] = sample.get("llama_server_args")
 
@@ -924,7 +990,15 @@ class RunExecution:
         占位——**两个分支都要做**：没有 Manager 的「外部端点」正是 153 上的形态，
         而 2.0 的助手用哪个模型只由它自己的 ``vlm_base_url`` 决定，与有没有 Manager 无关。
         """
-        if request.mode == "reuse" or request.model_profile == "__current__" or not request.manager_url:
+        if (
+            (request.mode == "reuse" and not request.switch_model)
+            or request.model_profile == "__current__"
+            or not request.manager_url
+        ):
+            if request.switch_model and request.endpoint_model:
+                models = self.inference.list_models().get("models") or []
+                if not models or models[0] != request.endpoint_model:
+                    raise ValueError("所选模型与产品端点实际使用的模型不一致，请选择该模型的专用端点")
             state.phase_done(
                 "model_deploy",
                 {
@@ -1016,13 +1090,20 @@ class RunExecution:
                 "error": "sentrix process controller is not wired",
                 "restarted": False,
             }
-        outcome = self.sentrix_switch.ensure_endpoint(request.model_base_url)
-        if not outcome.ok:
-            raise RuntimeError(f"could not point Sentrix at {outcome.endpoint or '(none)'}: {outcome.error}")
-        result = outcome.to_state()
+        observed = self.client.diagnostics() if request.switch_model else {}
+        actual = str((observed.get("runtime_configuration") or {}).get("vlm_base_url") or "")
+        if request.switch_model and _same_model_endpoint(actual, request.model_base_url):
+            result = {"ok": True, "restarted": False, "endpoint": actual, "reason": "verified_live_endpoint"}
+        else:
+            outcome = self.sentrix_switch.ensure_endpoint(request.model_base_url)
+            if not outcome.ok:
+                raise RuntimeError(
+                    f"could not point Sentrix at {outcome.endpoint or '(none)'}: {outcome.error}"
+                )
+            result = outcome.to_state()
+            observed = self.client.diagnostics() if self.runtime_snapshot is not None else {}
         if self.runtime_snapshot is not None:
             expected = self.runtime_snapshot.connection()
-            observed = self.client.diagnostics()
             effective = observed.get("runtime_configuration")
             if not isinstance(effective, dict):
                 raise RuntimeError("Sentrix did not report effective runtime configuration")
@@ -1054,7 +1135,10 @@ class RunExecution:
                 expected.get("required_build_revision")
                 and observed.get("build_revision") != expected["required_build_revision"]
             ):
-                mismatches.append("build_revision")
+                mismatches.append(
+                    f"build_revision (expected={expected['required_build_revision']}, "
+                    f"actual={observed.get('build_revision')})"
+                )
             if mismatches:
                 raise RuntimeError("Sentrix effective configuration mismatch: " + ", ".join(mismatches))
             result["runtime_configuration"] = effective
@@ -1359,8 +1443,8 @@ class RunExecution:
             )
             state.persist()
             absolute, entry_count = self.albums.import_target(album_id, relative)
-            limit = min(1000, max(1, entry_count))
             explicit_pipeline = bool(getattr(self.client, "supports_explicit_pipeline", False))
+            limit = max(1, entry_count) if explicit_pipeline else min(1000, max(1, entry_count))
             if explicit_pipeline:
                 if getattr(self.client, "supports_live_import_progress", False):
                     result, directory_processed = self._import_album_with_progress(
@@ -1550,7 +1634,7 @@ class RunExecution:
         """
         baseline = 0
         try:
-            baseline = len(self.client.list_assets(scope_id=scope_id, limit=1000, timeout=60))
+            baseline = len(self.client.list_assets(scope_id=scope_id, limit=None, timeout=60))
         except Exception:  # noqa: BLE001 - 旁路进度失败不能影响导入主链
             baseline = 0
 
@@ -1565,7 +1649,7 @@ class RunExecution:
         )
         while not future.done():
             try:
-                visible = self.client.list_assets(scope_id=scope_id, limit=1000, timeout=3)
+                visible = self.client.list_assets(scope_id=scope_id, limit=None, timeout=3)
                 current = max(0, len(visible) - baseline)
                 processed = min(total_media, processed_before + current)
                 state.record_phase("photo_import", "processed_count", processed)
@@ -1628,7 +1712,7 @@ class RunExecution:
         progress_signature: tuple[Any, ...] | None = None
         while True:
             poll_count += 1
-            assets = self.client.list_assets(scope_id=scope_id, limit=1000)
+            assets = self.client.list_assets(scope_id=scope_id, limit=None)
             pending = [item for item in assets if item.get("status") in PIPELINE_PENDING_STATUSES]
             failed = [item for item in assets if item.get("status") in PIPELINE_FAILED_STATUSES]
             processed = [item for item in assets if item.get("status") == "processed"]
@@ -1750,6 +1834,8 @@ class RunExecution:
     def _phase_processing_explicit(self, state: RunState, request: RunRequest) -> None:
         """调用主产品的真实流水线，同时旁路轮询源资产状态用于实时进度。"""
         state.record_phase("pipeline_processing", "execution_mode", "explicit")
+        if request.recover_pipeline:
+            state.record_phase("pipeline_processing", "recovery_mode", "resume_unfinished_sources")
         started = time.perf_counter()
         scope_id = str(state.get("scope_id"))
         asset_ids = [str(value) for value in (state.get("pipeline_asset_ids") or []) if value]
@@ -1774,19 +1860,20 @@ class RunExecution:
         )
         self._persist(str(state.get("run_id")), state)
 
+        process = self.client.recover_pipeline if request.recover_pipeline else self.client.process_pipeline
         future = self._start_phase_request(
-            lambda: self.client.process_pipeline(
+            lambda: process(
                 scope_id=scope_id,
                 asset_ids=asset_ids,
+                timeout=request.pipeline_timeout,
                 graph_enabled=request.graph_enabled,
-                timeout=request.import_timeout,
             ),
             name="sentrix-pipeline",
         )
         while not future.done():
             poll_count += 1
             try:
-                visible = self.client.list_assets(scope_id=scope_id, limit=1000, timeout=3)
+                visible = self.client.list_assets(scope_id=scope_id, limit=None, timeout=3)
                 assets = [item for item in visible if str(item.get("id") or "") in target_ids]
                 processed = [item for item in assets if item.get("status") == "processed"]
                 pending = [item for item in assets if item.get("status") in PIPELINE_PENDING_STATUSES]
@@ -1824,9 +1911,11 @@ class RunExecution:
                 pass
             self._cancel_wait(PIPELINE_POLL_SECONDS)
         result = future.result()
+        state.record_phase("pipeline_processing", "operation_id", result.get("operation_id"))
+        state.record_phase("pipeline_processing", "response", result)
 
         try:
-            visible = self.client.list_assets(scope_id=scope_id, limit=1000, timeout=60)
+            visible = self.client.list_assets(scope_id=scope_id, limit=None, timeout=60)
             assets = [item for item in visible if str(item.get("id") or "") in target_ids]
             poll_count += 1
         except Exception:  # noqa: BLE001 - 最终状态可由主响应兜底
@@ -2136,7 +2225,7 @@ class RunExecution:
         if health_error:
             raise RuntimeError(f"model service is unhealthy before QA evaluation: {health_error}")
         scope_id = str(state.get("scope_id"))
-        assets = self.client.list_assets(scope_id=scope_id, limit=1000)
+        assets = self.client.list_assets(scope_id=scope_id, limit=None)
         assets_by_name = index_assets_by_name(assets)
         snapshot = state.get("qa_snapshot")
         if not snapshot or "rows" not in snapshot:
@@ -2180,7 +2269,10 @@ class RunExecution:
         recovery_indices = {
             index
             for index, item in items.items()
-            if request.repair_missing_judges and judge is not None and judge.needs_judge_recovery(item)
+            if request.repair_missing_judges
+            and judge is not None
+            and (item.get("trace_quarantine") or {}).get("status") != "execution_anomaly"
+            and judge.needs_judge_recovery(item)
         }
         recovery_queue = iter(sorted(recovery_indices))
         judge_done = sum(
@@ -2543,6 +2635,7 @@ class RunExecution:
                     conversation_id=conversation_id,
                     message=message,
                     include_debug=True,
+                    reasoning=request.reasoning,
                     **({"graph_enabled": False} if not request.graph_enabled else {}),
                     timeout=300,
                 )
@@ -2550,7 +2643,26 @@ class RunExecution:
                 if not turn_id:
                     raise RuntimeError(f"2.0 发起回合没有返回 turn_id：{started_turn}")
                 request_stage = "await_turn"
-                polled = self._await_turn(turn_id, request)
+                if request.retest_context and self._state is not None:
+                    polled = self._await_turn(
+                        turn_id,
+                        request,
+                        on_progress=partial(
+                            self._publish_retest_progress,
+                            record={
+                                "index": turn_index,
+                                "message": message,
+                                "qa_id": row.get("qa_id"),
+                                "turn_id": turn_id,
+                            },
+                            previous_turns=turn_records,
+                            assets=assets_by_name,
+                            item=item,
+                            started=started,
+                        ),
+                    )
+                else:
+                    polled = self._await_turn(turn_id, request)
                 last_result = polled.get("result") or {}
                 last_progress = polled.get("public_progress") or []
                 turn_records.append(
@@ -2560,10 +2672,25 @@ class RunExecution:
                         "conversation_id": conversation_id,
                         "context_turn_count": turn_index,
                         "message": message,
+                        "reasoning": request.reasoning,
                         "turn_id": turn_id,
                         "status": polled.get("status"),
                         "answer": str(last_result.get("answer") or ""),
                         "attachments": last_result.get("attachments") or [],
+                        "predicted_source_refs": resolve_sources(
+                            selected_asset_ids(last_result), assets_by_name
+                        ),
+                        "retrieved_source_refs": resolve_sources(
+                            retrieved_candidate_asset_ids(last_result), assets_by_name
+                        ),
+                        "read_source_refs": resolve_sources(
+                            [
+                                str(r["asset_id"])
+                                for r in (last_result.get("trace") or {}).get("source_reads", [])
+                            ],
+                            assets_by_name,
+                        ),
+                        "source_mapping_complete": source_mapping_complete(last_result, assets_by_name),
                         "requirements": last_result.get("requirements") or [],
                         "termination_reason": last_result.get("termination_reason") or "",
                         "error": polled.get("error") or "",
@@ -2619,6 +2746,20 @@ class RunExecution:
                 )
             # 轨迹：从**同一条事件流**投影出两条（见 ``traces_from_progress``）。
             # 读侧的 ``bind_tool_calls_to_model_rounds`` 早就在等它们了。
+            for record in turn_records:
+                record["source_metrics"] = source_metrics_for_record(row, record)
+            item.update(
+                {
+                    key: turn_records[-1][key]
+                    for key in (
+                        "predicted_source_refs",
+                        "retrieved_source_refs",
+                        "read_source_refs",
+                        "source_mapping_complete",
+                        "source_metrics",
+                    )
+                }
+            )
             tool_trace, execution_trace = traces_from_progress(turn_records)
             selected = selected_asset_ids(last_result)
             predicted_media = resolve_predicted_media(selected, assets_by_name)
@@ -2657,6 +2798,7 @@ class RunExecution:
                         for call in (turn.get("trace_bundle") or {}).get("model_calls") or []
                     ],
                     "selected_asset_ids": selected,
+                    "attachments": last_result.get("attachments") or [],
                     # **检索的排名质量**（1.0 ``image_ranking``）。读侧的
                     # ``ranking_from_item`` 会从 ``retrieved_candidate_media`` 兜底回算，
                     # 但那只对 summary 生效——**逐题详情读的是 item 上这一格**，
@@ -2836,7 +2978,45 @@ class RunExecution:
                 self._state.data["cleanup"]["status"] = "stop_pending"
         return facts
 
-    def _await_turn(self, turn_id: str, request: RunRequest) -> dict[str, Any]:
+    def _publish_retest_progress(
+        self,
+        polled: dict[str, Any],
+        *,
+        record: dict[str, Any],
+        previous_turns: list[dict[str, Any]],
+        assets: dict[str, list[dict[str, Any]]],
+        item: dict[str, Any],
+        started: float,
+    ) -> None:
+        from photobench.domain.chat.projection import turn_item
+
+        assert self._state is not None
+        live = {**item, **turn_item(record, polled, assets)}
+        live["runtime_turns"][0].update(
+            {
+                "index": record["index"],
+                "context_turn_count": record["index"],
+                "conversation_id": item.get("conversation_id"),
+            }
+        )
+        live["runtime_turns"] = [*previous_turns, *live["runtime_turns"]]
+        live["tool_trace"], live["execution_trace"] = traces_from_progress(live["runtime_turns"])
+        live["model_call_metrics"] = [
+            {**metric, "conversation_turn": turn["index"]}
+            for turn in live["runtime_turns"]
+            for metric in (turn.get("trace_bundle") or {}).get("model_calls", [])
+        ]
+        live["wall_clock_ms"] = round((time.perf_counter() - started) * 1000)
+        self._state.set("interactive_item", live)
+        self._state.persist()
+
+    def _await_turn(
+        self,
+        turn_id: str,
+        request: RunRequest,
+        *,
+        on_progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         """1.0 ``wait_for_assistant_turn``（``:909``）的 2.0 版。
 
         1.0 的判据是状态字符串落在 ``{"complete","completed","done","success"}``；
@@ -2878,6 +3058,8 @@ class RunExecution:
                     self._cancel_wait(min(backoff, max(0.0, deadline - time.monotonic())))
                     continue
 
+                if on_progress is not None:
+                    on_progress(polled)
                 if str(polled.get("status") or "") not in TURN_PENDING_STATUSES:
                     return polled
                 if time.monotonic() >= deadline:

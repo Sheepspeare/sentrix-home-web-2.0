@@ -17,14 +17,19 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sentrix.infrastructure.assistant.turn_executor import TurnExecutor
 
 from sentrix.application.identity.person_directory import EntityPersonDirectory
+from sentrix.application.media.track_pipeline import TrackPipeline
 from sentrix.bootstrap.model_roles import ModelProfile, load_model_profile
 from sentrix.config import Settings
 from sentrix.domain.assistant.ports import (
     ChatModel,
     ConversationRepository,
+    GenerationHealthProbe,
     PersonDirectory,
     ResultSetRepository,
     SpeechRecognizer,
@@ -93,7 +98,12 @@ from sentrix.domain.retrieval.ports import (
     VisualEvidenceUtility,
 )
 from sentrix.domain.spaces.ports import SpaceRepository
-from sentrix.infrastructure.assistant.chat_client import MAX_ANSWER_TOKENS, ModelBudget, OpenAIChatModel
+from sentrix.infrastructure.assistant.chat_client import (
+    MAX_ANSWER_TOKENS,
+    REASONING_CONTEXT_TOKENS,
+    ModelBudget,
+    OpenAIChatModel,
+)
 from sentrix.infrastructure.assistant.events import InProcessTurnEventBroker
 from sentrix.infrastructure.assistant.model_endpoint import (
     FixedModelName,
@@ -133,6 +143,7 @@ from sentrix.infrastructure.models.speech_http import HttpSpeechRecognizer
 from sentrix.infrastructure.models.visual_utility import OpenAIVisualEvidenceUtility
 from sentrix.infrastructure.models.wemm import WeMMSidecarEmbedder
 from sentrix.infrastructure.persistence.database import Database
+from sentrix.infrastructure.persistence.pipeline_receipts import SqlitePipelineReceipts
 from sentrix.infrastructure.persistence.repositories.appearance import SqliteAppearanceRepository
 from sentrix.infrastructure.persistence.repositories.appearance_jobs import SqlitePersonAppearanceJobs
 from sentrix.infrastructure.persistence.repositories.asset_places import SqliteAssetPlaceRepository
@@ -263,6 +274,7 @@ class Container:
 
     operation_control: OperationControl
     import_progress: ImportProgressStore
+    pipeline_tracker: TrackPipeline
     asset_repository: AssetRepository
     observation_repository: ObservationRepository
     media_storage: MediaStorage
@@ -301,7 +313,7 @@ class Container:
     # 「此刻还嵌不嵌得动」——2026-10-10 那轮侧车全程不在，检索照常返回、静默降级，
     # ``/health`` 一路回 ok。没有这一格，降级在运维侧不可见。
     embedding_health: EmbeddingHealthProbe
-    model_health: ModelGenerationHealth
+    model_health: GenerationHealthProbe
 
     # 时间线（S4）。地点是纯离线的：区县走 PyGeoCN 的面，乡镇/村庄走 GeoNames 的
     # 最近邻点，运行时零网络依赖。
@@ -425,6 +437,7 @@ class Container:
         vision_max_tokens = MAX_ANSWER_TOKENS
         vision_json_mode = settings.vlm_generation_profile == "qwen35_nonthinking"
         vision_generation: dict[str, Any] | None = None
+        reasoning_context = settings.vlm_reasoning_context_tokens or REASONING_CONTEXT_TOKENS
         if settings.llm_profile == "cloud":
             assert settings.llm_config_path is not None
             model_profile = load_model_profile(
@@ -506,6 +519,11 @@ class Container:
             vision_timeout = settings.vlm_timeout_s
             chat_budget = ModelBudget(
                 context_tokens=served_context or settings.vlm_context_tokens,
+            )
+            # 自报容量优先；未报容量的云端代理可以独立声明推理窗口。
+            reasoning_context = min(
+                reasoning_context,
+                served_context or settings.vlm_reasoning_context_tokens or settings.vlm_context_tokens,
             )
         # **嵌入方案是整方案原子切换**（``scheme.SCHEMES``）。默认 wemm；legacy 是
         # 16 GB Mac mini 的回退（chinese-clip 768d + bge-m3 1024d）。两个分支都只
@@ -597,6 +615,7 @@ class Container:
             database=database,
             operation_control=InProcessOperationControl(),
             import_progress=InProcessImportProgressStore(),
+            pipeline_tracker=TrackPipeline(SqlitePipelineReceipts(database)),
             spaces=SqliteSpaceRepository(database),
             asset_repository=assets,
             observation_repository=observations,
@@ -710,6 +729,7 @@ class Container:
                 budget=chat_budget,
                 payload_config=chat_payload,
                 retry=chat_retry,
+                reasoning_context_tokens=reasoning_context,
             ),
             vlm_observer=OpenAIVlmObserver(
                 vision_base_url,
@@ -751,7 +771,7 @@ class Container:
             return False, f"model_unavailable: {reason}"
         return True, ""
 
-    def build_turn_executor(self):
+    def build_turn_executor(self) -> TurnExecutor:
         """消费问答接口创建的持久回合，包括独立本地 API 实例。"""
         from sentrix.bootstrap.assistant_wiring import build_run_turn
         from sentrix.infrastructure.assistant.turn_executor import TurnExecutor
@@ -761,7 +781,7 @@ class Container:
             workers = int(self.model_profile.agent["turn_workers"])
         return TurnExecutor(
             turns=self.turn_repository,
-            run_turn_factory=lambda: build_run_turn(self),
+            run_turn_factory=lambda reasoning: build_run_turn(self, reasoning=reasoning),
             broker=self.turn_event_broker,
             dependencies_ready=self.dependencies_ready,
             operation_control=self.operation_control,
@@ -794,7 +814,7 @@ class Container:
         from sentrix.infrastructure.media.upload_cleanup import reconcile_uploads
 
         return reconcile_uploads(
-            media_dir=self.settings.media_dir,
+            storage=self.media_storage,
             staging_dir=self.media_storage.staging_dir,
             jobs=self.import_jobs,
             grace_s=self.settings.upload_cleanup_grace_s,

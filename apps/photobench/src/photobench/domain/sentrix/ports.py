@@ -120,8 +120,20 @@ class SentrixClient(Protocol):
         """``POST /api/v1/pipeline/process``：同步执行关键帧、记忆与图构建。"""
         ...
 
-    def list_assets(self, *, scope_id: str, limit: int, timeout: int = 60) -> list[dict[str, Any]]:
+    def finalize_pipeline(self, *, scope_id: str, asset_ids: Sequence[str], timeout: int) -> dict[str, Any]:
+        """Validate processed sources and finish the build without source inference."""
+        ...
+
+    def recover_pipeline(
+        self, *, scope_id: str, asset_ids: Sequence[str], timeout: int, graph_enabled: bool = True
+    ) -> dict[str, Any]:
+        """Resume unprocessed sources after their original owning process has stopped."""
+        ...
+
+    def list_assets(self, *, scope_id: str, limit: int | None, timeout: int = 60) -> list[dict[str, Any]]:
         """``GET /api/v1/assets?scope_id=&limit=``，**拆掉响应信封后**的资产表。
+
+        ``limit=None`` 读取整个相册；适配器负责分页，整数表示最多返回的资产数。
 
         2.0 的响应是 ``{"items": [...]}`` 而 1.0 是 ``{"assets": [...]}``
         （``api/schemas/media.py:136``）——这个差异由适配器吸收，因为调用方用的是
@@ -146,6 +158,7 @@ class SentrixClient(Protocol):
         message: str,
         include_debug: bool = False,
         graph_enabled: bool = True,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         """``POST /api/v1/assistant/conversations/{cid}/turns``，返回 ``{turn_id, status}``。
@@ -158,6 +171,7 @@ class SentrixClient(Protocol):
         不打开，产品对话就不会把那几十 KB 的提示词写进 ``agent_turns``。
 
         ``graph_enabled=False`` 用于最终媒体召回率对照 run；默认不发送关闭标记。
+        ``reasoning`` 始终显式发送，测评默认开启；历史任务恢复传入原模式。
         """
         ...
 
@@ -203,3 +217,15 @@ class CancellableOperations(Protocol):
     def cancel_operation(self, *, kind: str, operation_id: str, timeout: int = 3) -> dict[str, Any]:
         """Request/observe cooperative cancellation; transport/unknown failures propagate."""
         ...
+
+
+class InteractiveSentrixClient(SentrixClient, Protocol):
+    """Conversation reads and cooperative turn cancellation for the chat page."""
+
+    def get_conversation(self, *, conversation_id: str, timeout: int = 30) -> dict[str, Any]: ...
+
+    def cancel_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]: ...
+
+    def delete_conversation(self, *, conversation_id: str, timeout: int = 30) -> None: ...
+
+    def get_asset(self, *, asset_id: str, timeout: int = 5) -> dict[str, Any] | None: ...

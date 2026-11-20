@@ -118,6 +118,8 @@ export function AssistantPanel({
   // 一次导航，而用户按「后退」时那条 URL 又是对的——两件事会打架。
   const consumed = useRef<string | null>(null);
   const [text, setText] = useState("");
+  // 推理模式是**下一问的开关**，不是会话状态：用户开一次问完，可以再关掉。
+  const [reasoning, setReasoning] = useState(false);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -304,9 +306,9 @@ export function AssistantPanel({
         },
         ...previous.filter((item) => !(item.turnId === "" && item.status === "failed" && item.question === question)),
       ]);
-      return ask(conversationId, question);
+      return ask(conversationId, question, reasoning);
     },
-    [ask, conversationId],
+    [ask, conversationId, reasoning],
   );
 
   // ``complete`` 到了就补到发起它的那条提问上。**按 key 定位**，不按「最后一条」——
@@ -457,6 +459,16 @@ export function AssistantPanel({
             {stopping ? "正在停止…" : "停止回答"}
           </button>
         ) : null}
+        <button
+          type="button"
+          className={reasoning ? "assistant-reasoning on" : "assistant-reasoning"}
+          aria-pressed={reasoning}
+          onClick={() => setReasoning((value) => !value)}
+          disabled={conversationId === null || historyLoading}
+          title="开启后会调用更多取证工具，回答更慢、更完整"
+        >
+          {reasoning ? "推理模式：开" : "推理模式：关"}
+        </button>
       </form>
       <p id="assistant-speech-status" className="assistant-speech-status" role="status" aria-live="polite">
         {speech.unavailable ?? (speech.message || "录音发送至本机后端识别，点击“停止并识别”后自动发送。")}
@@ -495,6 +507,15 @@ export function AssistantPanel({
                 <ul className="assistant-photos">
                   {exchange.attachments.map((photo) => (
                     <li key={photo.handle}>
+                      {photo.media_type === "text" ? (
+                        <details>
+                          <summary>{photo.title || photo.source_id || photo.file_name}</summary>
+                          <p>{photo.source_type === "email" ? "邮件" : "文档"} · {photo.source_id} · {photo.source_timestamp}</p>
+                          <blockquote style={{ whiteSpace: "pre-wrap" }}>{photo.excerpt}</blockquote>
+                          <a href={deliveredPhotoUrl(photo.asset_id, photo.file_name)} target="_blank" rel="noreferrer">查看完整原文</a>
+                        </details>
+                      ) : (
+                        <>
                       {/* **点图片是放大**，不是新标签打开原文件——后者遇到 HEIC
                           或不认识的 MIME 会被浏览器直接下载。 */}
                       <button
@@ -513,6 +534,8 @@ export function AssistantPanel({
                           loading="lazy"
                         />
                       </button>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>

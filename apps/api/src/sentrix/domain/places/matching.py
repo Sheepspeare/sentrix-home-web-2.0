@@ -34,6 +34,8 @@ def admin_text_matches(value: str, admin: tuple[str, str, str], aliases: PlaceAl
 
 
 def place_admin_matches(value: str, place: Place | None, aliases: PlaceAliases) -> bool:
+    if place is not None and place.precise_address:
+        return bool(value.strip()) and value.strip().casefold() in place.precise_address.casefold()
     return place is not None and admin_text_matches(
         value, (place.admin.province, place.admin.city, place.admin.district), aliases
     )
@@ -42,6 +44,7 @@ def place_admin_matches(value: str, place: Place | None, aliases: PlaceAliases) 
 def place_label(place: Place) -> str:
     """参与第 1 条规则的整串。与 1.0 的 ``label`` 拼接范围一致（含国名）。"""
     parts = [
+        place.precise_address,
         place.admin.province,
         place.admin.city,
         place.admin.district,

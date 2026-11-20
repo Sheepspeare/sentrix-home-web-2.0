@@ -19,7 +19,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.parse import quote
+from uuid import uuid4
 
+from photobench.domain.errors import ChatBusyError, HttpResponseError, RequestOutcomeUnknownError
 from photobench.domain.http.ports import HttpStream, JsonHttpClient
 from photobench.domain.sentrix.ports import API_PREFIX
 
@@ -59,6 +61,34 @@ class HttpxSentrixClient:
 
     def _url(self, path: str) -> str:
         return f"{self._base_url().rstrip('/')}{API_PREFIX}{path}"
+
+    def get_conversation(self, *, conversation_id: str, timeout: int = 30) -> dict[str, Any]:
+        return dict(
+            self._http.request_json(
+                self._url(f"/assistant/conversations/{_quote(conversation_id)}"), timeout=timeout
+            )
+        )
+
+    def cancel_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]:
+        return dict(
+            self._http.request_json(
+                self._url(f"/assistant/turns/{_quote(turn_id)}/cancel"), {}, "POST", timeout
+            )
+        )
+
+    def delete_conversation(self, *, conversation_id: str, timeout: int = 30) -> None:
+        try:
+            self._http.request_json(
+                self._url(f"/assistant/conversations/{_quote(conversation_id)}"),
+                method="DELETE",
+                timeout=timeout,
+            )
+        except HttpResponseError as exc:
+            if exc.status_code == 404:
+                return
+            if exc.status_code == 409:
+                raise ChatBusyError("请先停止回答，等待回合结束后再删除对话") from exc
+            raise
 
     def diagnostics(self, *, timeout: int = 10) -> dict[str, Any]:
         body: dict[str, Any] = self._http.request_json(self._url("/diagnostics"), timeout=timeout)
@@ -186,14 +216,52 @@ class HttpxSentrixClient:
     def process_pipeline(
         self, *, scope_id: str, asset_ids: Sequence[str], timeout: int, graph_enabled: bool = True
     ) -> dict[str, Any]:
-        return dict(
-            self._http.request_json(
-                self._url("/pipeline/process"),
-                {"scope_id": scope_id, "asset_ids": list(asset_ids), "graph_enabled": graph_enabled},
-                "POST",
-                timeout,
+        return self._pipeline_request("process", scope_id, asset_ids, timeout, graph_enabled=graph_enabled)
+
+    def finalize_pipeline(self, *, scope_id: str, asset_ids: Sequence[str], timeout: int) -> dict[str, Any]:
+        return self._pipeline_request("finalize", scope_id, asset_ids, timeout)
+
+    def recover_pipeline(
+        self, *, scope_id: str, asset_ids: Sequence[str], timeout: int, graph_enabled: bool = True
+    ) -> dict[str, Any]:
+        return self._pipeline_request("recover", scope_id, asset_ids, timeout, graph_enabled=graph_enabled)
+
+    def _pipeline_request(
+        self,
+        kind: str,
+        scope_id: str,
+        asset_ids: Sequence[str],
+        timeout: int,
+        *,
+        graph_enabled: bool = True,
+    ) -> dict[str, Any]:
+        operation_id = uuid4().hex
+        try:
+            return dict(
+                self._http.request_json(
+                    self._url(f"/pipeline/{kind}"),
+                    {
+                        "scope_id": scope_id,
+                        "asset_ids": list(asset_ids),
+                        "operation_id": operation_id,
+                        "graph_enabled": graph_enabled,
+                    },
+                    "POST",
+                    timeout,
+                )
             )
-        )
+        except RequestOutcomeUnknownError as error:
+            error.facts.update(operation_id=operation_id, scope_id=scope_id, pipeline_kind=kind)
+            # Read the durable receipt; never replay the uncertain POST.
+            try:
+                receipt = self._http.request_json(
+                    self._url(f"/pipeline/operations/{operation_id}"), timeout=10
+                )
+            except Exception:  # noqa: BLE001 - preserve the original uncertain request and its ID
+                raise error from None
+            if receipt.get("status") == "completed" and isinstance(receipt.get("result"), dict):
+                return dict(receipt["result"])
+            raise
 
     def import_progress(self, *, operation_id: str, timeout: int = 3) -> dict[str, Any]:
         return dict(
@@ -203,20 +271,28 @@ class HttpxSentrixClient:
             )
         )
 
-    def list_assets(self, *, scope_id: str, limit: int, timeout: int = 60) -> list[dict[str, Any]]:
-        """``GET /api/v1/assets``（``api/routes/media.py:290``），解封 ``{"items": [...]}``。
-
-        2.0 的上限是 ``min(limit, 1000)``（路由里做，不在 schema 上），所以调用方给
-        超过 1000 的数不会报错、只会被静默截断——这一点与 1.0 的 ``limit=2000``
-        行为不同，记在行为基线里。
-        """
-        payload = self._http.request_json(
-            self._url(f"/assets?scope_id={_quote(scope_id)}&limit={int(limit)}"),
-            method="GET",
-            timeout=timeout,
-        )
-        items = payload.get("items") if isinstance(payload, dict) else None
-        return [dict(item) for item in (items or []) if isinstance(item, dict)]
+    def list_assets(self, *, scope_id: str, limit: int | None, timeout: int = 60) -> list[dict[str, Any]]:
+        """按服务端每页500项读取；limit=None读取整个相册。按创建顺序稳定分页。"""
+        items: list[dict[str, Any]] = []
+        offset = 0
+        while limit is None or len(items) < limit:
+            size = 500 if limit is None else min(500, limit - len(items))
+            payload = self._http.request_json(
+                self._url(
+                    f"/assets?scope_id={_quote(scope_id)}&limit={size}&offset={offset}&sort=created&order=asc"
+                ),
+                method="GET",
+                timeout=timeout,
+            )
+            page = payload.get("items") or []
+            total = int(payload.get("total", offset + len(page)))
+            if not page and offset < total:
+                raise RuntimeError(f"资产分页提前结束：已读取{offset}，相册共{total}项")
+            items.extend(dict(item) for item in page if isinstance(item, dict))
+            offset += len(page)
+            if offset >= total:
+                break
+        return items
 
     def start_conversation(self, *, scope_id: str, title: str = "", timeout: int = 30) -> dict[str, Any]:
         """``POST /api/v1/assistant/conversations``（``api/routes/assistant.py:127``）。
@@ -239,15 +315,16 @@ class HttpxSentrixClient:
         message: str,
         include_debug: bool = False,
         graph_enabled: bool = True,
+        reasoning: bool = True,
         timeout: int = 300,
     ) -> dict[str, Any]:
         """``POST /api/v1/assistant/conversations/{cid}/turns``（``assistant.py:202``）。
 
-        请求体只有 ``message``、``include_debug`` 与可选的 ``graph_enabled``：``StartTurnRequest`` 里的
+        请求体包含 ``message``、``reasoning`` 及调试/图检索开关：``StartTurnRequest`` 里的
         ``conversation_id`` **被路由忽略**（``assistant.py:213`` 的注释写明路径参数才是
         权威），所以这里也不发它——发一个会被忽略的字段只会让下一个人以为它有用。
         """
-        payload: dict[str, Any] = {"message": message}
+        payload: dict[str, Any] = {"message": message, "reasoning": reasoning}
         if include_debug:
             # 只在需要时发这个键：老版主 API 不认识它也不会因为多一个字段而变，但
             # 「默认请求体长什么样」保持原样更省解释成本。
@@ -270,6 +347,18 @@ class HttpxSentrixClient:
         return dict(
             self._http.request_json(self._url(prefix + _quote(operation_id) + "/cancel"), {}, "POST", timeout)
         )
+
+    def get_asset(self, *, asset_id: str, timeout: int = 5) -> dict[str, Any] | None:
+        try:
+            return dict(
+                self._http.request_json(
+                    self._url(f"/assets/{_quote(asset_id)}"), method="GET", timeout=timeout
+                )
+            )
+        except HttpResponseError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
 
     def get_turn(self, *, turn_id: str, timeout: int = 30) -> dict[str, Any]:
         """``GET /api/v1/assistant/turns/{turn_id}``（**复数**，``assistant.py:341``）。"""

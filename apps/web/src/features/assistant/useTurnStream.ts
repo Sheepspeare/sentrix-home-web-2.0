@@ -15,6 +15,8 @@ import {
 type Accepted = Awaited<ReturnType<typeof startTurn>>;
 type Submission = {
   message: string;
+  /** 推理模式按回合选择（main a5daf519）；同一句话换了模式就是另一次提交。 */
+  reasoning: boolean;
   key: string;
   pending: Promise<Accepted> | null;
   stopRequested: boolean;
@@ -175,19 +177,19 @@ export function useTurnStream() {
     subscribe(id);
   }, [reset, subscribe]);
 
-  const ask = useCallback(async (conversationId: string, message: string) => {
+  const ask = useCallback(async (conversationId: string, message: string, reasoning = false) => {
     reset();
     setBusy(true);
     const previous = submissions.get(conversationId);
-    const submission: Submission = previous?.message === message ? previous : {
-      message, key: newClientId("turn"), pending: null, stopRequested: false,
+    const submission: Submission = previous?.message === message && previous.reasoning === reasoning ? previous : {
+      message, reasoning, key: newClientId("turn"), pending: null, stopRequested: false,
     };
     submitting.current = submission;
     submissions.set(conversationId, submission);
     const operationId = submission.key;
     void reportClientEvent({ eventName: "assistant.ask", result: "started", operationId });
     try {
-      submission.pending ??= startTurn(conversationId, message, operationId);
+      submission.pending ??= startTurn(conversationId, message, operationId, reasoning);
       const accepted = await submission.pending;
       if (submissions.get(conversationId) === submission) submissions.delete(conversationId);
       void reportClientEvent({

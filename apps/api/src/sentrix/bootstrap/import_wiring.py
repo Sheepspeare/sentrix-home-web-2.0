@@ -40,6 +40,8 @@ from sentrix.application.retrieval.index_visual import IndexAssetVisual
 from sentrix.domain.media.import_jobs import ImportJob
 from sentrix.domain.media.models import AssetStatus, MediaType, Observation
 from sentrix.domain.memories.graph import GraphBuildStats
+from sentrix.infrastructure.media.source_address import read_source_address
+from sentrix.infrastructure.media.text_chunks import document_chunks
 from sentrix.runtime.work import import_work
 
 if TYPE_CHECKING:
@@ -424,6 +426,7 @@ def _build_importer(
         observations=container.observation_repository,
         storage=container.media_storage,
         metadata=container.metadata_reader,
+        address_reader=read_source_address,
         visual_indexer=IndexAssetVisual(
             embedder=container.visual_embedder,
             vectors=container.vector_repository,
@@ -471,9 +474,21 @@ def _face_enroller(container: Container) -> EnrollFaces:
 
 
 def _text_indexer(container: Container) -> Callable[[Observation, str | None], int]:
-    index = IndexObservationText(embedder=container.text_embedder, vectors=container.vector_repository)
+    index = IndexObservationText(embedder=container.text_embedder, vectors=container.text_vector_repository)
 
     def run(observation: Observation, event_id: str | None) -> int:
+        if observation.source_text:
+            legacy = container.settings.embedding_scheme == "legacy"
+            chunks = document_chunks(
+                observation.source_text,
+                observation.caption,
+                tokenizer_path=container.settings.document_tokenizer_path,
+                endpoint=container.settings.text_embedder_url if legacy else container.settings.wemm_url,
+                token_budget=min(container.settings.document_chunk_tokens, 512)
+                if legacy
+                else container.settings.document_chunk_tokens,
+            )
+            return index.index_document(observation, chunks).rows
         return index.index(observation, event_id).rows
 
     return run

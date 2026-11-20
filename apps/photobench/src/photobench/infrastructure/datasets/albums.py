@@ -21,6 +21,7 @@ from typing import Any
 
 from photobench.domain.datasets.catalog import ALBUM_MEDIA_COLLECTIONS
 from photobench.domain.datasets.qa_taxonomy import validate_qa_annotations
+from photobench.domain.datasets.validation import require_valid_targets
 from photobench.domain.evaluation.contract import validate_evaluation
 from photobench.domain.evaluation.gt_context import context_index, empty_context
 from photobench.infrastructure.datasets.qa_metadata import (
@@ -34,6 +35,8 @@ from photobench.infrastructure.datasets.qa_metadata import (
 #: 之所以复制而不是 import，是因为 ``photobench-isolation`` 契约禁止读 ``sentrix.*``。
 MEDIA_SUFFIXES = frozenset(
     {
+        ".txt",
+        ".md",
         ".jpg",
         ".jpeg",
         ".png",
@@ -165,6 +168,15 @@ class JsonAlbumSource:
         return value
 
     def qa_rows(self, album_id: str, qa_set: str) -> list[dict[str, Any]]:
+        return self._qa_rows(album_id, qa_set)
+
+    def qa_question(self, album_id: str, qa_set: str, qa_id: str) -> dict[str, Any]:
+        rows = self._qa_rows(album_id, qa_set, qa_id=qa_id)
+        if len(rows) != 1:
+            raise KeyError(qa_id)
+        return rows[0]
+
+    def _qa_rows(self, album_id: str, qa_set: str, *, qa_id: str | None = None) -> list[dict[str, Any]]:
         manifest = self.manifest(album_id)
         relative = (manifest.get("qa_sets") or {}).get(qa_set)
         if not relative:
@@ -187,6 +199,9 @@ class JsonAlbumSource:
                 raise ValueError("QA IDs must be present and unique")
             if definition.get("qa_sha256") != sha256_file(path):
                 raise ValueError("versioned QA file fingerprint mismatch")
+        if qa_id is not None:
+            rows = [row for row in rows if str(row.get("qa_id")) == qa_id]
+        if definition.get("schema_version") in {"2.0", "3.0"}:
             for row in rows:
                 if definition.get("schema_version") == "3.0" and (
                     not row.get("ability_taxonomy_version")
@@ -206,6 +221,7 @@ class JsonAlbumSource:
             ):
                 if definition.get(source):
                     row[target] = definition[source]
+        require_valid_targets(rows, manifest)
         return rows
 
     def read_file(self, album_id: str, relative: str) -> bytes:
@@ -237,13 +253,18 @@ class JsonAlbumSource:
         entries = ["manifest.json"] + ([relative_qa] if relative_qa else [])
         entries.extend(
             str(item).strip()
-            for key in ("photos", "videos")
+            for key in ("photos", "videos", "documents")
             for item in (manifest.get(key) or [])
             if str(item).strip()
         )
         entries.extend(
             str(face.get("ref_image")) for face in manifest.get("faces") or [] if face.get("ref_image")
         )
+        if manifest.get("source_protocol"):
+            entries.extend(
+                str(path.relative_to(album_dir)) for path in album_dir.glob("*/source-metadata.jsonl")
+            )
+            entries.append("media-metadata.jsonl")
         missing: list[str] = []
         file_digests: list[dict[str, Any]] = []
         for relative in sorted(set(entries)):

@@ -45,10 +45,13 @@ from photobench.application.config.service import (
     normalize_model_base_url,
     normalize_service_url,
 )
+from photobench.application.interactive.models import InteractiveModels
 from photobench.application.run_execution.gpu_sampler import GpuSampler
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
 from photobench.application.run_execution.profile_scoring import prepare_batches
 from photobench.application.run_execution.service import (
+    DEFAULT_TURN_TIMEOUT,
+    REASONING_TURN_TIMEOUT,
     JudgeSettings,
     RunExecution,
     RunRequest,
@@ -71,12 +74,13 @@ from photobench.domain.evaluation.profiles import (
 )
 from photobench.domain.evaluation.prompts import evaluation_prompts as default_evaluation_prompts
 from photobench.domain.http.ports import JsonHttpClient
-from photobench.domain.results.ports import RunResultWriter, RunStore
+from photobench.domain.results.ports import RunListViews, RunResultWriter, RunStore
 from photobench.domain.runs import analysis
 from photobench.domain.runs.analysis import now_iso
 from photobench.domain.runs.execution import RunCancelledError, index_assets_by_name, safe_slug
 from photobench.domain.runs.judge import judge_chat_url
 from photobench.domain.runs.judge_recovery import RECOVERY_SCOPES, recovery_fields
+from photobench.domain.runs.service_recovery import service_retry_evidence
 from photobench.domain.runtime.ports import LifecycleProvider, RunRuntimeSnapshot, TelemetryProvider
 from photobench.domain.sentrix.ports import CancellableOperations, SentrixClient
 
@@ -136,6 +140,9 @@ class RunSuites:
         self._index = index
         self._albums = albums
         self._config = config
+        self.interactive_models = InteractiveModels(
+            config, build_revision, self._budget_defaults, lambda: sentrix.diagnostics()
+        )
         self._sentrix = sentrix
         self._http = http
         self._new_execution = new_execution
@@ -150,6 +157,7 @@ class RunSuites:
         self._sleep = sleep
         self._lock = threading.RLock()
         self._active: dict[str, RunExecution] = {}
+        self._live_entries: dict[str, dict[str, Any]] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._memory_thread: threading.Thread | None = None
         self._auxiliary: dict[str, tuple[threading.Thread, threading.Event]] = {}
@@ -165,6 +173,39 @@ class RunSuites:
             for rid, run in self._active.items()
             if run.state is None or run.state.get("status") in DIRTY_STATUSES
         ]
+
+    @staticmethod
+    def _live_list_entry(data: dict[str, Any]) -> dict[str, Any]:
+        """Seed a newly registered run before its first live refresh."""
+        items = data.get("items") or []
+        seed_state = {
+            **data,
+            "items": items[:1] if data.get("retest_context") else [],
+        }
+        seed_state.pop("scoring_results", None)
+        seed_state.pop("diagnostic_results", None)
+        entry = analysis.run_list_entry(seed_state)
+        summary = entry.setdefault("summary", {})
+        entry["item_count"] = len(items)
+        summary["completed"] = len(items)
+        summary["total"] = summary.get("total") or data.get("qa_count") or len(items)
+        saved_media_ranking = (data.get("summary") or {}).get("media_ranking")
+        if saved_media_ranking:
+            summary["media_ranking"] = saved_media_ranking
+        return entry
+
+    def _register_active(self, run_id: str, execution: RunExecution) -> None:
+        """Register a new run and seed its lock-independent list projection."""
+        self._active[run_id] = execution
+        state = execution.state
+        if state is not None:
+            lock = getattr(state, "lock", None)
+            if lock is None:
+                data = dict(state.data)
+            else:
+                with lock:
+                    data = dict(state.data)
+            self._live_entries[run_id] = copy.deepcopy(self._live_list_entry(data))
 
     @staticmethod
     def _stop_pending(state: Mapping[str, Any]) -> bool:
@@ -202,6 +243,7 @@ class RunSuites:
                 self._index.upsert(analysis.run_list_entry(finished))
             finally:
                 with self._lock:
+                    self._live_entries.pop(run_id, None)
                     if not self._stop_pending(finished):
                         self._active.pop(run_id, None)
                         self._threads.pop(run_id, None)
@@ -296,12 +338,22 @@ class RunSuites:
             raise InvalidRequestError(f"album {album_id} has no qa_sets in manifest")
         if mode != "build" and qa_set not in (manifest.get("qa_sets") or {}):
             raise InvalidRequestError(f"unknown qa_set for album {album_id}: {qa_set}")
+        if mode != "build":
+            from photobench.domain.datasets.validation import require_valid_targets
+
+            try:
+                require_valid_targets(self._albums.qa_rows(album_id, qa_set), manifest)
+            except ValueError as exc:
+                raise InvalidRequestError(str(exc)) from exc
         models = payload.get("models", [])
         if not isinstance(models, list) or not models:
             raise InvalidRequestError("models must contain at least one model")
         graph_enabled = payload.get("graph_enabled", True)
         if not isinstance(graph_enabled, bool):
             raise InvalidRequestError("graph_enabled must be a boolean")
+        reasoning = payload.get("reasoning", True)
+        if not isinstance(reasoning, bool):
+            raise InvalidRequestError("reasoning must be a boolean")
         graph_baseline_run_id = str(payload.get("graph_baseline_run_id") or "").strip()
         model_base_url = normalize_model_base_url(str(payload.get("model_base_url") or ""))
         manager_url = normalize_service_url(str(payload.get("vllm_manager_url") or ""))
@@ -381,12 +433,16 @@ class RunSuites:
                         payload.get("qa_concurrency", self._budget_defaults.get("qa_concurrency", 0))
                     ),
                     judge_backpressure=payload.get("judge_backpressure", True) is not False,
-                    turn_timeout=int(payload.get("turn_timeout") or 900),
+                    turn_timeout=int(
+                        payload.get("turn_timeout")
+                        or (REASONING_TURN_TIMEOUT if reasoning else DEFAULT_TURN_TIMEOUT)
+                    ),
                     # 整册导入在 Mac/CPU 上可能远超默认 2h；允许按 run 放宽客户端超时。
                     import_timeout=int(
                         payload.get("import_timeout") or self._budget_defaults.get("import_timeout") or 0
                     )
                     or default_import_timeout(),
+                    pipeline_timeout=int(payload.get("pipeline_timeout") or 86400),
                     # reuse 才传；full 留空让 ``execute`` 走 ``_default_scope_id``。
                     scope_id=existing_scope_id,
                     runtime_framework=deps.runtime_framework,
@@ -397,6 +453,7 @@ class RunSuites:
                     scoring_configs=configs,
                     evaluation_options=scoring_options(payload.get("evaluation_options")),
                     graph_enabled=graph_enabled,
+                    reasoning=reasoning,
                     graph_baseline_run_id=graph_baseline_run_id if graph_enabled else "",
                     judge_prompts={
                         "answer_quality": deps.judge.answer_quality_prompt,
@@ -410,7 +467,7 @@ class RunSuites:
                 requests[run_id] = request
                 execution = self._new_execution(request)
                 execution.prepare(request)
-                self._active[run_id] = execution
+                self._register_active(run_id, execution)
                 created.append(run_id)
 
         def _run_sequentially() -> None:
@@ -438,57 +495,14 @@ class RunSuites:
             "qa_set": qa_set,
             "mode": mode,
             "graph_enabled": graph_enabled,
+            "reasoning": reasoning,
             # 回显复用的那个 scope（1.0 ``start_suite`` 的响应形状）。full 模式为 None。
             "existing_scope_id": existing_scope_id or None,
             "current_model_snapshot": None,
         }
 
-    # ---- resume -------------------------------------------------------------
-
-    def resume_run(self, run_id: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        """``POST /api/runs/{id}/resume``（1.0 ``resume_run`` ``:7488``）。
-
-        **与 ``reuse`` 共用同一块地基**：两者都是「绑到一个已经存在的 scope 上、
-        不重新导入」。差别只在题目集——``reuse`` 从头跑全部，``resume`` 跳过已跑完的。
-
-        **只续跑「没跑过」的题**，判据逐条照 1.0 ``:3414-3417``：
-        ``execution_status not in {"scheduled", "running"}`` 的算已完成。
-        这也正是取消掉的题必须标 ``scheduled`` 而不能标 ``failed`` 的原因——
-        标 failed 的话它们会被当成「已跑完」，续跑时永远跳过（2026-10-15 改的）。
-
-        同时按轮次补缺失的 Judge 结果，成功子评分和失败尝试保留。
-        ``product_build_revision`` 可显式选择已配置的产品版本；原版本来源存入
-        ``resume_context``，运行前仍须通过产品配置与版本核验。
-        """
-        self._require_inactive()
-        payload = payload or {}
-        repair_missing = payload.get("repair_missing_judges", True)
-        if not isinstance(repair_missing, bool):
-            raise InvalidRequestError("repair_missing_judges must be a boolean")
-        target_revision = str(payload.get("product_build_revision") or "").strip()
-        if target_revision and target_revision != self._config.public_runtime_connection_config().get(
-            "product_build_revision"
-        ):
-            raise InvalidRequestError("resume product_build_revision must match the configured product build")
-        try:
-            saved = self._store.load_state(run_id)
-        except KeyError as exc:
-            raise InvalidRequestError(f"run not found: {run_id}") from exc
-        status = str(saved.get("status") or "")
-        if status not in {"interrupted", "failed", "cancelled", "completed_with_errors"}:
-            raise InvalidRequestError(f"run cannot be resumed while status is {status or 'unknown'}")
-        scope_id = str(saved.get("scope_id") or "").strip()
-        if not scope_id:
-            raise InvalidRequestError("the saved run has no memory-space checkpoint")
-        album_id = str(saved.get("album_id") or "")
-        qa_set = str(saved.get("qa_set") or "")
-        if not album_id or not qa_set:
-            raise InvalidRequestError("the saved run is missing album_id or qa_set")
-        try:
-            self._albums.manifest(album_id)
-        except KeyError as exc:
-            raise InvalidRequestError(f"manifest not found for album: {album_id}") from exc
-
+    def frozen_questions(self, saved: Mapping[str, Any]) -> dict[str, Any]:
+        album_id, qa_set = str(saved.get("album_id") or ""), str(saved.get("qa_set") or "")
         snapshot = saved.get("qa_snapshot")
         if not isinstance(snapshot, dict) or "rows" not in snapshot:
             manifest = self._albums.manifest(album_id)
@@ -511,14 +525,249 @@ class RunSuites:
             }
         if snapshot.get("definition_sha256") != qa_fingerprint(snapshot["rows"]):
             raise InvalidRequestError("原测评QA快照校验失败，不能续跑")
+        return copy.deepcopy(snapshot)
+
+    def reserve_interactive(self, key: str, cancel: threading.Event, *, recovery: bool = False) -> None:
+        with self._lock:
+            retained = self._reservations.pop(key, None) if recovery else None
+            try:
+                self._require_inactive()
+            except Exception:
+                if retained is not None:
+                    self._reservations[key] = retained
+                raise
+            self._reservations[key] = cancel
+
+    def release_interactive(self, key: str) -> None:
+        with self._lock:
+            self._reservations.pop(key, None)
+
+    def start_retest(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        self._require_inactive()
+        saved = self._store.load_state(run_id)
+        if saved.get("status") in DIRTY_STATUSES:
+            raise InvalidRequestError("请等待原任务结束后重测")
+        if str(saved.get("sentrix_url") or "").rstrip("/") != self._config.sentrix_url.rstrip("/"):
+            raise InvalidRequestError("请先将产品连接指向原测评实例")
+        scope_id = str(saved.get("scope_id") or "")
+        if not scope_id or (saved.get("scope_build") or {}).get("status") == "incomplete":
+            raise InvalidRequestError("原相册尚未完成构建")
+        connection = self._config.public_runtime_connection_config()
+        embedding = (saved.get("scope_build") or {}).get("embedding")
+        if embedding is not None and embedding != connection.get("embedding"):
+            raise InvalidRequestError("嵌入配置已变化，请使用原相册的嵌入配置")
+        snapshot = self.frozen_questions(saved)
+        qa_id = str(payload.get("qa_id") or "")
+        selected = [(i, r) for i, r in enumerate(snapshot["rows"]) if str(r.get("qa_id")) == qa_id]
+        if len(selected) != 1:
+            raise InvalidRequestError("请选择原任务中的一道题")
+        source_index, row = selected[0]
+        batch_id = str(payload.get("scoring_batch") or "")
+        profile = str(payload.get("scoring_profile") or "")
+        batches = saved.get("scoring_batches") or []
+        if batch_id:
+            selected_batches = [b for b in batches if b["batch_id"] == batch_id]
+        elif profile:
+            selected_batches = [b for b in batches if b["profile_id"] == profile][-1:]
+        else:
+            selected_batches = [
+                b for b in batches if b["batch_id"] in (saved.get("primary_scoring_batch_ids") or [])
+            ]
+            if not selected_batches and batches:
+                selected_batches = [batches[-1]]
+        if (batch_id or profile) and not selected_batches:
+            raise InvalidRequestError("所选评分批次不存在")
+        judges = {json.dumps(b["judge"], sort_keys=True) for b in selected_batches}
+        if len(judges) > 1:
+            raise InvalidRequestError("请选择同一Judge配置的评分批次")
+        primary = selected_batches[0] if selected_batches else None
+        judge = self._frozen_judge_settings(
+            primary["judge"]
+            if primary
+            else {
+                "provider_id": saved.get("judge_provider_id"),
+                "url": saved.get("judge_url"),
+                "model": saved.get("judge_model"),
+            }
+        )
+        context = {
+            "source_run_id": run_id,
+            "qa_id": qa_id,
+            "source_item_index": source_index,
+            "source_qa_definition_sha256": snapshot["definition_sha256"],
+            "source_scoring_batch_ids": [b["batch_id"] for b in selected_batches],
+            "source_rule_versions": [b.get("rule_version") for b in selected_batches],
+        }
+        single = {**snapshot, "rows": [row], "definition_sha256": qa_fingerprint([row])}
+        new_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-retest-{uuid.uuid4().hex[:8]}"
+        diagnostics = (primary or {}).get("diagnostics") or {}
+        request = self.interactive_models.resolve(
+            payload,
+            album_id=str(saved["album_id"]),
+            qa_set=str(saved["qa_set"]),
+            run_id=new_id,
+            mode="reuse",
+            scope_id=scope_id,
+            frozen_qa_snapshot=single,
+            retest_context=context,
+            graph_enabled=saved.get("graph_enabled") is not False,
+            judge_url=judge.judge_url,
+            judge_model=judge.judge_model,
+            judge_provider_id=judge.judge_provider_id,
+            judge_api_key=judge.judge_api_key,
+            judge_prompts={
+                **(saved.get("judge_prompts") or {}),
+                **{k: diagnostics[k] for k in ("task_decision", "evidence") if k in diagnostics},
+            },
+            scoring_configs={b["profile_id"]: b["config"] for b in selected_batches},
+            prior_scoring={
+                "gt_metadata_snapshot": copy.deepcopy(
+                    (primary or {}).get("gt_metadata_snapshot") or saved.get("gt_metadata_snapshot")
+                )
+            },
+            judge_use_gt_images=bool(saved.get("judge_use_gt_images")),
+            evidence_judge_enabled=bool(
+                diagnostics.get("evidence_enabled", saved.get("evidence_judge_enabled"))
+            ),
+            evaluation_options=saved.get("evaluation_options") or {},
+            evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
+        )
+        with self._lock:
+            self._require_inactive()
+            execution = self._new_execution(request)
+            execution.prepare(request)
+            self._register_active(new_id, execution)
+            thread = threading.Thread(
+                target=self._execute_and_release, args=(new_id, request), name=new_id, daemon=True
+            )
+            self._threads[new_id] = thread
+            thread.start()
+        return {"run_id": new_id, "retest_context": context}
+
+    def list_retests(self, run_id: str, qa_id: str) -> dict[str, Any]:
+        entries = {str(e["run_id"]): e for e in self._index.entries()}
+        entries.update({s["run_id"]: analysis.run_list_entry(s) for s in self.active_states().values()})
+        rows = [
+            e
+            for e in entries.values()
+            if (e.get("retest_context") or {}).get("source_run_id") == run_id
+            and (not qa_id or (e.get("retest_context") or {}).get("qa_id") == qa_id)
+        ]
+        return {"items": sorted(rows, key=lambda e: str(e.get("created_at") or ""), reverse=True)}
+
+    # ---- resume -------------------------------------------------------------
+
+    def resume_run(self, run_id: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """``POST /api/runs/{id}/resume``（1.0 ``resume_run`` ``:7488``）。
+
+        **与 ``reuse`` 共用同一块地基**：两者都是「绑到一个已经存在的 scope 上、
+        不重新导入」。差别只在题目集——``reuse`` 从头跑全部，``resume`` 跳过已跑完的。
+
+        默认只续跑「没跑过」的题，判据逐条照 1.0 ``:3414-3417``：
+        ``execution_status not in {"scheduled", "running"}`` 的算已完成。
+        这也正是取消掉的题必须标 ``scheduled`` 而不能标 ``failed`` 的原因——
+        标 failed 的话它们会被当成「已跑完」，续跑时永远跳过（2026-10-15 改的）。
+
+        同时按轮次补缺失的 Judge 结果，成功子评分和失败尝试保留。
+        显式 ``retry_qa_ids`` 只允许恢复有结构化服务故障、未交付答案的单轮题，
+        必须填写 ``retry_reason``；原 run 保留完整故障与评分历史。
+        ``product_build_revision`` 可显式选择已配置的产品版本；原版本来源存入
+        ``resume_context``，运行前仍须通过产品配置与版本核验。
+        """
+        self._require_inactive()
+        payload = payload or {}
+        recover_pipeline = payload.get("finish_incomplete_build", False)
+        if not isinstance(recover_pipeline, bool):
+            raise InvalidRequestError("finish_incomplete_build must be a boolean")
+        repair_missing = payload.get("repair_missing_judges", True)
+        if not isinstance(repair_missing, bool):
+            raise InvalidRequestError("repair_missing_judges must be a boolean")
+        target_revision = str(payload.get("product_build_revision") or "").strip()
+        if target_revision and target_revision != self._config.public_runtime_connection_config().get(
+            "product_build_revision"
+        ):
+            raise InvalidRequestError("resume product_build_revision must match the configured product build")
+        try:
+            saved = self._store.load_state(run_id)
+        except KeyError as exc:
+            raise InvalidRequestError(f"run not found: {run_id}") from exc
+        status = str(saved.get("status") or "")
+        if status not in {"interrupted", "failed", "cancelled", "completed_with_errors"}:
+            raise InvalidRequestError(f"run cannot be resumed while status is {status or 'unknown'}")
+        scope_id = str(saved.get("scope_id") or "").strip()
+        if not scope_id:
+            raise InvalidRequestError("the saved run has no memory-space checkpoint")
+        phases = saved.get("phases") or {}
+        interrupted_build = (
+            status == "interrupted"
+            and not saved.get("scope_build")
+            and (
+                saved.get("mode") in {"full", "build"}
+                or (saved.get("resume_context") or {}).get("finish_incomplete_build") is True
+            )
+            and (phases.get("pipeline_processing") or {}).get("status") != "done"
+        )
+        incomplete = (saved.get("scope_build") or {}).get("status") == "incomplete" or interrupted_build
+        if incomplete and not recover_pipeline:
+            raise InvalidRequestError(
+                "selected scope has an incomplete build; confirm the original pipeline has stopped "
+                "and finish the build before resuming QA"
+            )
+        if recover_pipeline:
+            imported = bool((saved.get("resume_context") or {}).get("asset_import_complete")) or all(
+                (phases.get(key) or {}).get("status") == "done" for key in ("identity_seed", "photo_import")
+            )
+            if not incomplete or not saved.get("pipeline_asset_ids") or not imported:
+                raise InvalidRequestError("pipeline recovery requires a complete asset import checkpoint")
+        album_id = str(saved.get("album_id") or "")
+        qa_set = str(saved.get("qa_set") or "")
+        if not album_id or not qa_set:
+            raise InvalidRequestError("the saved run is missing album_id or qa_set")
+        try:
+            self._albums.manifest(album_id)
+        except KeyError as exc:
+            raise InvalidRequestError(f"manifest not found for album: {album_id}") from exc
+
+        snapshot = self.frozen_questions(saved)
+        retry_ids = payload.get("retry_qa_ids", [])
+        if (
+            not isinstance(retry_ids, list)
+            or any(not isinstance(q, str) or not q.strip() for q in retry_ids)
+            or len(set(retry_ids)) != len(retry_ids)
+        ):
+            raise InvalidRequestError("retry_qa_ids must be a list of unique QA IDs")
+        reason = payload.get("retry_reason", "")
+        if retry_ids and (not isinstance(reason, str) or not reason.strip()):
+            raise InvalidRequestError("retry_reason is required for explicit service recovery")
+        frozen_ids = {str(row.get("qa_id")) for row in snapshot["rows"]}
+        items_by_id = {str(item.get("qa_id")): item for item in saved.get("items") or []}
+        quarantined_trace_ids = sorted(
+            str(item.get("qa_id"))
+            for item in saved.get("items") or []
+            if isinstance(item.get("trace_quarantine"), dict)
+            and item["trace_quarantine"].get("status") == "execution_anomaly"
+        )
+        quarantined_trace_set = set(quarantined_trace_ids)
+        retry_evidence = {}
+        for qa_id in retry_ids:
+            if qa_id in quarantined_trace_set:
+                raise InvalidRequestError(f"QA trace is quarantined and cannot be retried: {qa_id}")
+            evidence = service_retry_evidence(items_by_id.get(qa_id) or {})
+            if qa_id not in frozen_ids or evidence is None:
+                raise InvalidRequestError(f"QA has no retryable undelivered service failure: {qa_id}")
+            retry_evidence[qa_id] = evidence
+        retry_set = set(retry_ids)
         prior_items = tuple(
             item
             for item in (saved.get("items") or [])
             if isinstance(item, dict)
-            and str(item.get("execution_status") or "") not in {"scheduled", "running"}
+            and (
+                str(item.get("execution_status") or "") not in {"scheduled", "running"}
+                or str(item.get("qa_id")) in quarantined_trace_set
+            )
+            and str(item.get("qa_id")) not in retry_set
         )
         prior_ids = [str(item.get("qa_id")) for item in prior_items]
-        frozen_ids = {str(row.get("qa_id")) for row in snapshot["rows"]}
         if len(prior_ids) != len(set(prior_ids)) or not set(prior_ids) <= frozen_ids:
             raise InvalidRequestError("saved results do not uniquely match the frozen QA snapshot")
         model_profile = str(saved.get("model_profile") or "")
@@ -541,6 +790,28 @@ class RunSuites:
             }
         )
         resumed_judge = self._frozen_judge_settings(frozen_judge)
+        prior_scoring = {
+            k: copy.deepcopy(saved[k])
+            for k in (
+                "gt_metadata_snapshot",
+                "scoring_batches",
+                "scoring_results",
+                "scoring_summaries",
+                "diagnostic_results",
+                "primary_scoring_batch_ids",
+            )
+            if k in saved
+        }
+        replaced_scoring_keys = []
+        if retry_set:
+            for key in ("scoring_results", "diagnostic_results"):
+                records = prior_scoring.get(key) or {}
+                if key == "scoring_results":
+                    replaced_scoring_keys = [k for k, r in records.items() if r.get("qa_id") in retry_set]
+                prior_scoring[key] = {k: r for k, r in records.items() if r.get("qa_id") not in retry_set}
+            prior_scoring["scoring_summaries"] = summarize_batches(
+                {**saved, **prior_scoring, "items": list(prior_items)}
+            )
         request = RunRequest(
             album_id=album_id,
             qa_set=qa_set,
@@ -551,6 +822,8 @@ class RunSuites:
             endpoint_model=str(saved.get("endpoint_model") or ""),
             run_id=new_run_id,
             mode="reuse",
+            recover_pipeline=recover_pipeline,
+            recovery_asset_ids=tuple(saved.get("pipeline_asset_ids") or ()) if recover_pipeline else (),
             scope_id=scope_id,
             runtime_framework=str(saved.get("runtime_framework") or ""),
             judge_url=resumed_judge.judge_url,
@@ -560,36 +833,45 @@ class RunSuites:
             judge_prompts=copy.deepcopy(saved.get("judge_prompts") or {}),
             prior_items=prior_items,
             scoring_configs=saved.get("scoring_configs") or {},
-            prior_scoring={
-                k: copy.deepcopy(saved[k])
-                for k in (
-                    "gt_metadata_snapshot",
-                    "scoring_batches",
-                    "scoring_results",
-                    "scoring_summaries",
-                    "diagnostic_results",
-                    "primary_scoring_batch_ids",
-                )
-                if k in saved
-            },
+            prior_scoring=prior_scoring,
             repair_missing_judges=repair_missing and not bool(saved.get("scoring_profiles")),
             evaluation_options=scoring_options(saved.get("evaluation_options")),
             graph_enabled=saved.get("graph_enabled") is not False,
             graph_baseline_run_id=str(saved.get("graph_baseline_run_id") or ""),
+            reasoning=saved.get("reasoning") is True,
+            turn_timeout=DEFAULT_TURN_TIMEOUT,
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
             evidence_judge_enabled=bool(saved.get("evidence_judge_enabled")),
             resume_context={
                 "resumed_from": run_id,
+                "finish_incomplete_build": recover_pipeline,
+                "asset_import_complete": recover_pipeline,
                 "source_status": status,
                 "source_build_revision": saved.get("build_revision"),
                 "source_runtime_snapshot": saved.get("runtime_snapshot"),
                 "source_input_integrity": saved.get("input_integrity"),
                 "qa_definition_sha256": snapshot["definition_sha256"],
                 "inherited_qa_ids": [item.get("qa_id") for item in prior_items],
+                "retry_qa_ids": retry_ids,
+                "retry_reason": reason.strip() if retry_ids else None,
+                "retry_evidence": retry_evidence,
+                "source_retried_items_sha256": {
+                    q: hashlib.sha256(
+                        json.dumps(items_by_id[q], sort_keys=True, ensure_ascii=False).encode()
+                    ).hexdigest()
+                    for q in retry_ids
+                },
+                "replaced_scoring_result_keys": replaced_scoring_keys,
                 "repair_missing_judges": repair_missing,
                 "selected_product_build_revision": target_revision or None,
                 "source_judge_use_gt_images": saved.get("judge_use_gt_images"),
+                "trace_quarantine": {
+                    "source_run_id": run_id,
+                    "qa_ids": quarantined_trace_ids,
+                }
+                if quarantined_trace_ids
+                else None,
                 "selected_judge_use_gt_images": self._gt_image_option(
                     payload, bool(saved.get("judge_use_gt_images"))
                 ),
@@ -612,12 +894,29 @@ class RunSuites:
                 or prior_snapshot.get("required_build_revision")
                 or (self._build_revision if self._build_revision != "development" else None),
             )
+            if target_revision and request.reasoning:
+                configured = self._config.public_runtime_connection_config().get("product_settings") or {}
+                inherited["product_settings"] = {
+                    **(prior_snapshot.get("product_settings") or {}),
+                    **{
+                        key: configured[key]
+                        for key in (
+                            "reasoning_max_model_calls",
+                            "reasoning_max_tool_calls",
+                            "reasoning_max_search_calls",
+                            "reasoning_max_other_tool_calls",
+                            "vlm_generation_profile",
+                        )
+                        if key in configured
+                    },
+                }
             request = replace(
                 request,
                 sentrix_url=str(inherited["sentrix_url"]),
                 model_base_url=str(inherited["model_base_url"]),
                 manager_url=str(inherited.get("vllm_manager_url") or ""),
                 import_timeout=int(budgets.get("import_timeout") or 7200),
+                pipeline_timeout=int(budgets.get("pipeline_timeout") or 86400),
                 turn_timeout=int(budgets.get("turn_timeout") or 900),
                 qa_concurrency=int(budgets.get("qa_concurrency") or 0),
                 judge_backpressure=budgets.get("judge_backpressure", True) is not False,
@@ -634,7 +933,7 @@ class RunSuites:
             self._require_inactive()
             execution = self._new_execution(request)
             execution.prepare(request)
-            self._active[new_run_id] = execution
+            self._register_active(new_run_id, execution)
 
         def _run_resumed() -> None:
             try:
@@ -654,10 +953,48 @@ class RunSuites:
             "scope_id": scope_id,
             # 带回来的题数——调用方据此判断续跑到底省了多少。
             "resumed_items": len(prior_items),
+            "retried_qa_ids": retry_ids,
             "repair_missing_judges": repair_missing,
+            "trace_quarantined_items": len(quarantined_trace_ids),
         }
 
     # ---- 取消 / 删除 --------------------------------------------------------
+
+    def get_retest_progress(self, run_id: str) -> dict[str, Any]:
+        """Read the current retest projection without changing run selection or scores."""
+        state: dict[str, Any] | None
+        with self._lock:
+            execution = self._active.get(run_id)
+            if execution is not None and execution.state is not None:
+                with execution.state.lock:
+                    state = {
+                        key: copy.deepcopy(execution.state.data.get(key))
+                        for key in (
+                            "run_id",
+                            "status",
+                            "current_phase",
+                            "phases",
+                            "interactive_item",
+                            "retest_context",
+                            "model_profile",
+                            "model_name",
+                            "endpoint_model",
+                        )
+                    }
+            else:
+                state = self._state_if_exists(run_id)
+        if state is None:
+            raise KeyError(run_id)
+        if not state.get("retest_context"):
+            raise InvalidRequestError("progress view requires a single-question retest")
+        return {
+            "run_id": run_id,
+            "status": state.get("status"),
+            "current_phase": state.get("current_phase"),
+            "phases": state.get("phases") or {},
+            "item": state.get("interactive_item"),
+            "model": {key: state.get(key) for key in ("model_profile", "model_name", "endpoint_model")},
+        }
 
     def cancel_run(self, run_id: str) -> dict[str, Any]:
         """``POST /api/runs/{id}/cancel``（1.0 ``cancel_run`` ``:6879``）。"""
@@ -713,18 +1050,10 @@ class RunSuites:
 
     def work_status(self) -> dict[str, Any]:
         with self._lock:
-            runs = []
-            for run_id, execution in self._active.items():
-                thread = self._threads.get(run_id)
-                runs.append(
-                    {
-                        "id": run_id,
-                        "kind": "run",
-                        "worker_alive": bool(thread and thread.is_alive()),
-                        "status": execution.state.get("status") if execution.state else "pending",
-                        "cleanup": dict(execution.state.get("cleanup") or {}) if execution.state else {},
-                    }
-                )
+            active = [
+                (run_id, execution, self._threads.get(run_id), self._live_entries.get(run_id, {}))
+                for run_id, execution in self._active.items()
+            ]
             auxiliary = [
                 {
                     "id": key,
@@ -735,7 +1064,12 @@ class RunSuites:
                 for key, (thread, event) in self._auxiliary.items()
             ]
             reserved = [
-                {"id": key, "kind": "starting", "worker_alive": True, "cancel_requested": event.is_set()}
+                {
+                    "id": key,
+                    "kind": "chat" if key.startswith("chat-") else "starting",
+                    "worker_alive": True,
+                    "cancel_requested": event.is_set(),
+                }
                 for key, event in self._reservations.items()
             ]
             cleanup = [
@@ -753,12 +1087,34 @@ class RunSuites:
                 for sampler in samplers
                 if sampler.pending_work()
             ]
-            return {
-                "work": [*runs, *auxiliary, *reserved, *cleanup, *probes],
-                "cleanup_status": "pending"
-                if runs or auxiliary or reserved or cleanup or probes
-                else "stopped",
-            }
+        runs = []
+        for run_id, execution, thread, cached in active:
+            state = execution.state
+            data = cached
+            lock = getattr(state, "lock", None)
+            if state is not None and lock is None:
+                data = state.data
+            elif state is not None and lock is not None and lock.acquire(blocking=False):
+                try:
+                    data = {
+                        "status": state.data.get("status"),
+                        "cleanup": copy.deepcopy(state.data.get("cleanup") or {}),
+                    }
+                finally:
+                    lock.release()
+            runs.append(
+                {
+                    "id": run_id,
+                    "kind": "run",
+                    "worker_alive": bool(thread and thread.is_alive()),
+                    "status": data.get("status") or "pending",
+                    "cleanup": copy.deepcopy(data.get("cleanup") or {}),
+                }
+            )
+        return {
+            "work": [*runs, *auxiliary, *reserved, *cleanup, *probes],
+            "cleanup_status": "pending" if runs or auxiliary or reserved or cleanup or probes else "stopped",
+        }
 
     def refresh_cleanup(self) -> dict[str, Any]:
         with self._lock:
@@ -811,24 +1167,36 @@ class RunSuites:
 
     def delete_run(self, run_id: str) -> dict[str, Any]:
         """``DELETE /api/runs/{id}``（1.0 ``delete_run`` ``:7010``）。"""
-        state = self._state_if_exists(run_id)
-        if state is None and run_id not in self._active:
-            raise KeyError(run_id)
-        if isinstance(state, dict) and (state.get("rejudge") or {}).get("status") == "running":
-            raise InvalidRequestError("cannot delete a run while rejudge is running")
         with self._lock:
+            state = self._state_if_exists(run_id)
+            if state is None and run_id not in self._active:
+                raise KeyError(run_id)
+            if isinstance(state, dict) and (state.get("rejudge") or {}).get("status") == "running":
+                raise InvalidRequestError("cannot delete a run while rejudge is running")
             execution = self._active.get(run_id)
             if execution is not None:
                 raise InvalidRequestError("cannot delete a run until its workers have stopped")
-        if state is not None and state.get("status") in DIRTY_STATUSES:
-            raise InvalidRequestError("cannot delete an active run")
-        self._writer.delete_run(run_id)
-        self._index.remove(run_id)
+            entry = self._index.entry(run_id) or {}
+            # A failed write leaves an active checkpoint on disk. The current process
+            # records the terminal failure in its index after execution has stopped.
+            failed_write = (
+                entry.get("status") == "failed"
+                and (entry.get("persistence") or {}).get("status") == "failed"
+                and not self._stop_pending(entry)
+            )
+            if state is not None and state.get("status") in DIRTY_STATUSES and not failed_write:
+                raise InvalidRequestError("cannot delete an active run")
+            self._writer.delete_run(run_id)
+            self._index.remove(run_id)
         return {"deleted": True, "run_id": run_id}
 
     # ---- 评审 ---------------------------------------------------------------
 
     def save_reviews(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            return self._save_reviews(run_id, payload)
+
+    def _save_reviews(self, run_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """``POST /api/runs/{id}/reviews``（1.0 ``save_reviews`` ``:4988``）。
 
         **筛选规则照搬**：未知 ``qa_id``、非对象的条目、白名单外的 ``verdict`` 一律
@@ -839,7 +1207,10 @@ class RunSuites:
             raise KeyError(run_id)
         if state.get("status") in {"running", "pending"}:
             raise InvalidRequestError("cannot change reviews while benchmark is running")
-        provided = payload.get("reviews")
+        if "reviews" not in payload and "scoring_reviews" not in payload:
+            raise InvalidRequestError("reviews or scoring_reviews is required")
+        previous = self._store.read_reviews(run_id)
+        provided = payload.get("reviews", previous.get("reviews") or {})
         if not isinstance(provided, dict):
             raise InvalidRequestError("reviews must be an object keyed by qa_id")
         valid_ids = {str(item.get("qa_id")) for item in state.get("items") or [] if item.get("qa_id")}
@@ -852,7 +1223,18 @@ class RunSuites:
             if verdict not in {"correct", "partial", "wrong"}:
                 continue
             reviews[str(qa_id)] = {"verdict": verdict, "note": note, "updated_at": now_iso()}
-        stored = {"updated_at": now_iso(), "reviews": reviews}
+        from photobench.domain.evaluation.reviews import scoring_review
+
+        audits = list(previous.get("scoring_reviews") or [])
+        incoming = payload.get("scoring_reviews", [])
+        if not isinstance(incoming, list) or any(not isinstance(v, dict) for v in incoming):
+            raise InvalidRequestError("scoring_reviews must be a list of scoring audit records")
+        try:
+            for raw in incoming:
+                audits.append(scoring_review(state, raw, now_iso()))
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
+        stored = {**previous, "updated_at": now_iso(), "reviews": reviews, "scoring_reviews": audits}
         self._writer.save_reviews(run_id, stored)
         return {"saved": len(reviews), **stored}
 
@@ -945,12 +1327,18 @@ class RunSuites:
             "required_build_revision"
         )
         current_revision = self._config.public_runtime_connection_config().get("product_build_revision")
+        retryable_failures = [
+            {"qa_id": item["qa_id"], **evidence}
+            for item in state.get("items") or []
+            if (evidence := service_retry_evidence(item)) is not None
+        ]
         return {
             "run_id": run_id,
+            "retryable_service_failures": retryable_failures,
             "inherited_qa_count": len(done),
             "remaining_qa_count": remaining,
             "can_resume": bool(
-                remaining
+                (remaining or retryable_failures)
                 and state.get("scope_id")
                 and state.get("status") in {"failed", "cancelled", "interrupted", "completed_with_errors"}
             ),
@@ -1713,6 +2101,12 @@ class RunSuites:
                     }
                     sampler.start()
                     self._sleep(2)
+                    replay_timeout = int(
+                        (state.get("execution_budgets") or {}).get("turn_timeout")
+                        or (
+                            REASONING_TURN_TIMEOUT if state.get("reasoning") is True else DEFAULT_TURN_TIMEOUT
+                        )
+                    )
                     for item in state.get("items") or []:
                         if cancel_event.is_set():
                             raise RunCancelledError("memory profile cancelled")
@@ -1741,12 +2135,15 @@ class RunSuites:
                                 if cancel_event.is_set():
                                     raise RunCancelledError("memory profile cancelled")
                                 started = self._sentrix.start_turn(
-                                    conversation_id=conversation_id, message=message, timeout=300
+                                    conversation_id=conversation_id,
+                                    message=message,
+                                    reasoning=state.get("reasoning") is True,
+                                    timeout=300,
                                 )
                                 _await_turn(
                                     self._sentrix,
                                     str(started.get("turn_id") or ""),
-                                    900,
+                                    replay_timeout,
                                     self._sleep,
                                     cancel_event,
                                     record,
@@ -1866,6 +2263,14 @@ class RunSuites:
 
     # ---- 供路由用的只读投影 -------------------------------------------------
 
+    def active_snapshot(self, run_id: str) -> dict[str, Any] | None:
+        """Detach mutable metadata while sharing completed immutable execution traces."""
+        with self._lock:
+            execution = self._active.get(run_id)
+        if execution is None or execution.state is None:
+            return None
+        return execution.state.snapshot()
+
     def active_states(self) -> dict[str, dict[str, Any]]:
         """还在跑的 run 的**活状态**，给 ``GET /api/runs`` 的列表叠加用。
 
@@ -1876,28 +2281,68 @@ class RunSuites:
         所以那一轮在界面上**完全够不着**：看不到进度，也点不到取消。
 
         实测 2026-10-09：一轮 487 题的评测跑了一个多小时，界面上一直什么都没有。
+
+        Copy metadata under the state lock, then calculate statistics after releasing
+        it. Immutable traces remain shared; SQL-backed trace traversal must not block
+        checkpoint publication or Agent/Judge state updates.
         """
         with self._lock:
-            states: dict[str, dict[str, Any]] = {}
-            for run_id in self.active_run_ids():
-                execution = self._active.get(run_id)
-                if execution is None or execution.state is None:
+            active = list(self._active.items())
+        states: dict[str, dict[str, Any]] = {}
+        for run_id, execution in active:
+            state = execution.state
+            if state is None:
+                continue
+            lock = getattr(state, "lock", None)
+            indexed = isinstance(self._store, RunListViews)
+            if lock is None:
+                detached = (
+                    copy.deepcopy(self._live_list_entry(state.data))
+                    if indexed else copy.deepcopy(state.data)
+                )
+            elif lock.acquire(blocking=False):
+                try:
+                    detached = (
+                        copy.deepcopy(self._live_list_entry(state.data))
+                        if indexed else state.snapshot()
+                    )
+                finally:
+                    lock.release()
+            else:
+                with self._lock:
+                    cached = self._live_entries.get(run_id)
+                if cached is None:
                     continue
-                # 浅拷贝：调用方（列表页）不该拿到执行体正在改的那只 dict。
-                # 取 ``.data`` 而不是 ``dict(state)``——``RunState`` 是带锁的**包装**，
-                # 它本身不是 dict。
-                with execution.state.lock:
-                    states[run_id] = analysis.run_list_entry(execution.state.data)
-            return states
+                entry = copy.deepcopy(cached)
+                if entry.get("status") in DIRTY_STATUSES:
+                    states[run_id] = entry
+                continue
+            if indexed:
+                # Summary scores belong to the last atomic publication. Live
+                # status/progress/counts overlay it without traversing any trace.
+                try:
+                    committed = self._store.load_entry(run_id)
+                except KeyError:
+                    entry = detached
+                else:
+                    entry = {**committed, **detached, "summary": committed.get("summary") or {}}
+            else:
+                entry = copy.deepcopy(analysis.run_list_entry(detached))
+            with self._lock:
+                self._live_entries[run_id] = copy.deepcopy(entry)
+            if entry and entry.get("status") in DIRTY_STATUSES:
+                states[run_id] = entry
+        return states
 
     def active_run_ids(self) -> list[str]:
         """Still executing runs; stopped executions are released, stop-pending blocks admission."""
         with self._lock:
-            return [
-                run_id
-                for run_id, execution in self._active.items()
-                if execution.state is not None and execution.state.get("status") in DIRTY_STATUSES
-            ]
+            active = list(self._active.items())
+        return [
+            run_id
+            for run_id, execution in active
+            if execution.state is not None and execution.state.get("status") in DIRTY_STATUSES
+        ]
 
 
 def _items_digest(items: Sequence[dict[str, Any]]) -> str:

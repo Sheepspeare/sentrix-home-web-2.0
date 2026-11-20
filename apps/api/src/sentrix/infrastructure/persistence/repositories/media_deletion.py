@@ -85,15 +85,30 @@ class SqliteMediaDeletionRepository:
                 if faces
                 else ()
             )
+            chunk_sources = tuple(
+                (str(row[0]), str(row[1]))
+                for row in db.execute(
+                    "SELECT DISTINCT source_type,source_id FROM text_vectors "
+                    f"WHERE scope_id=? AND json_extract(metadata_json,'$.asset_id') IN ({a})",
+                    (scope, *assets),
+                ).fetchall()
+            )
             vector_sources = tuple(
-                (kind, source)
-                for kind, group in (
-                    ("asset", assets),
-                    ("observation", observations),
-                    ("face_instance", faces),
-                    ("event", tuple(events)),
+                dict.fromkeys(
+                    (
+                        *chunk_sources,
+                        *tuple(
+                            (kind, source)
+                            for kind, group in (
+                                ("asset", assets),
+                                ("observation", observations),
+                                ("face_instance", faces),
+                                ("event", tuple(events)),
+                            )
+                            for source in group
+                        ),
+                    )
                 )
-                for source in group
             )
             # Strip deleted observations from evidence lists, keeping shared memories.
             changed_facts: set[str] = set()
@@ -195,6 +210,11 @@ class SqliteMediaDeletionRepository:
                     "entity_mentions",
                 ):
                     db.execute(f"DELETE FROM {table} WHERE face_instance_id IN ({f})", faces)
+            db.execute(
+                "DELETE FROM text_vectors WHERE scope_id=? "
+                f"AND json_extract(metadata_json,'$.asset_id') IN ({a})",
+                (scope, *assets),
+            )
             if observations:
                 for table in (
                     "person_appearance_evidence",

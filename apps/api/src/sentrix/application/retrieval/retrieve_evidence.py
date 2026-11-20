@@ -38,6 +38,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
+from contextvars import copy_context
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -105,6 +106,7 @@ class EvidenceRequest:
     limit: int = 20
     graph_enabled: bool = True
     media_types: tuple[MediaType, ...] = ()
+    source_types: tuple[str, ...] = ()
     negated_media: tuple[MediaType, ...] = ()
     time_bounds: tuple[datetime, datetime] | None = None
     place: str = ""
@@ -431,7 +433,8 @@ class RetrieveEvidence:
         unscored_images: list[tuple[int, FusedCandidate]] = []
         if prepared:
             with ThreadPoolExecutor(max_workers=self._utility_concurrency) as executor:
-                scores = list(executor.map(score_one, (image for _, _, image in prepared)))
+                futures = [executor.submit(copy_context().run, score_one, image) for _, _, image in prepared]
+                scores = [future.result() for future in futures]
             for (position, candidate, _), score in zip(prepared, scores, strict=True):
                 if score is None:
                     unscored_images.append((position, candidate))
@@ -646,6 +649,22 @@ class RetrieveEvidence:
         # 先固定 primary 基线，再把它的头部交给图做种子。不能把所有过取候选都
         # 送进图：那会让一个低置信度的尾部命中扩大遍历面，也会令图效果基线失去
         # 「图加入前实际交付头部」的含义。
+        if request.source_types:
+            if self._assets is None:
+                raise ValueError("来源筛选需要资产仓储")
+            source_assets = self._assets.get_many(
+                [hit.asset_id for hits in channel_hits.values() for hit in hits]
+            )
+            allowed = {
+                identifier
+                for identifier, asset in source_assets.items()
+                if asset.media_type is MediaType.TEXT
+                and (asset.source_metadata.document_type or "document") in request.source_types
+            }
+            channel_hits = {
+                channel: tuple(hit for hit in hits if hit.asset_id in allowed)
+                for channel, hits in channel_hits.items()
+            }
         primary_fused = fuse(channel_hits, channel_weights=primary_weights)
         if eligible is not None or request.excluded_scopes:
             primary_fused = [candidate for candidate in primary_fused if included(candidate.asset_id)]
@@ -653,7 +672,7 @@ class RetrieveEvidence:
         # 图是由 primary 结果提供种子的 expander，不参与前面的并行召回。
         # 这样即使图尚未构建，原有五路检索仍然完整返回；图本身的降级会单独出现在
         # channel_trace，而不是伪装成「没有相关结果」。
-        if request.graph_enabled and self._graph is not None:
+        if request.graph_enabled and self._graph is not None and not request.source_types:
             graph_started = time.monotonic()
             try:
                 graph_result = self._graph.execute(

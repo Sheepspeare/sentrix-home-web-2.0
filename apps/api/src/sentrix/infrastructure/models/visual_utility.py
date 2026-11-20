@@ -10,6 +10,7 @@ import math
 import httpx
 from PIL import Image, ImageOps
 
+from sentrix.domain.assistant.request_budget import admit_model_attempt
 from sentrix.infrastructure.assistant.model_endpoint import ServedModel
 
 log = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class OpenAIVisualEvidenceUtility:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._client = httpx.Client(timeout=timeout_s)
+        self._timeout_s = timeout_s
 
     @property
     def model_id(self) -> str:
@@ -35,8 +37,10 @@ class OpenAIVisualEvidenceUtility:
                 output = io.BytesIO()
                 picture.save(output, format="JPEG", quality=82)
             image_url = "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+            timeout = admit_model_attempt(self._timeout_s, kind="tool_utility_vlm")
             response = self._client.post(
                 f"{self._base_url}/chat/completions",
+                timeout=timeout,
                 json={
                     "model": self._model.current(),
                     "messages": [

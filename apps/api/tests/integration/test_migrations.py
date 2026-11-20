@@ -164,7 +164,19 @@ def test_duplicate_migration_versions_fail_before_creating_database(tmp_path):
     assert not database.path.exists()
 
 
-@pytest.mark.parametrize("baseline", ["fresh", "our_branch", "main", "legacy_import_control"])
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        "fresh",
+        "our_branch",
+        "main",
+        "legacy_import_control",
+        "evaluation_20261114",
+        "main_20261116",
+        "evaluation_20261117",
+        "psh_20261117",
+    ],
+)
 def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
     source = Path(__file__).resolve().parents[2] / "src/sentrix/infrastructure/persistence/migrations"
     old_scripts = tmp_path / "old"
@@ -193,6 +205,30 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             (source / "0026_video_job_config_hash.sql").read_bytes()
         )
         (old_scripts / "0018_capture_time.sql").write_bytes((source / "0027_capture_time.sql").read_bytes())
+    elif baseline in {"evaluation_20261114", "main_20261116", "evaluation_20261117", "psh_20261117"}:
+        for script in source.glob("*.sql"):
+            # 这四个快照早于人物页分支的 0035（姓名同步）与 0036（外观取样任务），
+            # 它们由下面的 ``current.migrate()`` 补上。
+            if script.name[:4] >= "0035":
+                continue
+            if baseline == "main_20261116" and script.name[:4] >= "0032":
+                continue
+            if baseline.startswith("evaluation_") and script.name == "0032_text_sources.sql":
+                continue
+            if baseline == "psh_20261117" and script.name == "0033_pipeline_receipts.sql":
+                continue
+            if baseline == "evaluation_20261114":
+                if script.name.startswith("0019_") or "0028" <= script.name[:4] <= "0030":
+                    continue
+                name = {
+                    "0031_import_control.sql": "0019_import_control.sql",
+                    "0033_pipeline_receipts.sql": "0028_pipeline_receipts.sql",
+                }.get(script.name, script.name)
+            elif baseline == "evaluation_20261117" and script.name == "0033_pipeline_receipts.sql":
+                name = "0032_pipeline_receipts.sql"
+            else:
+                name = script.name
+            (old_scripts / name).write_bytes(script.read_bytes())
     path = tmp_path / "t.db"
     original_ledger = []
     if baseline != "fresh":
@@ -212,6 +248,11 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
                     "CREATE TABLE capture_audit AS SELECT applied_at FROM schema_migrations"
                     " WHERE version='0018'"
                 )
+            if baseline in {"evaluation_20261117", "psh_20261117"}:
+                connection.execute(
+                    "CREATE TABLE revision_audit AS SELECT applied_at FROM schema_migrations"
+                    " WHERE version='0032'"
+                )
             connection.commit()
     current = Database(path, source)
     current.migrate()
@@ -229,6 +270,9 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
             "scope_postprocess",
             "memory_rotation_sequences",
             "media_cleanup_jobs",
+            "memory_corrections",
+            "pipeline_receipts",
+            "person_appearance_jobs",
         ):
             assert (
                 connection.execute(
@@ -268,6 +312,17 @@ def test_branch_migrations_preserve_data_and_upgrade_once(tmp_path, baseline):
                 ).fetchone()[0]
                 == connection.execute("SELECT applied_at FROM capture_audit").fetchone()[0]
             )
+        assert "external_source_id" in {row[1] for row in connection.execute("PRAGMA table_info(assets)")}
+        assert "source_text" in {row[1] for row in connection.execute("PRAGMA table_info(observations)")}
+        if baseline in {"evaluation_20261117", "psh_20261117"}:
+            assert (
+                connection.execute(
+                    "SELECT applied_at FROM schema_migrations WHERE version='0032'"
+                ).fetchone()[0]
+                == connection.execute("SELECT applied_at FROM revision_audit").fetchone()[0]
+            )
+            assert "0033" in versions
+            assert ("0032_text_sources" in versions) is (baseline == "evaluation_20261117")
         if baseline == "our_branch":
             assert "0027" in versions
             job = connection.execute(

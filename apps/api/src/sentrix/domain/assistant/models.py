@@ -207,6 +207,13 @@ class Attachment:
     # ``media_type='image'`` 的普通资产，模型没说错，但它无从知道那是视频的帧）。
     # 带上类型至少让交付物自己说清身份，前端与评测也不必再靠猜。
     media_type: str = ""
+    source_type: str = ""
+    source_id: str = ""
+    title: str = ""
+    source_timestamp: str = ""
+    offset: int = 0
+    end_offset: int = 0
+    excerpt: str = ""
 
 
 @dataclass(frozen=True, slots=True)

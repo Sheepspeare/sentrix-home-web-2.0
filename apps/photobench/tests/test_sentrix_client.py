@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 from fakes_read import FakeJsonHttpClient
 
+from photobench.domain.errors import ChatBusyError, HttpResponseError
 from photobench.infrastructure.sentrix.client import HttpxSentrixClient
 
 BASE = "http://sentrix:8191"
@@ -27,6 +28,48 @@ BASE = "http://sentrix:8191"
 def _client(responses: dict) -> tuple[HttpxSentrixClient, FakeJsonHttpClient]:
     http = FakeJsonHttpClient(responses)
     return HttpxSentrixClient(http, lambda: BASE), http
+
+
+def test_delete_conversation_encodes_id_and_accepts_no_content():
+    client, http = _client({"conversations/": None})
+    client.delete_conversation(conversation_id="a/b c")
+    assert http.calls == [(f"{BASE}/api/v1/assistant/conversations/a%2Fb%20c", None, "DELETE", 30)]
+
+
+def test_get_one_asset_encodes_id_without_scanning_album():
+    client, http = _client({"assets/": {"id": "a/b"}})
+    assert client.get_asset(asset_id="a/b") == {"id": "a/b"}
+    assert http.calls == [(f"{BASE}/api/v1/assets/a%2Fb", None, "GET", 5)]
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_get_one_asset_only_treats_not_found_as_absent(status):
+    client, http = _client({})
+
+    def fail(*args, **kwargs):
+        raise HttpResponseError(status, "unavailable")
+
+    http.request_json = fail
+    if status == 404:
+        assert client.get_asset(asset_id="gone") is None
+    else:
+        with pytest.raises(HttpResponseError):
+            client.get_asset(asset_id="one")
+
+
+@pytest.mark.parametrize("status", [404, 409, 500])
+def test_delete_conversation_keeps_upstream_error_semantics(status):
+    client, http = _client({})
+
+    def failure(*args, **kwargs):
+        raise HttpResponseError(status, "upstream")
+
+    http.request_json = failure
+    if status == 404:
+        client.delete_conversation(conversation_id="gone")
+    else:
+        with pytest.raises(ChatBusyError if status == 409 else HttpResponseError):
+            client.delete_conversation(conversation_id="one")
 
 
 def test_every_call_goes_through_the_v1_prefix():
@@ -78,6 +121,33 @@ def test_list_assets_quotes_the_scope_id():
     client, http = _client({"assets": {"items": []}})
     client.list_assets(scope_id="a/b c", limit=1)
     assert "scope_id=a%2Fb%20c" in http.calls[0][0]
+
+
+@pytest.mark.parametrize("limit,expected", [(None, 1533), (1200, 1200)])
+def test_list_assets_reads_all_pages_with_stable_offsets(limit, expected):
+    from urllib.parse import parse_qs, urlparse
+
+    class PagedHttp(FakeJsonHttpClient):
+        def _answer(self, url):
+            query = parse_qs(urlparse(url).query)
+            offset, size = int(query["offset"][0]), int(query["limit"][0])
+            assert size <= 500
+            assert query["sort"] == ["created"] and query["order"] == ["asc"]
+            return {
+                "items": [{"id": f"a{i}"} for i in range(offset, min(offset + size, 1533))],
+                "total": 1533,
+            }
+
+    http = PagedHttp()
+    client = HttpxSentrixClient(http, lambda: BASE)
+    assert client.list_assets(scope_id="s1", limit=limit) == [{"id": f"a{i}"} for i in range(expected)]
+    assert len(http.calls) == (expected + 499) // 500
+
+
+def test_list_assets_reports_an_incomplete_page_instead_of_truncating():
+    client, _ = _client({"assets": {"items": [], "total": 1533}})
+    with pytest.raises(RuntimeError, match="资产分页提前结束"):
+        client.list_assets(scope_id="s1", limit=None)
 
 
 def test_seed_person_is_a_single_person_multipart_with_a_joined_alias_string():
@@ -135,9 +205,40 @@ def test_split_import_and_pipeline_use_the_explicit_endpoints():
     )
     assert http.calls[1][:3] == (
         f"{BASE}/api/v1/pipeline/process",
-        {"scope_id": "s1", "asset_ids": ["a1", "a2"], "graph_enabled": True},
+        {
+            "scope_id": "s1",
+            "asset_ids": ["a1", "a2"],
+            "operation_id": http.calls[1][1]["operation_id"],
+            "graph_enabled": True,
+        },
         "POST",
     )
+    assert len(http.calls[1][1]["operation_id"]) == 32
+
+
+@pytest.mark.parametrize("status", ["completed", "running", "failed"])
+def test_unknown_pipeline_reads_receipt_without_replaying_post(status):
+    from photobench.domain.errors import RequestOutcomeUnknownError
+
+    class UnknownHttp:
+        def __init__(self):
+            self.calls = []
+
+        def request_json(self, url, payload=None, method="GET", timeout=30):
+            self.calls.append((url, method))
+            if method == "POST":
+                raise RequestOutcomeUnknownError(method="POST", cause_type="ReadTimeout", attempts=1)
+            return {"status": status, "result": {"scope_id": "s", "skipped": 2}}
+
+    http = UnknownHttp()
+    client = HttpxSentrixClient(http, lambda: BASE)
+    if status == "completed":
+        assert client.finalize_pipeline(scope_id="s", asset_ids=["a", "b"], timeout=90)["skipped"] == 2
+    else:
+        with pytest.raises(RequestOutcomeUnknownError) as caught:
+            client.finalize_pipeline(scope_id="s", asset_ids=["a", "b"], timeout=90)
+        assert caught.value.facts["operation_id"]
+    assert [method for _, method in http.calls] == ["POST", "GET"]
 
 
 def test_ask_is_two_calls_and_the_turn_poll_uses_the_plural_path():
@@ -161,7 +262,7 @@ def test_ask_is_two_calls_and_the_turn_poll_uses_the_plural_path():
     assert conversation_call[1] == {"scope_id": "s1", "title": "q1"}
     assert turn_call[0] == f"{BASE}/api/v1/assistant/conversations/conv_1/turns"
     # 默认不发 include_debug：只有评测侧明确要求时才把完整 prompt 带回来。
-    assert turn_call[1] == {"message": "海边有谁？"}
+    assert turn_call[1] == {"message": "海边有谁？", "reasoning": True}
     assert poll_call[0] == f"{BASE}/api/v1/assistant/turns/turn_1"
     assert poll_call[2] == "GET"
 
@@ -172,7 +273,7 @@ def test_start_turn_can_request_the_full_debug_trace():
 
     client.start_turn(conversation_id="conv_1", message="海边有谁？", include_debug=True)
 
-    assert http.calls[0][1] == {"message": "海边有谁？", "include_debug": True}
+    assert http.calls[0][1] == {"message": "海边有谁？", "include_debug": True, "reasoning": True}
 
 
 def test_start_turn_can_disable_graph_retrieval_for_a_paired_baseline_run():
@@ -180,7 +281,13 @@ def test_start_turn_can_disable_graph_retrieval_for_a_paired_baseline_run():
 
     client.start_turn(conversation_id="conv_1", message="海边有谁？", graph_enabled=False)
 
-    assert http.calls[0][1] == {"message": "海边有谁？", "graph_enabled": False}
+    assert http.calls[0][1] == {"message": "海边有谁？", "graph_enabled": False, "reasoning": True}
+
+
+def test_start_turn_explicitly_disables_reasoning():
+    client, http = _client({"turns": {"turn_id": "turn_1", "status": "pending"}})
+    client.start_turn(conversation_id="conv_1", message="hello", reasoning=False)
+    assert http.calls[0][1] == {"message": "hello", "reasoning": False}
 
 
 def test_relationship_batch_sends_the_explicit_name_mapping():

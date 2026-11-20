@@ -21,6 +21,7 @@ from sentrix.domain.assistant.models import (
     TerminationReason,
 )
 from sentrix.domain.assistant.profile import TurnProfile
+from sentrix.domain.assistant.request_budget import RequestBudget
 from sentrix.domain.assistant.tools import (
     FINAL_ANSWER_TOOL,
     RETRIEVAL_TOOLS,
@@ -63,6 +64,21 @@ class TaskState:
     progress: list[ProgressEvent] = field(default_factory=list)
     guard_blocked_codes: set[str] = field(default_factory=set)
     termination_reason: TerminationReason | None = None
+    request_budget: RequestBudget | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        if self.profile.max_model_calls is not None:
+            assert self.profile.max_tool_calls is not None
+            assert self.profile.max_search_calls is not None
+            assert self.profile.max_other_tool_calls is not None
+            self.request_budget = RequestBudget(
+                max_model_calls=self.profile.max_model_calls,
+                max_tool_calls=self.profile.max_tool_calls,
+                max_search_calls=self.profile.max_search_calls,
+                max_other_tool_calls=self.profile.max_other_tool_calls,
+                deadline=self.started_at + self.profile.wall_time_s,
+                final_reserve_s=self.profile.final_reserve_s,
+            )
 
     # ---- 进度 ---------------------------------------------------------------
 
@@ -215,9 +231,14 @@ class TaskState:
         1.0 实测出的「预算耗尽后空答案」的成因。
         """
         within_steps = self.profile.max_steps is None or self.model_steps < self.profile.max_steps
-        return within_steps and self.wall_remaining() > 0
+        within_requests = self.request_budget is None or self.request_budget.can_model()
+        return within_steps and within_requests and self.wall_remaining() > 0
 
     def can_call_tool(self) -> bool:
+        if self.request_budget is not None:
+            return self.has_final_reserve() and any(
+                self.request_budget.can_tool(name) for name in ("search_memories", "read_source_text")
+            )
         within_calls = (
             self.profile.max_tool_calls is None or self.tool_round_trips < self.profile.max_tool_calls
         )

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import sqlite3
@@ -611,12 +612,8 @@ def test_rename_with_a_blank_name_is_400(identity_client: TestClient):
     assert _error(response) == ("invalid_request", "person name is required")
 
 
-def test_renaming_a_pending_candidate_exposes_name_without_confirming_it(identity_client: TestClient):
-    """改名不等于确认这个人（1.0 ``db.py:4459`` 只动 ``name_state``）。
-
-    pending 实体改名后会显示用户写入的名字，但 status/confirmed 仍表示它尚未被确认。
-    这条钉住的是「改名」与「确认」是两件事。
-    """
+def test_renaming_a_pending_candidate_shows_its_name_without_confirming_identity(identity_client: TestClient):
+    """用户命名后显示新名字，身份仍保持未确认。"""
     add_entity(identity_client, "ent_1", name="待确认人物簇 · cluster_1")
 
     response = identity_client.patch("/api/v1/people/ent_1/name", json={"name": "妈妈"})
@@ -1608,6 +1605,18 @@ def test_the_detail_properties_split_current_from_history(identity_client: TestC
     assert [item["id"] for item in body["property_history"]] == ["prop_old"]
 
 
+def _turns_run_in_this_thread(client: TestClient):
+    """建回合的路由（main a5daf519 起）会立刻起工作线程认领并跑回合。下面几条用例要在
+    本线程里用 ``build_run_turn`` 跑、拿 ``TurnResult`` 断言，所以按体验模式关掉路由的
+    即时派发——与 ``test_assistant_routes`` 的同一手法；只换容器，请求门禁读的是
+    ``app.state.settings``，不受影响。"""
+    container = client.app.state.container
+    client.app.state.container = dataclasses.replace(
+        container, settings=container.settings.model_copy(update={"experience_mode": True})
+    )
+    return client.app.state.container
+
+
 def test_assistant_resolves_both_names_to_one_person_and_delivers_only_linked_photos(
     identity_client: TestClient, tmp_path: Path
 ):
@@ -1625,7 +1634,7 @@ def test_assistant_resolves_both_names_to_one_person_and_delivers_only_linked_ph
         )
     edit = identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["天天"]})
     assert edit.status_code == 200 and edit.json()["sync_status"] == "pending"
-    container = identity_client.app.state.container
+    container = _turns_run_in_this_thread(identity_client)
     family = container.family_graph_repository
     family.write_portrait(HOME, "ent_1", '家庭归属：unknown；近期记忆：{"objects":["矮马"]}', source="model")
     family.set_membership(HOME, "ent_1", "family", source="user_override")
@@ -1707,7 +1716,7 @@ def test_all_albums_uses_catalog_scope_and_alias_rules(identity_client: TestClie
 
 def test_explicit_photo_request_has_gap_when_a_confirmed_person_has_no_photos(identity_client):
     add_entity(identity_client, "ent_1", name="已确认的人", status="confirmed")
-    container = identity_client.app.state.container
+    container = _turns_run_in_this_thread(identity_client)
     runner = build_run_turn(container)
     conversation = identity_client.post("/api/v1/assistant/conversations", json={"scope_id": ""}).json()
     turn = identity_client.post(
