@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 18:18｜Q4补做双流验收完成，豆包原任务继续
+
+93efab的1013逐题合同、1012有效ATM分与完整在线trace/SFT均通过；完整trace52,380,354字节、SFT1,230,237,000字节，分别与同版独立流SHA一致，未落大正文。SFT为2611样本/31585步骤，validator峰值RSS496968KiB。8872PID3631277、app-dir/导出源码SHA及读revision28381826d3174640bd2d07c50f3eb9a4全程保持，worker368735已退出；7ad9aa98事件已处理。证据产品项目audit/20261120-q4-supplement/{exports-acceptance.json,exports-acceptance-review.json,exports-final-probe.json,exports-v2-worker.log}。
+
+全部原答卷/attempt与1012有效回执保持，源3556c7 manifest和18隔离不变；当前14继承隔离保持。9b7cf030 Judge自相矛盾仍failed/null，2a22220b真实model_error与已有Judge自动0分如实保留。不再Agent/Judge或导出，旧v1失败记录保留，launch/verify/accept均已消费。
+
+原豆包d52ecf实查411/1013题、401有效分，4turn、型号/预算/独立库/16K与PID351254/351297匹配，标准wake3744e864/watcher53566命令及存活已核。/home约8.12GiB，可用内存约62GiB；无重启重提/切库/业务部署。继续等豆包终态核评分与两导出，再做三模型比较；冻结100-600-100-500/QA4-3660/reasoning-graph和ATM v5/豆包Judge保持。主实验/审计/两项目索引已更新，不改8772/8191/153/其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20 18:12｜压缩验收完成，豆包标准监控及Q4新导出已接续
 
 旧90f21f四快照完整解压SHA一致，5个保护文件SHA/stat保持；回收7,343,276,953字节（约6.84GiB），/home约8.13GiB，峰值RSS33052KiB。再次只读核gzip解析/大小及保护stat通过，8c14b3cc事件已处理；首v1误拒历史running而预检失败的证据保持，未重放任何压缩/checkpoint。证据产品项目audit/20261120-doubao-disk-recovery/archive-acceptance.json及archive-verification.json。

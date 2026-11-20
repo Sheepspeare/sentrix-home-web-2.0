@@ -1,10 +1,10 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/20旧快照v2完整SHA往返/5保护文件验收，回收约6.84GiB，/home约8.13GiB。豆包409题/399分、4turn运行，新标准wake3744e864/watcher53566接续，未重启重提；见T006及audit/20261120-doubao-disk-recovery。
+- 11/20旧快照v2回收约6.84GiB，保护文件保持；豆包411题/401有效分、4turn运行，标准wake3744e864/watcher53566继续。Q4补做双流已验收，见T006及audit/20261120-q4-supplement。
 
 - 11/20两次低磁盘告警均已处理；旧79d22271/48727066及压缩8c14b3cc监控已结束，当前原豆包run沿上条新标准监控接续，旧回执保持，见T006。
 
-- 11/20 Q4补做93efab已验1012有效分及原答卷/失败史保持，唯一Judge failed/null保留。新c3c3417e同步100验SHA并push，exports-v2/wake7ad9aa98/worker368735/watcher54062正验完整双流；旧v1存储失败回执保持，不重放，见T006及audit/20261120-q4-supplement。
+- 11/20 Q4补做93efab已验1013交卷/1012有效分及完整trace/SFT双流SHA；原答卷/分/隔离保持，唯一Judge failed/null及真实产品model_error/既有0保留。7ad9aa98已处理，不再Agent/Judge/导出，继续豆包终态；见T006及audit/20261120-q4-supplement。
 
 - 11/20 PR #43已于11:47合入main/f439244；8872聊天/节点耗时/格式3分析已上线7b34a75，PID3631277，166文件SHA及线上API/隔离聊天/纯规则分析验收通过。26436efa已处理，8874原空闲监控保持，见T006及产品项目audit/20261120-chat-trace-8872-release。
 
