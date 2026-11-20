@@ -94,8 +94,18 @@ def compress_one(path, minimum_free=256 * 1024**2):
         raise
 
 
+def committed_metadata(run):
+    pointer = json.loads((run / "snapshot-commit.json").read_text())
+    assert pointer == {"version": 1, "generation": "0153862e46f84a6c88ee5a47757604c8"}
+    metadata = json.loads((run / ".snapshots" / pointer["generation"] / "metadata.json").read_text())
+    assert metadata["entry"]["run_id"] == RUN
+    assert metadata["entry"]["status"] == "failed", "Committed generation must be the pinned failed run"
+    return metadata
+
+
 def preflight():
     run = ROOT / RUN
+    committed_metadata(run)
     for port in (8872, 8874):
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/active-work", timeout=10) as response:
             assert all(row["id"] != RUN for row in json.load(response)["work"])
@@ -113,7 +123,7 @@ def preflight():
         assert not path.with_name(path.name + ".gz").exists()
         metadata = json.loads((path.parent / "metadata.json").read_text())
         assert metadata["entry"]["run_id"] == RUN
-        assert metadata["entry"]["status"] not in {"running", "pending", "cancelling"}
+        # Older immutable generations preserve their historical running status.
         assert snapshot_file(path.parent, path.name) == path
     protected = [run / name for name in ("snapshot-commit.json", "run.json", "results.jsonl")]
     protected += sorted((run / ".snapshots").glob("*/metadata.json"))
@@ -166,7 +176,7 @@ def work():
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("operation", choices=("launch", "work", "probe"))
+    parser.add_argument("operation", choices=("launch", "work", "probe", "inspect"))
     parser.add_argument("--wait-id")
     args = parser.parse_args()
     if args.operation == "launch":
@@ -195,6 +205,10 @@ def main():
         print(json.dumps(receipt), flush=True)
     elif args.operation == "work":
         work()
+    elif args.operation == "inspect":
+        checked = preflight()
+        save("preflight.json", {"protected": checked, "status": "passed"})
+        print(json.dumps({"status": "passed", "protected_files": len(checked)}), flush=True)
     else:
         receipt = json.loads((HERE / "response.json").read_text())
         progress = (
