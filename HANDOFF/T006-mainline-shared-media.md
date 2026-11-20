@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20｜Q4有限Judge补评失败已验收，新完整导出已挂监控
+
+052e67ba/scoring-d202e367b4214b2db73735a03e9286fb终态completed_with_errors，单次score_missing.py accept通过：1012原有效回执与全部1013交卷/attempt保持，旧失败history正确累加。9b7cf030最新Judge仍accuracy=false但core_match=true、missing/contradictions为空，原始回包和error_details保存在scoring-error-review/summary；继续failed/null，不人工改分、不再Judge或Agent。34新attempt新增34分、原978回执保持；2a22220b产品真实model_error及既有Judge自动0分保持。
+
+2292a30/dc72cc9先本机ruff/格式/语法/diff通过并commit，再同步100新q4-supplement-exports-v1逐SHA/语法核验后push。先新wake13128c13-a143-4213-9483-0be071750f87，再单次exports launch，worker334292/watcher50498；绑定8872PID3631277/app-dir chat-trace-8872-7b34a75b、读revision28381826d3174640bd2d07c50f3eb9a4及源码SHA。先等旧快照压缩四文件acceptance及空间>=1.5GiB，再自动逐题合同、完整在线trace/SFT双流SHA，不落正文，最终验收待回调。
+
+accept/review/exports launch均已消费，probe只读，无验收读日志不盲重跑。原源3556c7两导出/18隔离和Qwen验收保持，当前新run14继承隔离保持。豆包原d52ecf继续，旧487告警已交43418412存储监控，25358已退出；存储回调须新wake接run，勿重复压缩/重提/重启。审计产品项目audit/20261120-q4-supplement及主实验state/checkpoint-watchers。不改8772/8191/153或其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20｜豆包第二次磁盘告警，旧快照压缩已启动
 
 48727066触发后只读核豆包401题/391有效分、四turn运行，精确worker/型号/独立库/16K/预算与PID351254/351297保持。/home约1.32GiB，Q4 WAL约116MiB，本轮不重放旧checkpoint。新a0b415f仅压缩旧终态Q4 90f21f两个generation的四份run/results快照，原文共约8.68GB；流式gzip完整解压SHA与源SHA一致才移除plain副本，兼容根文件/metadata/pointer保持。两线上encoding.py原生gzip支持SHA已核；本机往返、低空间原件保持、冲突拒绝及ruff/语法/diff通过，先commit→同步100 SHA/语法→push。
