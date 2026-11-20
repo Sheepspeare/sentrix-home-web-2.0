@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/20 16:19豆包旧低磁盘告警已核解除，原d52ecf持续运行（356题/347有效分）；新wake48727066/watcher25358接续，未重启或重提交。Q4补做93efab/d65adb3c监控保持，见T006及audit/20261120-doubao-media-reuse/disk-alert-review.json。
+
 - 11/20用户新授权补Q4缺分；93efab已在8872继承979答卷/978有效分，仅34旧执行失败各一新attempt，wake d65adb3c/watcher23643监控。原3556c7及18历史隔离保持，四条隔离QA生成新轨迹；终态后仅Judge补继承的9b7cf030，再验两导出。见T006及产品项目audit/20261120-q4-supplement。
 
 - 11/20 PR #43已于11:47合入main/f439244；8872聊天/节点耗时/格式3分析已上线7b34a75，PID3631277，166文件SHA及线上API/隔离聊天/纯规则分析验收通过。26436efa已处理，8874原空闲监控保持，见T006及产品项目audit/20261120-chat-trace-8872-release。

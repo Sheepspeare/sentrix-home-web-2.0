@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 16:29｜豆包旧磁盘告警已解除，接续原run监控
+
+79d22271事件实际发生在16:19:44，当时豆包仍running，/home约1.38GiB。Q4 seed产生约1.2GB已提交WAL，16:20:43的单次checkpoint已经回收；16:27只读核/home约2.38GiB、WAL约56MiB、豆包356/1013及347有效分，四turn事件继续前进，worker/模型/独立库/预算/16K及两服务PID351254/351297保持。本轮未重启/重提交/切库，也未再次checkpoint。旧事件/触发快照及实际核对保留在产品项目audit/20261120-doubao-media-reuse/disk-alert-{trigger-snapshot,current-probe,review}.json。
+
+先新wake48727066-361f-427f-8810-e9c6fcd44ab2，再只为原d52ecf接续watcher25358，首探running/无告警；旧79813已退出。新意图/回执、watchers/delivery与主实验state/checkpoint-watchers已更新。Q4缺分补做93efab/d65adb3c/watcher23643继续，旧3556c7及Qwen验收保持。新回调沿原1013题/冻结v5核真实去向、有效分/失败、只补缺Judge及两完整在线流式导出；不重放旧launch/activate/resume/checkpoint。不改8772/8191/153或其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20 16:23｜按新授权定点补Q4缺分
 
 用户要求补齐Q4尚无有效评分的题。原3556c7已验收的1013项/978有效ATM分及两导出继续保留；本轮授权34条执行失败各一新attempt（27 model_error、7 timeout），另1份现成答卷仅补Judge。34条产品turn逐项核实均failed，没有成功答卷可找回；标签本身不作为模型智能责任结论。
