@@ -604,6 +604,7 @@ export interface KeyframeAnalysis {
     }>;
     [key: string]: unknown;
   };
+  evidence_hits?: { annotated: number; candidate_video: number; candidate_time: number; viewed_video: number; viewed_time: number; candidate_time_unknown: number; viewed_time_unknown: number; unmapped_video: number; candidate_empty?: number; viewed_trace_missing?: number; windows?: Record<string, Record<string, { hits: number; unknown: number }>> };
   retrieval?: {
     candidate_keyframes?: number;
     candidate_relevant_keyframes?: number;
