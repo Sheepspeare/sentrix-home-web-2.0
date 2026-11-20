@@ -220,3 +220,36 @@ it('只在题目展开后显示并排的重测和Judge按钮', () => {
   expect(retest.parentElement).toBe(judge.parentElement);
   expect(retest.className).toBe(judge.className);
 });
+
+describe("GT 代表帧", () => {
+  it("代表帧与邮件在同一GT区域，保留去重和未交付标记", () => {
+    const source = { source_type: 'email', source_id: 'email1', title: '酒店确认' };
+    renderCard({ index: 0, metrics_contract_version: 2,
+      gt_media: [{ media_type: 'video', media_id: 'video1', file_name: 'video1.mp4', matched: false }],
+      retrieval_source_refs: [source], answer_evidence_source_refs: [source],
+      evidence_v12: { status: 'verified', frames: [{ frame: 'keyframes/video1/frame.jpg', time_seconds: 12 }] },
+    });
+    const region = screen.getByRole('region', { name: '检索 GT 媒体' });
+    expect(within(region).getByText('检索 GT 媒体（2）')).toBeTruthy();
+    expect(within(region).getAllByText('邮件 · 酒店确认')).toHaveLength(1);
+    expect(within(region).getByText('· 未交付')).toBeTruthy();
+    expect(within(region).getByText('代表帧 12.00 秒')).toBeTruthy();
+    expect(screen.getAllByRole('region', { name: '检索 GT 媒体' })).toHaveLength(1);
+  });
+  it("将视频定位到标注代表帧", () => {
+    const { container } = renderCard({
+      index: 0, question: "问题",
+      gt_media: [{ media_type: "video", media_id: "video1", video_id: "video1", file_name: "video1.mp4" }],
+      evidence_v12: { status: "verified", segments: [{ start_seconds: 10, end_seconds: 15 }], frames: [{ frame: "keyframes/video1/frame.jpg", time_seconds: 12 }] },
+    } as RunItemDetail);
+    const player = container.querySelector("video") as HTMLVideoElement;
+    expect(player).not.toBeNull();
+    fireEvent.loadedMetadata(player);
+    expect(player.currentTime).toBe(12);
+    expect(screen.getByText(/代表帧 12.00 秒/)).not.toBeNull();
+  });
+  it("说明纯音频题没有代表帧", () => {
+    renderCard({ index: 0, question: "音频问题", evidence_v12: { status: "not_required", frames: [] } } as RunItemDetail);
+    expect(screen.getByText("本题不要求关键帧，无代表帧时间点。")).not.toBeNull();
+  });
+});

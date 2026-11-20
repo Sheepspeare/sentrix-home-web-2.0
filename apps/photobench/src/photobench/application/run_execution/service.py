@@ -182,6 +182,8 @@ PASSTHROUGH_FIELDS = (
     "retrieval_source_refs",
     "answer_evidence_source_refs",
     "source_protocol",
+    "evidence_v12",
+    "keyframe_eval",
     "evaluation",
     "benchmark_id",
     "source_qa_id",
@@ -2648,8 +2650,10 @@ class RunExecution:
                         on_progress=partial(
                             self._publish_retest_progress,
                             record={
-                                "index": turn_index, "message": message,
-                                "qa_id": row.get("qa_id"), "turn_id": turn_id,
+                                "index": turn_index,
+                                "message": message,
+                                "qa_id": row.get("qa_id"),
+                                "turn_id": turn_id,
                             },
                             previous_turns=turn_records,
                             assets=assets_by_name,

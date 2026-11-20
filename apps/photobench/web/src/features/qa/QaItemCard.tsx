@@ -160,6 +160,8 @@ function QaItemDetail({
   const timing = itemTimingBreakdown(measuredDetail);
   const qaSegments = qaLatencySegments(measuredDetail);
   const toolTrace = hasToolTrace(measuredDetail);
+  const sourceType = (detail.tags ?? []).find(tag => ["question:audio", "question:visual", "question:audio_visual", "question:summary"].includes(tag));
+  const sourceTypeLabel: Record<string, string> = {"question:audio": "纯音频题", "question:visual": "视觉题", "question:audio_visual": "音画题", "question:summary": "总结题"};
   const qualityReason = evaluationReason(judgeReason(detail.judge));
   const behaviorReason = judgeReason(detail.task_judge);
   const evidenceReason = judgeReason(detail.evidence_judge);
@@ -167,6 +169,7 @@ function QaItemDetail({
   return (
     <>
       <div className="qa-meta-tags">
+        {sourceType && <span>QA 来源：{sourceTypeLabel[sourceType]}</span>}
         {detail.benchmark_group && !detail.ability_family_ids?.some(id => id === "H" || id === "I") ? <span>{taxonomyLabel(detail.benchmark_group)}</span> : null}
         {(detail.ability_family_ids || []).filter(id => id === "H" || id === "I").map(id => <span key={id}>{abilityLabel(id, detail.ability_taxonomy_version)}</span>)}
         {(detail.ability_primary_ids || []).map(id => <span key={id}>{abilityLabel(id[0], detail.ability_taxonomy_version)} · {abilityLabel(id, detail.ability_taxonomy_version)}</span>)}
