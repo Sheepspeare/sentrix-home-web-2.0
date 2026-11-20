@@ -1,10 +1,10 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/20豆包第二次磁盘告警核401题/391分、4turn运行，/home约1.32GiB；a0b415f旧快照无损压缩已先wake43418412再启动，验收后接原run监控，未重启重提，见T006及产品项目audit/20261120-doubao-disk-recovery。
+- 11/20豆包405题/395分、4turn运行；旧快照v1预检误拒历史running，未改原文件。dc9e98bd修正并完整inspect通过，先wake8c14b3cc再启v2压缩/原run监控，验收待回调。Q4旧导出因存储前置失败退出，后续须新操作，见T006及产品项目audit/20261120-doubao-disk-recovery。
 
 - 11/20 16:19豆包旧低磁盘告警已核解除，原d52ecf持续运行（356题/347有效分）；新wake48727066/watcher25358接续，未重启或重提交。Q4补做已终态，后续见下条，见T006及audit/20261120-doubao-media-reuse/disk-alert-review.json。
 
-- 11/20 Q4补做93efab已验1012有效分及全部答卷保持，最后9b7cf030 Judge仍自相矛盾，保留failed/null不再重试；新两流导出已先wake13128c13再启动，待存储回收验收后自动校验，见T006及产品项目audit/20261120-q4-supplement。
+- 11/20 Q4补做93efab已验1012有效分及原答卷/失败史保持，最后Judge自相矛盾failed/null保留。第一导出13128c13因存储前置失败退出、无验收；v2压缩通过后新wake/新操作验双流，见T006及产品项目audit/20261120-q4-supplement。
 
 - 11/20 PR #43已于11:47合入main/f439244；8872聊天/节点耗时/格式3分析已上线7b34a75，PID3631277，166文件SHA及线上API/隔离聊天/纯规则分析验收通过。26436efa已处理，8874原空闲监控保持，见T006及产品项目audit/20261120-chat-trace-8872-release。
 

@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20｜旧快照预检误判已修正，新v2压缩及豆包监控已启动
+
+43418412/v1在预检退出，四原文件大小保持且无gz/partial。操作脚本错误地拒绝旧39b453c代历史running，实际当前提交0153862为failed，active-work/active-runs未指向该run；不是新业务OOM。dc9e98bd只修当前提交状态核验，保留旧代状态；本机回归旧running允许/当前running拒绝与gzip往返、ruff/格式/语法/diff通过，commit→同步新doubao-disk-recovery-v2验SHA/语法及完整只读inspect五个保护文件通过→push。旧v1未重放。
+
+先新wake8c14b3cc-2cb1-4fbb-bf33-d82a2cc8892a，再单次launch worker347108/watcher51796；最终压缩验收待回调。watcher也只读核原豆包d52ecf worker/型号/进程/独立库/预算16K/内存，已处理低盘在回收期间若降至512MiB再告警，成功后立即新wake恢复标准1.5GiB告警。最新405题/395有效分、四turn推进，PID351254/351297保持，未重启重提或checkpoint。失败证据first-attempt-*和当前映射见产品项目audit/20261120-doubao-disk-recovery。
+
+Q4评分052e67ba已单次accept验收，1012分/答卷/失败史保持。第一导出13128c13/334292因存储v1失败在waiting_storage退出、无两流验收，真实日志已保存并标事件处理。后续旧回调只核记录，不重放launch/verify；压缩v2成功后新独立export-v2与新wake（移除旧v1依赖）验完整双流。不要再评分accept或Judge/Agent。主实验及AGENTS/T006同步，不改8772/8191/153/其他服务器，不启动Hard/16题包。
+
 ## 2026-11-20｜Q4有限Judge补评失败已验收，新完整导出已挂监控
 
 052e67ba/scoring-d202e367b4214b2db73735a03e9286fb终态completed_with_errors，单次score_missing.py accept通过：1012原有效回执与全部1013交卷/attempt保持，旧失败history正确累加。9b7cf030最新Judge仍accuracy=false但core_match=true、missing/contradictions为空，原始回包和error_details保存在scoring-error-review/summary；继续failed/null，不人工改分、不再Judge或Agent。34新attempt新增34分、原978回执保持；2a22220b产品真实model_error及既有Judge自动0分保持。
