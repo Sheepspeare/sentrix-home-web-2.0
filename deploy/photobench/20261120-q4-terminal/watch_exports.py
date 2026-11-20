@@ -16,6 +16,8 @@ parser = argparse.ArgumentParser(__doc__)
 parser.add_argument("--worker-pid", type=int, required=True)
 parser.add_argument("--registration", type=Path, required=True)
 parser.add_argument("--audit", type=Path, required=True)
+parser.add_argument("--remote-directory", required=True)
+parser.add_argument("--app-dir", required=True)
 parser.add_argument("--check", action="store_true")
 args = parser.parse_args()
 failures = 0
@@ -36,10 +38,9 @@ while True:
                 "ServerAliveCountMax=2",
                 "192.168.0.100",
                 "env",
-                "PYTHONPATH=/home/realmagic/xy/experiments/atm1013-20261118/"
-                "psh-formal-f75c105/evaluation/apps/photobench/src",
+                "PYTHONPATH=" + args.app_dir,
                 "/home/realmagic/xy/releases/psh-b2030e1-100-20261117/.venv/bin/python",
-                "/home/realmagic/xy/experiments/atm1013-20261118/q4-terminal-v1/verify_exports.py",
+                args.remote_directory + "/verify_exports.py",
                 "probe",
                 "--worker-pid",
                 str(args.worker_pid),

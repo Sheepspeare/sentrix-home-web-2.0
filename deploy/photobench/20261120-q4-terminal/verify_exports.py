@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from inspect_terminal import APP, BATCH, HERE, ROOT, RUN, api, current, fingerprint, save
+from inspect_terminal import BATCH, HERE, ROOT, RUN, api, current, fingerprint, save
 
 from photobench.application.runs.reports import RunReports
 from photobench.domain.evaluation.profile_view import primary_profile_state, profile_state
@@ -36,7 +36,25 @@ def service_memory():
     fields = dict(
         line.split(":", 1) for line in Path(f"/proc/{pid}/status").read_text().splitlines() if ":" in line
     )
-    return {"pid": pid, **{k: fields[k].strip() for k in ("VmRSS", "VmHWM")}}
+    command = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")
+    app = Path(command[command.index("--app-dir") + 1])
+    imported_exports = Path(exports.__file__).resolve()
+    deployed_exports = app / "photobench/domain/runs/exports.py"
+    return {
+        "pid": pid,
+        "app_dir": str(app),
+        "imported_exports_match_service": imported_exports == deployed_exports.resolve(),
+        "exports_source_sha256": hashlib.sha256(deployed_exports.read_bytes()).hexdigest(),
+        **{k: fields[k].strip() for k in ("VmRSS", "VmHWM")},
+    }
+
+
+def pinned_service(before):
+    after = service_memory()
+    for key in ("pid", "app_dir", "exports_source_sha256"):
+        assert after[key] == before[key], f"Evaluator {key} changed during export validation"
+    assert after["imported_exports_match_service"]
+    return after
 
 
 def progress(result, phase):
@@ -76,6 +94,7 @@ def verify():
         "service_memory_before": service_memory(),
         "export_bodies_saved": False,
     }
+    assert result["service_memory_before"]["imported_exports_match_service"]
     projected_scores = samples = steps = quarantined = 0
     progress(result, "contracts")
     for item in selected["items"]:
@@ -103,6 +122,7 @@ def verify():
         steps += sum(len(t["steps"]) for t in row["turns"])
     assert projected_scores == accepted["valid_atm_scores"]
     assert quarantined == 18
+    pinned_service(result["service_memory_before"])
     result.update(
         sft_samples=samples,
         sft_steps=steps,
@@ -111,6 +131,7 @@ def verify():
     )
     reports = RunReports(FileRunStore(ROOT), None, lambda: "")
     for kind in ("trace", "sft"):
+        pinned_service(result["service_memory_before"])
         started = time.monotonic()
         expected_hash, expected_bytes = hashlib.sha256(), 0
         progress(result, "expected_" + kind)
@@ -122,6 +143,7 @@ def verify():
             expected_bytes += len(raw)
         expected_seconds = time.monotonic() - started
         assert SplitRunReader(ROOT, ROOT / RUN).revision == revision
+        pinned_service(result["service_memory_before"])
         progress({**result, "expected_bytes": expected_bytes}, "http_" + kind)
         actual_hash, actual_bytes = hashlib.sha256(), 0
         started = time.monotonic()
@@ -139,6 +161,7 @@ def verify():
         assert actual_bytes == expected_bytes
         assert actual_hash.hexdigest() == expected_hash.hexdigest()
         assert SplitRunReader(ROOT, ROOT / RUN).revision == revision
+        pinned_service(result["service_memory_before"])
         result["exports"][kind] = {
             "bytes": actual_bytes,
             "sha256": actual_hash.hexdigest(),
@@ -157,7 +180,7 @@ def verify():
     result.update(
         status="verified_with_preserved_failures",
         finished_at=datetime.now().astimezone().isoformat(),
-        service_memory_after=service_memory(),
+        service_memory_after=pinned_service(result["service_memory_before"]),
         validator_peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         answers_attempts_and_previous_scores_unchanged=True,
     )
@@ -174,13 +197,15 @@ def launch(wait_id):
     assert accepted["valid_atm_scores"] == 978
     assert not api(8872, "active-work")["work"]
     assert SplitRunReader(ROOT, ROOT / RUN).revision == accepted["read_revision"]
+    service = service_memory()
+    assert service["imported_exports_match_service"], "Launch using the evaluator's actual app directory"
     command = [sys.executable, str(Path(__file__).resolve()), "verify"]
     save("exports-intent.json", {"wait_id": wait_id, "run_id": RUN, "command": command})
     with (HERE / "exports-worker.log").open("xb") as output:
         worker = subprocess.Popen(
             command,
             cwd=HERE,
-            env={**os.environ, "PYTHONPATH": str(APP)},
+            env={**os.environ, "PYTHONPATH": service["app_dir"]},
             stdin=subprocess.DEVNULL,
             stdout=output,
             stderr=subprocess.STDOUT,
@@ -192,7 +217,9 @@ def launch(wait_id):
         "worker_pid": worker.pid,
         "started_at": datetime.now().astimezone().isoformat(),
         "read_revision": accepted["read_revision"],
-        "evaluation_pid": service_memory()["pid"],
+        "evaluation_pid": service["pid"],
+        "evaluation_app_dir": service["app_dir"],
+        "exports_source_sha256": service["exports_source_sha256"],
     }
     save("exports-response.json", response)
     print(json.dumps(response), flush=True)
