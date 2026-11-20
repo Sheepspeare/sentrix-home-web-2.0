@@ -368,6 +368,43 @@ def resume(wait_id):
     print(json.dumps(result), flush=True)
 
 
+def checkpoint():
+    """Release the Q4 result store's committed WAL while its evaluator is idle."""
+    assert not (HERE / "checkpoint-intent.json").exists()
+    assert not api(8872, "active-work")["work"]
+    plan = read("plan.json")
+    assert manifest_sha(SOURCE) == plan["source_manifest_sha256"]
+    seed_sha = manifest_sha(SEED)
+    database = ROOT / ".split-results/objects.sqlite3"
+    wal = database.with_name(database.name + "-wal")
+    save(
+        "checkpoint-intent.json",
+        {
+            "created_at": now(),
+            "database": str(database),
+            "source_manifest_sha256": plan["source_manifest_sha256"],
+            "seed_manifest_sha256": seed_sha,
+            "wal_bytes": wal.stat().st_size,
+            "disk_free": shutil.disk_usage(ROOT).free,
+        },
+    )
+    with sqlite3.connect(database, timeout=30) as db:
+        result = list(db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone())
+    assert manifest_sha(SOURCE) == plan["source_manifest_sha256"]
+    assert manifest_sha(SEED) == seed_sha
+    save(
+        "checkpoint-response.json",
+        {
+            "created_at": now(),
+            "checkpoint_result": result,
+            "source_and_seed_manifests_unchanged": True,
+            "wal_bytes": wal.stat().st_size if wal.exists() else 0,
+            "disk_free": shutil.disk_usage(ROOT).free,
+        },
+    )
+    print(json.dumps(read("checkpoint-response.json")), flush=True)
+
+
 def probe(run_id):
     response = read("resume-response.json")
     assert response["run_id"] == run_id
@@ -408,7 +445,7 @@ def probe(run_id):
 if __name__ == "__main__":
     resource.setrlimit(resource.RLIMIT_AS, (6 * 1024**3, 6 * 1024**3))
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("operation", choices=["inspect", "seed", "resume", "probe"])
+    parser.add_argument("operation", choices=["inspect", "seed", "checkpoint", "resume", "probe"])
     parser.add_argument("--wait-id")
     parser.add_argument("--run-id")
     args = parser.parse_args()
@@ -417,4 +454,4 @@ if __name__ == "__main__":
     elif args.operation == "resume":
         resume(args.wait_id)
     else:
-        {"inspect": inspect, "seed": seed}[args.operation]()
+        {"inspect": inspect, "seed": seed, "checkpoint": checkpoint}[args.operation]()
