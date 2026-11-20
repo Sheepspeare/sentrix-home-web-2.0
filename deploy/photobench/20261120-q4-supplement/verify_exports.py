@@ -243,7 +243,17 @@ def launch(wait_id):
     assert service["imported_exports_match_service"], "Launch using the evaluator's actual app directory"
     command = [sys.executable, str(Path(__file__).resolve()), "verify"]
     save("exports-intent.json", {"wait_id": wait_id, "run_id": RUN, "command": command})
-    progress({"run_id": RUN, "read_revision": accepted["read_revision"], "exports": {}}, "waiting_storage")
+    (HERE / "exports-progress.json").write_text(
+        json.dumps(
+            {
+                "run_id": RUN,
+                "read_revision": accepted["read_revision"],
+                "exports": {},
+                "phase": "waiting_storage",
+                "updated_at": datetime.now().astimezone().isoformat(),
+            }
+        )
+    )
     with (HERE / "exports-worker.log").open("xb") as output:
         worker = subprocess.Popen(
             command,
