@@ -1,10 +1,10 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/20豆包405题/395分、4turn运行；旧快照v1预检误拒历史running，未改原文件。dc9e98bd修正并完整inspect通过，先wake8c14b3cc再启v2压缩/原run监控，验收待回调。Q4旧导出因存储前置失败退出，后续须新操作，见T006及产品项目audit/20261120-doubao-disk-recovery。
+- 11/20旧快照v2完整SHA往返/5保护文件验收，回收约6.84GiB，/home约8.13GiB。豆包409题/399分、4turn运行，新标准wake3744e864/watcher53566接续，未重启重提；见T006及audit/20261120-doubao-disk-recovery。
 
-- 11/20 16:19豆包旧低磁盘告警已核解除，原d52ecf持续运行（356题/347有效分）；新wake48727066/watcher25358接续，未重启或重提交。Q4补做已终态，后续见下条，见T006及audit/20261120-doubao-media-reuse/disk-alert-review.json。
+- 11/20两次低磁盘告警均已处理；旧79d22271/48727066及压缩8c14b3cc监控已结束，当前原豆包run沿上条新标准监控接续，旧回执保持，见T006。
 
-- 11/20 Q4补做93efab已验1012有效分及原答卷/失败史保持，最后Judge自相矛盾failed/null保留。第一导出13128c13因存储前置失败退出、无验收；v2压缩通过后新wake/新操作验双流，见T006及产品项目audit/20261120-q4-supplement。
+- 11/20 Q4补做93efab已验1012有效分及原答卷/失败史保持，唯一Judge failed/null保留。新c3c3417e同步100验SHA并push，exports-v2/wake7ad9aa98/worker368735/watcher54062正验完整双流；旧v1存储失败回执保持，不重放，见T006及audit/20261120-q4-supplement。
 
 - 11/20 PR #43已于11:47合入main/f439244；8872聊天/节点耗时/格式3分析已上线7b34a75，PID3631277，166文件SHA及线上API/隔离聊天/纯规则分析验收通过。26436efa已处理，8874原空闲监控保持，见T006及产品项目audit/20261120-chat-trace-8872-release。
 

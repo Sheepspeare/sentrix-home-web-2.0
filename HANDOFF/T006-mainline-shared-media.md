@@ -1,12 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
-## 2026-11-20｜旧快照预检误判已修正，新v2压缩及豆包监控已启动
+## 2026-11-20 18:12｜压缩验收完成，豆包标准监控及Q4新导出已接续
 
-43418412/v1在预检退出，四原文件大小保持且无gz/partial。操作脚本错误地拒绝旧39b453c代历史running，实际当前提交0153862为failed，active-work/active-runs未指向该run；不是新业务OOM。dc9e98bd只修当前提交状态核验，保留旧代状态；本机回归旧running允许/当前running拒绝与gzip往返、ruff/格式/语法/diff通过，commit→同步新doubao-disk-recovery-v2验SHA/语法及完整只读inspect五个保护文件通过→push。旧v1未重放。
+旧90f21f四快照完整解压SHA一致，5个保护文件SHA/stat保持；回收7,343,276,953字节（约6.84GiB），/home约8.13GiB，峰值RSS33052KiB。再次只读核gzip解析/大小及保护stat通过，8c14b3cc事件已处理；首v1误拒历史running而预检失败的证据保持，未重放任何压缩/checkpoint。证据产品项目audit/20261120-doubao-disk-recovery/archive-acceptance.json及archive-verification.json。
 
-先新wake8c14b3cc-2cb1-4fbb-bf33-d82a2cc8892a，再单次launch worker347108/watcher51796；最终压缩验收待回调。watcher也只读核原豆包d52ecf worker/型号/进程/独立库/预算16K/内存，已处理低盘在回收期间若降至512MiB再告警，成功后立即新wake恢复标准1.5GiB告警。最新405题/395有效分、四turn推进，PID351254/351297保持，未重启重提或checkpoint。失败证据first-attempt-*和当前映射见产品项目audit/20261120-doubao-disk-recovery。
+原豆包d52ecf最新409/1013题、399有效分、4turn运行，PID351254/351297、独立库/16K/真实型号/预算保持。先wake 3744e864-4641-4fc7-957c-1d8c572eb950再启动标准watcher53566，恢复1.5GiB告警，未重启重提/切库。单次映射见media-reuse/post-compression-monitor-intent/response。
 
-Q4评分052e67ba已单次accept验收，1012分/答卷/失败史保持。第一导出13128c13/334292因存储v1失败在waiting_storage退出、无两流验收，真实日志已保存并标事件处理。后续旧回调只核记录，不重放launch/verify；压缩v2成功后新独立export-v2与新wake（移除旧v1依赖）验完整双流。不要再评分accept或Judge/Agent。主实验及AGENTS/T006同步，不改8772/8191/153/其他服务器，不启动Hard/16题包。
+Q4 c3c3417e本机ruff/格式/语法/diff通过提交，独立q4-supplement-exports-v2同步100 SHA/语法后push。绑定成功压缩v2，先wake 7ad9aa98-e847-4c7f-b30e-0aab0c012827再单次launch worker368735/watcher54062，首探worker/8872PID3631277/固定读revision匹配；逐题1013/1012分及完整在线trace/SFT仍待终态验收，不落正文。旧exports-v1/13128已因旧存储失败退出，回执归档exports-first-attempt-*，不重放。9b7cf030 Judge failed/null、2a22220b真实model_error/既有0与全部原答卷/有效分/14继承隔离和源18隔离保持，不再Judge或Agent。
+
+后续只沿精确新映射核回调；无验收先读日志。主实验state/checkpoint-watchers、相关审计和两项目索引已同步。不改8772/8191/153/其他服务器，不启动Hard/16题包。
 
 ## 2026-11-20｜Q4有限Judge补评失败已验收，新完整导出已挂监控
 
