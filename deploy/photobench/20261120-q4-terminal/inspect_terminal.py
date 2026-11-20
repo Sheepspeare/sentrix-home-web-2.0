@@ -51,6 +51,12 @@ def identity(value):
     return value
 
 
+def fingerprint(value):
+    # Compare immutable object IDs without asking ObjectReader to expand their contents.
+    raw = json.dumps(identity(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def save(name, value):
     with (HERE / name).open("x") as stream:
         json.dump(value, stream, ensure_ascii=False, indent=2)
@@ -173,9 +179,7 @@ def main():
         for k, v in parent.get("scoring_results", {}).items()
         if v.get("batch_id") == BATCH and valid_result(v)
     }
-    assert parent_reader.reader.fingerprint(old_valid) == reader.reader.fingerprint(
-        {k: valid[k] for k in old_valid}
-    )
+    assert fingerprint(old_valid) == fingerprint({k: valid[k] for k in old_valid})
     targets = scoring_targets(state, batch, "missing")
     inventory = []
     for qa, item in items.items():
@@ -253,8 +257,8 @@ def main():
         "termination_counts": dict(Counter(i.get("termination_reason") for i in items.values())),
         "valid_atm_scores": len(valid),
         "valid_score_keys": list(valid),
-        "valid_receipts_sha256": reader.reader.fingerprint(valid),
-        "all_items_sha256": reader.reader.fingerprint(identity(state["items"])),
+        "valid_receipts_sha256": fingerprint(valid),
+        "all_items_sha256": fingerprint(state["items"]),
         "missing_targets": targets,
         "missing_score_targets": sum(not t.get("diagnostics_only") for t in targets),
         "diagnostics_only_targets": sum(bool(t.get("diagnostics_only")) for t in targets),
