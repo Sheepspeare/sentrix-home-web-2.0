@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-20 13:31｜8872聊天、节点耗时与规则分析已上线验收
+
+26436efa回调已处理。评分worker退出后核全库活动：10条11/10旧pending均已请求取消，实际产品claim_due源码精确排除其ID；47886b流水线回执早于当前产品进程，实际TrackPipeline仅维护进程内活动集合，未从旧回执恢复worker。没有其他活动turn/导入/后处理/测评worker；旧记录未删除、未改完成。此核验取代12:54“旧记录仍需查明”的阻塞。
+
+7b34a75发布脚本先本机验证提交，再同步独立候选chat-trace-8872-7b34a75b，166文件SHA核验。单次仅8872测评切app-dir和静态目录，PID1405124→3631277，revision为7b34a75+100-chat-trace；8291产品、8874和其他保护服务PID保持。原配置、结果提交manifest及已有聊天文件SHA保持；inspect/activate均已消费，不可重放。系统Python3.10导入datetime.UTC失败留证，未触发激活；正式Python3.12 venv验收成功。
+
+线上config/active-work/聊天列表/轨迹分页/节点timing/格式3analysis均200，index/JS/CSS的HTTP SHA匹配。具体节点返回模型1099.6ms、关联搜索49166.4ms及检索内部各分量。既有smoke10派生rules分析571d965d4ce64316b28aa9331095f0fe已完成10/10，无AI/Judge调用。生产聊天session为空；26b5572隔离验收使用正式候选相同路由/ChatService和一个真实已保存产品turn，会话轻读0次产品读取，首次单回合1次turn/6次asset GET，此后回合/节点/timing均命中缓存，答案SHA一致，临时目录已删。续接用本机回归验证，本轮未发真实消息。专项后端65/前端34通过，前端类型检查与生产构建通过；未重跑此前全量。
+
+最终166文件/原配置与结果manifest/保护PID再次保持，active-work为空，历史10回合/1流水线保持；内存可用约65.6GiB、/home约2.73GiB。未证明所有OOM/慢写根因消除，历史loop缺墙钟时只展示调用累计。PR #43已于11:47合main/f439244，本轮更新发布评论，不新建/合并PR。8874空闲wake1942be94/PID16372保持，活动期不切后端；届时从最新适用已提交源码准备新候选，旧99306be不能直接激活。Q4双导出验收由原ATM主线程新监控负责，本轮不接管。
+
+当前审计入口：产品项目audit/20261120-chat-trace-8872-release/{README.md,delivery.json,watchers.json,final-preservation.json}；原chat-trace-analysis/idle-review已更新当前映射并保留上线前回执。交付提交和push/PR评论回执见delivery.json。不改8772/8191/153，不启动Hard/16题包，不重放评分或恢复脚本。
+
 ## 2026-11-20 13:29｜Q4补评已验，按上线后的8872重固定导出
 
 134dea0d事件与score_missing.py accept已处理：16份既有答卷新增15有效评分，共978；963原有效回执、全部1013答卷/attempt、34执行失败、12旧失败评分history及18隔离保持。唯一9b7cf030 Judge输出accuracy=false，但core_match=true且missing/contradictions为空，违反冻结v5汇总公式；真实error_details/原响应已保存，保持failed/null，不人工改分或重跑Agent。有效样本均分44.8909338787%，total_score=null。
