@@ -1,5 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-21｜豆包887项检查点失败，隔离真实写入分析已启动
+
+原d52ecf在12:48:55（北京时间）因300秒检查点等待失败。只读inventory验887条（814完成/8超时/65失败）、812有效ATM分及1Judge失败；原manifest SHA为c86fcfa0328f14a910bbb8fde2b49a5f0d22ab95bc814358db6efdbfc3d1ce07。已定位3个未入账产品终态（complete/partial/failed-model_error各1），答案SHA及ID已存，只能GET回收、不重跑；真正未启动123题。原73执行失败不自动重跑。
+
+慢日志writer相邻182.448/151.366秒、copy约0.3秒；writer内部唯一瓶颈尚未确认，不再仅延长等待。产品351254/测评351297保持，产品全库无活动turn、测评无worker、导入后处理idle；11/17旧pipeline running回执未清理。内存约70GiB、/home约120GiB可用，磁盘增加原因未调查，不编造；尚无本次OOM证据。
+
+新ac51c671操作脚本本机ruff/格式/语法/diff通过提交→同步100新doubao-persist-20261121-v1核SHA/语法及inventory→push；只新增操作目录，无正式源码/配置切换。先wake 4be7d84f-d424-463e-bf3a-6b96f8ec5bac再单次profile launch worker4047024/watcher68229，首探通过。用线上实际源码对887项做两次隔离checkpoint+cProfile，逐次核原manifest/全部记录/评分指纹保持，不调用Agent/Judge。inventory、launch/work已消费，probe只读，不能重放。审计入口产品项目audit/20261121-doubao-persist-recovery/README.md，回执watchers/delivery/inventory。
+
+回调先读验收和两份profile文本，无验收先查实际error；按真实热点修复并本机验证提交→同步100校验→push，部署先核全库产品/测评空闲。新seed找回3回合后只续123题；每个新任务先wake及intent/response映射。冻结预算/题库/评分及真实失败保持，终态补缺Judge与双流验收后再比较。Qwen和Q4补做均已1012分/双流验收，不再Agent/Judge/导出，Q4源18隔离保持。未重放旧操作，不改8772/8191/153/其他服务器，不启Hard/16题包。
+
+
 ## 2026-11-20 18:18｜Q4补做双流验收完成，豆包原任务继续
 
 93efab的1013逐题合同、1012有效ATM分与完整在线trace/SFT均通过；完整trace52,380,354字节、SFT1,230,237,000字节，分别与同版独立流SHA一致，未落大正文。SFT为2611样本/31585步骤，validator峰值RSS496968KiB。8872PID3631277、app-dir/导出源码SHA及读revision28381826d3174640bd2d07c50f3eb9a4全程保持，worker368735已退出；7ad9aa98事件已处理。证据产品项目audit/20261120-q4-supplement/{exports-acceptance.json,exports-acceptance-review.json,exports-final-probe.json,exports-v2-worker.log}。
