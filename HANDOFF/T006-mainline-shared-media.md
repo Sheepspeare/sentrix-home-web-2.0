@@ -1,15 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
-## 2026-11-21｜豆包887项检查点失败，隔离真实写入分析已启动
+## 2026-11-21｜豆包检查点按题复用已上线，890题继承后仅续123题
 
-原d52ecf在12:48:55（北京时间）因300秒检查点等待失败。只读inventory验887条（814完成/8超时/65失败）、812有效ATM分及1Judge失败；原manifest SHA为c86fcfa0328f14a910bbb8fde2b49a5f0d22ab95bc814358db6efdbfc3d1ce07。已定位3个未入账产品终态（complete/partial/failed-model_error各1），答案SHA及ID已存，只能GET回收、不重跑；真正未启动123题。原73执行失败不自动重跑。
+原d52ecf在887项/812有效分时300秒检查点等待失败，原manifest及全部答卷、分和失败史保持。原版真实隔离写27.524/19.766秒，第一候选19.484秒改善有限未上线；13b397a8改为按题复用summary/core，第二候选warm8.272秒，缩短58.15%，全部查看数据与原版一致。248回归通过，先commit→同步100核SHA/真实数据验收→push。150秒以上旧峰值未复现，不能称慢写/OOM彻底消除。
 
-慢日志writer相邻182.448/151.366秒、copy约0.3秒；writer内部唯一瓶颈尚未确认，不再仅延长等待。产品351254/测评351297保持，产品全库无活动turn、测评无worker、导入后处理idle；11/17旧pipeline running回执未清理。内存约70GiB、/home约120GiB可用，磁盘增加原因未调查，不编造；尚无本次OOM证据。
+核全库产品turn/导入/后处理及测评真实空闲；旧running pipeline已核有更晚completed回执替代，历史保持。只切8874到doubao-persist-projection-v2/candidate，PID4113489，产品351254/独立库/18107型号及其他服务PID保持。只改线上split_store.py，预算/静态目录/300秒等待保持。
 
-新ac51c671操作脚本本机ruff/格式/语法/diff通过提交→同步100新doubao-persist-20261121-v1核SHA/语法及inventory→push；只新增操作目录，无正式源码/配置切换。先wake 4be7d84f-d424-463e-bf3a-6b96f8ec5bac再单次profile launch worker4047024/watcher68229，首探通过。用线上实际源码对887项做两次隔离checkpoint+cProfile，逐次核原manifest/全部记录/评分指纹保持，不调用Agent/Judge。inventory、launch/work已消费，probe只读，不能重放。审计入口产品项目audit/20261121-doubao-persist-recovery/README.md，回执watchers/delivery/inventory。
+3个未入账终态回合仅GET找回，答案SHA一致，complete/partial/failed-model_error各1；首seed误要求completed而在真实失败处停止，未创建seed。修正8364dd0f提交同步后，用新seed-v3 intent恢复，原错误证据保留。独立seed890题、812原有效分保持，原73执行失败不重跑。
 
-回调先读验收和两份profile文本，无验收先查实际error；按真实热点修复并本机验证提交→同步100校验→push，部署先核全库产品/测评空闲。新seed找回3回合后只续123题；每个新任务先wake及intent/response映射。冻结预算/题库/评分及真实失败保持，终态补缺Judge与双流验收后再比较。Qwen和Q4补做均已1012分/双流验收，不再Agent/Judge/导出，Q4源18隔离保持。未重放旧操作，不改8772/8191/153/其他服务器，不启Hard/16题包。
+先wake 150d4403-0c54-408c-aee4-5bffbe3914ce，再单次resume为20261121-132322-2026.11.17-atm-sources-addresses-current-resume-f72710；890继承、123未启动题续评，retried_qa_ids为空。首探worker存活、4turn运行，watcher76141监控精确run、PID/源码/原manifest/预算/内存磁盘。型号doubao-seed-2.1-lite/16K，100-600-100-500、QA4-3660、reasoning/graph和冻结ATM v5/豆包Judge保持。证据产品项目audit/20261121-doubao-persist-recovery/README.md与delivery/watchers。
 
+本轮profile事件4be7d84f已处理；所有stage/validate/activate/seed/seed-v3/resume已消费，禁止重放。终态核1013去向与保持性，缺Judge另先wake仅补Judge，再验完整trace/SFT双流及三模型比较。Qwen和Q4补做各1012有效分/双流已验，不再操作，Q4源18隔离保持。/home约120GiB增加来源未调查。不改8772/8191/153或其他服务器，不启Hard/16题包。
 
 ## 2026-11-20 18:18｜Q4补做双流验收完成，豆包原任务继续
 
