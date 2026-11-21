@@ -365,12 +365,12 @@ class ExistingTurn:
         return body
 
 
-def seed():
+def seed(*, intent_name="restore-intent.json"):
     from photobench.application.run_execution.service import RunExecution, RunRequest
     from photobench.domain.runs.execution import index_assets_by_name
     from photobench.infrastructure.results.split_store import SplitResultWriter, SplitRunReader
 
-    assert not (HERE / "restore-intent.json").exists() and not (ROOT / SEED).exists()
+    assert not (HERE / intent_name).exists() and not (ROOT / SEED).exists()
     activation = read("activate-response.json")
     assert pid(UNIT) == activation["pid"]
     idle()
@@ -381,7 +381,7 @@ def seed():
     facts = plan["uncollected_product_turns"]
     assert len(facts) == 3 and not existing.intersection(f["qa_id"] for f in facts)
     save(
-        "restore-intent.json",
+        intent_name,
         {
             "source_run": RUN,
             "seed_run": SEED,
@@ -418,13 +418,12 @@ def seed():
             turn_timeout=3660,
         )
         item = execution._evaluate_one(rows[qa], state["scope_id"], assets_by_name, request)
-        assert item["execution_status"] == "completed", item.get("error")
+        expected_status = "failed" if fact["status"] == "failed" else "completed"
+        assert item["execution_status"] == expected_status, item.get("error")
         assert hashlib.sha256(item["answer"].encode()).hexdigest() == fact["answer_sha256"]
         assert item["runtime_turns"][0]["agent_status"] == fact["status"]
         if fact["status"] == "failed":
-            item.update(
-                execution_status="failed", error="saved product turn failed: " + fact["termination_reason"]
-            )
+            assert fact["termination_reason"] in item["error"]
         item["wall_clock_ms"] = round(
             (
                 datetime.fromisoformat(fact["updated_at"]) - datetime.fromisoformat(fact["created_at"])
@@ -503,7 +502,7 @@ def resume(wait_id):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("mode", choices=("stage", "validate", "activate", "seed", "resume"))
+    parser.add_argument("mode", choices=("stage", "validate", "activate", "seed", "seed-v3", "resume"))
     parser.add_argument("--wait-id")
     args = parser.parse_args()
     sys.path.insert(0, str(APP))
@@ -511,5 +510,9 @@ if __name__ == "__main__":
     if args.mode == "resume":
         assert args.wait_id
         resume(args.wait_id)
+    elif args.mode == "seed-v3":
+        assert (HERE / "restore-intent.json").exists()
+        assert not (HERE / "restore-response.json").exists()
+        seed(intent_name="restore-v3-intent.json")
     else:
         {"stage": stage, "validate": validate, "activate": activate, "seed": seed}[args.mode]()
