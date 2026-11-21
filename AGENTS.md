@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/21检查点按题复用13b397a8已上线8874/PID4113489，887题warm写19.77→8.27秒、248回归通过；豆包f72710继承890题/812原分，仅续123未启动题，wake150d4403/watcher76141监控。原失败/答卷保持，旧慢写峰值未唯一复现；见T006与audit/20261121-doubao-persist-recovery。
+- 11/21 13:43，100的22/8874/8294均不可达，豆包f72710当前状态未知，原wake150d4403已处理；新本机只读连接监控wakec7ae289f/watcher82014运行。13:27的894题/815分仅为历史验收点；连接恢复先核原任务，不重提。见T006及audit/20261121-doubao-connection-loss。
 
 - 11/20旧快照v2回收约6.84GiB，保护文件保持；豆包411题/401有效分、4turn运行，标准wake3744e864/watcher53566继续。Q4补做双流已验收，见T006及audit/20261120-q4-supplement。
 
@@ -41,4 +41,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-21 | 豆包检查点按题复用已上线，890继承后续123题并挂wake；Qwen/Q4已验收 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-21 | 100连接不可达，豆包状态待核，已挂只读连接恢复wake；Qwen/Q4已验收 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
