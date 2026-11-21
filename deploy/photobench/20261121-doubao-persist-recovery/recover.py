@@ -228,7 +228,9 @@ def validate():
     )
     writer = SplitResultWriter(ROOT)
     receipts = []
-    old_views = SplitRunReader(ROOT, HERE / "isolated-checkpoint" / RUN).manifest["views"]
+    old_views = SplitRunReader(ROOT, BASE / "doubao-persist-20261121-v1/isolated-checkpoint" / RUN).manifest[
+        "views"
+    ]
     for index in range(2):
         profiler = cProfile.Profile()
         began = time.monotonic()

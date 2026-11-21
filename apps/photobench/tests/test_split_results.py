@@ -45,36 +45,62 @@ def state() -> dict:
     }
 
 
-def test_metric_projection_reuses_saved_descriptor_and_rejects_mutation(tmp_path, monkeypatch):
-    import pytest
+def test_checkpoint_rebuilds_only_changed_question_views(tmp_path, monkeypatch):
+    import copy
 
-    from photobench.infrastructure.results.split_json import ObjectRef, thaw
+    from photobench.domain.runs import analysis
 
-    writer = SplitResultWriter(tmp_path)
     fixture = state()
-    directory = tmp_path / "source"
+    fixture["qa_count"] = 2
+    fixture["items"].append({**copy.deepcopy(fixture["items"][0]), "qa_id": "q2"})
+    fixture["qa_snapshot"] = {"rows": [{"qa_id": "q1"}, {"qa_id": "q2"}]}
+    calls = []
+    original = analysis.item_summary
+
+    def count(item, index):
+        calls.append(item["qa_id"])
+        return original(item, index)
+
+    monkeypatch.setattr(analysis, "item_summary", count)
+    writer = SplitResultWriter(tmp_path)
+    directory = tmp_path / "run"
     writer.write(directory, fixture)
-    objects = writer._objects
-    assert objects is not None
-    projected = writer.metric_item(fixture["items"][0], objects)["model_call_metrics"]
-    with pytest.raises(TypeError, match="immutable"):
-        projected[0]["prompt_tokens"] = 999
-    assert projected[0]["prompt_tokens"] == 4
-
-    def no_encoding(*args, **kwargs):
-        raise AssertionError("saved metric projection was encoded again")
-
-    with monkeypatch.context() as patch:
-        patch.setattr(objects, "raw", no_encoding)
-        descriptor = objects.put(projected)
-    assert isinstance(descriptor, ObjectRef)
-    assert thaw(writer._metric_reader.value(descriptor)) == projected
-
-    fixture["items"][0]["model_call_metrics"][0]["prompt_tokens"] = 9
+    assert calls == ["q1", "q2"]
+    calls.clear()
     result = writer.write(directory, fixture)
+    assert calls == []
+    fixture["items"][0]["answer"] = "新答案"
+    writer.write(directory, fixture)
+    assert calls == ["q1"]
+    calls.clear()
+    fixture["scoring_results"] = {
+        "missing-batch:q2:0": {
+            "qa_id": "q2",
+            "batch_id": "missing-batch",
+            "status": "failed",
+            "reason": "judge error",
+        }
+    }
+    writer.write(directory, fixture)
+    assert calls == ["q2"]
+    calls.clear()
+    fixture["scoring_results"]["missing-batch:q2:0"]["reason"] = "new attempt failed"
+    writer.write(directory, fixture)
+    assert calls == ["q2"]
+    calls.clear()
+    fixture["qa_snapshot"]["rows"][0]["answer"] = "新参考答案"
+    writer.write(directory, fixture)
+    assert calls == ["q1"]
     reader = SplitRunReader(tmp_path, directory)
-    assert reader.state()["items"][0]["model_call_metrics"][0]["prompt_tokens"] == 9
-    assert writer.metric_item(fixture["items"][0], objects)["model_call_metrics"][0]["prompt_tokens"] == 9
+    assert reader.core(0)["answer"] == "新答案"
+    assert reader.core(1)["scoring_results"][0]["reason"] == "new attempt failed"
+    # Cache reuse persists across writer instances, without retaining full runs in memory.
+    calls.clear()
+    writer.close()
+    another = SplitResultWriter(tmp_path)
+    another.write(directory, fixture)
+    assert calls == []
+    another.close()
     assert set(result["timings"]) == {
         "writer_lock",
         "connection",
@@ -88,7 +114,6 @@ def test_metric_projection_reuses_saved_descriptor_and_rejects_mutation(tmp_path
         "manifest_publish",
     }
     assert all(value >= 0 for value in result["timings"].values())
-    writer.close()
 
 
 def test_loop_timing_is_lazy_and_binds_only_same_turn_successful_attempt(tmp_path, monkeypatch):
