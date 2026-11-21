@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import threading
@@ -23,7 +24,7 @@ from photobench.domain.evaluation.profile_view import (
     profile_state,
 )
 from photobench.domain.runs import analysis
-from photobench.domain.runs.frozen_trace import ITEM_TRACE_FIELDS, TURN_TRACE_FIELDS
+from photobench.domain.runs.frozen_trace import ITEM_TRACE_FIELDS, TURN_TRACE_FIELDS, freeze_trace
 from photobench.infrastructure.results.split_json import (
     ObjectReader,
     ObjectWriter,
@@ -56,6 +57,7 @@ IO_FIELDS = {
     "result",
 }
 _WRITER_LOCKS = tuple(threading.RLock() for _ in range(64))
+log = logging.getLogger(__name__)
 
 
 class ReadIndexRequired(ReadIndexRequiredError):
@@ -243,7 +245,7 @@ class SplitResultWriter:
                     self._metric_refs[cache_key] = projected
                 cached_value = self._metric_values.get(cache_key)
                 if cached_value is None:
-                    records = plain(self._metric_reader.value(projected))
+                    records = freeze_trace(plain(self._metric_reader.value(projected)), {})
                     weight = len(json_bytes(records))
                     if weight <= 64 * 1024 * 1024:
                         self._metric_values[cache_key] = (records, weight)
@@ -254,6 +256,9 @@ class SplitResultWriter:
                 else:
                     records = cached_value[0]
                     self._metric_values.move_to_end(cache_key)
+                # This immutable projection is already in the current object store.
+                # Reuse its descriptor instead of re-encoding every nested record.
+                objects.identities[id(records)] = records, projected
                 result[key] = records
                 continue
             identity = (id(value), key)
@@ -271,7 +276,9 @@ class SplitResultWriter:
     def write(self, run_dir: Path, state: dict[str, Any], *, source: Any = None) -> dict[str, Any]:
         # Separate from the legacy read lock: readers select immutable objects.
         lock = _WRITER_LOCKS[hash(str(database(self.root).resolve())) % len(_WRITER_LOCKS)]
+        requested = time.monotonic()
         with lock:
+            acquired = time.monotonic()
             # Persistence and API maintenance can use different threads.
             if self._objects is None or self._thread != threading.get_ident():
                 if self._objects is not None:
@@ -282,8 +289,18 @@ class SplitResultWriter:
             objects.known.clear()
             objects.inserted_bytes = objects.inserted_objects = 0
             started = time.monotonic()
+            timings = {"writer_lock": acquired - requested, "connection": started - acquired}
+            phase_started = started
+
+            def mark(phase: str) -> None:
+                nonlocal phase_started
+                finished = time.monotonic()
+                timings[phase] = finished - phase_started
+                phase_started = finished
+
             try:
                 root = objects.put(state)
+                mark("state_objects")
                 object_reader = ObjectReader(database(self.root), connection=objects.db)
                 self._metric_reader = object_reader
                 fingerprints = {}
@@ -297,12 +314,14 @@ class SplitResultWriter:
                             lambda source_ref=source_ref: object_reader.fingerprint(source_ref),
                         )
                     fingerprints[str(item.get("qa_id"))] = self._fingerprints[key]
+                mark("answer_fingerprints")
                 # The current transaction's objects are not visible to another connection.
                 # Build node indexes from already available state, then commit together.
                 analytics = {
                     **state,
                     "items": [self.metric_item(i, objects) for i in state.get("items") or []],
                 }
+                mark("metric_projections")
                 variants: dict[str, Any] = {}
                 selections = [("", "")]
                 selections.extend(
@@ -403,6 +422,7 @@ class SplitResultWriter:
                     variants[profile + ":" + batch] = objects.put(
                         {"overview": overview, "index": summaries, "cores": cores}
                     )
+                mark("profile_views")
                 overview = default_overview or {}
                 nodes = []
                 for item in state.get("items") or []:
@@ -467,6 +487,7 @@ class SplitResultWriter:
                         )
                         self._nodes_cache[trace_key] = node_ref
                     nodes.append({"item": item_ref, "nodes": node_ref})
+                mark("node_indexes")
                 views = objects.put({"variants": variants, "nodes": nodes})
                 entry = analysis.run_list_entry(analytics)
                 entry["summary"] = light_summary(entry.get("summary") or {})
@@ -507,7 +528,9 @@ class SplitResultWriter:
                         },
                     },
                 }
+                mark("manifest_build")
                 objects.db.commit()
+                mark("sqlite_commit")
                 objects.identities.clear()
                 self._metric_cache.clear()
                 # Keep immutable manifests so in-flight node pages/exports can pin a revision.
@@ -518,13 +541,21 @@ class SplitResultWriter:
                     handle.flush()
                     os.fsync(handle.fileno())
                 publish(run_dir, value)
+                mark("manifest_publish")
+                elapsed = time.monotonic() - requested
+                if elapsed >= 10:
+                    log.warning(
+                        "Split checkpoint slow: run=%s seconds=%.3f phases=%s", run_dir.name, elapsed, timings
+                    )
                 return {
                     "revision": value["revision"],
                     "inserted_bytes": objects.inserted_bytes,
                     "inserted_objects": objects.inserted_objects,
                     "seconds": time.monotonic() - started,
+                    "timings": timings,
                 }
             except BaseException:
+                log.exception("Split checkpoint failed: run=%s completed_phases=%s", run_dir.name, timings)
                 objects.db.rollback()
                 objects.identities.clear()
                 raise

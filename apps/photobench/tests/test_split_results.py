@@ -45,6 +45,52 @@ def state() -> dict:
     }
 
 
+def test_metric_projection_reuses_saved_descriptor_and_rejects_mutation(tmp_path, monkeypatch):
+    import pytest
+
+    from photobench.infrastructure.results.split_json import ObjectRef, thaw
+
+    writer = SplitResultWriter(tmp_path)
+    fixture = state()
+    directory = tmp_path / "source"
+    writer.write(directory, fixture)
+    objects = writer._objects
+    assert objects is not None
+    projected = writer.metric_item(fixture["items"][0], objects)["model_call_metrics"]
+    with pytest.raises(TypeError, match="immutable"):
+        projected[0]["prompt_tokens"] = 999
+    assert projected[0]["prompt_tokens"] == 4
+
+    def no_encoding(*args, **kwargs):
+        raise AssertionError("saved metric projection was encoded again")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(objects, "raw", no_encoding)
+        descriptor = objects.put(projected)
+    assert isinstance(descriptor, ObjectRef)
+    assert thaw(writer._metric_reader.value(descriptor)) == projected
+
+    fixture["items"][0]["model_call_metrics"][0]["prompt_tokens"] = 9
+    result = writer.write(directory, fixture)
+    reader = SplitRunReader(tmp_path, directory)
+    assert reader.state()["items"][0]["model_call_metrics"][0]["prompt_tokens"] == 9
+    assert writer.metric_item(fixture["items"][0], objects)["model_call_metrics"][0]["prompt_tokens"] == 9
+    assert set(result["timings"]) == {
+        "writer_lock",
+        "connection",
+        "state_objects",
+        "answer_fingerprints",
+        "metric_projections",
+        "profile_views",
+        "node_indexes",
+        "manifest_build",
+        "sqlite_commit",
+        "manifest_publish",
+    }
+    assert all(value >= 0 for value in result["timings"].values())
+    writer.close()
+
+
 def test_loop_timing_is_lazy_and_binds_only_same_turn_successful_attempt(tmp_path, monkeypatch):
     fixture = state()
     item = fixture["items"][0]
