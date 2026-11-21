@@ -24,9 +24,10 @@ from photobench.domain.evaluation.profile_view import (
     profile_state,
 )
 from photobench.domain.runs import analysis
-from photobench.domain.runs.frozen_trace import ITEM_TRACE_FIELDS, TURN_TRACE_FIELDS, freeze_trace
+from photobench.domain.runs.frozen_trace import ITEM_TRACE_FIELDS, TURN_TRACE_FIELDS
 from photobench.infrastructure.results.split_json import (
     ObjectReader,
+    ObjectRef,
     ObjectWriter,
     database,
     is_reference,
@@ -245,7 +246,7 @@ class SplitResultWriter:
                     self._metric_refs[cache_key] = projected
                 cached_value = self._metric_values.get(cache_key)
                 if cached_value is None:
-                    records = freeze_trace(plain(self._metric_reader.value(projected)), {})
+                    records = plain(self._metric_reader.value(projected))
                     weight = len(json_bytes(records))
                     if weight <= 64 * 1024 * 1024:
                         self._metric_values[cache_key] = (records, weight)
@@ -256,9 +257,6 @@ class SplitResultWriter:
                 else:
                     records = cached_value[0]
                     self._metric_values.move_to_end(cache_key)
-                # This immutable projection is already in the current object store.
-                # Reuse its descriptor instead of re-encoding every nested record.
-                objects.identities[id(records)] = records, projected
                 result[key] = records
                 continue
             identity = (id(value), key)
@@ -303,6 +301,47 @@ class SplitResultWriter:
                 mark("state_objects")
                 object_reader = ObjectReader(database(self.root), connection=objects.db)
                 self._metric_reader = object_reader
+                items = state.get("items") or []
+                stored_items = (
+                    object_reader.metadata(object_reader.descriptor(root, "items")) if items else []
+                )
+                item_refs = {
+                    str(item.get("qa_id")): ObjectRef(ref)
+                    for item, ref in zip(items, stored_items, strict=True)
+                }
+                qa_by_id = {
+                    str(row.get("qa_id")): row for row in (state.get("qa_snapshot") or {}).get("rows") or []
+                }
+                scores_by_qa: dict[str, dict[str, Any]] = {}
+                for key, score in (state.get("scoring_results") or {}).items():
+                    scores_by_qa.setdefault(str(score.get("qa_id")), {})[key] = score
+                diagnostics_by_qa: dict[str, list[Any]] = {}
+                for diagnostic in (state.get("diagnostic_results") or {}).values():
+                    diagnostics_by_qa.setdefault(str(diagnostic.get("qa_id")), []).append(diagnostic)
+                stored_scores = (
+                    object_reader.metadata(object_reader.descriptor(root, "scoring_results"))
+                    if state.get("scoring_results")
+                    else {}
+                )
+                score_refs_by_qa: dict[str, dict[str, Any]] = {}
+                for key, score in (state.get("scoring_results") or {}).items():
+                    score_refs_by_qa.setdefault(str(score.get("qa_id")), {})[key] = stored_scores[key]
+                batch_definitions = [
+                    {
+                        key: batch.get(key)
+                        for key in (
+                            "batch_id",
+                            "profile_id",
+                            "rule_version",
+                            "qa_definition_sha256",
+                            "judge",
+                            "config",
+                            "gt_metadata_snapshot",
+                        )
+                    }
+                    for batch in state.get("scoring_batches") or []
+                ]
+                batch_definitions_ref = objects.put(batch_definitions)
                 fingerprints = {}
                 for item in state.get("items") or []:
                     source_ref = objects.put(answer_source(item))
@@ -357,68 +396,97 @@ class SplitResultWriter:
                     summaries = []
                     cores = []
                     for index, item in enumerate(selected.get("items") or []):
-                        summary = analysis.item_summary(item, index)
-                        summary["profile_scores"] = item_profile_results(selected, str(item.get("qa_id")))
-                        summary["_search_messages"] = " ".join(
-                            str(t.get("message") or "") for t in item.get("runtime_turns") or []
-                        )
-                        # Table rows carry status/score, never Judge raw I/O or reasons.
-                        summary.pop("evaluation_result", None)
-                        for key in ("task_judge", "task_judges", "evidence_judge"):
-                            summary.pop(key, None)
-                        summaries.append(summary)
-                        core = core_item(item)
                         qa_id = str(item.get("qa_id"))
-                        core["index"] = index
-                        core["profile_scores"] = summary["profile_scores"]
-                        core["scoring_results"] = item_scores(selected, qa_id)
-                        qa_row = next(
-                            (
-                                row
-                                for row in (state.get("qa_snapshot") or {}).get("rows") or []
-                                if str(row.get("qa_id")) == qa_id
-                            ),
-                            None,
-                        )
-                        if qa_row is not None:
-                            core["_qa_snapshot_row"] = qa_row
-                        core["diagnostic_results"] = [
-                            value
-                            for value in (state.get("diagnostic_results") or {}).values()
-                            if str(value.get("qa_id")) == qa_id
-                        ]
-                        core["choice_matching_result"] = choice_matching_result(selected, qa_id)
-                        diagnostic_key = objects.put(
+
+                        def build_item_view(
+                            item: Any = item,
+                            index: int = index,
+                            selected: Any = selected,
+                            diagnostic_state: Any = diagnostic_state,
+                        ) -> Any:
+                            summary = analysis.item_summary(item, index)
+                            summary["profile_scores"] = item_profile_results(selected, str(item.get("qa_id")))
+                            summary["_search_messages"] = " ".join(
+                                str(t.get("message") or "") for t in item.get("runtime_turns") or []
+                            )
+                            # Table rows carry status/score, never Judge raw I/O or reasons.
+                            summary.pop("evaluation_result", None)
+                            for key in ("task_judge", "task_judges", "evidence_judge"):
+                                summary.pop(key, None)
+                            core = core_item(item)
+                            qa_id = str(item.get("qa_id"))
+                            core["index"] = index
+                            core["profile_scores"] = summary["profile_scores"]
+                            core["scoring_results"] = item_scores(selected, qa_id)
+                            qa_row = next(
+                                (
+                                    row
+                                    for row in (state.get("qa_snapshot") or {}).get("rows") or []
+                                    if str(row.get("qa_id")) == qa_id
+                                ),
+                                None,
+                            )
+                            if qa_row is not None:
+                                core["_qa_snapshot_row"] = qa_row
+                            core["diagnostic_results"] = [
+                                value
+                                for value in (state.get("diagnostic_results") or {}).values()
+                                if str(value.get("qa_id")) == qa_id
+                            ]
+                            core["choice_matching_result"] = choice_matching_result(selected, qa_id)
+                            diagnostic_key = objects.put(
+                                {
+                                    "fingerprint": fingerprints[qa_id],
+                                    "qa": qa_row,
+                                    "item_metadata": {
+                                        k: v
+                                        for k, v in item.items()
+                                        if k not in HEAVY and k != "runtime_turns"
+                                    },
+                                    "scores": {
+                                        k: v
+                                        for k, v in (state.get("scoring_results") or {}).items()
+                                        if str(v.get("qa_id")) == qa_id
+                                    },
+                                    "batches": [
+                                        (b["profile_id"], b["batch_id"])
+                                        for b in state.get("scoring_batches") or []
+                                    ],
+                                    "profile": diagnostic_state.get("selected_scoring_profile"),
+                                    "batch": diagnostic_state.get("selected_scoring_batch"),
+                                }
+                            )
+                            diagnostic_ref = objects.derive(
+                                "process-diagnostics-v2",
+                                diagnostic_key,
+                                lambda diagnostic_state=diagnostic_state, qa_id=qa_id: objects.put(
+                                    process_for_qa(diagnostic_state, qa_id)
+                                ),
+                            )
+                            core["process_diagnostics"] = object_reader.value(diagnostic_ref)
+                            core = core_item(core)
+                            core["trace_storage"] = {"version": 3, "item_index": index}
+                            return objects.put({"summary": summary, "core": core})
+
+                        view_ref = objects.derive(
+                            "checkpoint-item-view-v1",
                             {
-                                "fingerprint": fingerprints[qa_id],
-                                "qa": qa_row,
-                                "item_metadata": {
-                                    k: v for k, v in item.items() if k not in HEAVY and k != "runtime_turns"
-                                },
-                                "scores": {
-                                    k: v
-                                    for k, v in (state.get("scoring_results") or {}).items()
-                                    if str(v.get("qa_id")) == qa_id
-                                },
-                                "batches": [
-                                    (b["profile_id"], b["batch_id"])
-                                    for b in state.get("scoring_batches") or []
-                                ],
-                                "profile": diagnostic_state.get("selected_scoring_profile"),
-                                "batch": diagnostic_state.get("selected_scoring_batch"),
-                            }
+                                "item": item_refs[qa_id],
+                                "qa": qa_by_id.get(qa_id),
+                                "scores": score_refs_by_qa.get(qa_id, {}),
+                                "diagnostics": diagnostics_by_qa.get(qa_id, []),
+                                "batches": batch_definitions_ref,
+                                "profile": profile,
+                                "batch": batch,
+                                "selected_profile": selected.get("selected_scoring_profile"),
+                                "selected_batch": selected.get("selected_scoring_batch"),
+                                "index": index,
+                            },
+                            build_item_view,
                         )
-                        diagnostic_ref = objects.derive(
-                            "process-diagnostics-v2",
-                            diagnostic_key,
-                            lambda diagnostic_state=diagnostic_state, qa_id=qa_id: objects.put(
-                                process_for_qa(diagnostic_state, qa_id)
-                            ),
-                        )
-                        core["process_diagnostics"] = object_reader.value(diagnostic_ref)
-                        core = core_item(core)
-                        core["trace_storage"] = {"version": 3, "item_index": index}
-                        cores.append(core)
+                        item_view = object_reader.value(view_ref)
+                        summaries.append(item_view["summary"])
+                        cores.append(item_view["core"])
                     variants[profile + ":" + batch] = objects.put(
                         {"overview": overview, "index": summaries, "cores": cores}
                     )
@@ -426,12 +494,8 @@ class SplitResultWriter:
                 overview = default_overview or {}
                 nodes = []
                 for item in state.get("items") or []:
-                    receipts = {
-                        key: value
-                        for key, value in (state.get("scoring_results") or {}).items()
-                        if str(value.get("qa_id")) == str(item.get("qa_id"))
-                    }
-                    item_ref = objects.put(item)
+                    receipts = scores_by_qa.get(str(item.get("qa_id")), {})
+                    item_ref = item_refs[str(item.get("qa_id"))]
                     # Trace identity is independent of score/status updates.
                     trace_key = (
                         tuple(json.dumps(objects.put(item.get(k)), sort_keys=True) for k in ITEM_TRACE_FIELDS)
