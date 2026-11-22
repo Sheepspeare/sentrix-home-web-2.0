@@ -7,6 +7,7 @@ import json
 import resource
 import sqlite3
 import sys
+import urllib.request
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ BASE = Path("/home/realmagic/xy/experiments/atm1013-20261118")
 PRIOR = BASE / "doubao-reconnect-20261122-v1"
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(PRIOR))
-from inspect_reconnect import APP, BATCH, DB, ROOT, api, fingerprint, identity, sha  # noqa: E402
+from inspect_reconnect import APP, BATCH, DB, ROOT, fingerprint, identity, sha  # noqa: E402
 from probe_resume19 import snapshot  # noqa: E402
 
 sys.path.insert(0, str(APP))
@@ -23,6 +24,16 @@ from photobench.domain.evaluation.profiles import scoring_targets, valid_result 
 from photobench.infrastructure.results.split_store import SplitRunReader  # noqa: E402
 
 RUN = "20261122-114200-2026.11.17-atm-sources-addresses-current-resume-9763a1"
+
+
+def api(port, path, data=None):
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/v1/{path}",
+        data=None if data is None else json.dumps(data).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=300) as response:
+        return json.load(response)
 
 
 def save(name, value):
