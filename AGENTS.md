@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/22豆包9763a1已验1013项/852执行完成/842有效分；原990项/823回执保持，10现成答卷仅Judge补评沿wake aa201991精确监控。161原执行失败保留；评分后验两导出，见T006及audit/20261122-doubao-terminal。
+
 - 11/22四原回合已GET找回并核SHA；994题seed/原990项及823分保持。豆包新9763a1仅续19未启动题，wake5939ccca/watcher33040监控；原161执行失败不自动重跑。旧13145232事件已处理，见T006及audit/20261122-doubao-reconnect。
 
 - 11/20旧快照v2回收约6.84GiB，保护文件保持；豆包411题/401有效分、4turn运行，标准wake3744e864/watcher53566继续。Q4补做双流已验收，见T006及audit/20261120-q4-supplement。
@@ -41,4 +43,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-22 | Qwen/Q4已验收；豆包继承994题仅续19题，新精确监控已挂 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-22 | Qwen/Q4已验收；豆包1013项终态，10份现成答卷仅Judge补评运行中 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

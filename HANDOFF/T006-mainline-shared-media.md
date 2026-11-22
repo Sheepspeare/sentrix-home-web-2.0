@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-22 12:33｜豆包1013终态验收，10份现成答卷仅补Judge
+
+5939ccca终态事件已处理。精确9763a1共1013项，测评记录852 completed、92 timeout、69 failed；19新QA各一个attempt，真实产品10complete/8partial/1blocked，guard_blocked保持。4恢复答卷SHA一致，原990项内容/轨迹和823有效回执、994seed全部评分记录保持；987项仅内部_index被运行器移除，差异证据完整。两次只读预检分别因内部索引及blocked终态枚举中止，修正验收口径后通过，没有改写run/答卷。
+
+842有效分，10现成答卷待Judge：7份无评分、1旧持久化超时、2旧DNS失败。同冻结score-dd0413c8aa869b1c84626de7仅Judge有限补一次，原161执行失败不自动重跑或补0。新审计脚本本机ruff/语法/diff通过，先commit同步100逐SHA再push b24d3cd0；先wake aa201991-e0b0-4eae-9970-1569e0d4c937，再单次launch scoring-792a125049ff45fb89ba84a4f0228430，watcher46761精确监控。首探运行/worker存活。远端doubao-terminal-20261122-v1；plan/launch已消费，accept待终态单次验842原回执/全部答卷和旧失败history。
+
+8874PID1624、8294PID12370、实际目录/独立库/18107型号、16K及100-600-100-500/QA4-3660/reasoning-graph保持，无业务部署重启。审计产品项目audit/20261122-doubao-terminal；主实验/旧回调映射同步。评分验收后另先新wake再做完整在线trace/SFT双流，之后三模型比较；Qwen/Q4各1012分及双流已验不再操作，源18隔离保持。历史媒体复用+新版邮件增量条件保持；不改网络、8772/8191/153及其他服务器，不启Hard/16题包。
+
 ## 2026-11-22 11:43｜四原答卷已取回，豆包仅续19题
 
 13145232四回合终态事件已处理。4原turn均complete/answered、attempt2，仅GET取回，答案SHA一致；新独立seed20261122-doubao-reboot-turns-seed-f72710共994项，990原项/823有效回执及全部评分状态逐项保持。原f72710 manifest3f72829c…99ef8ea、d52ecf manifestc86fcfa0…3d1ce07及890旧seed保持。
