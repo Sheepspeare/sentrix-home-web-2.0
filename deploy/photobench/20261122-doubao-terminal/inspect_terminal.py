@@ -74,14 +74,23 @@ def inspect():
     items = {i["qa_id"]: i for i in state["items"]}
     rows = {q["qa_id"]: q for q in state["qa_snapshot"]["rows"]}
     assert len(items) == 1013 and items.keys() == rows.keys()
+    original = SplitRunReader(ROOT, ROOT / old["run_id"]).state()
+    original_items = {i["qa_id"]: i for i in original["items"]}
+    differences = json.loads((HERE / "preservation-differences.json").read_text())
+    assert all(set(fact["field_counts"]) == {"_index"} for fact in differences["sources"].values())
+
+    def content(item):
+        return {k: v for k, v in item.items() if k != "_index"}
+
     for qa, digest in old["item_fingerprints"].items():
-        assert fingerprint(items[qa]) == digest, qa
+        assert fingerprint(original_items[qa]) == digest, qa
+        assert fingerprint(content(items[qa])) == fingerprint(content(original_items[qa])), qa
     for key, digest in old["valid_receipt_fingerprints"].items():
         assert fingerprint(state["scoring_results"][key]) == digest, key
     seed_reader = SplitRunReader(ROOT, ROOT / restored["seed_run_id"])
     seed = seed_reader.state()
     assert len(seed["items"]) == 994
-    assert all(fingerprint(items[i["qa_id"]]) == fingerprint(i) for i in seed["items"])
+    assert all(fingerprint(content(items[i["qa_id"]])) == fingerprint(content(i)) for i in seed["items"])
     assert all(
         fingerprint(state["scoring_results"][k]) == fingerprint(v) for k, v in seed["scoring_results"].items()
     )
@@ -186,6 +195,8 @@ def inspect():
         "new_nineteen_turns": turns,
         "restored_four": restored["restored"],
         "original_990_items_unchanged": True,
+        "item_comparison_excluded_fields": ["_index"],
+        "removed_index_metadata_items": 987,
         "original_823_valid_scores_unchanged": True,
         "seed_994_items_and_all_score_receipts_unchanged": True,
         "source_manifests_unchanged": True,
