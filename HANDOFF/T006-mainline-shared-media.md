@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-22 11:30｜连接恢复，四个原产品回合自动接回后续19题
+
+c7ae289f连接恢复事件已处理。内核记录11/21 13:40:02 igc网卡PCIe link lost/device detached；11/22 11:16:25主机重启，重启原因待核。查询上个启动周期OOM关键词无命中。systemd自动拉起产品8294/PID12370和测评8874/PID1624；本轮没有手工重启、切库、改网络或部署业务代码。实际8874仍为doubao-persist-projection-v2/candidate，writer SHA保持。
+
+原f72710状态interrupted、无测评worker，保存990项（829completed/92timeout/69failed）及823有效分、3Judge失败。逐项核原d52ecf887答卷/812有效分及890seed保持，原manifest c86fcfa0…3d1ce07保持。缺23题中，4原turn由持久执行器自动认领，首个running/attempt2、其余pending/attempt1；另19题从未启动。没有另建重复回合或重跑历史失败。
+
+新增28ca3a1a只读inventory和d436daa7四原回合监控；ruff/语法/diff及在线probe通过，独立操作目录同步SHA已核，源码已push。先wake13145232-83a7-48b9-9281-3cf0627956bc，再启watcher28647；精确绑定四原turn、两服务新PID/实际目录、源码/原manifest、真实型号及预算，监控终态和异常。inspect_reconnect已消费，不重放。证据产品项目audit/20261122-doubao-reconnect/README.md、inventory、connection-review、turns-latest及watchers。
+
+四回合终态后刷新真实状态和答案SHA，仅GET取回到独立新seed，保持990原项及823分；失败按实保留。只续19个从未启动QA，原161执行失败不自动重跑；新resume须先新wake和单次intent/response。随后缺Judge仅Judge，验1013去向和完整在线trace/SFT双流，再三模型比较。实际doubao-seed-2.1-lite/16K、100-600-100-500、QA4/3660/reasoning-graph、冻结ATM v5和豆包Judge保持。Qwen/Q4各1012分和双流已验收，不再操作；Q4源18隔离保持。
+
+/home约119GiB、可用内存约100GiB；空间增加来源仍未调查。旧持久化150秒以上峰值未唯一归因，日志还保留一次128.557秒写入；不能宣称慢写/OOM根因消除。不改8772/8191/153或其他服务器，不启Hard/16题包。
+
 ## 2026-11-21 13:43｜100连接不可达，豆包状态待核，已挂只读恢复监控
 
 150d4403因连续三次SSH失败唤醒；复查22/8874/8294均Host is down或超时，ping无响应。本机en1的192.168.1.245/23与目标同网段、链路active，目标路由走en1。远端worker/服务/进度及内核证据无法读取，尚不能判断重启、OOM或任务退出。本轮未改网络、未重启或重新提交测评。
