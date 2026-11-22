@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-22 11:43｜四原答卷已取回，豆包仅续19题
+
+13145232四回合终态事件已处理。4原turn均complete/answered、attempt2，仅GET取回，答案SHA一致；新独立seed20261122-doubao-reboot-turns-seed-f72710共994项，990原项/823有效回执及全部评分状态逐项保持。原f72710 manifest3f72829c…99ef8ea、d52ecf manifestc86fcfa0…3d1ce07及890旧seed保持。
+
+首只读预检误把复用库的同题旧会话计入，写seed前拒绝；独立只读查证19目标的27个历史turn均为11/12–13，本轮11/20 02:06:30独立实验起点后无turn。7f02a82f改按本轮起点核验，SQLite时间边界检查/ruff/语法/diff通过；已提交同步100 SHA及在线只读核验后push。首次错误和target-history-review保留；未发生重复Agent提交。
+
+先注册wake5939ccca-a2cb-46ed-b4c5-c892ffdda698，再单次恢复seed和resume。精确新run20261122-114200-2026.11.17-atm-sources-addresses-current-resume-9763a1，继承994项，仅19未启动QA；retried_qa_ids空、repair_missing_judges=false。首探994项/823有效分、worker存活/4turn运行；新watcher33040及命令已核，监控原manifest/实际目录/源码/PID/型号/预算/资源。8294PID12370、8874PID1624及业务代码保持，无重启或部署。实际doubao-seed-2.1-lite/16K/100-600-100-500/QA4-3660/reasoning-graph与冻结ATM v5/豆包Judge保持。
+
+restore_remaining.py的inspect/restore/resume均已消费，不得重放；后续只沿resume19-response/active-runs。终态逐QA验19新attempt、4恢复答卷、原990项及823有效分/失败history保持；原161执行失败不自动重跑。缺Judge仅Judge另先新wake，最终1013去向与完整在线trace/SFT双流验收再三模型比较。Qwen/Q4各1012分和两导出已验收，不再操作，源18隔离保持。未改网络或8772/8191/153及其他服务器，未启Hard/16题包。审计产品项目audit/20261122-doubao-reconnect，主实验和两项目索引同步。
+
 ## 2026-11-22 11:30｜连接恢复，四个原产品回合自动接回后续19题
 
 c7ae289f连接恢复事件已处理。内核记录11/21 13:40:02 igc网卡PCIe link lost/device detached；11/22 11:16:25主机重启，重启原因待核。查询上个启动周期OOM关键词无命中。systemd自动拉起产品8294/PID12370和测评8874/PID1624；本轮没有手工重启、切库、改网络或部署业务代码。实际8874仍为doubao-persist-projection-v2/candidate，writer SHA保持。
