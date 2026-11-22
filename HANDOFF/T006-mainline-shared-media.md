@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-22 12:41｜豆包852有效分验收，完整在线导出校验已启动
+
+aa201991十份仅Judge补评已单次accept：10/10完成、0失败；有效分842→852，原842有效回执及全部1013答卷/attempt指纹保持，3旧失败history完整保留。161原执行超时/失败保持空分，现成答卷无缺Judge，不再Agent或Judge。精确9763a1的1013去向及原990内容/823分、994seed、19新attempt和4恢复答卷保持；只有既有987内部_index移除差异。
+
+新f6f3565b导出校验本机ruff/格式/语法/diff通过，先提交→同步100新doubao-terminal-exports-v1逐SHA/实际app-dir只读preflight→push。先wake063c5396-9af2-415d-b9a5-92e1827df82e，再单次launch worker283361/watch49130；首探contracts/存活、PID/app-dir/源码SHA及读revision保持。固定8874PID1624/候选doubao-persist-projection-v2、exports源码3adba6e1…06cc9a及read_revision24b94722a11249a7a67e99cbbbbb5a30；验1013逐题合同/852分/161失败空分和完整在线trace/SFT双流SHA，不落正文。launch/verify均已消费，不重放；评分accept也已消费。无验收先读日志，不盲重跑。
+
+实际产品8294PID12370、独立库/18107 doubao-seed-2.1-lite/16K、100-600-100-500/QA4-3660/reasoning-graph和冻结ATM v5/豆包Judge保持，无业务重启部署。审计产品项目audit/20261122-doubao-terminal及主实验/两项目索引更新。两流验收后对比三模型覆盖率、有效分均值及共同有效QA；豆包标历史媒体复用+新版邮件增量，执行失败按证据归因。Qwen/Q4各1012分和两流已验，仅只读取比较数据，不再Agent/Judge/导出；源18隔离保持。不改网络、8772/8191/153或其他服务器，不启Hard/16题包。
+
 ## 2026-11-22 12:33｜豆包1013终态验收，10份现成答卷仅补Judge
 
 5939ccca终态事件已处理。精确9763a1共1013项，测评记录852 completed、92 timeout、69 failed；19新QA各一个attempt，真实产品10complete/8partial/1blocked，guard_blocked保持。4恢复答卷SHA一致，原990项内容/轨迹和823有效回执、994seed全部评分记录保持；987项仅内部_index被运行器移除，差异证据完整。两次只读预检分别因内部索引及blocked终态枚举中止，修正验收口径后通过，没有改写run/答卷。
