@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 当前状态
+
+2026-11-22用户新授权补做豆包161道未有效结束题，每题仅一次新Agent尝试和评分。原9763a1全部1013项/852分及失败历史保持；独立seed继承852答卷/852有效回执（含189真0），新run `20261122-215409-2026.11.17-atm-sources-addresses-current-resume-7bba84` 仅执行原92timeout/69failed。新授权覆盖旧“不再Agent”对这161题的限制；Qwen/Q4保持只读。补做前三模型结果留作基线，重评和重统计待终态验收。
+
+本机脚本80982245先验证提交，再同步100独立doubao-supplement161-20261122-v1核SHA/语法。先wake `db85e746-c6aa-4f22-a052-3ef9f4db1b81`，再单次seed/resume；inspect/seed/resume均已消费。首探worker存活/4产品turn运行，852原分已继承；watcher `91934` 按精确run接终态/异常。8874PID1624/8294PID12370、实际目录/独立库/18107豆包型号/16K及100-600-100-500、QA4/3660/reasoning-graph和冻结ATM v5/豆包Judge保持，无业务部署重启。
+
+接手先读产品项目audit/20261122-doubao-supplement161/README.md、delivery/watchers/plan/resume-response和主实验state/checkpoint-watchers。终态核161新旧attempt、原852答卷/回执及源manifest；真实新失败如实保留，不人工改成功或补0、不自动再Agent。现成答卷缺Judge仅Judge另先wake，之后新run完整trace/SFT双流流式验收，再另存覆盖率/有效均分/缺分计0离线全量口径与三模型新共同题比较。旧run/双流/基线报告与Q4源18隔离保持；不重放旧操作，不改网络、8772/8191/153及其他服务器，不启Hard/16题包。
+
 ## 2026-11-22 12:52｜三模型全链路验收与850同题比较完成
 
 063c5396导出回调已读远端原始回执、worker日志与最终probe验收。豆包9763a1逐题1013项合同通过；完整trace 43,204,156字节、SFT 899,267,489字节，各与同版独立流SHA一致。SFT 1705样本/22339步骤，validator峰值RSS502496KiB，未落大正文。8874PID1624/app-dir/源码SHA/read_revision保持，8294PID12370/独立库/18107实际型号/16K及预算保持；worker283361与本机watcher49130已退出。852有效分、161执行失败空分、全部答卷attempt与评分history保持；原842回执及3旧失败history保持。审计见产品项目audit/20261122-doubao-terminal/{exports-acceptance.json,exports-acceptance-review.json,exports-final-probe.json,exports-worker.log}。

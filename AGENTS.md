@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/22 ATM1013三模型评分及完整trace/SFT均已验收；Plus/Q4各1012有效分，豆包852有效分/161失败留空。850共同题均值67.58%/45.80%/75.80%，比较见audit/20261122-three-model-comparison；063c5396已处理，不再自动Agent/Judge/导出，接T006。
+- 11/22用户新授权豆包161失败题各一次补做重评，原852答卷/有效分与全部旧run保持；新7bba84运行，wake db85e746-c6aa-4f22-a052-3ef9f4db1b81/watcher91934。旧三模型报告留作基线，Qwen/Q4不再操作；接T006及audit/20261122-doubao-supplement161。
 
 - 11/22豆包四原回合GET找回与19未启动题续评已结束；994seed/原990项及823分保持，旧13145232/5939ccca回调已处理。保留全部真实失败和历史，见audit/20261122-doubao-reconnect及T006。
 
@@ -43,4 +43,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-22 | 三模型评分/双流已验收；850共同题对比完成，保留缺分及历史 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-22 | 豆包161题授权补做运行；852原分保持，终态重统计 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
