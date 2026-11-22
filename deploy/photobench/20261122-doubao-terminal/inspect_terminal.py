@@ -124,7 +124,7 @@ def inspect():
             item = items[turn["qa_id"]]
             assert turn["id"] in [t["turn_id"] for t in item["runtime_turns"]]
             assert turn["attempt_no"] == 1
-            assert turn["status"] in {"complete", "partial", "failed", "cancelled"}
+            assert turn["status"] in {"complete", "partial", "blocked", "failed", "cancelled"}, turn
             assert turn["answer"] == item["answer"]
             turn["answer_sha256"] = hashlib.sha256(turn.pop("answer").encode()).hexdigest()
             turn["execution_status"] = item["execution_status"]
