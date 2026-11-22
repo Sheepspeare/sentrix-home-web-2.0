@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 from datetime import datetime
 
-from inspect_reconnect import APP, BASE, DB, EVALUATOR, HERE, ROOT, RUN, fingerprint, pid, sha
+from inspect_reconnect import APP, BASE, DB, EVALUATOR, HERE, ORIGINAL, ROOT, RUN, fingerprint, pid, sha
 from probe_turns import snapshot
 
 sys.path.insert(0, str(APP))
@@ -102,12 +102,13 @@ def idle():
             assert replacement["status"] == "completed" and replacement["started_at"] > old[0]["started_at"]
         remaining = read("inventory.json")["never_started_qa_ids"]
         assert len(remaining) == 19
+        experiment_start = SplitRunReader(ROOT, ROOT / ORIGINAL).state()["started_at"]
         for qa in remaining:
             assert (
                 db.execute(
                     "select count(*) from agent_turns t join agent_conversations c on c.id=t.conversation_id "
-                    "where t.scope_id=? and c.title=?",
-                    (read("inventory.json")["scope_id"], qa),
+                    "where t.scope_id=? and c.title=? and julianday(t.created_at)>=julianday(?)",
+                    (read("inventory.json")["scope_id"], qa, experiment_start),
                 ).fetchone()[0]
                 == 0
             ), qa
