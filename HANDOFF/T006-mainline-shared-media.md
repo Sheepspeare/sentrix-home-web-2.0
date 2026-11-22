@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-22 12:52｜三模型全链路验收与850同题比较完成
+
+063c5396导出回调已读远端原始回执、worker日志与最终probe验收。豆包9763a1逐题1013项合同通过；完整trace 43,204,156字节、SFT 899,267,489字节，各与同版独立流SHA一致。SFT 1705样本/22339步骤，validator峰值RSS502496KiB，未落大正文。8874PID1624/app-dir/源码SHA/read_revision保持，8294PID12370/独立库/18107实际型号/16K及预算保持；worker283361与本机watcher49130已退出。852有效分、161执行失败空分、全部答卷attempt与评分history保持；原842回执及3旧失败history保持。审计见产品项目audit/20261122-doubao-terminal/{exports-acceptance.json,exports-acceptance-review.json,exports-final-probe.json,exports-worker.log}。
+
+新只读脚本本机ruff/语法/diff和0分/空分/交集/配对方向验证后提交，同步100独立three-model-comparison-20261122-v2核SHA/语法再执行并push 4c07313d。首v1因旧ObjectReader无close接口在输出前退出，错误及9efb5ed7保留；修为进程结束释放只读连接，源数据无写入。最终三manifest与active-runs映射保持，原评分/双流回执交叉核验通过。本地独立CSV复算覆盖数、各自与共同均值一致。0 Agent/Judge调用，无重新导出或业务部署重启。
+
+各自有效均值与覆盖：Plus1012/1013、65.8846%；Q4补做1012/1013、44.6014%；豆包852/1013、75.8567%。共同有效850题：Plus67.5775%、Q4 45.8000%、豆包75.7999%；Plus/Q4两两1011题，Plus/豆包与Q4/豆包各851题。报告、逐题CSV、固定manifest/read_revision及复核见产品项目audit/20261122-three-model-comparison/README.md。缺分不计0；豆包历史媒体记忆复用+新版邮件增量，Plus17题/Q4 34题授权补做和早期配置分段均注明，本轮结果按最终交付条件解释。
+
+本轮三模型评分和双流验收结束，无待补Judge或自动Agent/导出任务。Qwen唯一995f8ba1真实model_error空分、Q4唯一9b7cf030 Judge failed/null、2a22220b产品model_error/已有Judge自动0及源18/当前14隔离均保持；豆包92timeout/69failed保留。状态码不直接归为模型智能缺陷，慢写旧峰值/网卡断链后重启原因仍未唯一确认。主实验state/checkpoint-watchers、审计delivery/watchers与两项目AGENTS/T006已更新；不改网络及8772/8191/153或其他服务器，不启Hard/16题包。
+
 ## 2026-11-22 12:41｜豆包852有效分验收，完整在线导出校验已启动
 
 aa201991十份仅Judge补评已单次accept：10/10完成、0失败；有效分842→852，原842有效回执及全部1013答卷/attempt指纹保持，3旧失败history完整保留。161原执行超时/失败保持空分，现成答卷无缺Judge，不再Agent或Judge。精确9763a1的1013去向及原990内容/823分、994seed、19新attempt和4恢复答卷保持；只有既有987内部_index移除差异。
