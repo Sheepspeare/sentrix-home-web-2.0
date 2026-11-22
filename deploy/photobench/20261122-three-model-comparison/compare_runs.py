@@ -135,7 +135,6 @@ def read_run(spec, frozen):
     }
     assert summary["valid_count"] == spec["valid_count"]
     assert sha(directory / MANIFEST) == before
-    reader.reader.close()
     return summary, rows
 
 
