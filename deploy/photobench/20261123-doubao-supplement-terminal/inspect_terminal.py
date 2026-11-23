@@ -58,9 +58,20 @@ def current():
     assert not state.get("fatal_error") and not state.get("current_phase")
     assert len(state["items"]) == state["qa_count"] == 1013
     batch = next(b for b in state["scoring_batches"] if b["batch_id"] == BATCH)
-    original, _, _, _ = source()
+    original, _, _, targets = source()
     frozen = next(b for b in original["scoring_batches"] if b["batch_id"] == BATCH)
-    assert fingerprint(batch) == fingerprint(frozen)
+    assert fingerprint({k: v for k, v in batch.items() if k not in {"materials", "targets"}}) == (
+        fingerprint({k: v for k, v in frozen.items() if k not in {"materials", "targets"}})
+    )
+    assert set(frozen["targets"]) <= set(batch["targets"])
+    assert len(batch["targets"]) == len(set(batch["targets"]))
+    assert all(
+        state["scoring_results"][k]["qa_id"] in targets
+        for k in set(batch["targets"]) - set(frozen["targets"])
+    )
+    assert frozen["materials"].keys() <= batch["materials"].keys()
+    assert all(fingerprint(v) == fingerprint(batch["materials"][k]) for k, v in frozen["materials"].items())
+    assert all(k.rsplit(":", 1)[0] in targets for k in batch["materials"].keys() - frozen["materials"].keys())
     return reader, state, batch
 
 
