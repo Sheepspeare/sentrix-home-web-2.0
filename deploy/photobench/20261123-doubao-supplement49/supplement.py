@@ -257,7 +257,8 @@ def inspect():
         "created_at": now(),
         "authorization": (
             "User authorized rerun and re-evaluation of Doubao's 49 unfinished QA on 2026-11-23; "
-            "one new product turn each. The earlier no-Agent-retry instruction is superseded for these 49 only."
+            "one new product turn each. The earlier no-Agent-retry instruction "
+            "is superseded for these 49 only."
         ),
         "source_run_id": SOURCE,
         "source_read_revision": REVISION,
