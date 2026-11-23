@@ -2,11 +2,13 @@
 
 ## 当前状态
 
-2026-11-22用户新授权补做豆包161道未有效结束题，每题仅一次新Agent尝试和评分。原9763a1全部1013项/852分及失败历史保持；独立seed继承852答卷/852有效回执（含189真0），新run `20261122-215409-2026.11.17-atm-sources-addresses-current-resume-7bba84` 仅执行原92timeout/69failed。新授权覆盖旧“不再Agent”对这161题的限制；Qwen/Q4保持只读。补做前三模型结果留作基线，重评和重统计待终态验收。
+2026-11-23豆包161题授权补做的执行和评分已验收：新7bba84共1013项/964有效分，新增112分，原852答卷内容及有效回执、源run/seed/历史保持。剩余40model_error/9timeout保留空分，无待Judge，不再Agent/Judge。有效均分74.9100%、覆盖95.1629%，缺分计0的离线全1013均分71.2865%；原正式分不补0。14turn曾多次认领，failure_count0且只有最终代事件，详细代次保留，不能写成全部attempt1；未另建重复题目回合。实验标签历史豆包媒体记忆复用+新版邮件增量/161题授权补做保持。
 
-本机脚本80982245先验证提交，再同步100独立doubao-supplement161-20261122-v1核SHA/语法。先wake `db85e746-c6aa-4f22-a052-3ef9f4db1b81`，再单次seed/resume；inspect/seed/resume均已消费。首探worker存活/4产品turn运行，852原分已继承；watcher `91934` 按精确run接终态/异常。8874PID1624/8294PID12370、实际目录/独立库/18107豆包型号/16K及100-600-100-500、QA4/3660/reasoning-graph和冻结ATM v5/豆包Judge保持，无业务部署重启。
+新完整trace/SFT流式验收已先wake `f3e08d83-6438-48ce-a41b-1fc498ddaa8f` 再单次launch worker4117305，本机watcher74006首探contracts/存活。远端doubao-supplement-terminal-20261123-v1，绑定8874PID1624/app-dir doubao-persist-projection-v2/candidate、exports源码3adba6e1及read_revision `f3071901339c4e2ea30368c5c13aaf06`。launch/verify已消费不重放，probe只读；原db85e746事件已处理。新终态验收和导出/比较脚本已本机验证提交ffb261b2、同步100五文件SHA/语法再push，无业务部署重启。
 
-接手先读产品项目audit/20261122-doubao-supplement161/README.md、delivery/watchers/plan/resume-response和主实验state/checkpoint-watchers。终态核161新旧attempt、原852答卷/回执及源manifest；真实新失败如实保留，不人工改成功或补0、不自动再Agent。现成答卷缺Judge仅Judge另先wake，之后新run完整trace/SFT双流流式验收，再另存覆盖率/有效均分/缺分计0离线全量口径与三模型新共同题比较。旧run/双流/基线报告与Q4源18隔离保持；不重放旧操作，不改网络、8772/8191/153及其他服务器，不启Hard/16题包。
+接手读产品项目audit/20261122-doubao-supplement161/{README.md,delivery.json,watchers.json,terminal-acceptance.json,terminal-outcome-review.json,attempt-review.json,exports-response.json,exports-latest.json}及主实验state/checkpoint-watchers。先验实际worker日志和exports-acceptance、1013/964分/49失败null、双完整在线流SHA及原答卷/分保持。成功后新compare_supplement.py仅运行一次（尚未消费），输出到新audit/20261123-doubao-supplement-comparison，独立CSV复算覆盖、有效均分、全量缺分计0及新共同QA；旧852分/850共同题报告留基线。Qwen/Q4只读比较，不再Agent/Judge/导出；原18隔离保持。实际8294PID12370/独立库/18107豆包16K、100-600-100-500/QA4-3660/reasoning-graph/冻结ATM v5豆包Judge保持。不重放旧操作，不改网络、8772/8191/153或其他服务器，不启Hard/16题包。
+
+只读取证脚本一次先传后提交的顺序错误已补齐原文与AST一致性记录，见attempt-review-sync-sequence-note；未重执行或修改答卷。旧批次全同/attempt1验收中止及修正证据保留，详见terminal-outcome-review。慢写及网卡断链后重启原因仍未唯一确认。
 
 ## 2026-11-22 12:52｜三模型全链路验收与850同题比较完成
 
@@ -822,3 +824,11 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 ### 2026-11-19｜完整懒加载实现与发布验证
 
 本轮隔离树codex/q4-trace-quarantine-20261119已完成格式3内容引用/分块存储、增量保存与已提交轨迹释放，概览/题页/单题轻读，节点50条分页、内容256KiB内分块，Judge请求按需读取，同版本trace/SFT流式导出及显式旧存档迁移。后端1692项通过；前端832项通过，1项ChatView失败已在e24f8fb基线复现，专项40项和构建通过。真实含18条异常轨迹的101题迁移峰值RSS1.23GB，48读/4写及导出压测进行中。审计在产品项目audit/20261119-full-lazy-results；新发布脚本deploy/photobench/20261119-full-lazy，不执行旧脚本。当前线上仍fcb32bd，尚未声明新版本已上线。待压测验收后按已授权流程停两精确run，空闲后迁移和切8872/8874，先新wake再原scope续评。
+
+## 2026-11-22｜161题补做启动记录
+
+2026-11-22用户新授权补做豆包161道未有效结束题，每题仅一次新Agent尝试和评分。原9763a1全部1013项/852分及失败历史保持；独立seed继承852答卷/852有效回执（含189真0），新run `20261122-215409-2026.11.17-atm-sources-addresses-current-resume-7bba84` 仅执行原92timeout/69failed。新授权覆盖旧“不再Agent”对这161题的限制；Qwen/Q4保持只读。补做前三模型结果留作基线，重评和重统计待终态验收。
+
+本机脚本80982245先验证提交，再同步100独立doubao-supplement161-20261122-v1核SHA/语法。先wake `db85e746-c6aa-4f22-a052-3ef9f4db1b81`，再单次seed/resume；inspect/seed/resume均已消费。首探worker存活/4产品turn运行，852原分已继承；watcher `91934` 按精确run接终态/异常。8874PID1624/8294PID12370、实际目录/独立库/18107豆包型号/16K及100-600-100-500、QA4/3660/reasoning-graph和冻结ATM v5/豆包Judge保持，无业务部署重启。
+
+接手先读产品项目audit/20261122-doubao-supplement161/README.md、delivery/watchers/plan/resume-response和主实验state/checkpoint-watchers。终态核161新旧attempt、原852答卷/回执及源manifest；真实新失败如实保留，不人工改成功或补0、不自动再Agent。现成答卷缺Judge仅Judge另先wake，之后新run完整trace/SFT双流流式验收，再另存覆盖率/有效均分/缺分计0离线全量口径与三模型新共同题比较。旧run/双流/基线报告与Q4源18隔离保持；不重放旧操作，不改网络、8772/8191/153及其他服务器，不启Hard/16题包。
