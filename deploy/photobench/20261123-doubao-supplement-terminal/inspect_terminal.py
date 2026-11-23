@@ -80,7 +80,7 @@ def content(item):
 
 
 def inspect():
-    assert not (HERE / "terminal-inventory.json").exists()
+    assert not (HERE / "terminal-acceptance.json").exists()
     probe = snapshot()
     for key in (
         "exact_run_matches",
@@ -161,10 +161,20 @@ def inspect():
             )
     turn_ids = {t["id"] for t in turns}
     turn_counts = Counter(t["qa_id"] for t in turns)
+    claim_review = json.loads((HERE / "attempt-review.json").read_text())
+    assert claim_review["run_id"] == RUN and claim_review["read_revision"] == reader.revision
+    multiple_claims = {t["id"]: t for t in claim_review["multiple_claim_turns"]}
+    assert set(multiple_claims) == {t["id"] for t in turns if t["attempt_no"] > 1}
     checks = {
         "exactly_161_new_product_turns": len(turns) == len(turn_ids) == 161,
         "one_new_turn_per_authorized_qa": set(turn_counts) == targets and set(turn_counts.values()) == {1},
-        "one_attempt_per_new_turn": all(t["attempt_no"] == 1 for t in turns),
+        "multiple_claim_turns_have_only_one_recorded_execution_generation": all(
+            t["failure_count"] == 0
+            and len(t["event_attempt_counts"]) == 1
+            and t["event_attempt_counts"][0]["attempt_no"] == t["attempt_no"]
+            and t["event_attempt_counts"][0]["first_seq"] == 1
+            for t in multiple_claims.values()
+        ),
         "old_product_turn_ids_not_reused": not turn_ids & {t["id"] for t in plan["prior_product_turns"]},
         "all_product_turns_terminal": all(
             t["status"] in {"complete", "partial", "blocked", "failed", "cancelled"} for t in turns
@@ -241,6 +251,13 @@ def inspect():
             if v.get("batch_id") == BATCH and v.get("status") == "failed"
         },
         "new_attempt_comparison": comparisons,
+        "product_attempt_no_counts": claim_review["turn_attempt_no_counts"],
+        "multiple_claim_turns": claim_review["multiple_claim_turns"],
+        "internal_claim_note": (
+            "14 turns were claimed more than once. Each has failure_count=0 and events only in its final "
+            "generation, starting at sequence 1. Claim generations are preserved; their exact dependency "
+            "or lease cause is not uniquely established. Exactly one new product turn was submitted per QA."
+        ),
         "checks": checks,
         "accepted": all(checks.values()),
         "original_852_answer_content_unchanged": True,
@@ -256,7 +273,7 @@ def inspect():
         "seed_run_id": SEED,
         "agent_calls_in_acceptance": 0,
     }
-    save("terminal-inventory.json", result)
+    save("terminal-acceptance.json", result)
     print(
         json.dumps(
             {

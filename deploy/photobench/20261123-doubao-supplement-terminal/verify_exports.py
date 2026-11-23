@@ -80,7 +80,7 @@ def progress(result, phase):
 
 
 def baseline():
-    accepted = json.loads((ACCEPT_DIR / "terminal-inventory.json").read_text())
+    accepted = json.loads((ACCEPT_DIR / "terminal-acceptance.json").read_text())
     assert accepted["accepted"] and all(accepted["checks"].values())
     assert accepted["original_852_answer_content_unchanged"]
     assert accepted["original_852_valid_receipts_unchanged"]
