@@ -129,6 +129,8 @@ def connectivity_probe():
     import time
 
     started = time.monotonic()
+    with urllib.request.urlopen("http://127.0.0.1:18107/v1/models", timeout=30) as response:
+        assert [m["id"] for m in json.load(response)["data"]] == ["doubao-seed-2.1-lite"]
     payload = {
         "model": "doubao-seed-2.1-lite",
         "messages": [{"role": "user", "content": "Reply with OK."}],
@@ -143,10 +145,11 @@ def connectivity_probe():
     with urllib.request.urlopen(request, timeout=90) as response:
         result = json.load(response)
     assert result.get("choices"), result
-    assert result["model"] == "doubao-seed-2.1-lite", result.get("model")
+    assert result["model"] == "doubao-seed-2-1-lite-260915", result.get("model")
     return {
         "ok": True,
-        "model": result["model"],
+        "requested_model": payload["model"],
+        "response_model": result["model"],
         "seconds": time.monotonic() - started,
         "agent_or_judge": False,
         "completion_limit": 8,
