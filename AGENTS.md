@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/23豆包161补做评分已验：新增112分，共964/1013；40model_error/9timeout空分保留，852原答卷/分保持，无待Judge。新双流验收wake f3e08d83-6438-48ce-a41b-1fc498ddaa8f/worker4117305，通过后重算共同QA；接T006及audit/20261122-doubao-supplement161。
+- 11/23豆包161补做及双流验收、重统计完成：964/1013有效分（74.91%，覆盖95.16%），49失败空分保留；共同962题Plus67.23%/Q4 46.04%/豆包74.86%。原852分和各历史保持，无待自动任务；见T006及audit/20261123-doubao-supplement-comparison。
 
 - 11/22豆包四原回合GET找回与19未启动题续评已结束；994seed/原990项及823分保持，旧13145232/5939ccca回调已处理。保留全部真实失败和历史，见audit/20261122-doubao-reconnect及T006。
 
@@ -43,4 +43,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-23 | 豆包补做964有效分/49失败；双流验收中，待共同题重统计 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-23 | 豆包964有效分/49失败；双流已验，共同962题重统计完成 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

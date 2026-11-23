@@ -2,13 +2,21 @@
 
 ## 当前状态
 
-2026-11-23豆包161题授权补做的执行和评分已验收：新7bba84共1013项/964有效分，新增112分，原852答卷内容及有效回执、源run/seed/历史保持。剩余40model_error/9timeout保留空分，无待Judge，不再Agent/Judge。有效均分74.9100%、覆盖95.1629%，缺分计0的离线全1013均分71.2865%；原正式分不补0。14turn曾多次认领，failure_count0且只有最终代事件，详细代次保留，不能写成全部attempt1；未另建重复题目回合。实验标签历史豆包媒体记忆复用+新版邮件增量/161题授权补做保持。
+2026-11-23豆包161题授权补做、评分和完整在线trace/SFT导出均已验收，重新统计完成。7bba84共1013项/964有效分，新增112分；原852答卷及评分、源run/seed/失败历史保持。40model_error/9timeout保留空分，无待Judge，不再Agent/Judge/导出。有效覆盖95.1629%、有效均分74.9100%，缺分按0的离线全1013均分71.2865%；原正式空分保持。
 
-新完整trace/SFT流式验收已先wake `f3e08d83-6438-48ce-a41b-1fc498ddaa8f` 再单次launch worker4117305，本机watcher74006首探contracts/存活。远端doubao-supplement-terminal-20261123-v1，绑定8874PID1624/app-dir doubao-persist-projection-v2/candidate、exports源码3adba6e1及read_revision `f3071901339c4e2ea30368c5c13aaf06`。launch/verify已消费不重放，probe只读；原db85e746事件已处理。新终态验收和导出/比较脚本已本机验证提交ffb261b2、同步100五文件SHA/语法再push，无业务部署重启。
+三模型共同有效962题：Plus67.2346%、Q4 46.0360%、豆包74.8579%。各自有效评分数Plus/Q4均1012、豆包964；全1013缺分按0的离线均分为Plus65.8195%、Q4 44.5574%、豆包71.2865%。新报告和逐题CSV见产品项目audit/20261123-doubao-supplement-comparison/README.md；本地Decimal独立复算通过，原852分及Plus/Q4全部CSV评分/状态一致，11/22旧报告保留。
 
-接手读产品项目audit/20261122-doubao-supplement161/{README.md,delivery.json,watchers.json,terminal-acceptance.json,terminal-outcome-review.json,attempt-review.json,exports-response.json,exports-latest.json}及主实验state/checkpoint-watchers。先验实际worker日志和exports-acceptance、1013/964分/49失败null、双完整在线流SHA及原答卷/分保持。成功后新compare_supplement.py仅运行一次（尚未消费），输出到新audit/20261123-doubao-supplement-comparison，独立CSV复算覆盖、有效均分、全量缺分计0及新共同QA；旧852分/850共同题报告留基线。Qwen/Q4只读比较，不再Agent/Judge/导出；原18隔离保持。实际8294PID12370/独立库/18107豆包16K、100-600-100-500/QA4-3660/reasoning-graph/冻结ATM v5豆包Judge保持。不重放旧操作，不改网络、8772/8191/153或其他服务器，不启Hard/16题包。
+f3e08d83导出回调已处理，1013逐题合同通过，完整trace46,754,257字节/SFT999,351,785字节与同版独立流SHA一致；全部答卷attempt和评分history指纹保持。worker4117305与watcher74006已退出。固定8874PID1624/app-dir doubao-persist-projection-v2/candidate/exports源码3adba6e1/read_revision f3071901339c4e2ea30368c5c13aaf06保持。compare_supplement.py已单次消费，三manifest和active映射保持；无待自动任务，无业务部署重启。
 
-只读取证脚本一次先传后提交的顺序错误已补齐原文与AST一致性记录，见attempt-review-sync-sequence-note；未重执行或修改答卷。旧批次全同/attempt1验收中止及修正证据保留，详见terminal-outcome-review。慢写及网卡断链后重启原因仍未唯一确认。
+实验条件为历史豆包媒体记忆复用+新版邮件增量；161题授权补做。8294PID12370/独立库/18107真实豆包/16K、100-600-100-500/QA4-3660/reasoning-graph/冻结ATM v5及豆包Judge保持。14turn多次内部认领的真实代次保留；具体依赖/租约原因未唯一确认。慢写及网卡断链后重启原因仍未唯一确认。Q4源18/当前14隔离及产品model_error已有自动0、唯一Judge failed/null保持。运行器原阶段摘要87失败/955 Judge与逐题统计不一致已在新报告注明，原记录不改写。
+
+本轮已完成用户授权范围。后续读取新比较报告和补做审计的terminal-acceptance、exports-acceptance/复核、attempt-review及主实验state/checkpoint-watchers。不重放已消费的比较/导出/恢复/评分/压缩操作；不改网络、8772/8191/153或其他服务器，不启Hard/16题包。只读取证曾先传后提交的顺序错误及修正AST一致性证据保留在attempt-review-sync-sequence-note，未重执行或修改答卷。
+
+## 2026-11-23 09:30｜豆包补做导出验收与962共同题比较完成
+
+- 结果：导出原始回执、worker日志与最终probe验收通过；compare_supplement.py单次执行，本地Decimal独立CSV复算通过，原852分及Plus/Q4全部评分/状态保持。
+- 证据：产品项目audit/20261123-doubao-supplement-comparison/{README.md,comparison-acceptance.json,qa-scores.csv,sync-receipt.json}，补做审计exports-acceptance/复核与final-run-probe。
+- 影响：161题补做新增112有效分，豆包964/1013有效；新共同题962。旧报告及49真实失败空分保留，全部本轮监控已结束，无后续自动任务。
 
 ## 2026-11-22 12:52｜三模型全链路验收与850同题比较完成
 
