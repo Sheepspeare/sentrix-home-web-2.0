@@ -4,6 +4,8 @@
 
 2026-11-23豆包161题授权补做、评分和完整在线trace/SFT导出均已验收，重新统计完成。7bba84共1013项/964有效分，新增112分；原852答卷及评分、源run/seed/失败历史保持。40model_error/9timeout保留空分，无待Judge，不再Agent/Judge/导出。有效覆盖95.1629%、有效均分74.9100%，缺分按0的离线全1013均分71.2865%；原正式空分保持。
 
+49失败已只读细分：29云端ConnectTimeout、17一小时时限（8个误记model_error）、3上下文超限。17题均见空向量索引降为sqlite_exact，搜索累计49–57分钟；两题asset_group输出320431字符。归因报告见补做审计failure49-review.md，评分与服务保持。
+
 三模型共同有效962题：Plus67.2346%、Q4 46.0360%、豆包74.8579%。各自有效评分数Plus/Q4均1012、豆包964；全1013缺分按0的离线均分为Plus65.8195%、Q4 44.5574%、豆包71.2865%。新报告和逐题CSV见产品项目audit/20261123-doubao-supplement-comparison/README.md；本地Decimal独立复算通过，原852分及Plus/Q4全部CSV评分/状态一致，11/22旧报告保留。
 
 f3e08d83导出回调已处理，1013逐题合同通过，完整trace46,754,257字节/SFT999,351,785字节与同版独立流SHA一致；全部答卷attempt和评分history指纹保持。worker4117305与watcher74006已退出。固定8874PID1624/app-dir doubao-persist-projection-v2/candidate/exports源码3adba6e1/read_revision f3071901339c4e2ea30368c5c13aaf06保持。compare_supplement.py已单次消费，三manifest和active映射保持；无待自动任务，无业务部署重启。
