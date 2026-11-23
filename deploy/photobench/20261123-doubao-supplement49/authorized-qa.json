@@ -1,0 +1,306 @@
+{
+  "authorization_date": "2026-11-23",
+  "source_run_id": "20261122-215409-2026.11.17-atm-sources-addresses-current-resume-7bba84",
+  "source_read_revision": "f3071901339c4e2ea30368c5c13aaf06",
+  "category_counts": {
+    "wall_time_limit": 17,
+    "context_over_limit": 3,
+    "cloud_connect_timeout": 29
+  },
+  "targets": [
+    {
+      "qa_id": "atm-3552f5f5-c0aa-4367-914a-97b20e4656b7",
+      "turn_id": "turn_20261122135417592111",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-6731d2c8-f6dc-4993-b8ea-656745c27dfe",
+      "turn_id": "turn_20261122140827903580",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-7b706c69-a649-4c2a-83ac-08a51ceb3e46",
+      "turn_id": "turn_20261122144447441867",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-ae25652a-780b-47b0-9f82-3851054f9664",
+      "turn_id": "turn_20261122145415555058",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-1549c95e-6cfe-484a-96e2-535835bc38b1",
+      "turn_id": "turn_20261122145729457454",
+      "diagnostic_category": "context_over_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-4ff17b87-80fd-4694-9f8f-24eba874a44d",
+      "turn_id": "turn_20261122145957797639",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-46024501-fb00-49bd-be9e-70d9ee9b5968",
+      "turn_id": "turn_20261122154556146441",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-230a8013-f176-4acc-aa80-801935cc5c5b",
+      "turn_id": "turn_20261122160318921216",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-b767821e-3d20-4880-8de0-81c6bedf1577",
+      "turn_id": "turn_20261122161342386812",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-230bf920-cc9f-46c9-a77a-f0ce976e5bb7",
+      "turn_id": "turn_20261122163339777601",
+      "diagnostic_category": "context_over_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-fb138999-5e32-43eb-9222-091a6ff5b174",
+      "turn_id": "turn_20261122163640037452",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-5703b8c1-2e4f-4a5e-9385-44643f5a33c5",
+      "turn_id": "turn_20261122165805658302",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-779282a7-0fe9-47e2-86b5-88244fdcfb5f",
+      "turn_id": "turn_20261122171351096076",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-09325332-67e4-49cb-b7df-43c75c2328d5",
+      "turn_id": "turn_20261122182345896909",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-8ac9782c-1063-4260-ae67-1bb7d80bba83",
+      "turn_id": "turn_20261122182718617435",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-8257ed18-0d71-4e05-b360-ea727ee410f7",
+      "turn_id": "turn_20261122183602922114",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-3b4b5c9f-1059-4402-813c-d1674ab956de",
+      "turn_id": "turn_20261122185234963254",
+      "diagnostic_category": "context_over_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-b00921cc-3630-4622-8d5f-4e1f5a1d38b0",
+      "turn_id": "turn_20261122193254396479",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-c4f8a140-c452-421b-b4f9-6b2149ef943c",
+      "turn_id": "turn_20261122203917631632",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-03e12392-fdba-400a-945b-fe22b0d16978",
+      "turn_id": "turn_20261122210425133672",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "timeout"
+    },
+    {
+      "qa_id": "atm-2d3ba0a9-988f-4190-98e7-a7083f6b3817",
+      "turn_id": "turn_20261122213652809069",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-b23db9fd-f0c4-4740-b057-3a7738c4757f",
+      "turn_id": "turn_20261122214722207101",
+      "diagnostic_category": "wall_time_limit",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-79ab440a-5da6-4cb8-900e-368234df9c36",
+      "turn_id": "turn_20261122235514817969",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-75be5d50-99ee-4722-b916-5229e52f926a",
+      "turn_id": "turn_20261123000808616327",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-9f98bf39-a49b-4760-86ac-caeae37ebebb",
+      "turn_id": "turn_20261123000945976048",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-99756dc5-3509-4cbd-b068-057dea667dab",
+      "turn_id": "turn_20261123002709377415",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-8275d3e3-f9db-44cc-83e8-c1594bece17f",
+      "turn_id": "turn_20261123002928486359",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-05de7c18-17cf-4552-8c02-ebcdff97ec70",
+      "turn_id": "turn_20261123003133159451",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-c2658184-5fcd-4c1a-b342-008d4cd44cca",
+      "turn_id": "turn_20261123003133468198",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-ea30ad37-d627-4ad2-870b-688c7e34927f",
+      "turn_id": "turn_20261123003133499480",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-3fb725e5-acdc-4e07-b66e-ea7681143519",
+      "turn_id": "turn_20261123003534401758",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-2314e071-b2b5-4892-a30e-0596c5eafda6",
+      "turn_id": "turn_20261123003547922802",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-a6ca0fb5-8d6a-4759-927d-de9f8eac276c",
+      "turn_id": "turn_20261123004409399422",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-b36ef189-0fd7-4aa0-8632-ba93fe2eb5a5",
+      "turn_id": "turn_20261123004550181501",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-d7f7dfc2-8bdf-4462-8723-54ede6363a95",
+      "turn_id": "turn_20261123004615898511",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-2dce59e1-bf90-44bc-9c49-96a940dc60e5",
+      "turn_id": "turn_20261123004622850658",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-edf3d0e6-19de-4355-afce-6c73e59f4547",
+      "turn_id": "turn_20261123004626775611",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-287c0238-060f-4ac4-a783-9f625b237ccc",
+      "turn_id": "turn_20261123004953818012",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-8b4332f3-bc74-48fb-99c6-0cbd088493a6",
+      "turn_id": "turn_20261123004954102979",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-7ca44840-b1d0-49e4-bd58-0886998ceb2c",
+      "turn_id": "turn_20261123005115961175",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-1348a281-8c4b-4c86-b144-02593b3dcd6e",
+      "turn_id": "turn_20261123005129717370",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-5a25602f-0503-47d6-a9f7-75dfb7f59993",
+      "turn_id": "turn_20261123005400891495",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-a34d20ab-48e2-4840-bf1c-cbc68d609cac",
+      "turn_id": "turn_20261123005448849776",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-15077063-2667-4492-ad52-34cb407050f8",
+      "turn_id": "turn_20261123005541220346",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-f98cc2a5-5730-4ac4-a216-a3cdf29cd60a",
+      "turn_id": "turn_20261123005541220945",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-76826a99-72e0-47c9-b174-6d36afb9d5aa",
+      "turn_id": "turn_20261123005541221445",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-772a6e3c-0a9b-4def-ab97-551b51d41456",
+      "turn_id": "turn_20261123005708185463",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-604043a6-d6db-4744-b3aa-d5f0a313a7ac",
+      "turn_id": "turn_20261123005940102030",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    },
+    {
+      "qa_id": "atm-00cd191c-a6c2-454a-a4d1-52188df2633b",
+      "turn_id": "turn_20261123010151045847",
+      "diagnostic_category": "cloud_connect_timeout",
+      "recorded_termination_reason": "model_error"
+    }
+  ]
+}
