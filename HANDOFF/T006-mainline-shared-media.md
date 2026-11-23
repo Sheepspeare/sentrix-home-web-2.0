@@ -2,7 +2,9 @@
 
 ## 当前状态
 
-2026-11-23豆包161题授权补做、评分和完整在线trace/SFT导出均已验收，重新统计完成。7bba84共1013项/964有效分，新增112分；原852答卷及评分、源run/seed/失败历史保持。40model_error/9timeout保留空分，无待Judge，不再Agent/Judge/导出。有效覆盖95.1629%、有效均分74.9100%，缺分按0的离线全1013均分71.2865%；原正式空分保持。
+2026-11-23用户新授权剩余49题再补跑一次，覆盖这些QA旧“不再Agent”约束。新审计audit/20261123-doubao-supplement49，独立seed继承7bba84的964答卷/964有效回执（222真0），仅执行29连接超时/17时限/3上下文题，每题提交一个新产品turn；首inspect/seed/resume已消费。业务代码和预算保持，空索引/超大工具输出/时限分类未修，不能称修复后验证。服务在09:58主机重启后恢复为8294PID11871/8874PID1588；实际目录/选定SHA/独立库及预算通过，本轮无业务部署重启。新wake4b4de38e先注册，再单次seed/resume；旧run/导出/比较及原失败保持。
+
+2026-11-23豆包161题授权补做、评分和完整在线trace/SFT导出均已验收，重新统计完成。7bba84共1013项/964有效分，新增112分；原852答卷及评分、源run/seed/失败历史保持。40model_error/9timeout保留空分，无待Judge，不再Agent/Judge/导出。有效覆盖95.1629%、有效均分74.9100%，缺分按0的离线全1013均分71.2865%；原正式空分保持。以下为49题再次补跑前的已验基线。
 
 49失败已只读细分：29云端ConnectTimeout、17一小时时限（8个误记model_error）、3上下文超限。17题均见空向量索引降为sqlite_exact，搜索累计49–57分钟；两题asset_group输出320431字符。归因报告见补做审计failure49-review.md，评分与服务保持。
 
@@ -12,7 +14,13 @@ f3e08d83导出回调已处理，1013逐题合同通过，完整trace46,754,257�
 
 实验条件为历史豆包媒体记忆复用+新版邮件增量；161题授权补做。8294PID12370/独立库/18107真实豆包/16K、100-600-100-500/QA4-3660/reasoning-graph/冻结ATM v5及豆包Judge保持。14turn多次内部认领的真实代次保留；具体依赖/租约原因未唯一确认。慢写及网卡断链后重启原因仍未唯一确认。Q4源18/当前14隔离及产品model_error已有自动0、唯一Judge failed/null保持。运行器原阶段摘要87失败/955 Judge与逐题统计不一致已在新报告注明，原记录不改写。
 
-本轮已完成用户授权范围。后续读取新比较报告和补做审计的terminal-acceptance、exports-acceptance/复核、attempt-review及主实验state/checkpoint-watchers。不重放已消费的比较/导出/恢复/评分/压缩操作；不改网络、8772/8191/153或其他服务器，不启Hard/16题包。只读取证曾先传后提交的顺序错误及修正AST一致性证据保留在attempt-review-sync-sequence-note，未重执行或修改答卷。
+上一轮161题已完成用户授权范围；本轮49题以新审计和新wake接续。后续读取新比较报告和补做审计的terminal-acceptance、exports-acceptance/复核、attempt-review及主实验state/checkpoint-watchers。不重放已消费的比较/导出/恢复/评分/压缩操作；不改网络、8772/8191/153或其他服务器，不启Hard/16题包。只读取证曾先传后提交的顺序错误及修正AST一致性证据保留在attempt-review-sync-sequence-note，未重执行或修改答卷。
+
+## 2026-11-23 13:31｜剩余49题再次授权补跑启动
+
+已于2026-11-23 13:30提交新run `20261123-133037-2026.11.17-atm-sources-addresses-current-resume-fc11be`，继承964项/964分，retried_qa_ids为空（目标从新seed缺项执行）。首探worker存活、4新产品turn运行；旧答卷/分及源manifest、新seed保持。watcher40207，wait `4b4de38e-882d-45e0-a2f4-dcda3c736b29`。实际freeze8294PID11871/8874PID1588、16K/100-600-100-500/QA4-3660保持。seed写入27.154秒，既有慢写峰值根因仍未确认。计划/seed/resume均已单次消费，后续只读probe和终态验收。
+
+终态按49精确QA核新旧turn与实际状态、原964内容/评分和源manifest；内部认领次数单独记录，不假设均为attempt1。现成答卷缺Judge仅Judge另先wake；之后新run双流验收及新统计，保留964分/962共同题报告。不再自动追加Agent。新脚本本机验证提交605c94f2→同步100新v2核四文件SHA/语法→push；首v1仅连通预检错比alias/canonical已保留，无seed或Agent。
 
 ## 2026-11-23 09:30｜豆包补做导出验收与962共同题比较完成
 
