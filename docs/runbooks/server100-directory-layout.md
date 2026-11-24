@@ -43,3 +43,5 @@ PhotoBench default实例原68个散落文件已按scripts/logs/artifacts/audit/i
 最终142563份身份中142547完全不变、16项已解释、无未知差异；跨分区两批checksum无差异。38份split-commit保持原inode/大小/mtime，并记录当前SHA；未采集迁移前SHA。8872/8874的349源码和三份静态页面SHA一致，三测评空闲、三产品live健康。
 
 最终验收与当前状态见产品项目`audit/20261124-server100-directory-layout/README.md`及T006。不要只按本文推断迁移已执行。
+
+2026-11-24后续静态更新：8872/8874前端导出筛选已发布61e4f1ee产物，ATM显示0–1量表；后端仍56ea57aa+100-main-merge，无重启。静态发布回执在`xy/deploy/20261124-export-score-scale/61e4f1ee/`。旧hash资源保留供已打开页面加载，前端当前文件以该回执为准。

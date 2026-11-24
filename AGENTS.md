@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/24 ATM导出筛选标签61e4f1ee已静态发布1008872/8874：按0–1量表显示零分/部分得分/满分，原分及分组接口保持；115后端/50前端、构建与在线SHA/真实页面通过，无重启。见产品项目audit/20261124-export-score-scale及T006。
+
 - 11/24 100目录已统一至`xy/benchmarks/{atm-bench,photobench}`，实验/脚本/日志分类、旧路径兼容及文档已更新；文件校验和六服务入口通过。8294/8874已恢复，原WeMM8102为恢复依赖已启用，无正式测评；见`docs/runbooks/server100-directory-layout.md`及产品项目audit/20261124-server100-directory-layout，接T006。
 
 - 11/24 17:00只读核1008872/8874均运行56ea57aa（含团队最新main8c209ebc及后续8提交），349源码与在线静态SHA匹配；无需重发/重启，关联产品后端仍独立旧部署。见产品项目audit/20261124-100-main-version-check及T006。
@@ -37,4 +39,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-24 | 100目录统一分类已验，维护路径/服务恢复及历史保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-24 | ATM导出量表标签已上线；目录统一/服务与原分保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-24｜ATM导出筛选量表修复
+
+2026-11-24，ATM导出筛选量表显示修复61e4f1ee已本机提交并静态发布1008872/8874。已核真实逻辑：profile_state保留ATM judge.score原分/max_score=1；judge_bucket_for_summary内部将零分/中间分/满分分为0/1/2组，未将导出原分改成2分。旧RunDetail给scoreChoices传入不含count的临时summary，函数返回开放式0/1/2旧标签，导致ATM界面误标。
+
+现ATM下拉为“ATM-Bench QS（0–1）”，三组“零分（0）／部分得分（0<QS<1）／满分（1）”；开放式保持0/1/2。移除重复“导出轨迹”标签，字段简化为“评分标准／得分”。分组接口值保持0/1/2，满分组仍传scores=2；这是组编号，导出judge.score/max_score保持真实量表。选择的标准与批次随两种导出URL传递。
+
+后端115项通过，新增6组ATM连续分0/.25/.5/.75/1与开放式0/1/2导出测试，核轨迹/SFT、普通/流式合同、小数原分、满分、选定批次及源数据不变；前端50项通过，包含标签切换、分组回传、两导出所选标准/批次URL。TypeScript与生产构建通过，原大chunk提示保留。
+
+本次仅更新共享web-dist构建产物，HTML最后原子替换，旧hash资源保留；两HTTP端三文件SHA一致，浏览器已打开原Q4真实任务核验ATM标签。发布目录`/home/realmagic/xy/deploy/20261124-export-score-scale/61e4f1ee`。服务PID全部保持、无重启、无Agent/Judge/正式测评，后端仍56ea57aa+100-main-merge。后续维护需区分该后端基线与本次前端61e4f1ee产物，不按旧release/web/src副本推断线上界面。原评分/GT/历史不变。证据见产品项目`audit/20261124-export-score-scale/README.md`，publish已消费不可重放。
+
 ## 2026-11-24 17:25｜100目录统一整理并验收
 
 2026-11-24 17:25，100目录整理验收通过。稳定总根为`/home/realmagic/xy/benchmarks/`，下分`atm-bench/`与`photobench/`；ATM顶层去日期，实验按releases/operations/state/scripts/logs/artifacts/cache分类，8872结果在`atm-bench/results/`，8874结果在`atm-bench/results-cloud/`。8294当前库在`atm-bench/instances/doubao/product-data/`，旧云端完整环境在`instances/doubao-legacy/`；源题包在`datasets/sources/`，PhotoBench原8191/8772实例在`photobench/instances/default/`。用户根20份日志/脚本归`/home/realmagic/maintenance/`，旧部署归`xy/archive/deploy/`。旧绝对路径保留符号链接/隐藏映射，禁止删除；文档中的维护路径已更新，冻结原始证据仍保留原文。
