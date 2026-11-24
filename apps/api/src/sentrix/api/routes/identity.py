@@ -19,7 +19,7 @@ import hashlib
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
@@ -66,9 +66,9 @@ from sentrix.api.schemas.identity import (
     SeedIdentityResponse,
     SplitClusterRequest,
 )
+from sentrix.application.identity.appearance_sampling import QueueAppearance
 from sentrix.application.identity.merge_people import MergePeople
 from sentrix.application.identity.name_person import NamePerson
-from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.read_entity_detail import EntityDetail, ReadEntityDetail
 from sentrix.application.identity.read_entity_groups import (
     EntityGroup,
@@ -83,10 +83,12 @@ from sentrix.application.identity.seed_identity import (
     SeedPhoto,
 )
 from sentrix.application.memories.assign_events import ConfirmedPersonEvents, EventVisualSimilarity
+from sentrix.application.memories.sync_corrections import wake_correction_sync
 from sentrix.bootstrap.container import Container
 from sentrix.bootstrap.import_wiring import refresh_memory_graph
 from sentrix.domain.identity.decoration import is_reviewable, is_single_sample, private_place
 from sentrix.domain.identity.models import (
+    ALIAS_PROPERTY_KEY,
     CLUSTER_SAMPLES_LIMIT,
     CLUSTER_STATUS_PENDING,
     CLUSTER_STATUS_REJECTED,
@@ -154,15 +156,10 @@ def _confirmed_person_events(container: Container) -> ConfirmedPersonEvents:
     )
 
 
-def _observe_appearance(container: Container) -> ObserveAppearance:
-    return ObserveAppearance(
-        faces=container.face_repository,
-        entities=container.entity_repository,
-        observations=container.observation_repository,
-        appearances=container.appearance_repository,
-        crops=container.person_crop_renderer,
-        vision=container.person_vision,
-    )
+def _request_appearance(container: Container) -> QueueAppearance:
+    """确认 / 合并之后的外观取样只入队：每个事件一次视觉模型调用（约 10 秒），
+    由 ``AppearanceSamplingExecutor`` 在请求之外跑（2026-11-20）。"""
+    return QueueAppearance(container.person_appearance_jobs)
 
 
 def _review_cluster(container: Container) -> ReviewCluster:
@@ -171,7 +168,7 @@ def _review_cluster(container: Container) -> ReviewCluster:
         entities=container.entity_repository,
         facts=container.fact_repository,
         events=_confirmed_person_events(container),
-        appearance=_observe_appearance(container),
+        appearance=_request_appearance(container),
     )
 
 
@@ -180,6 +177,7 @@ def _name_person(container: Container) -> NamePerson:
         faces=container.face_repository,
         entities=container.entity_repository,
         review=_review_cluster(container),
+        corrections=container.memory_corrections,
     )
 
 
@@ -189,7 +187,7 @@ def _merge_people(container: Container) -> MergePeople:
         faces=container.face_repository,
         merges=container.person_merge_repository,
         events=_confirmed_person_events(container),
-        appearance=_observe_appearance(container),
+        appearance=_request_appearance(container),
     )
 
 
@@ -665,7 +663,6 @@ def _property_payload(record: EntityPropertyRecord) -> EntityPropertyPayload:
 
 
 @router.put("/entities/{entity_id}/properties/{property_key}")
-@memory_write("entity", "entity_id")
 def set_entity_property(
     entity_id: str,
     property_key: str,
@@ -683,6 +680,24 @@ def set_entity_property(
     写成属性的这条路**会顶掉派生值**（这是它存在的意义），所以它归 ``set_property``
     而不归 ``maintain_property``；两条路的差别在 ``EntityRepository`` 的 docstring 里。
     """
+    if property_key.strip() != ALIAS_PROPERTY_KEY:
+        return cast(
+            EntityPropertyPayload, _write_entity_property(entity_id, property_key, payload, container)
+        )
+    try:
+        written, job_id = container.memory_corrections.save_aliases(
+            entity_id, payload.value, payload.evidence_ids or []
+        )
+    except KeyError as error:
+        raise NotFoundError("entity not found") from error
+    wake_correction_sync()
+    return _property_payload(written).model_copy(update={"sync_status": "pending", "sync_job_id": job_id})
+
+
+@memory_write("entity", "entity_id")
+def _write_entity_property(
+    entity_id: str, property_key: str, payload: EntityPropertyRequest, container: Container
+) -> EntityPropertyPayload:
     try:
         written = container.entity_repository.set_property(
             entity_id, property_key, payload.value, evidence_ids=payload.evidence_ids or []
@@ -837,7 +852,6 @@ def get_person(person_id: str, container: Container = Depends(get_container)) ->
 
 
 @router.patch("/people/{person_id}/name")
-@memory_write("entity", "person_id")
 def rename_person(
     person_id: str,
     payload: RenamePersonRequest,
@@ -846,8 +860,13 @@ def rename_person(
     result = _name_person(container).rename(person_id, payload.name)
     if result is None:
         raise NotFoundError("person not found")
+    if result.sync_job_id:
+        wake_correction_sync()
     return RenamePersonResponse(
-        entity=_person_payload(container, result.entity), aliases=list(result.aliases)
+        entity=_person_payload(container, result.entity),
+        aliases=list(result.aliases),
+        sync_status="pending" if result.sync_job_id else "synced",
+        sync_job_id=result.sync_job_id or None,
     )
 
 
@@ -859,10 +878,14 @@ def batch_confirm_people(
     use_case = _name_person(container)
     confirmed: list[BatchConfirmOutcome] = []
     failed: list[BatchConfirmFailure] = []
-    scopes: set[str] = set()
     for item in payload.items:
         try:
-            result = use_case.confirm_entity(item.person_id, name=item.name, family_role=item.family_role)
+            result = use_case.confirm_entity(
+                item.person_id,
+                name=item.name,
+                family_role=item.family_role,
+                merge_same_name=item.merge_same_name,
+            )
         except Exception as error:  # noqa: BLE001 — 逐件回执正是要把失败收进响应
             failed.append(
                 BatchConfirmFailure(person_id=item.person_id, name=item.name, error=str(error)[:200])
@@ -873,6 +896,8 @@ def batch_confirm_people(
                 BatchConfirmFailure(person_id=item.person_id, name=item.name, error="person not found")
             )
             continue
+        # 确认已经提交；记忆图（含因果判定）交给后台重建，不让用户在请求里等。
+        job_id = container.memory_corrections.enqueue_graph_sync(result.entity.scope_id, result.entity.id)
         confirmed.append(
             BatchConfirmOutcome(
                 person_id=item.person_id,
@@ -880,11 +905,11 @@ def batch_confirm_people(
                 name=item.name,
                 family_role=item.family_role,
                 merged=result.merged_into is not None,
+                sync_job_id=job_id,
             )
         )
-        scopes.add(result.entity.scope_id)
-    for scope_id in sorted(scopes):
-        refresh_memory_graph(container, scope_id)
+    if confirmed:
+        wake_correction_sync()
     return BatchConfirmResponse(confirmed=confirmed, failed=failed, count=len(confirmed))
 
 

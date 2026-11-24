@@ -296,6 +296,7 @@ class PersonRelationship:
     predicate: str
     other_name: str
     source: str
+    other_aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,3 +325,13 @@ class PersonProfile:
     membership_source: str = ""
     summary: str = ""
     relationships: tuple[PersonRelationship, ...] = ()
+    entity_id: str = ""
+    scope_id: str = ""
+    aliases: tuple[str, ...] = ()
+    family_role_label: str = ""
+    summary_source: str = ""
+    photo_portrait: str = ""
+
+
+class AmbiguousPersonName(ValueError):
+    """More than one confirmed person matches the provided name in this scope."""

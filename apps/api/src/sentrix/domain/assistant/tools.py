@@ -260,16 +260,17 @@ FINAL_ANSWER = ToolSpec(
 
 GET_PERSON_PROFILE = ToolSpec(
     name="get_person_profile",
-    brief="读取一位已确认人物的家庭归属、人物关系与画像。",
+    brief="查已确认人物的姓名、别名、归属和关系，可按需附有效画像。",
     description=(
-        "读取一位**已确认人物**的家庭归属、人物关系与已有画像。"
+        "读取一位**已确认人物**的姓名、别名、当前家庭归属与关系。"
         "关系来自家庭图谱，逐条标了来源（模型推断或用户确认）。"
+        "家庭角色标签不代表与某个具体人物的关系。问人物概述时可附当前有效的叙事画像。"
         "没有已记录的关系时 relationships 是空数组——那只表示这个人还没有关系数据，"
         "**不要**据此说查不到这个人。"
         "常去地点、行为规律、近期事件与语义声明尚未建立，问到时如实说明数据不足，不要编造。"
     ),
     parameters=_object_schema(
-        {"person": {"type": "string", "description": "人物名字，例如 妈妈、浦思航。"}},
+        {"person": {"type": "string", "description": "已确认人物的姓名或别名。"}},
         ["person"],
     ),
     satisfies=(EvidenceType.PERSON_PROFILE,),

@@ -25,6 +25,11 @@ import { AssistantPanel } from "./AssistantPanel";
 import "../../styles/assistant.css";
 import "./assistantDetail.css";
 
+function selectedConversation(scope: string): string | null {
+  try { return sessionStorage.getItem(`sentrix.assistant.conversation.${scope}`); }
+  catch { return null; }
+}
+
 export function AssistantPage() {
   const { scopeId } = useScope();
   // 旧链接可能把问题放在 `?q=`：只清掉参数，停在提问页，不自动重复提交。
@@ -47,6 +52,12 @@ export function AssistantPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const deletePending = useRef(false);
 
+  useEffect(() => {
+    if (activeId === null) return;
+    try { sessionStorage.setItem(`sentrix.assistant.conversation.${scopeId}`, activeId); }
+    catch { /* The current view still works without storage. */ }
+  }, [activeId, scopeId]);
+
   const reload = useCallback(async () => {
     try {
       const items = await listConversations(scopeId);
@@ -65,7 +76,8 @@ export function AssistantPage() {
     void reload().then(async (items) => {
       if (!alive) return;
       if (items.length > 0) {
-        setActiveId(items[0].id);
+        const previous = selectedConversation(scopeId);
+        setActiveId(items.find((item) => item.id === previous)?.id ?? items[0].id);
         return;
       }
       try {
@@ -269,6 +281,7 @@ export function AssistantPage() {
         </aside>
         <div className="assistant-main">
           <AssistantPanel
+            key={activeId}
             conversationId={activeId}
             scopeId={scopeId}
             initialQuestion=""

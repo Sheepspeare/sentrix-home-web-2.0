@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../shared/api/client", async (importOriginal) => {
@@ -16,11 +16,19 @@ vi.mock("../../../shared/api/client", async (importOriginal) => {
     batchConfirmPeople: vi.fn(),
     rejectFaceCluster: vi.fn().mockResolvedValue({ cluster_id: "cluster_1", rejected_entity_id: "person_1" }),
     renamePerson: vi.fn(),
+    setPersonHidden: vi.fn().mockResolvedValue(undefined),
+    mergePeople: vi.fn(async (id: string, sources: string[], name: string) => ({
+      entity: {
+        id, scope_id: "album1", canonical_name: name, status: "confirmed",
+        family_role: null, summary: "", confidence: 1, confirmed: true, aliases: [],
+      },
+      merged_person_ids: sources, moved_face_count: 1, moved_relationship_count: 0, dropped_relationship_count: 0,
+    })),
   };
 });
 
 import * as client from "../../../shared/api/client";
-import type { FamilyPerson } from "../../../shared/api/client";
+import type { FamilyPerson, FamilyRelationship } from "../../../shared/api/client";
 import { PersonDetail } from "./PersonDetail";
 
 describe("PersonDetail 建立关系的空间隔离", () => {
@@ -45,20 +53,29 @@ describe("PersonDetail 建立关系的空间隔离", () => {
 
   it("只提供同空间的其他人物，并用人物自己的空间创建关系", async () => {
     const onChanged = mount();
-    const target = screen.getByLabelText("对方");
-    expect(target.querySelector('option[value="person_1"]')).toBeNull();
-    expect(target.querySelector('option[value="other_scope"]')).toBeNull();
-    expect(target.querySelector('option[value="same_scope"]')).not.toBeNull();
+    const options = document.querySelector('[aria-label="对方"]') as HTMLElement;
+    expect(options.querySelector('[data-option-id="person_1"]')).toBeNull();
+    expect(options.querySelector('[data-option-id="other_scope"]')).toBeNull();
+    const target = options.querySelector('[data-option-id="same_scope"]') as HTMLElement;
+    expect(target).not.toBeNull();
 
-    fireEvent.change(target, { target: { value: "same_scope" } });
-    fireEvent.click(screen.getByRole("button", { name: "建立关系" }));
+    fireEvent.click(target);
+    // 「孩子 是 妈妈 的儿子」：反向有父亲/母亲两项，必须再选一次才能提交。
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "儿子" } });
+    const submit = screen.getByRole("button", { name: "建立关系" }) as HTMLButtonElement;
+    // 「儿子」的反向有父亲/母亲两种可能：反向称谓留空，给出点选。
+    expect((screen.getByLabelText("反向称谓") as HTMLInputElement).value).toBe("");
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "母亲" }));
+    expect(screen.getByText("将记录：孩子 是 妈妈 的儿子；妈妈 是 孩子 的母亲")).toBeTruthy();
+    fireEvent.click(submit);
 
     await waitFor(() => expect(client.putFamilyRelationship).toHaveBeenCalledWith({
       scopeId: "album1",
-      subjectEntityId: "person_1",
-      predicate: "父亲",
-      objectEntityId: "same_scope",
-      inversePredicate: "儿子",
+      subjectEntityId: "same_scope",
+      predicate: "儿子",
+      objectEntityId: "person_1",
+      inversePredicate: "母亲",
     }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
   });
@@ -83,6 +100,8 @@ function person(overrides: Partial<FamilyPerson> = {}): FamilyPerson {
     avatar_face_instance_id: null,
     appearance_count: 3,
     representative_media: [],
+    aliases: [],
+    hidden: false,
     status: "confirmed",
     ...overrides,
   };
@@ -116,7 +135,7 @@ describe("PersonDetail 人物记忆修正", () => {
 
     await waitFor(() => expect(client.renamePerson).toHaveBeenCalledWith("person_1", "妈妈2"));
     await waitFor(() => expect((screen.getByLabelText("姓名") as HTMLInputElement).value).toBe("妈妈2"));
-    expect(await screen.findByText("修改已保存，关联记忆、图谱与检索索引已同步。")).toBeTruthy();
+    expect(await screen.findByText("修改已保存，关联记忆已同步。")).toBeTruthy();
     expect(onChanged).toHaveBeenCalledOnce();
   });
 
@@ -130,13 +149,13 @@ describe("PersonDetail 人物记忆修正", () => {
     fireEvent.click(screen.getByRole("button", { name: "修正并同步关联记忆" }));
 
     await waitFor(() => expect(client.retryMemoryCorrections).toHaveBeenCalledWith("album1"));
-    expect(await screen.findByText("已按当前人物与关系信息同步关联记忆、图谱和检索索引。")).toBeTruthy();
+    expect(await screen.findByText("修改已保存，关联记忆已同步。")).toBeTruthy();
     expect(onChanged).toHaveBeenCalledOnce();
   });
 });
 
 describe("PersonDetail 别名编辑", () => {
-  it("从 GET /people/{id} 读别名，保存时写 entity_properties 的 aliases 键", async () => {
+  it("别名取自名录投影，保存时写 entity_properties 的 aliases 键", async () => {
     vi.mocked(client.getPerson).mockResolvedValue({
       entity: {
         id: "person_1",
@@ -155,8 +174,8 @@ describe("PersonDetail 别名编辑", () => {
 
     render(
       <PersonDetail
-        person={person()}
-        people={[person()]}
+        person={person({ aliases: ["小明", "阿明"] })}
+        people={[]}
         relationships={[]}
         onClose={() => undefined}
         onChanged={vi.fn().mockResolvedValue(undefined)}
@@ -201,8 +220,365 @@ describe("PersonDetail 别名编辑", () => {
     fireEvent.click(await screen.findByRole("button", { name: "保存别名" }));
     const notice = await screen.findByRole("status");
     expect(notice.textContent).toContain("图谱暂不可用");
-    expect(notice.textContent).toContain("待同步");
+    expect(notice.textContent).toContain("同步失败");
     expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
+  });
+});
+
+describe("PersonDetail 别名编辑的取消与快捷键", () => {
+  async function openAliasEditor() {
+    vi.mocked(client.getPerson).mockResolvedValue({
+      entity: {
+        id: "person_1",
+        scope_id: "album1",
+        canonical_name: "妈妈",
+        status: "confirmed",
+        family_role: null,
+        summary: "",
+        confidence: 1,
+        confirmed: true,
+        aliases: ["阿娟"],
+      },
+      avatar_face_instance_id: null,
+      clusters: [],
+    });
+    render(
+      <PersonDetail
+        person={person({ aliases: ["阿娟"] })}
+        people={[]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "编辑别名" }));
+    const input = (await screen.findByLabelText("人物别名")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "阿娟、老妈" } });
+    return input;
+  }
+
+  it("点「取消」退出编辑，不保存；再打开时是原来的内容", async () => {
+    await openAliasEditor();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByLabelText("人物别名")).toBeNull();
+    expect(client.setEntityProperty).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "编辑别名" }));
+    expect(((await screen.findByLabelText("人物别名")) as HTMLInputElement).value).toBe("阿娟");
+  });
+
+  it("Esc 取消、Enter 保存", async () => {
+    let input = await openAliasEditor();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByLabelText("人物别名")).toBeNull();
+    expect(client.setEntityProperty).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑别名" }));
+    input = (await screen.findByLabelText("人物别名")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "阿娟、老妈" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(client.setEntityProperty).toHaveBeenCalledWith("person_1", "aliases", ["阿娟", "老妈"]),
+    );
+  });
+
+  it("输入法组字时按 Enter / Esc 交给输入法，不保存也不取消", async () => {
+    const input = await openAliasEditor();
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", keyCode: 229 });
+
+    expect(client.setEntityProperty).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("人物别名")).toBeTruthy();
+  });
+
+  it("改了姓名可以取消回原名；Esc 同样回原名", () => {
+    render(
+      <PersonDetail
+        person={person()}
+        people={[person()]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    const input = screen.getByLabelText("姓名") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "妈" } });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(input.value).toBe("妈妈");
+
+    fireEvent.change(input, { target: { value: "妈" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("妈妈");
+    expect(client.renamePerson).not.toHaveBeenCalled();
+  });
+});
+
+describe("PersonDetail 关系双向显示", () => {
+  const dad = () => person({ id: "dad", display_name: "爸爸" });
+  const son = () => person({ id: "son", display_name: "儿子" });
+  // 后端一条关系落两行：正行「爸爸 是 儿子 的父亲」+ 反行「儿子 是 爸爸 的儿子」。
+  const rows: FamilyRelationship[] = [
+    relationRow("dad", "父亲", "儿子", "son"),
+    relationRow("son", "儿子", "父亲", "dad"),
+  ];
+
+  function mountFor(self: FamilyPerson) {
+    render(
+      <PersonDetail
+        person={self}
+        people={[dad(), son()]}
+        relationships={rows}
+        onClose={() => undefined}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    return document.querySelector(".detail-relations") as HTMLElement;
+  }
+
+  it("在父亲的档案里，对方显示为儿子", () => {
+    expect(mountFor(dad()).textContent).toContain("儿子 是 爸爸 的儿子");
+  });
+
+  it("在儿子的档案里，对方显示为父亲（同一条关系，另一侧自动可见）", () => {
+    expect(mountFor(son()).textContent).toContain("爸爸 是 儿子 的父亲");
+  });
+
+  it("选中已有关系的人时提示将替换", () => {
+    mountFor(son());
+    fireEvent.click(document.querySelector('[data-option-id="dad"]') as Element);
+    expect(screen.getByText("将替换现有关系：爸爸 是 儿子 的父亲")).toBeTruthy();
+  });
+});
+
+describe("PersonDetail 自定义称谓", () => {
+  function mountPair() {
+    render(
+      <PersonDetail
+        person={person()}
+        people={[person(), person({ id: "colleague", display_name: "小李" })]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    fireEvent.click(document.querySelector('[data-option-id="colleague"]') as Element);
+  }
+
+  it("词表外的称谓照样能写，反向默认同一个词，也可以改", async () => {
+    mountPair();
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: " 同事 " } });
+    const reverse = screen.getByLabelText("反向称谓") as HTMLInputElement;
+    expect(reverse.value).toBe("同事");
+    fireEvent.change(reverse, { target: { value: "领导" } });
+    expect(screen.getByText("将记录：小李 是 妈妈 的同事；妈妈 是 小李 的领导")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "建立关系" }));
+
+    await waitFor(() =>
+      expect(client.putFamilyRelationship).toHaveBeenCalledWith({
+        scopeId: "album1",
+        subjectEntityId: "colleague",
+        predicate: "同事",
+        objectEntityId: "person_1",
+        inversePredicate: "领导",
+      }),
+    );
+  });
+
+  it("亲属表里只有一种反向时自动填上；改了正向称谓、反向没动过就跟着变", () => {
+    mountPair();
+    const role = screen.getByLabelText("关系称谓");
+    const reverse = screen.getByLabelText("反向称谓") as HTMLInputElement;
+    fireEvent.change(role, { target: { value: "丈夫" } });
+    expect(reverse.value).toBe("妻子");
+    fireEvent.change(role, { target: { value: "朋友" } });
+    expect(reverse.value).toBe("朋友");
+  });
+
+  it("超过 16 个字提示且不能提交", () => {
+    mountPair();
+    fireEvent.change(screen.getByLabelText("关系称谓"), { target: { value: "一二三四五六七八九十一二三四五六七" } });
+    expect(screen.getByRole("alert").textContent).toContain("称谓不能超过 16 个字");
+    expect((screen.getByRole("button", { name: "建立关系" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("PersonDetail 标为路人", () => {
+  it("待确认的人可以标为路人；已标的可以取消", async () => {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    const pending = person({ status: "pending", display_name: "未确认姓名人物" });
+    const { rerender } = render(
+      <PersonDetail
+        person={pending}
+        people={[pending]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={onChanged}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "标为路人" }));
+    await waitFor(() => expect(client.setPersonHidden).toHaveBeenCalledWith("person_1", true));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+
+    const hidden = { ...pending, hidden: true };
+    rerender(
+      <PersonDetail
+        person={hidden}
+        people={[hidden]}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={onChanged}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "取消路人标记" }));
+    await waitFor(() => expect(client.setPersonHidden).toHaveBeenCalledWith("person_1", false));
+  });
+});
+
+function relationRow(subject: string, predicate: string, inverse: string, object: string): FamilyRelationship {
+  return {
+    id: `r_${subject}_${object}`,
+    scope_id: "album1",
+    family_graph_id: null,
+    subject_entity_id: subject,
+    predicate,
+    object_entity_id: object,
+    inverse_predicate: inverse,
+    source: "user_override",
+    confidence: 1,
+    evidence_refs: [],
+    state: "active",
+    locked: true,
+    revision: 1,
+  } as FamilyRelationship;
+}
+
+describe("PersonDetail 改名撞名时询问是否合并（隐藏式合并）", () => {
+  const wangA = () => person({ id: "wang_a", display_name: "王王", appearance_count: 36 });
+  const other = () => person({ id: "other", display_name: "老王", appearance_count: 5, aliases: ["阿王"] });
+
+  function mountFor(self: FamilyPerson, everyone: FamilyPerson[]) {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    const onRedirect = vi.fn();
+    render(
+      <PersonDetail
+        person={self}
+        people={everyone}
+        relationships={[]}
+        onClose={() => undefined}
+        onChanged={onChanged}
+        onRedirect={onRedirect}
+      />,
+    );
+    return { onChanged, onRedirect };
+  }
+
+  function typeName(value: string) {
+    const input = screen.getByLabelText("姓名") as HTMLInputElement;
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("页面上没有任何合并按钮", () => {
+    mountFor(other(), [other(), wangA()]);
+    expect(screen.queryByRole("button", { name: /合并/ })).toBeNull();
+  });
+
+  it("改成别人的名字先问；「不是，只是同名」照常改名，不合并", async () => {
+    mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("已有一位「王王」，是同一个人吗？");
+    expect(client.renamePerson).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "不是，只是同名" }));
+
+    await waitFor(() => expect(client.renamePerson).toHaveBeenCalledWith("other", "王王"));
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("「是同一个人」合并，保留出现更多的那位，详情跟过去", async () => {
+    const { onRedirect } = mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "是同一个人，合并" }));
+
+    await waitFor(() => expect(client.mergePeople).toHaveBeenCalledWith("wang_a", ["other"], "王王"));
+    await waitFor(() => expect(onRedirect).toHaveBeenCalledWith("wang_a"));
+    expect(client.renamePerson).not.toHaveBeenCalled();
+  });
+
+  it("撞上的是别人的别名也会问，并说明是谁的别名", async () => {
+    mountFor(wangA(), [wangA(), other()]);
+    typeName("阿王");
+    expect((await screen.findByRole("dialog")).textContent).toContain("「阿王」是「老王」的别名");
+  });
+
+  it("确认身份撞上已确认的人：合并即完成确认，不再单独确认", async () => {
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    const { onRedirect } = mountFor(face, [face, wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "是同一个人，合并" }));
+
+    await waitFor(() => expect(client.mergePeople).toHaveBeenCalledWith("wang_a", ["face"], "王王"));
+    expect(client.batchConfirmPeople).not.toHaveBeenCalled();
+    await waitFor(() => expect(onRedirect).toHaveBeenCalledWith("wang_a"));
+  });
+
+  it("确认身份时答「只是同名」：告诉后端不要同名并入", async () => {
+    vi.mocked(client.batchConfirmPeople).mockResolvedValue({
+      confirmed: [{ person_id: "face", entity_id: "face", name: "王王", family_role: null, merged: false }],
+      failed: [],
+      count: 1,
+    });
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    mountFor(face, [face, wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "不是，只是同名" }));
+
+    await waitFor(() =>
+      expect(client.batchConfirmPeople).toHaveBeenCalledWith([
+        { person_id: "face", name: "王王", family_role: null, merge_same_name: false },
+      ]),
+    );
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("确认身份在路上：按钮写「确认中…」，姓名与家庭角色锁住，回来后放开", async () => {
+    let resolve: (value: Awaited<ReturnType<typeof client.batchConfirmPeople>>) => void = () => undefined;
+    vi.mocked(client.batchConfirmPeople).mockReturnValue(new Promise((done) => { resolve = done; }));
+    const face = person({ id: "face", status: "pending", display_name: "未确认姓名人物", appearance_count: 2 });
+    mountFor(face, [face]);
+    typeName("老周");
+
+    const submit = await screen.findByRole("button", { name: "确认中…" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("家庭角色") as HTMLSelectElement).disabled).toBe(true);
+
+    resolve({
+      confirmed: [{ person_id: "face", entity_id: "face", name: "老周", family_role: null, merged: false }],
+      failed: [],
+      count: 1,
+    });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "确认中…" })).toBeNull());
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("取消：什么都不写，名字框保留刚输入的内容", async () => {
+    mountFor(other(), [other(), wangA()]);
+    typeName("王王");
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect((screen.getByLabelText("姓名") as HTMLInputElement).value).toBe("王王");
+    expect(client.renamePerson).not.toHaveBeenCalled();
+    expect(client.mergePeople).not.toHaveBeenCalled();
+  });
+
+  it("只看同一相册：别的相册里的同名不算", () => {
+    const elsewhere = { ...wangA(), id: "far", scope_id: "album2" };
+    mountFor(other(), [other(), elsewhere]);
+    typeName("王王");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -243,7 +619,7 @@ describe("PersonDetail 待确认人物", () => {
 
     await waitFor(() =>
       expect(client.batchConfirmPeople).toHaveBeenCalledWith([
-        { person_id: "person_1", name: "王王", family_role: "孩子" },
+        { person_id: "person_1", name: "王王", family_role: "孩子", merge_same_name: false },
       ]),
     );
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());

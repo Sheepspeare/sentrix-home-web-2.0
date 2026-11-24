@@ -11,16 +11,25 @@
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from sentrix.api.routes import corrections as correction_routes
+from sentrix.application.identity.observe_appearance import ObserveAppearance
 from sentrix.application.identity.person_directory import EntityPersonDirectory
+from sentrix.application.memories.sync_corrections import SyncCorrections
+from sentrix.bootstrap.assistant_wiring import build_run_turn
+from sentrix.domain.assistant.evidence_binding import BindingVerdict, bind_requirements, facts_from_state
+from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement, EvidenceType, RequirementValueType
+from sentrix.domain.assistant.models import AmbiguousPersonName
+from sentrix.domain.assistant.profile import DEFAULT_PROFILE
+from sentrix.domain.assistant.task_state import TaskState, ToolCallRecord
 from sentrix.domain.identity.models import PENDING_CLUSTER_NAME
 
 NOW = "2026-09-23T10:00:00+00:00"
@@ -279,6 +288,46 @@ def test_confirming_with_an_existing_name_merges_into_that_person(identity_clien
     assert response.json()["entity"]["id"] == "ent_known"
 
 
+def _two_people_named_mom(identity_client: TestClient) -> None:
+    add_entity(identity_client, "ent_known", name="妈妈", status="confirmed", family_role="母亲")
+    add_cluster(identity_client, "cluster_known", status="confirmed", entity_id="ent_known", member_count=1)
+    add_instance(identity_client, "face_known", cluster_id="cluster_known")
+    add_entity(identity_client, "ent_new", name="待确认人物簇 · cluster_new")
+    add_cluster(identity_client, "cluster_new", entity_id="ent_new", member_count=1)
+    add_instance(identity_client, "face_new", cluster_id="cluster_new")
+
+
+def test_batch_confirm_still_merges_a_same_name_person_by_default(identity_client: TestClient):
+    """不带 ``merge_same_name`` 的旧调用方行为不变：同名即并入。"""
+    _two_people_named_mom(identity_client)
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm", json={"items": [{"person_id": "ent_new", "name": "妈妈"}]}
+    )
+
+    outcome = response.json()["confirmed"][0]
+    assert outcome["entity_id"] == "ent_known"
+    assert outcome["merged"] is True
+
+
+def test_batch_confirm_keeps_a_namesake_apart_when_the_user_says_they_differ(identity_client: TestClient):
+    """用户答了「不是同一个人，只是同名」：照常确认成独立的人，两个「妈妈」并存。"""
+    _two_people_named_mom(identity_client)
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm",
+        json={"items": [{"person_id": "ent_new", "name": "妈妈", "merge_same_name": False}]},
+    )
+
+    outcome = response.json()["confirmed"][0]
+    assert outcome["entity_id"] == "ent_new"
+    assert outcome["merged"] is False
+    people = {item["id"]: item for item in identity_client.get("/api/v1/people").json()["people"]}
+    assert people["ent_new"]["canonical_name"] == "妈妈"
+    assert people["ent_new"]["status"] == "confirmed"
+    assert people["ent_known"]["status"] == "confirmed"
+
+
 # ---- 拒绝 / 合并 / 拆分 -----------------------------------------------------------
 
 
@@ -493,23 +542,65 @@ def test_rename_folds_the_old_name_into_aliases(identity_client: TestClient):
     assert "sync_error" in response.json()
 
 
-def test_rename_reports_pending_when_derived_sync_fails(
-    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
-):
+def test_saved_name_survives_graph_failure_and_retry(identity_client: TestClient):
     add_entity(identity_client, "ent_1", name="妈妈", status="confirmed")
+    jobs = identity_client.app.state.container.memory_corrections
+    completed: list[str] = []
 
-    class FailedSync:
-        @staticmethod
-        def execute(_scope: str) -> str:
-            return "图谱暂不可用"
+    def graph(scope: str) -> None:
+        if not completed:
+            raise RuntimeError("图谱暂不可用")
 
-    monkeypatch.setattr(correction_routes, "synchronizer", lambda _container: FailedSync())
+    sync = SyncCorrections(jobs, lambda _scope: pytest.fail("unchanged text must not be embedded"), graph)
     response = identity_client.patch("/api/v1/people/ent_1/name", json={"name": "母亲"})
-
     assert response.status_code == 200
-    assert response.json()["entity"]["canonical_name"] == "母亲"
-    assert response.json()["sync_status"] == "pending"
-    assert response.json()["sync_error"] == "图谱暂不可用"
+    edit = response.json()
+    assert edit["sync_status"] == "pending"
+    assert edit["sync_error"] == ""
+    status_url = "/api/v1/memories/corrections/name-sync?entity_id=ent_1"
+    assert identity_client.get(status_url).json() == {
+        "id": edit["sync_job_id"],
+        "status": "pending",
+        "error": "",
+    }
+
+    assert sync.execute_next_name_batch()
+    failed = identity_client.get(status_url).json()
+    assert failed["status"] == "pending"
+    assert "同步失败" in failed["error"]
+    assert not sync.execute_next_name_batch()
+    assert identity_client.get("/api/v1/people/ent_1").json()["entity"]["canonical_name"] == "母亲"
+    for _ in range(2):
+        with _db(identity_client).connect() as conn, conn:
+            conn.execute(
+                "UPDATE memory_corrections SET next_attempt_at='' WHERE id=?", (edit["sync_job_id"],)
+            )
+        assert sync.execute_next_name_batch()
+    assert identity_client.get(status_url).json()["status"] == "failed"
+
+    retried = identity_client.post(f"/api/v1/memories/corrections/name-sync/{edit['sync_job_id']}/retry")
+    assert retried.status_code == 202
+    completed.append(HOME)
+    assert sync.execute_next_name_batch()
+    assert identity_client.get(status_url).json()["status"] == "synced"
+
+
+@pytest.mark.parametrize("edit", ["name", "aliases"])
+def test_name_and_alias_edits_roll_back_if_the_durable_job_cannot_be_saved(identity_client: TestClient, edit):
+    add_entity(identity_client, "ent_1", name="妈妈", status="confirmed")
+    with _db(identity_client).connect() as conn, conn:
+        conn.execute(
+            "CREATE TRIGGER fail_name_sync BEFORE INSERT ON memory_corrections "
+            "BEGIN SELECT RAISE(ABORT, 'job insert failed'); END"
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="job insert failed"):
+        if edit == "name":
+            identity_client.patch("/api/v1/people/ent_1/name", json={"name": "母亲"})
+        else:
+            identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["小名"]})
+    person = identity_client.get("/api/v1/people/ent_1").json()["entity"]
+    assert person["canonical_name"] == "妈妈"
+    assert person["aliases"] == []
 
 
 def test_rename_with_a_blank_name_is_400(identity_client: TestClient):
@@ -562,6 +653,7 @@ def test_batch_confirm_reports_each_item_and_keeps_going(identity_client: TestCl
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
+    job_id = body["confirmed"][0].pop("sync_job_id")
     assert body["confirmed"] == [
         {
             "person_id": "ent_ok",
@@ -572,6 +664,55 @@ def test_batch_confirm_reports_each_item_and_keeps_going(identity_client: TestCl
         }
     ]
     assert body["failed"] == [{"person_id": "ent_missing", "name": "爸爸", "error": "person not found"}]
+    # 记忆图不在请求里重建：确认只排一条后台任务，进度按任务 id 查。
+    job = identity_client.get(f"/api/v1/memories/corrections/jobs/{job_id}")
+    assert job.json() == {"id": job_id, "status": "pending", "error": ""}
+
+
+def _forbid_appearance_in_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """外观取样（每个事件一次视觉模型调用）不许在请求里跑：一跑就炸。"""
+
+    def boom(self: ObserveAppearance, person_id: str) -> int:
+        raise AssertionError("外观取样不该在请求里跑")
+
+    monkeypatch.setattr(ObserveAppearance, "__call__", boom)
+
+
+def test_batch_confirm_queues_appearance_sampling_instead_of_running_it(
+    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """2026-11-20：确认一个出现在 16 个事件里的人，请求里串行调 18 次视觉模型、196 秒。"""
+    _forbid_appearance_in_request(monkeypatch)
+    add_entity(identity_client, "ent_ok", name="待确认人物簇 · cluster_1")
+    add_cluster(identity_client, "cluster_ok", entity_id="ent_ok", member_count=1)
+    add_instance(identity_client, "face_ok", cluster_id="cluster_ok")
+
+    response = identity_client.post(
+        "/api/v1/people/batch-confirm", json={"items": [{"person_id": "ent_ok", "name": "妈妈"}]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert identity_client.app.state.container.person_appearance_jobs.status("ent_ok") == "pending"
+
+
+def test_merging_people_queues_appearance_sampling_instead_of_running_it(
+    identity_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    _forbid_appearance_in_request(monkeypatch)
+    add_entity(identity_client, "ent_a", name="妈妈", status="confirmed")
+    add_entity(identity_client, "ent_b", name="母亲", status="confirmed")
+    add_cluster(identity_client, "cluster_a", status="confirmed", entity_id="ent_a", member_count=1)
+    add_cluster(identity_client, "cluster_b", status="confirmed", entity_id="ent_b", member_count=1)
+    add_instance(identity_client, "face_a", cluster_id="cluster_a")
+    add_instance(identity_client, "face_b", cluster_id="cluster_b")
+
+    response = identity_client.post(
+        "/api/v1/people/merge", json={"target_person_id": "ent_a", "source_person_ids": ["ent_b"]}
+    )
+
+    assert response.status_code == 200
+    assert identity_client.app.state.container.person_appearance_jobs.status("ent_a") == "pending"
 
 
 def test_batch_confirm_with_no_items_is_422(identity_client: TestClient):
@@ -618,14 +759,19 @@ def test_the_directory_reports_membership_portrait_and_relationships(identity_cl
     add_entity(identity_client, "ent_mom", name="妈妈", status="confirmed")
     family = identity_client.app.state.container.family_graph_repository
     family.set_membership(HOME, "ent_mom", "family", source="user_override")
-    family.write_portrait(HOME, "ent_mom", "家庭归属：family；近期记忆：一起在公园野餐。", source="model")
-
-    profile = identity_client.app.state.container.person_directory.lookup("妈妈", HOME)
+    family.write_portrait(HOME, "ent_mom", "一起在公园野餐。", source="user_override")
+    directory = identity_client.app.state.container.person_directory
+    profile = directory.lookup("妈妈", HOME, include_portrait=True)
 
     assert profile is not None
     assert profile.membership == "family"
     assert profile.membership_source == "user_override"
-    assert profile.summary == "家庭归属：family；近期记忆：一起在公园野餐。"
+    assert profile.summary == "一起在公园野餐。"
+    assert directory.lookup("妈妈", HOME).summary == ""
+    family.set_membership(HOME, "ent_mom", "friend", source="user_override")
+    updated = directory.lookup("妈妈", HOME, include_portrait=True)
+    assert updated.membership == "friend"
+    assert updated.summary == ""
 
 
 def test_a_relationship_appears_on_both_ends_with_its_own_predicate(identity_client: TestClient):
@@ -1457,3 +1603,267 @@ def test_the_detail_properties_split_current_from_history(identity_client: TestC
 
     assert body["properties"] == []
     assert [item["id"] for item in body["property_history"]] == ["prop_old"]
+
+
+def _turns_run_in_this_thread(client: TestClient):
+    """建回合的路由（main a5daf519 起）会立刻起工作线程认领并跑回合。下面几条用例要在
+    本线程里用 ``build_run_turn`` 跑、拿 ``TurnResult`` 断言，所以按体验模式关掉路由的
+    即时派发——与 ``test_assistant_routes`` 的同一手法；只换容器，请求门禁读的是
+    ``app.state.settings``，不受影响。"""
+    container = client.app.state.container
+    client.app.state.container = dataclasses.replace(
+        container, settings=container.settings.model_copy(update={"experience_mode": True})
+    )
+    return client.app.state.container
+
+
+def test_assistant_resolves_both_names_to_one_person_and_delivers_only_linked_photos(
+    identity_client: TestClient, tmp_path: Path
+):
+    add_entity(identity_client, "ent_1", name="力霸天", status="confirmed")
+    add_entity(identity_client, "ent_2", name="小李", status="confirmed")
+    add_entity(identity_client, "ent_hidden", name="天天", status="confirmed", scope_id=HIDDEN)
+    photo = tmp_path / "person.jpg"
+    photo.write_bytes(b"fixture image")
+    with _db(identity_client).connect() as conn, conn:
+        conn.execute("UPDATE assets SET path=?,status='processed' WHERE id='asset_1'", (str(photo),))
+        conn.execute(
+            "INSERT INTO entity_mentions (id,entity_id,observation_id,created_at)"
+            " VALUES('m','ent_1','obs_1',?)",
+            (NOW,),
+        )
+    edit = identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["天天"]})
+    assert edit.status_code == 200 and edit.json()["sync_status"] == "pending"
+    container = _turns_run_in_this_thread(identity_client)
+    family = container.family_graph_repository
+    family.write_portrait(HOME, "ent_1", '家庭归属：unknown；近期记忆：{"objects":["矮马"]}', source="model")
+    family.set_membership(HOME, "ent_1", "family", source="user_override")
+    family.set_relationship(HOME, "ent_1", "儿子", "ent_2", "父亲", source="user_override")
+    runner = build_run_turn(container)
+    conv = identity_client.post("/api/v1/assistant/conversations", json={"scope_id": ""}).json()
+    for name in ("力霸天", "天天"):
+        profile = container.person_directory.lookup(name, "")
+        assert profile is not None and (profile.entity_id, profile.scope_id) == ("ent_1", HOME)
+        start = identity_client.post(
+            f"/api/v1/assistant/conversations/{conv['id']}/turns", json={"message": f"{name}是谁？"}
+        )
+        assert start.status_code == 202
+        turn_id = start.json()["turn_id"]
+        runner.run(turn_id)
+        response = identity_client.get(f"/api/v1/assistant/turns/{turn_id}").json()
+        assert response["status"] == "complete"
+        answer = response["result"]["answer"]
+        assert "力霸天" in answer and "家人" in answer and "「小李」的儿子" in answer
+        assert "unknown" not in answer and "objects" not in answer
+        assert [item["asset_id"] for item in response["result"]["attachments"]] == ["asset_1"]
+        trace = container.turn_repository.get(turn_id).trace
+        assert trace["retrieval_observations"]["complete"] is True
+        assert trace["retrieval_observations"]["asset_ids"] == ["asset_1"]
+        assert trace["evidence_ledger"]["bindings"][0]["verdict"] == "satisfies"
+        for scope in ("", HOME):
+            search = identity_client.get(
+                "/api/v1/search", params={"q": name, "person": name, "scope_id": scope}
+            )
+            assert search.status_code == 200
+            assert [item["asset"]["id"] for item in search.json()["items"]] == ["asset_1"]
+
+    assert (
+        identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": []}).status_code
+        == 200
+    )
+    assert container.person_directory.lookup("天天", "") is None
+
+
+def test_ambiguous_alias_in_visible_albums_is_not_assigned_arbitrarily(identity_client: TestClient):
+    for entity_id, name in (("ent_1", "甲"), ("ent_2", "乙")):
+        add_entity(identity_client, entity_id, name=name, status="confirmed")
+        assert (
+            identity_client.put(
+                f"/api/v1/entities/{entity_id}/properties/aliases", json={"value": ["天天"]}
+            ).status_code
+            == 200
+        )
+    directory = identity_client.app.state.container.person_directory
+    with pytest.raises(AmbiguousPersonName):
+        directory.lookup("天天", "")
+    response = identity_client.get("/api/v1/search", params={"q": "天天", "person": "天天"})
+    assert response.status_code == 409
+    assert response.json() == {
+        "code": "conflict",
+        "message": "有多位已确认人物匹配这个姓名",
+        "detail": {},
+    }
+    assert "409" in identity_client.app.openapi()["paths"]["/api/v1/search"]["get"]["responses"]
+
+
+@pytest.mark.parametrize("alias_value", [["旧名"], "旧名", {"label": "旧名"}])
+def test_all_albums_uses_catalog_scope_and_alias_rules(identity_client: TestClient, alias_value):
+    add_entity(identity_client, "legacy", name="旧相册人物", status="confirmed", scope_id=FRESH)
+    assert (
+        identity_client.put(
+            "/api/v1/entities/legacy/properties/aliases", json={"value": alias_value}
+        ).status_code
+        == 200
+    )
+    directory = identity_client.app.state.container.person_directory
+    profile = directory.lookup("旧相册人物", "")
+    assert profile is not None and profile.scope_id == FRESH
+    if isinstance(alias_value, dict):
+        assert profile.aliases == () and directory.lookup("旧名", "") is None
+    else:
+        assert profile.aliases == ("旧名",) and directory.lookup("旧名", "") == profile
+
+
+def test_explicit_photo_request_has_gap_when_a_confirmed_person_has_no_photos(identity_client):
+    add_entity(identity_client, "ent_1", name="已确认的人", status="confirmed")
+    container = _turns_run_in_this_thread(identity_client)
+    runner = build_run_turn(container)
+    conversation = identity_client.post("/api/v1/assistant/conversations", json={"scope_id": ""}).json()
+    turn = identity_client.post(
+        f"/api/v1/assistant/conversations/{conversation['id']}/turns",
+        json={"message": "帮我找已确认的人的照片"},
+    ).json()["turn_id"]
+    result = runner.run(turn)
+    assert result.termination_reason.value == "answered_with_gap"
+    assert not result.attachments
+    stored = container.turn_repository.get(turn)
+    assert {item["evidence_type"] for item in stored.requirements} == {"photo_set", "delivered_photo"}
+    assert stored.trace["retrieval_observations"]["complete"] is True
+
+
+def test_compound_search_uses_confirmed_mentions_scope_and_date(identity_client, tmp_path):
+    add_entity(identity_client, "ent_1", name="甲", status="confirmed")
+    add_entity(identity_client, "ent_2", name="乙", status="confirmed")
+    assert (
+        identity_client.put("/api/v1/entities/ent_1/properties/aliases", json={"value": ["小甲"]}).status_code
+        == 200
+    )
+    container = identity_client.app.state.container
+    container.family_graph_repository.set_relationship(
+        HOME, "ent_1", "儿子", "ent_2", "父亲", source="user_override"
+    )
+    photo = tmp_path / "park.jpg"
+    photo.write_bytes(b"fixture photo")
+    with _db(identity_client).connect() as conn, conn:
+        conn.execute(
+            "UPDATE assets SET path=?,status='processed',captured_at=? WHERE id='asset_1'",
+            (str(photo), "2020-05-01T10:00:00Z"),
+        )
+        conn.execute("UPDATE observations SET caption='公园合照',place='公园' WHERE id='obs_1'")
+        for asset, date, scope in (
+            ("only_one", "2020-06-01T10:00:00Z", HOME),
+            ("out_of_date", "2022-06-01T10:00:00Z", HOME),
+        ):
+            conn.execute(
+                "INSERT INTO assets"
+                " (id,scope_id,file_name,media_type,path,status,captured_at,created_at,updated_at)"
+                " VALUES (?,?,?,'image',?,'processed',?,?,?)",
+                (asset, scope, f"{asset}.jpg", str(photo), date, NOW, NOW),
+            )
+            conn.execute(
+                "INSERT INTO observations"
+                " (id,scope_id,asset_id,source_type,caption,place,created_at,updated_at)"
+                " VALUES (?,?,?,'vlm','公园合照','公园',?,?)",
+                (asset, scope, asset, NOW, NOW),
+            )
+        for observation, person in (
+            ("obs_1", "ent_1"),
+            ("obs_1", "ent_2"),
+            ("only_one", "ent_1"),
+            ("out_of_date", "ent_1"),
+            ("out_of_date", "ent_2"),
+        ):
+            conn.execute(
+                "INSERT INTO entity_mentions (id,entity_id,observation_id,created_at) VALUES(?,?,?,?)",
+                (f"{observation}-{person}", person, observation, NOW),
+            )
+    toolbox = build_run_turn(container)._toolbox
+    now = datetime.now(UTC)
+    need = EvidenceRequirement(
+        "photos",
+        EvidenceType.PHOTO_SET,
+        "找两人的合照",
+        value_type=RequirementValueType.MEDIA_SET,
+        scope=(("person", "小甲、乙"), ("time", "2020年")),
+    )
+    output = toolbox.execute(
+        "search_memories",
+        {"query": "公园合照"},
+        scope_id="",
+        now=now,
+        question="找2020年小甲和乙在公园的合照",
+        requirements=(need,),
+    )
+    assert output.ok
+    assert output.observation["returned_asset_ids"] == ["asset_1"]
+    assert set(output.observation["people_by_asset"]["asset_1"]) == {"甲", "小甲", "乙"}
+    state = TaskState("turn", "conv", "", "说说小甲是谁", DEFAULT_PROFILE)
+    state.record(
+        ToolCallRecord(
+            "search",
+            "search_memories",
+            "search",
+            "ok",
+            observation=output.observation,
+            model_visible=output.model_visible,
+        )
+    )
+    assert bind_requirements([need], facts_from_state(state))[0].verdict is BindingVerdict.SATISFIES
+    # The same resolved alias also works on the ordinary profile-tool path.
+    profile = toolbox.execute("get_person_profile", {"person": "甲"}, scope_id="", now=now)
+    state.record(
+        ToolCallRecord(
+            "profile",
+            "get_person_profile",
+            "profile",
+            "ok",
+            observation=profile.observation,
+            model_visible=profile.model_visible,
+        )
+    )
+    identity = EvidenceRequirement(
+        "person",
+        EvidenceType.PERSON_PROFILE,
+        "读取档案",
+        value_type=RequirementValueType.PERSON,
+        scope=(("person", "小甲"),),
+    )
+    assert bind_requirements([identity], facts_from_state(state))[0].verdict is BindingVerdict.SATISFIES
+    pair = EvidenceRequirement(
+        "relation",
+        EvidenceType.PERSON_PROFILE,
+        "核对关系",
+        value_type=RequirementValueType.PERSON,
+        scope=(("person", "小甲和乙"),),
+    )
+    assert bind_requirements([pair], facts_from_state(state))[0].verdict is BindingVerdict.SATISFIES
+    count = toolbox.execute(
+        "query_memory_facts",
+        {
+            "operation": "count",
+            "subject": "person_appearance",
+            "filters": {"person": "甲", "media": "image"},
+        },
+        scope_id="",
+        now=now,
+    )
+    assert count.ok and count.model_visible["value"] == 3
+    assert count.model_visible["filters_applied"]["scope_id"] == HOME
+    state.record(
+        ToolCallRecord(
+            "count",
+            "query_memory_facts",
+            "count",
+            "ok",
+            observation=count.observation,
+            model_visible=count.model_visible,
+        )
+    )
+    total = EvidenceRequirement(
+        "count",
+        EvidenceType.STRUCTURED_FACT,
+        "统计照片",
+        value_type=RequirementValueType.COUNT,
+        scope=(("person", "小甲"),),
+    )
+    assert bind_requirements([total], facts_from_state(state))[0].verdict is BindingVerdict.SATISFIES

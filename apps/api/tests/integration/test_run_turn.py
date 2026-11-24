@@ -22,6 +22,7 @@ from sentrix.application.assistant.run_turn import (
     TurnRequest,
 )
 from sentrix.application.assistant.tools import ToolOutcome
+from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement
 from sentrix.domain.assistant.models import (
     Attachment,
     ChatMessage,
@@ -128,6 +129,7 @@ class StubToolbox:
         now: datetime,
         question: str = "",
         graph_enabled: bool = True,
+        requirements: Sequence[EvidenceRequirement] = (),
     ) -> ToolOutcome:
         # ``question`` 是 `inspect_photo` 要的（1.0 ``tools.py:2162-2165`` 拿它找裁剪目标）,
         # 与 ``__init__`` 那三件一样：**凡是 ``RunTurn`` 会传给真实 toolbox 的形参，
@@ -1234,7 +1236,9 @@ def test_an_unexpected_exception_still_produces_a_named_reason(env):
     """
 
     class Exploding(StubToolbox):
-        def execute(self, name, arguments, *, scope_id, now, question="", graph_enabled=True):  # type: ignore[override]
+        def execute(  # type: ignore[override]
+            self, name, arguments, *, scope_id, now, question="", graph_enabled=True, requirements=()
+        ):
             raise ValueError("工具内部炸了")
 
     _conversations, turns, conversation, _db = env
