@@ -1,0 +1,281 @@
+{
+  "default_files": [
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/pipeline_probe100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/pipeline_probe100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/vision_probe.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/vision_probe.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/acceptance-20261028.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/acceptance-20261028.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/verify100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/verify100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/manifests-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/manifests-response.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/backend-tests.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/backend-tests.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/finish_checks100.sh",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/finish_checks100.sh"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/acceptance-monitor.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/acceptance-monitor.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/build-stamp-recheck.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/build-stamp-recheck.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/prune_two.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/prune_two.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/sentrix2-photobench.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/sentrix2-photobench.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source.bundle",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/artifacts/source.bundle"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/web-install.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/web-install.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source153-finalize.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/source153-finalize.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/inspect_probe.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/inspect_probe.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/setup-model-migration.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/setup-model-migration.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/photobench-web-build.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/photobench-web-build.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit-model-migration.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/audit-model-migration.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/finalize100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/finalize100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/requirements.observed.txt",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/requirements.observed.txt"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/sentrix2-api.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/sentrix2-api.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source.sha256",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/artifacts/source.sha256"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/configure100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/configure100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/add_split_qa.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/add_split_qa.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/acceptance-latest.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/acceptance-latest.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/build100.sh",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/build100.sh"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/acceptance-final.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/acceptance-final.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/start_acceptance.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/start_acceptance.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source153-weight-sha-verification.txt",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/source153-weight-sha-verification.txt"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/pipeline-smoke-results.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/pipeline-smoke-results.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/runtime-config-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/runtime-config-response.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/verify_reuse.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/verify_reuse.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/synthetic-red.png",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/artifacts/synthetic-red.png"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/archive_smoke100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/archive_smoke100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/agent_smoke.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/agent_smoke.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/progress.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/progress.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/native_tool_smoke.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/native_tool_smoke.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/photobench-web-install.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/photobench-web-install.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/deployment-report.md",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/deployment-report.md"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/smoke-archive.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/smoke-archive.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/sentrix2-clip.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/sentrix2-clip.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/web-test.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/web-test.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/sentrix2-bge.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/sentrix2-bge.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/enable_tools.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/enable_tools.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/prepare100.sh",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/prepare100.sh"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/inventory_albums100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/inventory_albums100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/web-build.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/web-build.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/pipeline-probe.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/pipeline-probe.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/old-tracked-before.patch",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/old-tracked-before.patch"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/runtime.env",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/config/runtime.env"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/photobench-web-test.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/photobench-web-test.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/verify_current_profile.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/verify_current_profile.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/random662-register.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/random662-register.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/smoke-results.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/smoke-results.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/register_random662.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/register_random662.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/manifest.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/manifest.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source153-model-verification.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/source153-model-verification.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/model_probe100.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/model_probe100.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/register.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/register.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/check100.sh",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/check100.sh"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/old-status-before.txt",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/old-status-before.txt"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/source153-finalize.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/source153-finalize.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/expand_vision_context.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/expand_vision_context.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/architecture-tests.log",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/logs/architecture-tests.log"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/reuse-deploy-verification.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/reuse-deploy-verification.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/model-probe.json",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/audit/initial-deployment/model-probe.json"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/disable_awq_recovery.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/disable_awq_recovery.py"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/photobench/instances/default/monitor_acceptance.py",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default/scripts/monitor_acceptance.py"
+    }
+  ],
+  "default_old": "/home/realmagic/deployment_outputs/sentrix_github_update_20261027",
+  "default_new": "/home/realmagic/xy/benchmarks/photobench/instances/default",
+  "default_mirror": "/home/realmagic/xy/.legacy/photobench-default",
+  "dataset_old": "/var/tmp/sentrix-atm-sources-20261117",
+  "dataset_new": "/home/realmagic/xy/benchmarks/atm-bench/datasets/sources"
+}
