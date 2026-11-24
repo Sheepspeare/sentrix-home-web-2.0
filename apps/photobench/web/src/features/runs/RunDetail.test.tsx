@@ -33,6 +33,25 @@ it("切换运行和轮询更新时分析入口与记忆面板保持独立", () =
   }
 });
 
+it("建库轮询及切换任务、评分批次时诊断汇总只保留一份", () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const props = { exportScores: [], onExportScoresChange: vi.fn(),
+    onExportTraces: vi.fn(), onExportSftTraces: vi.fn(), rejudge: rejudgeProps() };
+  const view = render(<RunDetail {...props} activeRun={run({ mode: "build", status: "running" })} />);
+  try {
+    for (const [id, batch] of [["r1", ""], ["r2", ""], ["r2", ""], ["r1", ""],
+      ["r1", "batch1"], ["r1", "batch2"], ["r1", "batch2"], ["r2", ""]]) {
+      view.rerender(<RunDetail {...props} activeRun={run({ mode: "build", status: "running",
+        run_id: id, selected_scoring_profile: ATM_PROFILE, selected_scoring_batch: batch })} />);
+      expect(view.container.querySelectorAll(".process-diagnostics-overview")).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: "错误分析 展开" })).toHaveLength(1);
+    }
+    expect(errors.mock.calls.filter(args => args.some(value => String(value).includes("same key")))).toEqual([]);
+  } finally {
+    errors.mockRestore();
+  }
+});
+
 function run(overrides: Partial<Run> = {}): Run {
   return { run_id: "r1", mode: "full", status: "done", ...overrides };
 }
