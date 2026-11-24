@@ -18,7 +18,7 @@ PYTHON = '/home/realmagic/xy/releases/psh-b2030e1-100-20261117/.venv/bin/python'
 PRODUCT_UNIT = 'sentrix-atm100-doubao-api.service'
 EVAL_UNIT = 'sentrix-atm100-doubao-photobench.service'
 GATEWAY_UNIT = 'sentrix-atm100-qwen38-flash-gateway.service'
-ENDPOINT = 'http://127.0.0.1:18108/v1'
+ENDPOINT = 'http://127.0.0.1:18138/v1'
 MODEL = 'qwen3.8-flash'
 ALBUM = '2026.11.17-atm-sources-addresses'
 SOURCE = Path('/home/realmagic/xy/benchmarks/atm-bench/datasets/sources') / ALBUM
@@ -197,7 +197,7 @@ def start():
     assert effective['album_workers'] == 4
     pid = systemctl('show', PRODUCT_UNIT, '-p', 'MainPID', '--value')
     assert process_env(PRODUCT_UNIT)['SENTRIX_IMPORT_WORKERS'] == '4'
-    assert call(18108, '/health')['model'] == MODEL
+    assert call(18138, '/health')['model'] == MODEL
     assert call(8294, '/api/v1/health')['embeddings'] == 'ok'
     payload = {'album_id': ALBUM, 'mode': 'build', 'models': [MODEL], 'graph_enabled': True,
                'reasoning': True, 'runtime_framework': 'generic', 'model_base_url': ENDPOINT,
@@ -211,7 +211,7 @@ def start():
 
 def status():
     receipt_path = BASE / 'launch-receipt.json'
-    value = {'protected_pids': processes(), 'gateway': call(18108, '/health')}
+    value = {'protected_pids': processes(), 'gateway': call(18138, '/health')}
     if receipt_path.exists():
         run = json.loads(receipt_path.read_text())['run_ids'][0]
         data = call(8874, f'/api/v1/runs/{run}', timeout=60)
@@ -221,8 +221,44 @@ def status():
     print(json.dumps(value, ensure_ascii=False))
 
 
+def repair_prelaunch():
+    """Correct this operation's occupied port and shadowed drop-in before launch."""
+    assert_idle()
+    assert (BASE / 'prepared.json').exists()
+    assert not (BASE / 'launch-intent.json').exists()
+    assert not (BASE / 'prelaunch-repair.json').exists()
+    for name in ['product.env', 'evaluation.env', 'model-profile.json', 'config/runtime_connection.json']:
+        path = BASE / name
+        text = path.read_text().replace('127.0.0.1:18108', '127.0.0.1:18138')
+        path.write_text(text)
+        path.chmod(0o600)
+    build = BASE / 'release/build-info.json'
+    value = json.loads(build.read_text())
+    value['revision'] = value['build_revision']
+    save(build, value)
+    targets = BASE / 'config/vllm_targets.json'
+    targets.write_text(targets.read_text().replace('127.0.0.1:18108', '127.0.0.1:18138'))
+    units = Path.home() / '.config/systemd/user'
+    for unit in [PRODUCT_UNIT, EVAL_UNIT]:
+        dropdir = units / (unit + '.d')
+        old = dropdir / '99-qwen38-flash-build.conf'
+        new = dropdir / ('z' * 40 + '-qwen38-flash-build.conf')
+        old.write_text(old.read_text().replace('127.0.0.1:18108', '127.0.0.1:18138'))
+        assert sorted([p.name for p in dropdir.glob('*.conf')] + [new.name])[-1] == new.name
+        old.rename(new)
+    gateway = units / GATEWAY_UNIT
+    gateway.write_text(gateway.read_text().replace('--port 18108', '--port 18138'))
+    systemctl('daemon-reload')
+    systemctl('start', GATEWAY_UNIT)
+    systemctl('restart', PRODUCT_UNIT)
+    systemctl('restart', EVAL_UNIT)
+    save(BASE / 'prelaunch-repair.json', {'at': time.time(), 'endpoint': ENDPOINT,
+                                       'reason': 'occupied port and later historical drop-ins'})
+    print(json.dumps({'repaired_before_launch': True, 'endpoint': ENDPOINT}))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['prepare', 'start', 'status'])
+    parser.add_argument('action', choices=['prepare', 'start', 'status', 'repair-prelaunch'])
     args = parser.parse_args()
-    {'prepare': prepare, 'start': start, 'status': status}[args.action]()
+    {'prepare': prepare, 'start': start, 'status': status, 'repair-prelaunch': repair_prelaunch}[args.action]()
