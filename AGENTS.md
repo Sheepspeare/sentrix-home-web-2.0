@@ -1,6 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Oracle1013题生成/评分已验收，主分87.018756%，0缺分失败；1234裁判原请求离线重放与CSV/冻结SHA一致，列表条件单列。相册build和原fc462190/健康06d02671保持；结果见产品项目audit/20261125-qwen38-oracle/RESULTS.md与T006。
+- 11/25 Flash建库收尾停滞告警已核为误报；另发现259/533视频抽帧缺场景，ee6594ae本机修复/14项通过，259条只读验证准备中，活动服务未改。健康cd5efb52与原fc462190保持；见产品项目audit/20261125-qwen38-build-finalization/README.md及T006。
+
+- 11/25 Oracle1013题生成/评分已验收，主分87.018756%，0缺分失败；1234裁判原请求离线重放与CSV/冻结SHA一致，列表条件单列。相册build和原fc462190保持，当前健康监控见上方最新记录；结果见产品项目audit/20261125-qwen38-oracle/RESULTS.md与T006。
 
 - 11/24 诊断汇总重复41dfa5b5已静态发布1008872/8874：修复11/12引入的相邻组件重复key；15项/构建及切换轮询唯一性通过，Flash建库继续、无重启。见产品项目audit/20261124-diagnostics-identity及T006。
 
@@ -43,4 +45,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | Oracle1013主分87.018756%已验收；Flash相册build继续 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | Oracle1013主分87.018756%已验收；Flash收尾及259失败视频恢复 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
