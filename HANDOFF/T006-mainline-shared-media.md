@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜259条视频只读验证验收
+
+3655e653已终态验收：259/259通过，955张计划帧中696张已有文件SHA一致、259张缺失帧全部临时抽取成功，耗时24.946秒；0模型请求/0相册写入。原视频与analysis SHA、259 ID均一致。已冻结recovery-plans.json，保持696帧的原文件和原时间，仅259缺失帧用校正后的解码时间，场景边界/原选帧序号保留。新增真实SQLite的局部帧失败恢复回归，15专项通过，覆盖补观察/场景及再次执行0新增。
+
+原pipeline receipt仍running，补做未启动；等原fc462190终态后才能同步必要修复并接续259视频。现有产品video-jobs可装载scene_windows.json+阶段input_hash复用计划，由持有Qdrant的8294进程处理；需先准备作业计划再resume，不能先POST reprocess立即调度，也不能另建Container抢同目录锁。默认1视频worker、模型上限4保持，不改全局并发。原fc462190和cd5efb52均已核waiting，不重复挂。原21请求错误未增长，length174待终态查影响。证据见产品项目audit/20261125-qwen38-build-finalization/{README.md,validation-acceptance.json,recovery-plans.json,recovery-tests.log}。
+
+
 ## 2026-11-25｜收尾告警已核，发现259条视频抽帧缺口
 
 健康06d02671的30分钟无素材进展为finalizing阶段误报；55.19秒事件revision+23/成功模型请求+25。新监控bbc85601纳入真实事件落库和成功请求，健康wait cd5efb52/PID66376，原建库fc462190/PID2745保持。

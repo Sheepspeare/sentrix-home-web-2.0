@@ -13,9 +13,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from sentrix.application.media.extract_video_scenes import ExtractVideoScenes
 from sentrix.application.media.import_assets import ImportAssets, ImportRequest
 from sentrix.domain.media.models import MediaType, VideoMetadata
+from sentrix.domain.media.scenes import SceneWindow
 from sentrix.infrastructure.persistence.database import Database
 from sentrix.infrastructure.persistence.repositories.asset_places import SqliteAssetPlaceRepository
 from sentrix.infrastructure.persistence.repositories.assets import (
@@ -187,6 +190,55 @@ def test_running_the_extraction_again_reuses_the_existing_scenes(
     assert (again.scene_count, again.keyframe_count, again.reused) == (3, 0, 3)
     assert [item.id for item in harness.videos.list_derived(result.asset_id)] == [item.id for item in before]
     assert len(harness.events.list_video_scenes(result.asset_id)) == 3
+
+
+def test_resuming_after_last_frame_failure_reuses_files_and_builds_missing_memories(
+    migrations_ready_db: Database, tmp_path: Path
+):
+    harness = Harness(migrations_ready_db, tmp_path)
+    original_extract = harness.extractor.extract
+
+    def fail_last(source, asset_id, scene_index, timestamp_sec):
+        if scene_index == 2:
+            raise RuntimeError("ffmpeg keyframe extraction failed")
+        return original_extract(source, asset_id, scene_index, timestamp_sec)
+
+    harness.extractor.extract = fail_last
+    result = harness.import_video()
+    partial = harness.videos.list_derived(result.asset_id)
+    assert len(partial) == 2
+    assert harness.events.list_video_scenes(result.asset_id) == []
+    assert all(harness.observations.list_by_asset(frame.id) == [] for frame in partial)
+    existing_files = {frame.id: Path(harness.assets.get(frame.id).path).read_bytes() for frame in partial}
+    harness.extractor.extract = original_extract
+    harness.extractor.calls.clear()
+    recovery = ExtractVideoScenes(
+        assets=harness.assets,
+        events=harness.events,
+        places=harness.places,
+        video_repository=harness.videos,
+        keyframes=harness.extractor,
+        observations=harness.observations,
+        process_image=harness._process_image,
+        scene_planner=lambda *_: pytest.fail("must use the saved scene plan"),
+    )
+    windows = (
+        SceneWindow(0, 0.0, 60.0, 30.0),
+        SceneWindow(1, 60.0, 120.0, 90.0),
+        SceneWindow(2, 120.0, 125.0, 122.499999),
+    )
+    completed = recovery.execute(result.asset_id, planned_windows=windows)
+    assert completed.scene_count == completed.keyframe_count == 3
+    assert harness.extractor.calls == [(result.asset_id, 2, 122.499999)]
+    for frame_id, content in existing_files.items():
+        assert Path(harness.assets.get(frame_id).path).read_bytes() == content
+    assert len(harness.events.list_video_scenes(result.asset_id)) == 3
+    assert all(
+        len(harness.observations.list_by_asset(frame.id)) == 1
+        for frame in harness.videos.list_derived(result.asset_id)
+    )
+    again = recovery.execute(result.asset_id, planned_windows=windows)
+    assert (again.scene_count, again.keyframe_count, again.reused) == (3, 0, 3)
 
 
 def test_a_long_video_is_capped_at_max_scenes_by_growing_the_window(
