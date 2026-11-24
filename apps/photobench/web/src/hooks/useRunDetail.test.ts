@@ -489,3 +489,20 @@ it('旧记录缺少冻结标准时按题集选择，题集优先于相册名称'
   await act(async()=>{await result.current.loadActiveRun();});
   await waitFor(()=>expect(result.current.scoring.profiles).toEqual(['photobench_open_v1']));
 });
+
+
+it("两种导出携带所选ATM评分标准、批次和满分分组", () => {
+  const open = vi.spyOn(window, "open").mockImplementation(() => null);
+  const { result } = mount();
+  act(() => {
+    result.current.setReadProfile("atm_qs_v1");
+    result.current.setReadBatch("atm-batch");
+    result.current.setExportScores(["2"]);
+  });
+  act(() => result.current.exportTraces());
+  act(() => result.current.exportSftTraces());
+  expect(open.mock.calls.map(call => call[0])).toEqual([
+    "/api/v1/runs/r1/export-trace?scores=2&scoring_profile=atm_qs_v1&scoring_batch=atm-batch",
+    "/api/v1/runs/r1/export-sft?scores=2&scoring_profile=atm_qs_v1&scoring_batch=atm-batch",
+  ]);
+});

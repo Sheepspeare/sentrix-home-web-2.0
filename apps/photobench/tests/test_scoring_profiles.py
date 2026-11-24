@@ -18,6 +18,7 @@ from photobench.domain.evaluation.profiles import (
     media_ranking,
     media_ranking_summary,
     profile_configs,
+    result_key,
     scoring_targets,
     summarize_batches,
     valid_result,
@@ -1054,3 +1055,59 @@ def test_tool_aliases_reject_reused_handles_keyframes_and_future_turns():
         call("three", "a.jpg", source_kind="video_keyframe")
     )
     assert tool_media_aliases(item, 0) == []
+
+
+@pytest.mark.parametrize("profile", [ATM, OPEN])
+@pytest.mark.parametrize("group", [0, 1, 2])
+def test_export_groups_use_selected_scale_and_preserve_fractional_scores(profile, group):
+    from photobench.domain.runs.stream_exports import sft_json, trace_json
+
+    s = state("atm_list")
+    _, batches, _, _ = setup(s, [profile])
+    batch = batches[0]["batch_id"]
+    maximum = 1 if profile == ATM else 2
+    values = [0, 0.25, 0.5, 0.75, 1] if profile == ATM else [0, 1, 2]
+    original, row = s["items"][0], s["qa_snapshot"]["rows"][0]
+    s["items"] = []
+    s["qa_snapshot"]["rows"] = []
+    for index, value in enumerate([*values, None]):
+        qa_id = f"q{index}"
+        item = {**copy.deepcopy(original), "qa_id": qa_id}
+        item["runtime_turns"][0]["trace_bundle"] = {
+            "debug_calls": [
+                {
+                    "call_type": "agent",
+                    "messages": [{"role": "user", "content": qa_id}],
+                    "response": {"content": "answer"},
+                }
+            ]
+        }
+        s["items"].append(item)
+        s["qa_snapshot"]["rows"].append({**copy.deepcopy(row), "qa_id": qa_id})
+        s.setdefault("scoring_results", {})[result_key(batch, qa_id, 0)] = {
+            "batch_id": batch,
+            "qa_id": qa_id,
+            "turn_index": 0,
+            "profile_id": profile,
+            "purpose": "list" if profile == ATM else "answer_quality",
+            "score": value,
+            "max_score": maximum,
+            "status": "completed" if value is not None else "failed",
+        }
+    frozen = copy.deepcopy(s)
+    view = profile_state(s, profile, batch)
+    expected = {
+        f"q{i}": value
+        for i, value in enumerate(values)
+        if (0 if value == 0 else 2 if value == maximum else 1) == group
+    }
+    trace = export_traces(view, scores=[group])
+    sft = export_sft(view, scores=[group])
+    for rows in (trace, sft["items"]):
+        assert {item["qa_id"]: item["judge"]["score"] for item in rows} == expected
+        assert all(item["judge"]["max_score"] == maximum for item in rows)
+        assert all(item["judge"]["batch_id"] == batch for item in rows)
+    assert {sample["qa_id"] for sample in sft["samples"]} == set(expected)
+    assert json.loads("".join(trace_json(view, scores=[group]))) == trace
+    assert json.loads("".join(sft_json(view, scores=[group]))) == sft
+    assert s == frozen

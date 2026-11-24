@@ -5,6 +5,7 @@ import type { Mock } from "vitest";
 import type { Run } from "../../api/types.ts";
 import type { RejudgeCardProps } from "./RejudgeCard.tsx";
 import { RunDetail } from "./RunDetail.tsx";
+import { ATM_PROFILE, OPEN_PROFILE } from "../../lib/scoring.ts";
 import { ResumeCard } from "./ResumeCard.tsx";
 import type { MemoryLayerPanelProps } from "../memory/MemoryLayerPanel.tsx";
 
@@ -188,4 +189,29 @@ it("续跑与评分默认折叠，展开后才显示双栏操作，再次点击�
   expect(screen.getByRole("button", { name: "补齐缺失评分" })).toBeTruthy();
   fireEvent.click(panel.querySelector("summary")!);
   expect(panel.open).toBe(false);
+});
+
+
+it("ATM导出显示0–1量表，部分得分和满分仍传对应分组", () => {
+  const change = vi.fn();
+  const props = { activeRun: run(), exportScores: ["0", "1", "2"],
+    onExportScoresChange: change, onExportTraces: vi.fn(), onExportSftTraces: vi.fn(),
+    rejudge: rejudgeProps(), onReadProfileChange: vi.fn() };
+  const view = render(<RunDetail {...props} readProfile={ATM_PROFILE} />);
+  fireEvent.click(screen.getByText("导出轨迹", {selector: "summary"}));
+  expect(screen.getByRole("option", {name: "ATM-Bench QS（0–1）"})).toBeTruthy();
+  expect(screen.getByRole("checkbox", {name: "零分（0）"})).toBeTruthy();
+  const partial = screen.getByRole("checkbox", {name: "部分得分（0<QS<1）"});
+  const full = screen.getByRole("checkbox", {name: "满分（1）"});
+  expect(screen.queryByRole("checkbox", {name: /2分/})).toBeNull();
+  fireEvent.click(partial);
+  expect(change).toHaveBeenLastCalledWith(["0", "2"]);
+  fireEvent.click(full);
+  expect(change).toHaveBeenLastCalledWith(["0", "1"]);
+  fireEvent.change(screen.getByLabelText("导出评分标准"), {target: {value: OPEN_PROFILE}});
+  expect(props.onReadProfileChange).toHaveBeenCalledWith(OPEN_PROFILE);
+  view.rerender(<RunDetail {...props} readProfile={OPEN_PROFILE} />);
+  expect(screen.getByRole("checkbox", {name: "正确（2分）"})).toBeTruthy();
+  expect(screen.getByRole("checkbox", {name: "部分正确（1分）"})).toBeTruthy();
+  expect(screen.queryByRole("checkbox", {name: "满分（1）"})).toBeNull();
 });

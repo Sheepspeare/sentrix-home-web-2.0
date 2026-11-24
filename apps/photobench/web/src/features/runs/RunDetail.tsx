@@ -1,10 +1,10 @@
 import { ProcessDiagnosticsOverview } from "../qa/ProcessDiagnostics.tsx";
 import { scoreChoices } from "../analysis/presentation.ts";
-import { OPEN_PROFILE, PROFILE_LABELS } from "../../lib/scoring.ts";
+import { ATM_PROFILE, OPEN_PROFILE } from "../../lib/scoring.ts";
 /**
  * 运行详情外壳。逐行照搬 1.0
  * `services/photobench/frontend/src/App.vue:3039-3058`（只读权威）：标题 / 状态 /
- * 导出轨迹控制（0/1/2 分勾选）/ `run-meta` / `fatal_error` 横幅，并装配
+ * 导出轨迹控制（按所选量表分组）/ `run-meta` / `fatal_error` 横幅，并装配
  * `RejudgeCard`、`PhaseList`。
  *
  * **`runDetailRef` 不在这里**：`useRuns` 的 `runDetailRef` 在 1.0 对应的锚点是
@@ -72,7 +72,17 @@ function runScopeMeta(run: Run): ReactNode {
   return null;
 }
 
-/** 1.0 `:3049-3052` 的 checkbox group（值就是字符串 "0"/"1"/"2"）。 */
+// 接口保留0/1/2组编号：零分/中间分/满分；ATM原分仍为0–1。
+const ATM_EXPORT_GROUPS = [
+  { value: "0", label: "零分（0）" },
+  { value: "1", label: "部分得分（0<QS<1）" },
+  { value: "2", label: "满分（1）" },
+];
+const EXPORT_PROFILE_LABELS = {
+  [OPEN_PROFILE]: "开放式回答（0/1/2）",
+  [ATM_PROFILE]: "ATM-Bench QS（0–1）",
+};
+
 function toggleScore(current: string[], value: string, checked: boolean): string[] {
   const next = new Set(current);
   if (checked) next.add(value);
@@ -105,6 +115,9 @@ export function RunDetail({
   memory,
   graphQuality,
 }: RunDetailProps) {
+  const exportChoices = readProfile === ATM_PROFILE ? ATM_EXPORT_GROUPS : scoreChoices({
+    evaluation_summary: readProfile === OPEN_PROFILE ? undefined : activeRun?.summary?.evaluation_summary,
+  }).filter(s => s.value !== "None").slice().reverse();
   return (
     <section id="detail-region">
       {!activeRun ? (
@@ -118,10 +131,10 @@ export function RunDetail({
             <div className="detail-head-tools">
               <RunTaskStatus run={activeRun} />
               <details className="export-control"><summary>导出轨迹</summary><div className="export-control-body">
-                <label>筛分标准 <select aria-label="导出筛分标准" value={readProfile} onChange={e => onReadProfileChange?.(e.target.value)}>{Object.entries(PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}<option value="">历史评分</option></select></label>
-                <span className="field-label">导出轨迹</span>
+                <label>评分标准 <select aria-label="导出评分标准" value={readProfile} onChange={e => onReadProfileChange?.(e.target.value)}>{Object.entries(EXPORT_PROFILE_LABELS).map(([id,label]) => <option key={id} value={id}>{label}</option>)}<option value="">历史评分</option></select></label>
+                <span className="field-label">得分</span>
                 <span className="export-score-filter">
-                  {scoreChoices({evaluation_summary: readProfile ? {scorer:readProfile === OPEN_PROFILE ? "answer_quality" : "choice", max_score:readProfile === OPEN_PROFILE ? 2 : 1} : activeRun.summary?.evaluation_summary}).filter(s => s.value !== "None").slice().reverse().map(({value, label}) => (
+                  {exportChoices.map(({value, label}) => (
                     <label className="checkbox-inline" key={value}>
                       <input
                         type="checkbox"
