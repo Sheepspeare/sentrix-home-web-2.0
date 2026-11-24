@@ -52,12 +52,11 @@ for port in [8772,8872,8874]:
     ms=layout.get_json(port,'/api/v1/manifests')
     ports[str(port)]={'build_revision':conf['build_revision'],'run_total':runs.get('total'),'manifest_response_keys':list(ms),'active_work_count':len(idle['evaluations'][str(port)]['work'])}
 # Check the complete ATM package with its normal HTTP media endpoint.
-album='2026.11.17-atm-sources-addresses-current'
+album='2026.11.17-atm-sources-addresses'
 manifest=layout.get_json(8874,'/api/v1/manifests/'+album)
-photo=manifest['photos'][0]
-photo_name=photo.get('file_name') or photo.get('filename') or photo.get('path')
-assert photo_name,photo.keys()
-media_path='/api/v1/albums/'+urllib.parse.quote(album,safe='')+'/photos/'+urllib.parse.quote(photo_name,safe='/')
+photo_name=manifest['photos'][0]
+assert isinstance(photo_name,str) and photo_name.startswith('photos/')
+media_path='/api/v1/albums/'+urllib.parse.quote(album,safe='')+'/photos/'+urllib.parse.quote(photo_name.removeprefix('photos/'),safe='/')
 media={}
 for port in [8872,8874]:
     with urllib.request.urlopen(f'http://127.0.0.1:{port}'+media_path,timeout=30) as r:
