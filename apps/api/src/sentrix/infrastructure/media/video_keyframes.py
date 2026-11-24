@@ -51,7 +51,8 @@ class FfmpegVideoKeyframeExtractor:
                 "-v",
                 "error",
                 "-ss",
-                f"{float(timestamp_sec):.3f}",
+                # 保留帧时间精度；毫秒四舍五入可能把末帧的 seek 推到视频末尾之后。
+                f"{float(timestamp_sec):.9f}",
                 "-i",
                 str(source),
                 "-frames:v",

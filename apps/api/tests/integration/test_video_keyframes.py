@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -51,7 +53,7 @@ def test_the_command_seeks_before_the_input_and_takes_exactly_one_frame(tmp_path
     # ``-ss`` 必须在 ``-i`` 之前：输入侧 seek。放到后面 ffmpeg 会整段解码到该秒，
     # 一个几小时的录像就是几十分钟的等待——命令仍然正确，只是慢得不可用。
     assert command.index("-ss") < command.index("-i")
-    assert command[command.index("-ss") + 1] == "30.000"
+    assert command[command.index("-ss") + 1] == "30.000000000"
     assert command[command.index("-frames:v") + 1] == "1"
 
 
@@ -76,3 +78,30 @@ def test_a_zero_exit_without_the_output_file_is_still_a_failure(tmp_path: Path):
         pytest.raises(RuntimeError),
     ):
         _extractor(tmp_path).extract(source, "asset_1", 0, 0.0)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
+def test_the_last_frame_survives_a_timestamp_that_rounds_up_to_milliseconds(tmp_path: Path):
+    source = tmp_path / "three-frames.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=64x48:rate=30",
+            "-frames:v",
+            "3",
+            "-c:v",
+            "mpeg4",
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    result = _extractor(tmp_path).extract(source, "asset_last", 0, 2 / 30)
+    assert result.stat().st_size > 0

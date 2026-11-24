@@ -113,6 +113,7 @@ def _sample_video(
     sampled_indices: list[int] = []
     last_frame: np.ndarray | None = None
     last_frame_index = -1
+    last_frame_timestamp = 0.0
     next_tick = 0
     index = 0
     while True:
@@ -121,7 +122,10 @@ def _sample_video(
             break
         last_frame = image.copy()
         last_frame_index = index
-        source_time = index / source_fps
+        # 使用解码帧的显示时间。平均帧率不能还原可变帧率视频的时间轴，
+        # 尤其会把尾帧估计到实际最后一帧之后，导致后续 ffmpeg 抽帧为空。
+        source_time = float(capture.get(cv2.CAP_PROP_POS_MSEC)) / 1000.0
+        last_frame_timestamp = source_time
         target_time = next_tick / SAMPLE_FPS
         if source_time + (0.5 / max(source_fps, 1.0)) >= target_time and target_time < duration:
             if (image.shape[1], image.shape[0]) != (width, height):
@@ -137,7 +141,7 @@ def _sample_video(
     # The first 10fps sample is the exact first decoded frame. Add the exact
     # final decoded frame when the last regular tick did not land on it.
     tail_added = sampled_indices[-1] != last_frame_index
-    actual_last_timestamp = last_frame_index / source_fps
+    actual_last_timestamp = last_frame_timestamp
     if tail_added:
         if (last_frame.shape[1], last_frame.shape[0]) != (width, height):
             last_frame = cv2.resize(last_frame, (width, height), interpolation=cv2.INTER_AREA)
@@ -146,6 +150,7 @@ def _sample_video(
         frames,
         {
             "source_fps": source_fps,
+            "timestamp_basis": "decoded_frame_pts",
             "duration_sec": duration,
             "decoded_frame_count": index,
             "sampled_frame_count": len(frames) - int(tail_added),
