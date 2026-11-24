@@ -1,0 +1,716 @@
+{
+  "version": 1,
+  "home": "/home/realmagic",
+  "xy": "/home/realmagic/xy",
+  "atm": "/home/realmagic/xy/benchmarks/atm-bench",
+  "photobench": "/home/realmagic/xy/benchmarks/photobench",
+  "experiment_old": "/home/realmagic/xy/experiments/atm1013-20261118",
+  "experiment_legacy": "/home/realmagic/xy/.legacy/atm1013",
+  "experiment_new": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013",
+  "moves": [
+    {
+      "source": "/home/realmagic/xy/atm-bench-20261110",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench"
+    },
+    {
+      "source": "/home/realmagic/xy/photobench-typed-20261104",
+      "destination": "/home/realmagic/xy/benchmarks/photobench"
+    },
+    {
+      "source": "/home/realmagic/deployment_outputs/sentrix_github_update_20261027",
+      "destination": "/home/realmagic/xy/benchmarks/photobench/instances/default"
+    }
+  ],
+  "mappings": {
+    "/home/realmagic/xy/atm-bench-20261110": "/home/realmagic/xy/benchmarks/atm-bench",
+    "/home/realmagic/xy/photobench-typed-20261104": "/home/realmagic/xy/benchmarks/photobench",
+    "/home/realmagic/deployment_outputs/sentrix_github_update_20261027": "/home/realmagic/xy/benchmarks/photobench/instances/default",
+    "/home/realmagic/xy/experiments/atm1013-20261118/__pycache__": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/cache/__pycache__",
+    "/home/realmagic/xy/experiments/atm1013-20261118/active-runs.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/active-runs.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/agent-latency-7f162815": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/agent-latency-7f162815",
+    "/home/realmagic/xy/experiments/atm1013-20261118/agent-latency-ed268c61": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/agent-latency-ed268c61",
+    "/home/realmagic/xy/experiments/atm1013-20261118/chat-read-accept-26b5572": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/chat-read-accept-26b5572",
+    "/home/realmagic/xy/experiments/atm1013-20261118/chat-trace-8872-7b34a75b": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/chat-trace-8872-7b34a75b",
+    "/home/realmagic/xy/experiments/atm1013-20261118/chat-trace-analysis-99306be2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/chat-trace-analysis-99306be2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/chat-trace-idle-review-9c3c783": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/chat-trace-idle-review-9c3c783",
+    "/home/realmagic/xy/experiments/atm1013-20261118/cloud-results": "/home/realmagic/xy/benchmarks/atm-bench/results-cloud",
+    "/home/realmagic/xy/experiments/atm1013-20261118/conversation-delete-9363d4b": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/conversation-delete-9363d4b",
+    "/home/realmagic/xy/experiments/atm1013-20261118/conversation-delete-9363d4b-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/conversation-delete-9363d4b-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/dataset-preflight.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/dataset-preflight.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-accept-285bb73": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-accept-285bb73",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-context-terminal-20261124-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-context-terminal-20261124-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-context-three-20261124-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-context-three-20261124-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-disk-recovery-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-disk-recovery-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-disk-recovery-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-disk-recovery-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-persist-20261121-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-persist-20261121-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-persist-projection-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-persist-projection-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-reconnect-20261122-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-reconnect-20261122-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-reuse-49f347c": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-reuse-49f347c",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-start-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-start-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-supplement-terminal-20261123-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement-terminal-20261123-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-supplement161-20261122-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement161-20261122-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-supplement49-20261123-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-20261123-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-supplement49-20261123-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-20261123-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-supplement49-terminal-20261124-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-terminal-20261124-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-terminal-20261122-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-terminal-20261122-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-terminal-exports-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-terminal-exports-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-transport-terminal-20261124-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-transport-terminal-20261124-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-transport-three-20261124-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-transport-three-20261124-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/full-lazy-18146f7": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/full-lazy-18146f7",
+    "/home/realmagic/xy/experiments/atm1013-20261118/full-lazy-18146f7.tar.gz": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/full-lazy-18146f7.tar.gz",
+    "/home/realmagic/xy/experiments/atm1013-20261118/gpu-model-restore-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/gpu-model-restore-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/gpu-model-restore-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/gpu-model-restore-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/idle-preflight.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/idle-preflight.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/inspect-oom-20261119.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect-oom-20261119.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/inspect_live.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect_live.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/inspect_reboot.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect_reboot.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/install_resume_release.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/install_resume_release.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/launch.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/launch.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/main-56ea57aa": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/main-56ea57aa",
+    "/home/realmagic/xy/experiments/atm1013-20261118/main-fe9cf991": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/main-fe9cf991",
+    "/home/realmagic/xy/experiments/atm1013-20261118/model-acceptance.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-acceptance.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/model-api-evidence.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-api-evidence.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/model-start-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-start-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/model-unit-before.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-unit-before.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/oom-read-47523cd": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/oom-read-47523cd",
+    "/home/realmagic/xy/experiments/atm1013-20261118/prepare_runtime.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/prepare_runtime.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/prepare_storage.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/prepare_storage.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/probe.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/probe.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/product-q4-diagnostics.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/product-q4-diagnostics.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/psh-formal-f75c105": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/psh-formal-f75c105",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-checkpoint-release": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-checkpoint-release",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-gpu-restore-d0fc404": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-gpu-restore-d0fc404",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-read-release": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-read-release",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-supplement-exports-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-exports-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-supplement-exports-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-exports-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-supplement-terminal-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-terminal-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-supplement-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-terminal-exports-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-terminal-exports-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-terminal-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-terminal-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4-trace-reuse-release": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-trace-reuse-release",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4km-launch-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-launch-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4km-launch-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-launch-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4km-resume-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-resume-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/q4km-resume-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-resume-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-anomaly17-persist-04471e4": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-anomaly17-persist-04471e4",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-live-list-8b6da36": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/qwen-live-list-8b6da36",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-live-list-8b6da36.tar.gz": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-live-list-8b6da36.tar.gz",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-persist-profile": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-persist-profile",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-persist-recovery-54beb51": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-persist-recovery-54beb51",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-persist-recovery-54beb51.tar.gz": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-persist-recovery-54beb51.tar.gz",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-persist-recovery-adapted.tar.gz": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-persist-recovery-adapted.tar.gz",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-persist-recovery-b0c982f": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/qwen-persist-recovery-b0c982f",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-service-recovery-c9179c1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-service-recovery-c9179c1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen-terminal-00db192": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-terminal-00db192",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen37-launch-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-launch-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen37-launch-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-launch-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen37-resume-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-resume-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/qwen37-resume-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-resume-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/reasoning-bounds-ffec2be": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/reasoning-bounds-ffec2be",
+    "/home/realmagic/xy/experiments/atm1013-20261118/results-relocation-before.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/results-relocation-before.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/results-relocation.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/results-relocation.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume-install-intent.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-install-intent.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume-install-response.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-install-response.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume-release": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/resume-release",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume-suites.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/resume-suites.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume-version.env": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-version.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/resume_checkpoint.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/resume_checkpoint.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/scoring-frozen.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/scoring-frozen.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/start_q4km.sh": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/start_q4km.sh",
+    "/home/realmagic/xy/experiments/atm1013-20261118/storage-preparation.json": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/storage-preparation.json",
+    "/home/realmagic/xy/experiments/atm1013-20261118/storage.log": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/logs/storage.log",
+    "/home/realmagic/xy/experiments/atm1013-20261118/test_resume_checkpoint.py": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/test_resume_checkpoint.py",
+    "/home/realmagic/xy/experiments/atm1013-20261118/three-model-comparison-20261122-v1": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/three-model-comparison-20261122-v1",
+    "/home/realmagic/xy/experiments/atm1013-20261118/three-model-comparison-20261122-v2": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/three-model-comparison-20261122-v2",
+    "/home/realmagic/xy/experiments/atm1013-20261118/trace-quarantine-fcb32bd": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/trace-quarantine-fcb32bd",
+    "/home/realmagic/xy/experiments/atm1013-20261118/trace-viewer-ui-4df9302": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/trace-viewer-ui-4df9302",
+    "/home/realmagic/xy/experiments/atm1013-20261118/trace-viewer-ui-4df9302.tgz": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/trace-viewer-ui-4df9302.tgz",
+    "/home/realmagic/xy/experiments/atm1013-20261118/wait-chat-950b2be": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/wait-chat-950b2be",
+    "/home/realmagic/xy/experiments/atm1013-20261118": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-reuse-49f347c/product-data": "/home/realmagic/xy/benchmarks/atm-bench/instances/doubao/product-data",
+    "/var/tmp/sentrix-atm-doubao-20261112": "/home/realmagic/xy/benchmarks/atm-bench/instances/doubao-legacy",
+    "/home/realmagic/xy/atm-bench-20261110/qwen37-quota-incident-20261113": "/home/realmagic/xy/benchmarks/atm-bench/audit/qwen37-quota-incident-20261113",
+    "/home/realmagic/xy/atm-bench-20261110/doubao-text-index-20261113.db": "/home/realmagic/xy/benchmarks/atm-bench/artifacts/doubao-text-index-20261113.db",
+    "/home/realmagic/xy/trace-deploy-20261029": "/home/realmagic/xy/archive/deploy/trace-20261029",
+    "/home/realmagic/xy/rollback-deploy-20261029": "/home/realmagic/xy/archive/deploy/rollback-20261029",
+    "/home/realmagic/archive_results_20261029.log": "/home/realmagic/maintenance/logs/archive_results_20261029.log",
+    "/home/realmagic/videospy_q4km_prempl_100.log": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_100.log",
+    "/home/realmagic/videospy_q4km_prempl_exact_100.log": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_exact_100.log",
+    "/home/realmagic/hardlink_history_media_20261029.py": "/home/realmagic/maintenance/scripts/hardlink_history_media_20261029.py",
+    "/home/realmagic/audit_duplicates_20261029.log": "/home/realmagic/maintenance/logs/audit_duplicates_20261029.log",
+    "/home/realmagic/sentrix-api.log": "/home/realmagic/maintenance/logs/sentrix-api.log",
+    "/home/realmagic/archive_results_20261029.sh": "/home/realmagic/maintenance/scripts/archive_results_20261029.sh",
+    "/home/realmagic/videospy_f16_100.log": "/home/realmagic/maintenance/logs/videospy_f16_100.log",
+    "/home/realmagic/photobench.log": "/home/realmagic/maintenance/logs/photobench.log",
+    "/home/realmagic/hardlink-history-media-20261029.jsonl": "/home/realmagic/maintenance/reports/hardlink-history-media-20261029.jsonl",
+    "/home/realmagic/sentrix-photobench.log": "/home/realmagic/maintenance/logs/sentrix-photobench.log",
+    "/home/realmagic/hardlink-agent-runs-20261029.jsonl": "/home/realmagic/maintenance/reports/hardlink-agent-runs-20261029.jsonl",
+    "/home/realmagic/hardlink_history_media_20261029.log": "/home/realmagic/maintenance/logs/hardlink_history_media_20261029.log",
+    "/home/realmagic/videospy_q4km_100.log": "/home/realmagic/maintenance/logs/videospy_q4km_100.log",
+    "/home/realmagic/hardlink-history-media-20261029.json": "/home/realmagic/maintenance/reports/hardlink-history-media-20261029.json",
+    "/home/realmagic/audit_duplicates_20261029.py": "/home/realmagic/maintenance/scripts/audit_duplicates_20261029.py",
+    "/home/realmagic/checkpoint-prune-20261029.json": "/home/realmagic/maintenance/reports/checkpoint-prune-20261029.json",
+    "/home/realmagic/freeret_api_100.log": "/home/realmagic/maintenance/logs/freeret_api_100.log",
+    "/home/realmagic/storage-duplicates-20261029.json": "/home/realmagic/maintenance/reports/storage-duplicates-20261029.json",
+    "/home/realmagic/videospy_q4km_prempl_nojinja_100.log": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_nojinja_100.log"
+  },
+  "restart_services": false,
+  "experiment_children": [
+    {
+      "name": "__pycache__",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/cache/__pycache__"
+    },
+    {
+      "name": "active-runs.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/active-runs.json"
+    },
+    {
+      "name": "agent-latency-7f162815",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/agent-latency-7f162815"
+    },
+    {
+      "name": "agent-latency-ed268c61",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/agent-latency-ed268c61"
+    },
+    {
+      "name": "chat-read-accept-26b5572",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/chat-read-accept-26b5572"
+    },
+    {
+      "name": "chat-trace-8872-7b34a75b",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/chat-trace-8872-7b34a75b"
+    },
+    {
+      "name": "chat-trace-analysis-99306be2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/chat-trace-analysis-99306be2"
+    },
+    {
+      "name": "chat-trace-idle-review-9c3c783",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/chat-trace-idle-review-9c3c783"
+    },
+    {
+      "name": "cloud-results",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/results-cloud"
+    },
+    {
+      "name": "conversation-delete-9363d4b",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/conversation-delete-9363d4b"
+    },
+    {
+      "name": "conversation-delete-9363d4b-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/conversation-delete-9363d4b-v2"
+    },
+    {
+      "name": "dataset-preflight.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/dataset-preflight.json"
+    },
+    {
+      "name": "doubao-accept-285bb73",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-accept-285bb73"
+    },
+    {
+      "name": "doubao-context-terminal-20261124-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-context-terminal-20261124-v1"
+    },
+    {
+      "name": "doubao-context-three-20261124-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-context-three-20261124-v1"
+    },
+    {
+      "name": "doubao-disk-recovery-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-disk-recovery-v1"
+    },
+    {
+      "name": "doubao-disk-recovery-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-disk-recovery-v2"
+    },
+    {
+      "name": "doubao-persist-20261121-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-persist-20261121-v1"
+    },
+    {
+      "name": "doubao-persist-projection-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/doubao-persist-projection-v2"
+    },
+    {
+      "name": "doubao-reconnect-20261122-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-reconnect-20261122-v1"
+    },
+    {
+      "name": "doubao-reuse-49f347c",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-reuse-49f347c"
+    },
+    {
+      "name": "doubao-start-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-start-v1"
+    },
+    {
+      "name": "doubao-supplement-terminal-20261123-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement-terminal-20261123-v1"
+    },
+    {
+      "name": "doubao-supplement161-20261122-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement161-20261122-v1"
+    },
+    {
+      "name": "doubao-supplement49-20261123-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-20261123-v1"
+    },
+    {
+      "name": "doubao-supplement49-20261123-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-20261123-v2"
+    },
+    {
+      "name": "doubao-supplement49-terminal-20261124-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-supplement49-terminal-20261124-v1"
+    },
+    {
+      "name": "doubao-terminal-20261122-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-terminal-20261122-v1"
+    },
+    {
+      "name": "doubao-terminal-exports-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-terminal-exports-v1"
+    },
+    {
+      "name": "doubao-transport-terminal-20261124-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-transport-terminal-20261124-v1"
+    },
+    {
+      "name": "doubao-transport-three-20261124-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-transport-three-20261124-v1"
+    },
+    {
+      "name": "full-lazy-18146f7",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/full-lazy-18146f7"
+    },
+    {
+      "name": "full-lazy-18146f7.tar.gz",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/full-lazy-18146f7.tar.gz"
+    },
+    {
+      "name": "gpu-model-restore-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/gpu-model-restore-intent.json"
+    },
+    {
+      "name": "gpu-model-restore-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/gpu-model-restore-response.json"
+    },
+    {
+      "name": "idle-preflight.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/idle-preflight.json"
+    },
+    {
+      "name": "inspect-oom-20261119.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect-oom-20261119.py"
+    },
+    {
+      "name": "inspect_live.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect_live.py"
+    },
+    {
+      "name": "inspect_reboot.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/inspect_reboot.py"
+    },
+    {
+      "name": "install_resume_release.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/install_resume_release.py"
+    },
+    {
+      "name": "launch.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/launch.py"
+    },
+    {
+      "name": "main-56ea57aa",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/main-56ea57aa"
+    },
+    {
+      "name": "main-fe9cf991",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/main-fe9cf991"
+    },
+    {
+      "name": "model-acceptance.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-acceptance.json"
+    },
+    {
+      "name": "model-api-evidence.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-api-evidence.json"
+    },
+    {
+      "name": "model-start-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-start-intent.json"
+    },
+    {
+      "name": "model-unit-before.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/model-unit-before.json"
+    },
+    {
+      "name": "oom-read-47523cd",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/oom-read-47523cd"
+    },
+    {
+      "name": "prepare_runtime.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/prepare_runtime.py"
+    },
+    {
+      "name": "prepare_storage.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/prepare_storage.py"
+    },
+    {
+      "name": "probe.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/probe.py"
+    },
+    {
+      "name": "product-q4-diagnostics.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/product-q4-diagnostics.json"
+    },
+    {
+      "name": "psh-formal-f75c105",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/psh-formal-f75c105"
+    },
+    {
+      "name": "q4-checkpoint-release",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-checkpoint-release"
+    },
+    {
+      "name": "q4-gpu-restore-d0fc404",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-gpu-restore-d0fc404"
+    },
+    {
+      "name": "q4-read-release",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-read-release"
+    },
+    {
+      "name": "q4-supplement-exports-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-exports-v1"
+    },
+    {
+      "name": "q4-supplement-exports-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-exports-v2"
+    },
+    {
+      "name": "q4-supplement-terminal-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-terminal-v1"
+    },
+    {
+      "name": "q4-supplement-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-supplement-v1"
+    },
+    {
+      "name": "q4-terminal-exports-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-terminal-exports-v2"
+    },
+    {
+      "name": "q4-terminal-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/q4-terminal-v1"
+    },
+    {
+      "name": "q4-trace-reuse-release",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/q4-trace-reuse-release"
+    },
+    {
+      "name": "q4km-launch-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-launch-intent.json"
+    },
+    {
+      "name": "q4km-launch-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-launch-response.json"
+    },
+    {
+      "name": "q4km-resume-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-resume-intent.json"
+    },
+    {
+      "name": "q4km-resume-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/q4km-resume-response.json"
+    },
+    {
+      "name": "qwen-anomaly17-persist-04471e4",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-anomaly17-persist-04471e4"
+    },
+    {
+      "name": "qwen-live-list-8b6da36",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/qwen-live-list-8b6da36"
+    },
+    {
+      "name": "qwen-live-list-8b6da36.tar.gz",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-live-list-8b6da36.tar.gz"
+    },
+    {
+      "name": "qwen-persist-profile",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-persist-profile"
+    },
+    {
+      "name": "qwen-persist-recovery-54beb51",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-persist-recovery-54beb51"
+    },
+    {
+      "name": "qwen-persist-recovery-54beb51.tar.gz",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-persist-recovery-54beb51.tar.gz"
+    },
+    {
+      "name": "qwen-persist-recovery-adapted.tar.gz",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/qwen-persist-recovery-adapted.tar.gz"
+    },
+    {
+      "name": "qwen-persist-recovery-b0c982f",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/qwen-persist-recovery-b0c982f"
+    },
+    {
+      "name": "qwen-service-recovery-c9179c1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-service-recovery-c9179c1"
+    },
+    {
+      "name": "qwen-terminal-00db192",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/qwen-terminal-00db192"
+    },
+    {
+      "name": "qwen37-launch-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-launch-intent.json"
+    },
+    {
+      "name": "qwen37-launch-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-launch-response.json"
+    },
+    {
+      "name": "qwen37-resume-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-resume-intent.json"
+    },
+    {
+      "name": "qwen37-resume-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/qwen37-resume-response.json"
+    },
+    {
+      "name": "reasoning-bounds-ffec2be",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/reasoning-bounds-ffec2be"
+    },
+    {
+      "name": "results-relocation-before.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/results-relocation-before.json"
+    },
+    {
+      "name": "results-relocation.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/results-relocation.json"
+    },
+    {
+      "name": "resume-install-intent.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-install-intent.json"
+    },
+    {
+      "name": "resume-install-response.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-install-response.json"
+    },
+    {
+      "name": "resume-release",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/resume-release"
+    },
+    {
+      "name": "resume-suites.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/resume-suites.py"
+    },
+    {
+      "name": "resume-version.env",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/resume-version.env"
+    },
+    {
+      "name": "resume_checkpoint.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/resume_checkpoint.py"
+    },
+    {
+      "name": "scoring-frozen.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/scoring-frozen.json"
+    },
+    {
+      "name": "start_q4km.sh",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/start_q4km.sh"
+    },
+    {
+      "name": "storage-preparation.json",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/state/storage-preparation.json"
+    },
+    {
+      "name": "storage.log",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/logs/storage.log"
+    },
+    {
+      "name": "test_resume_checkpoint.py",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/scripts/test_resume_checkpoint.py"
+    },
+    {
+      "name": "three-model-comparison-20261122-v1",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/three-model-comparison-20261122-v1"
+    },
+    {
+      "name": "three-model-comparison-20261122-v2",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/three-model-comparison-20261122-v2"
+    },
+    {
+      "name": "trace-quarantine-fcb32bd",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/trace-quarantine-fcb32bd"
+    },
+    {
+      "name": "trace-viewer-ui-4df9302",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/trace-viewer-ui-4df9302"
+    },
+    {
+      "name": "trace-viewer-ui-4df9302.tgz",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/artifacts/trace-viewer-ui-4df9302.tgz"
+    },
+    {
+      "name": "wait-chat-950b2be",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/wait-chat-950b2be"
+    }
+  ],
+  "data_move": {
+    "source": "/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/operations/doubao-reuse-49f347c/product-data",
+    "destination": "/home/realmagic/xy/benchmarks/atm-bench/instances/doubao/product-data"
+  },
+  "cloud_old": "/var/tmp/sentrix-atm-doubao-20261112",
+  "cloud_new": "/home/realmagic/xy/benchmarks/atm-bench/instances/doubao-legacy",
+  "tail_moves": [
+    {
+      "source": "/home/realmagic/xy/benchmarks/atm-bench/qwen37-quota-incident-20261113",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/audit/qwen37-quota-incident-20261113"
+    },
+    {
+      "source": "/home/realmagic/xy/benchmarks/atm-bench/doubao-text-index-20261113.db",
+      "destination": "/home/realmagic/xy/benchmarks/atm-bench/artifacts/doubao-text-index-20261113.db"
+    },
+    {
+      "source": "/home/realmagic/xy/trace-deploy-20261029",
+      "destination": "/home/realmagic/xy/archive/deploy/trace-20261029"
+    },
+    {
+      "source": "/home/realmagic/xy/rollback-deploy-20261029",
+      "destination": "/home/realmagic/xy/archive/deploy/rollback-20261029"
+    }
+  ],
+  "home_files": [
+    {
+      "source": "/home/realmagic/archive_results_20261029.log",
+      "destination": "/home/realmagic/maintenance/logs/archive_results_20261029.log"
+    },
+    {
+      "source": "/home/realmagic/videospy_q4km_prempl_100.log",
+      "destination": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_100.log"
+    },
+    {
+      "source": "/home/realmagic/videospy_q4km_prempl_exact_100.log",
+      "destination": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_exact_100.log"
+    },
+    {
+      "source": "/home/realmagic/hardlink_history_media_20261029.py",
+      "destination": "/home/realmagic/maintenance/scripts/hardlink_history_media_20261029.py"
+    },
+    {
+      "source": "/home/realmagic/audit_duplicates_20261029.log",
+      "destination": "/home/realmagic/maintenance/logs/audit_duplicates_20261029.log"
+    },
+    {
+      "source": "/home/realmagic/sentrix-api.log",
+      "destination": "/home/realmagic/maintenance/logs/sentrix-api.log"
+    },
+    {
+      "source": "/home/realmagic/archive_results_20261029.sh",
+      "destination": "/home/realmagic/maintenance/scripts/archive_results_20261029.sh"
+    },
+    {
+      "source": "/home/realmagic/videospy_f16_100.log",
+      "destination": "/home/realmagic/maintenance/logs/videospy_f16_100.log"
+    },
+    {
+      "source": "/home/realmagic/photobench.log",
+      "destination": "/home/realmagic/maintenance/logs/photobench.log"
+    },
+    {
+      "source": "/home/realmagic/hardlink-history-media-20261029.jsonl",
+      "destination": "/home/realmagic/maintenance/reports/hardlink-history-media-20261029.jsonl"
+    },
+    {
+      "source": "/home/realmagic/sentrix-photobench.log",
+      "destination": "/home/realmagic/maintenance/logs/sentrix-photobench.log"
+    },
+    {
+      "source": "/home/realmagic/hardlink-agent-runs-20261029.jsonl",
+      "destination": "/home/realmagic/maintenance/reports/hardlink-agent-runs-20261029.jsonl"
+    },
+    {
+      "source": "/home/realmagic/hardlink_history_media_20261029.log",
+      "destination": "/home/realmagic/maintenance/logs/hardlink_history_media_20261029.log"
+    },
+    {
+      "source": "/home/realmagic/videospy_q4km_100.log",
+      "destination": "/home/realmagic/maintenance/logs/videospy_q4km_100.log"
+    },
+    {
+      "source": "/home/realmagic/hardlink-history-media-20261029.json",
+      "destination": "/home/realmagic/maintenance/reports/hardlink-history-media-20261029.json"
+    },
+    {
+      "source": "/home/realmagic/audit_duplicates_20261029.py",
+      "destination": "/home/realmagic/maintenance/scripts/audit_duplicates_20261029.py"
+    },
+    {
+      "source": "/home/realmagic/checkpoint-prune-20261029.json",
+      "destination": "/home/realmagic/maintenance/reports/checkpoint-prune-20261029.json"
+    },
+    {
+      "source": "/home/realmagic/freeret_api_100.log",
+      "destination": "/home/realmagic/maintenance/logs/freeret_api_100.log"
+    },
+    {
+      "source": "/home/realmagic/storage-duplicates-20261029.json",
+      "destination": "/home/realmagic/maintenance/reports/storage-duplicates-20261029.json"
+    },
+    {
+      "source": "/home/realmagic/videospy_q4km_prempl_nojinja_100.log",
+      "destination": "/home/realmagic/maintenance/logs/videospy_q4km_prempl_nojinja_100.log"
+    }
+  ],
+  "path_files": [
+    "/home/realmagic/xy/deploy/20261117-psh-release/8294.env",
+    "/home/realmagic/xy/deploy/20261117-psh-release/8872.env",
+    "/home/realmagic/xy/deploy/20261117-psh-release/8291.env",
+    "/home/realmagic/xy/deploy/20261117-psh-release/8874.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/full-lazy-18146f7/web-activation-fix/version.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/doubao-start-v1/product.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/main-fe9cf991/release.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/main-56ea57aa/release.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/conversation-delete-9363d4b-v2/evaluation-web.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/conversation-delete-9363d4b-v2/product-web.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/chat-trace-8872-7b34a75b/release.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/agent-latency-7f162815/release.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/wait-chat-950b2be/evaluation.env",
+    "/home/realmagic/xy/experiments/atm1013-20261118/agent-latency-ed268c61/release.env",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-qwen37-gateway.service",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-model.service",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-wemm.service",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-api.service.d/zzzzz-reasoning-bounds.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-api.service.d/zzzzzzzzzzzzzzzz-context-preview-20261124.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-api.service.d/zzzzzzzzzzzz-doubao-reuse.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-model.service.d/90-atm1013-q4km.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zz-atm1013-resume.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzz-full-lazy.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzzz-full-lazy-envfile.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzzzzzzzzzz-persist-projection-20261121.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-main-56ea57aa.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzzzzzzzzzzzz-main-fe9cf991.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzz-trace-quarantine.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzz-reasoning-bounds.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-doubao-photobench.service.d/zzzzzzzzzzzz-doubao-reuse.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-api.service.d/zzzzzzzzzzzz-psh-q4-formal.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-api.service.d/zzzzz-reasoning-bounds.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zz-atm1013-resume.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzz-full-lazy.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzzz-full-lazy-envfile.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-main-56ea57aa.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzzzzzzzzzzzzzzzzzzz-agent-latency.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzzzzzzzzzzzzzzzzzz-chat-trace-8872.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzz-trace-quarantine.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzz-oom-read-reuse.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzzzzzzzzz-psh-q4-formal.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzz-q4-trace-reuse.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzzzz-reasoning-bounds.conf",
+    "/home/realmagic/.config/systemd/user/sentrix-atm100-photobench.service.d/zzz-q4-checkpoint.conf"
+  ]
+}
