@@ -28,6 +28,14 @@ def inspect(kind, data):
     return progress, bool(errors), f"Build failed phases/items: {errors}"
 
 
+def finalization_progress(progress, detail):
+    """Count persisted event updates and completed model calls, not probe time."""
+    return progress + ((
+        'finalization', detail['events']['revision_sum'],
+        detail['model_requests']['successful'],
+    ),)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--state", type=Path, required=True)
@@ -35,7 +43,11 @@ def main():
     p.add_argument("--build", type=Path, required=True)
     p.add_argument("--oracle", type=Path, required=True)
     p.add_argument("--audit", type=Path, required=True)
+    p.add_argument("--build-probe-host")
+    p.add_argument("--build-probe-script")
     args = p.parse_args()
+    if bool(args.build_probe_host) != bool(args.build_probe_script):
+        p.error('Provide both build probe host and script')
     wake = Path.home() / ".codex/skills/wakecodex/scripts/wakecodex.py"
     observations = {}
     deadline = time.monotonic() + 72 * 3600
@@ -56,11 +68,36 @@ def main():
             previous.pop("unreadable_since", None)
             progress, failed, detail = inspect(kind, data)
             terminal = data.get("status") in TERMINAL
+            finalization = None
+            stage = data.get('phases', {}).get('pipeline_processing', {}).get('progress', {}).get('stage')
+            if kind == 'build' and not terminal and stage == 'finalizing' and args.build_probe_host:
+                try:
+                    result = subprocess.run(
+                        ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+                         args.build_probe_host, 'python3 ' + args.build_probe_script],
+                        check=True, capture_output=True, text=True, timeout=30,
+                    )
+                    finalization = json.loads(result.stdout)
+                    progress = finalization_progress(progress, finalization)
+                    previous.pop('probe_unreadable_since', None)
+                    error_count = sum(finalization['model_requests']['errors'].values())
+                    previous_errors = previous.get('model_errors', error_count)
+                    if error_count > previous_errors:
+                        reasons.append(f'build: {error_count - previous_errors} new model request failures')
+                    previous['model_errors'] = error_count
+                except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+                    failed_since = previous.setdefault('probe_unreadable_since', time.monotonic())
+                    observations[kind] = previous
+                    if time.monotonic() - failed_since >= 600:
+                        reasons.append('build: finalization probe unreadable for 10 minutes')
+                    continue
             changed = time.monotonic() if progress != previous.get("progress") else previous["changed"]
-            observations[kind] = {"progress": progress, "changed": changed, "terminal": terminal}
+            observations[kind] = {**previous, "progress": progress, "changed": changed, "terminal": terminal}
             snapshot[kind] = {"status": data.get("status"), "progress": progress,
                               "source": str(path), "source_mtime": path.stat().st_mtime,
                               "no_progress_seconds": round(time.monotonic() - changed)}
+            if finalization is not None:
+                snapshot[kind]['finalization'] = finalization
             if failed:
                 reasons.append(f"{kind}: {detail}")
             if not terminal:
