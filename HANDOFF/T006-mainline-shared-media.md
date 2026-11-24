@@ -1,5 +1,7 @@
 # T006 主线集成与跨相册媒体共享
 
+2026-11-25补充：用户授权长任务异常修复/复测；独立Python健康监控05ce601b已启动，wait2538d376，原两终态wait保持。失败/状态10分钟不更新/完成进度30分钟不变提前wake，先核实再处置，保留成功结果。细节及精确PID见产品项目Oracle audit。
+
 ## 2026-11-25｜独立Qwen3.8 Flash Oracle
 
 用户指定单组开启思考high、输出64K。新增scripts/benchmarks/qwen38_oracle.py，复用官方ef4e5dff的raw标准证据与原提示词，传enable_thinking=true/reasoning_effort=high/max_completion_tokens=65536；官方正文确认high映射xhigh、合计预算含思考和答案。完整1013证据覆盖/971媒体SHA已验，9题模态×题型小样全部成功且有思考、无截断；参考答案排除及临时帧清理通过。全量2并发、复用9题，只新增1004请求。活动Sentrix建库仍关思考/4并发，服务不改。评分沿用冻结豆包协议，生成终态后独立评分，尚无Oracle分数。全量任务/wake状态、结果与接手入口见产品项目audit/20261125-qwen38-oracle/README.md；方法详见docs/refactor/2026-11-25-qwen38-oracle.md。
