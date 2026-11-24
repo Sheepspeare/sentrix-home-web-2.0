@@ -1,5 +1,21 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-24 17:25｜100目录统一整理并验收
+
+2026-11-24 17:25，100目录整理验收通过。稳定总根为`/home/realmagic/xy/benchmarks/`，下分`atm-bench/`与`photobench/`；ATM顶层去日期，实验按releases/operations/state/scripts/logs/artifacts/cache分类，8872结果在`atm-bench/results/`，8874结果在`atm-bench/results-cloud/`。8294当前库在`atm-bench/instances/doubao/product-data/`，旧云端完整环境在`instances/doubao-legacy/`；源题包在`datasets/sources/`，PhotoBench原8191/8772实例在`photobench/instances/default/`。用户根20份日志/脚本归`/home/realmagic/maintenance/`，旧部署归`xy/archive/deploy/`。旧绝对路径保留符号链接/隐藏映射，禁止删除；文档中的维护路径已更新，冻结原始证据仍保留原文。
+
+142563份迁移前文件身份中142547完全不变，16项为已记录配置/日志/运行态变化，无未解释差异；云端环境与11088份源题包跨分区逐文件checksum无差异，38份split-commit当前SHA已记录且原inode/大小/mtime保持（无迁移前SHA，不能声称双SHA比较）。default原68个散落文件完成分类。三产品live健康、三测评空闲；8872/8874仍56ea57aa+100-main-merge，349源码及三份线上静态SHA一致，业务代码未改。历史评分/GT/答卷保持，不启动正式Agent/Judge/补跑。
+
+迁移云端环境时停启8294/8874及两网关。8294因原已停服的WeMM8102无法通过启动校验，曾自动重启34次；已恢复既有WeMM（PID1824529，GPU0约5.6GiB）并恢复8294（PID1825089，NRestarts稳定34）。仅执行服务启动/健康合成探测。8874PID1815881；8291/8872/8191/8772、8100主模型与网卡记录进程PID保持，未停其他GPU任务。豆包全部turn终态计数与迁移前相同，无自动任务。以上取代历史“嵌入停服/资源待定”和旧PID描述；原三题已取消，不自动恢复。
+
+目录约定见代码树`docs/runbooks/server100-directory-layout.md`；完整迁移与验收见产品项目`audit/20261124-server100-directory-layout/README.md`。服务器`xy/README.md`及两套数据README已部署。工具apply/finish已消费，不重放；后续新建内容使用稳定路径。本次只归类保存，不删除历史数据以回收空间；/home可用27G，根分区可用49G。
+
+## 2026-11-24 17:00｜100两测评服务最新main核验通过
+
+Mac fetch及ls-remote确认团队main8c209ebc；开发分支56ea57aa已包含它并另有8提交，已有Agent耗时/历史轻读/检查点复用等修改保持。1008872/8874均已运行main-56ea57aa/apps/photobench/src，PID1750481/1750479，16:40:14启动；349源码与本机提交逐SHA相同，前端HTML/JS/CSS在本机dist、远端web-dist和两HTTP端口完全一致。在线版本56ea57aa+100-main-merge、均active/无活动工作、NRestarts0。
+
+本次远端全程只读，无需重复合并、同步、重启或服务器GitHub认证。关联8291/8294产品仍为独立的psh-formal-f75c105/context-three-v1部署，本结论仅针对两测评服务。原两份本机修改及两份未跟踪uv.lock保持。证据：产品项目audit/20261124-100-main-version-check/{README.md,verification.json,source-sha256.json,units.txt}。现役测评版本以此取代下文历史PID/目录；实验分数/历史和后续授权范围仍按产品项目T006记录。
+
 ## 2026-11-20 10:45｜修复Sentrix前端31项测试失败
 
 用户侧聊明确授权修复既有31项失败，并提交、push及更新原main PR #43。起点1a56385工作树干净；本机复现158通过/31失败。逐项根因与当前源码依据保存在产品项目audit/20261120-product-web-tests/failure-inventory.json。缺认证/上传Provider与matchMedia的测试已补齐运行上下文；导航与路由按现行六入口/七路由检查，旧相册切换/命令/QA入口保持隐藏；过程卡片、媒体标签和预览按当前界面核验。
@@ -283,7 +299,7 @@ Q4原90f21f因180秒快照等待失败；51题的run.json为2.17GB，最大单�
 
 11:06核149内核/595.99.02两张3090可用，WeMM及8291/8294健康。原Q4误CPU装载已按原unit恢复GPU1/PID191317，Q4_K_M、4×16K和Q4_OK验证通过；十条旧pending及其他任务保持。
 
-发现突然重启的状态恢复未写scope_build，原resume接口会拒绝完成未完构建。本机f8a75a5依据中断full/build原阶段判定未完构建，并保留显式finish_incomplete_build和完整导入条件；192项本地、83项远端发布组合及Ruff/格式通过。远端现有型号/清理适配保留，AST核仅resume_run变化。独立复制测评应用至/home/realmagic/xy/experiments/atm1013-20261118/resume-release，仅8872/8874切专属unit，PID194991/194992；原共享源码SHA及8772/8191 PID11560/1497保持。
+发现突然重启的状态恢复未写scope_build，原resume接口会拒绝完成未完构建。本机f8a75a5依据中断full/build原阶段判定未完构建，并保留显式finish_incomplete_build和完整导入条件；192项本地、83项远端发布组合及Ruff/格式通过。远端现有型号/清理适配保留，AST核仅resume_run变化。独立复制测评应用至/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/resume-release，仅8872/8874切专属unit，PID194991/194992；原共享源码SHA及8772/8191 PID11560/1497保持。
 
 两次resume各一次成功，原scope/11034导入及阶段成果保持，原中断历史和快照指针SHA不变。活动Q4为20261118-111519-2026.11.17-atm-sources-addresses-current-resume-90f21f，父e53f3c；Qwen为20261118-111529-2026.11.17-atm-sources-addresses-current-resume-211c0d，父7fcbea。均running/pipeline_processing且worker_alive，QA0；Q4材料11034/11034、finalizing，Qwen从3778/11034继续。执行器mode=reuse，属于此次full原scope的检查点续跑；1013题、reasoning/graph、QA4、3660秒及冻结ATM/Judge配置保持，未重新导入。
 
@@ -330,7 +346,7 @@ GPU恢复后先核两卡/磁盘/WeMM/产品/原pipeline与turn，再新注册两
 
 两端实际型号发现、冻结1013/SHA、共同评分提示词一致、全11034份材料路径预检通过。新scope各含run时间，model_deploy均done，原答卷未复用。导入最新processed分别7663/1970，失败0（仅启动快照，后续读精确run）。Q4权重SHA及Q4量化、4×16K、Q4_OK短生成通过；仅恢复既定GPU1服务并刷新8291容量探测。云端推理声明128K；系统reasoning开关与原生模型thinking分别记录，实际QA轨迹待进入答题后复核。
 
-资源准备：六份离线部署DB冷备压缩并解压SHA一致，释放10.55GiB；原始冷备路径各附.db.archive.json可恢复映射。首次系统Python缺file_digest在首文件读阶段失败，无写入；改业务Python3.12完成。8874历史results迁至/home/realmagic/xy/experiments/atm1013-20261118/cloud-results，159文件/2117301466字节SHA逐份一致，原路径保留软链接，空闲重启8874；历史数据保持。未变更8772/8191。
+资源准备：六份离线部署DB冷备压缩并解压SHA一致，释放10.55GiB；原始冷备路径各附.db.archive.json可恢复映射。首次系统Python缺file_digest在首文件读阶段失败，无写入；改业务Python3.12完成。8874历史results迁至/home/realmagic/xy/benchmarks/atm-bench/results-cloud，159文件/2117301466字节SHA逐份一致，原路径保留软链接，空闲重启8874；历史数据保持。未变更8772/8191。
 
 本机ops先语法检查与commit（27d250c/da5c55b/73d2c3c/516894c/c1346a6），再传100；五份远端脚本SHA与已提交本机一致，实际运行验收通过。业务源码仍d44e834+100-reasoning-context，本轮仅实验运行准备与专属模型unit覆盖；单次prepare/launch禁止重放。代码推送状态以审计delivery.json为准。
 

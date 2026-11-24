@@ -22,4 +22,4 @@ ObjectWriter复用StoredDict/StoredList时必须保留ObjectRef类型，不能�
 
 4df9302已同步100核SHA，160项通过；真实1013项存档及411节点长轨迹只读验收通过，峰值RSS69888KiB、manifest未变。静态资源已在8872/8874生效，两端HTTP首页/JS/CSS SHA一致，7保护PID保持；原wake继续。8874真实输入/输出/指标、390px窄屏无横向溢出与8872真实节点视图均已核。
 
-11/19 23:53后8874空闲激活`/home/realmagic/xy/experiments/atm1013-20261118/trace-viewer-ui-4df9302/evaluation`，实际PID3854102、cmdline/四源码SHA及在线轻详情均核验；8872活动中尚未激活。普通单题取消diagnostics默认读取已在8874生效。stage、publish-static及本轮8874 activate均已消费，禁止重放。线上历史列表一次18.97秒超时，独立旧/新读代码均0.77秒，活动run可查看；该并发现场耗时尚未唯一定位。
+11/19 23:53后8874空闲激活`/home/realmagic/xy/benchmarks/atm-bench/experiments/atm1013/releases/trace-viewer-ui-4df9302/evaluation`，实际PID3854102、cmdline/四源码SHA及在线轻详情均核验；8872活动中尚未激活。普通单题取消diagnostics默认读取已在8874生效。stage、publish-static及本轮8874 activate均已消费，禁止重放。线上历史列表一次18.97秒超时，独立旧/新读代码均0.77秒，活动run可查看；该并发现场耗时尚未唯一定位。

@@ -1,5 +1,9 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/24 100目录已统一至`xy/benchmarks/{atm-bench,photobench}`，实验/脚本/日志分类、旧路径兼容及文档已更新；文件校验和六服务入口通过。8294/8874已恢复，原WeMM8102为恢复依赖已启用，无正式测评；见`docs/runbooks/server100-directory-layout.md`及产品项目audit/20261124-server100-directory-layout，接T006。
+
+- 11/24 17:00只读核1008872/8874均运行56ea57aa（含团队最新main8c209ebc及后续8提交），349源码与在线静态SHA匹配；无需重发/重启，关联产品后端仍独立旧部署。见产品项目audit/20261124-100-main-version-check及T006。
+
 - 11/20 Agent时延修复ed268c61已上线1008872，270项及真实34题/979继承范围核验通过；启动状态扫描15历史仅0.267秒，原分/配置保持。8874豆包活动中保持旧版本，待空闲单独发布；见T006及产品项目audit/20261120-agent-latency-fix。
 
 - 11/20 Sentrix前端31项失败已逐项处理，全量191项/44文件通过、0跳过；TypeScript/构建通过，lint 0错误/45警告。修正旧测试上下文与界面断言，补时间线懒加载/定位和语音推理验证，修复无Fullscreen API时首页报错。继续PR #43，本轮不部署，见T006及产品项目audit/20261120-product-web-tests。
@@ -33,4 +37,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-20 | Sentrix前端191项通过；Qwen已验收，Q4/豆包原监控保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-24 | 100目录统一分类已验，维护路径/服务恢复及历史保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
