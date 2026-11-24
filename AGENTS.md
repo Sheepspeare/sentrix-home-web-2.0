@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Oracle生成1013题已全验收，豆包独立评分2并发已启动（wake51569dbf/健康06d02671）；相册build保持。评分6cd7ad59，详细结果/失败恢复接产品项目audit/20261125-qwen38-oracle与T006。
+- 11/25 Oracle1013题生成/评分已验收，主分87.018756%，0缺分失败；1234裁判原请求离线重放与CSV/冻结SHA一致，列表条件单列。相册build和原fc462190/健康06d02671保持；结果见产品项目audit/20261125-qwen38-oracle/RESULTS.md与T006。
 
 - 11/24 诊断汇总重复41dfa5b5已静态发布1008872/8874：修复11/12引入的相邻组件重复key；15项/构建及切换轮询唯一性通过，Flash建库继续、无重启。见产品项目audit/20261124-diagnostics-identity及T006。
 
@@ -43,4 +43,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-24 | ATM导出量表标签已上线；目录统一/服务与原分保持 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | Oracle1013主分87.018756%已验收；Flash相册build继续 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
