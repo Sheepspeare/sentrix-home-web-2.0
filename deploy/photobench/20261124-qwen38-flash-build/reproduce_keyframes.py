@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import cv2
+
 from probe_finalization import DATABASE, SCOPE
 
 
@@ -28,16 +30,26 @@ def main():
         for row in rows:
             analysis = json.loads((media / 'derived/svd_katna' / row['id'] / 'analysis.json').read_text())
             timestamp = analysis['selected_timestamps_sec'][-1]
+            capture = cv2.VideoCapture(row['path'])
+            decoded_times = []
+            while True:
+                ok, _ = capture.read()
+                if not ok:
+                    break
+                decoded_times.append(capture.get(cv2.CAP_PROP_POS_MSEC) / 1000)
+            capture.release()
             variants = []
-            for precision in (3, 6, 9):
-                seek = f'{timestamp:.{precision}f}'
-                target = Path(temporary) / f'{row["id"]}-{precision}.jpg'
+            for name, seek in [('milliseconds', f'{timestamp:.3f}'),
+                               ('microseconds', f'{timestamp:.6f}'),
+                               ('nanoseconds', f'{timestamp:.9f}'),
+                               ('decoded_pts', f'{decoded_times[-1]:.9f}')]:
+                target = Path(temporary) / f'{row["id"]}-{name}.jpg'
                 result = subprocess.run(
                     ['ffmpeg', '-y', '-v', 'error', '-ss', seek, '-i', row['path'],
                      '-frames:v', '1', '-vf', 'scale=iw*sar:ih,setsar=1', '-q:v', '2', str(target)],
                     capture_output=True, text=True, timeout=300,
                 )
-                variants.append({'seek': seek, 'exit_code': result.returncode,
+                variants.append({'name': name, 'seek': seek, 'exit_code': result.returncode,
                                  'output_bytes': target.stat().st_size if target.exists() else 0,
                                  'stderr': result.stderr[-1000:]})
             probe = subprocess.run(
@@ -48,6 +60,7 @@ def main():
             frames = json.loads(probe.stdout)['frames']
             results.append({'asset_id': row['id'], 'selected_timestamp': timestamp,
                             'sampling': analysis['sampling'], 'variants': variants,
+                            'last_decoded_times': decoded_times[-3:],
                             'last_frame_pts': [f.get('best_effort_timestamp_time') for f in frames[-3:]]})
     print(json.dumps({'scope_id': SCOPE, 'database_read_only': True,
                       'temporary_outputs_removed': True, 'results': results}, ensure_ascii=False))
