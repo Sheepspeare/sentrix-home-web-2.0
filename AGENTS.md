@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Flash建库收尾停滞告警已核为误报；另发现259/533视频抽帧缺场景，ee6594ae本机修复/14项通过，259条只读验证准备中，活动服务未改。健康cd5efb52与原fc462190保持；见产品项目audit/20261125-qwen38-build-finalization/README.md及T006。
+- 11/25 Flash建库收尾停滞告警已核为误报；另发现259/533视频抽帧缺场景，ee6594ae本机修复/14项通过，259条只读验证已启动（wake 3655e653），活动服务未改。健康cd5efb52与原fc462190保持；见产品项目audit/20261125-qwen38-build-finalization/README.md及T006。
 
 - 11/25 Oracle1013题生成/评分已验收，主分87.018756%，0缺分失败；1234裁判原请求离线重放与CSV/冻结SHA一致，列表条件单列。相册build和原fc462190保持，当前健康监控见上方最新记录；结果见产品项目audit/20261125-qwen38-oracle/RESULTS.md与T006。
 
