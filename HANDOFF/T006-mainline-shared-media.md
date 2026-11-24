@@ -1,5 +1,9 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜独立Qwen3.8 Flash Oracle
+
+用户指定单组开启思考high、输出64K。新增scripts/benchmarks/qwen38_oracle.py，复用官方ef4e5dff的raw标准证据与原提示词，传enable_thinking=true/reasoning_effort=high/max_completion_tokens=65536；官方正文确认high映射xhigh、合计预算含思考和答案。完整1013证据覆盖/971媒体SHA已验，9题模态×题型小样全部成功且有思考、无截断；参考答案排除及临时帧清理通过。全量2并发、复用9题，只新增1004请求。活动Sentrix建库仍关思考/4并发，服务不改。评分沿用冻结豆包协议，生成终态后独立评分，尚无Oracle分数。全量任务/wake状态、结果与接手入口见产品项目audit/20261125-qwen38-oracle/README.md；方法详见docs/refactor/2026-11-25-qwen38-oracle.md。
+
 ## 2026-11-24｜诊断汇总重复修复并静态上线
 
 重复标识错误由11/12 01:44的87f73054引入：诊断汇总与错误分析采用相同run/profile/batch key，React更新时遗留面板。41dfa5b5为两组件key加入各自前缀，新增build轮询/切任务/切评分批次回归；旧代码复现1→2份，修复后15项及TypeScript/构建通过。8872/8874已仅静态更新，HTTP三文件SHA及8保护单元PID保持，后端56ea57aa未重启。浏览器原6份，刷新后切任务/切回/轮询均1份，Flash媒体167→170/11034、失败0且继续运行。旧页面需刷新。修复已本机提交，发布脚本已消费不可重放；新前端41dfa5b5取代61e4f1ee静态版本，原数据/分数/GT保持。证据：产品项目audit/20261124-diagnostics-identity/README.md及published.json。
