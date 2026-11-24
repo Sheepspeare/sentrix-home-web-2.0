@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Qwen3.8 Flash Oracle独立适配已验9题（high映射xhigh、思考与答案合计64K），完整1013证据预检通过；全量执行及评分状态见产品项目audit/20261125-qwen38-oracle与T006。相册build保持。
+- 11/25 Oracle生成1013题已全验收，豆包独立评分2并发已启动（wake51569dbf/健康06d02671）；相册build保持。评分6cd7ad59，详细结果/失败恢复接产品项目audit/20261125-qwen38-oracle与T006。
 
 - 11/24 诊断汇总重复41dfa5b5已静态发布1008872/8874：修复11/12引入的相邻组件重复key；15项/构建及切换轮询唯一性通过，Flash建库继续、无重启。见产品项目audit/20261124-diagnostics-identity及T006。
 
