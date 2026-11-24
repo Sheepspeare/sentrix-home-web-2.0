@@ -1,5 +1,10 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-24｜诊断汇总重复修复并静态上线
+
+重复标识错误由11/12 01:44的87f73054引入：诊断汇总与错误分析采用相同run/profile/batch key，React更新时遗留面板。41dfa5b5为两组件key加入各自前缀，新增build轮询/切任务/切评分批次回归；旧代码复现1→2份，修复后15项及TypeScript/构建通过。8872/8874已仅静态更新，HTTP三文件SHA及8保护单元PID保持，后端56ea57aa未重启。浏览器原6份，刷新后切任务/切回/轮询均1份，Flash媒体167→170/11034、失败0且继续运行。旧页面需刷新。修复已本机提交，发布脚本已消费不可重放；新前端41dfa5b5取代61e4f1ee静态版本，原数据/分数/GT保持。证据：产品项目audit/20261124-diagnostics-identity/README.md及published.json。
+
+
 ## 2026-11-24｜ATM导出筛选量表修复
 
 2026-11-24，ATM导出筛选量表显示修复61e4f1ee已本机提交并静态发布1008872/8874。已核真实逻辑：profile_state保留ATM judge.score原分/max_score=1；judge_bucket_for_summary内部将零分/中间分/满分分为0/1/2组，未将导出原分改成2分。旧RunDetail给scoreChoices传入不含count的临时summary，函数返回开放式0/1/2旧标签，导致ATM界面误标。

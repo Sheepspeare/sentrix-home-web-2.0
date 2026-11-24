@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/24 诊断汇总重复41dfa5b5已静态发布1008872/8874：修复11/12引入的相邻组件重复key；15项/构建及切换轮询唯一性通过，Flash建库继续、无重启。见产品项目audit/20261124-diagnostics-identity及T006。
+
 - 11/24 ATM导出筛选标签61e4f1ee已静态发布1008872/8874：按0–1量表显示零分/部分得分/满分，原分及分组接口保持；115后端/50前端、构建与在线SHA/真实页面通过，无重启。见产品项目audit/20261124-export-score-scale及T006。
 
 - 11/24 100目录已统一至`xy/benchmarks/{atm-bench,photobench}`，实验/脚本/日志分类、旧路径兼容及文档已更新；文件校验和六服务入口通过。8294/8874已恢复，原WeMM8102为恢复依赖已启用，无正式测评；见`docs/runbooks/server100-directory-layout.md`及产品项目audit/20261124-server100-directory-layout，接T006。
