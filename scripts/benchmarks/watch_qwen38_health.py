@@ -13,8 +13,11 @@ TERMINAL = {"completed", "completed_with_errors", "failed", "cancelled", "interr
 
 def inspect(kind, data):
     if kind == "oracle":
-        failures = data.get("failed", 0)
-        return data.get("finished", 0), bool(failures), f"{failures} oracle failures"
+        failures = data.get("failed", data.get("failed_primary", 0))
+        auxiliary = data.get("numeric_auxiliary_failed", 0)
+        return data.get("finished", 0), bool(failures or auxiliary), (
+            f"{failures} oracle primary failures, {auxiliary} numeric auxiliary failures"
+        )
     phases = data.get("phases", {})
     progress = tuple(
         (name, phase.get("status"), phase.get("progress", {}).get("processed", 0))
