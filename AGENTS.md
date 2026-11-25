@@ -1,7 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Flash结构已验，955新场景摘要保存；四图纠正wake956ce08c待验，32测试通过。新发现1328旧视频场景仅占位摘要及955图谱节点待同步；5部分caption/旧2OCR等待收尾，QA0。见audit/20261125-qwen38-build-finalization及T006。
-
+- 11/25 Flash四图局部纠正已验，52视觉/955新摘要保存且原4324事件保持；1328旧场景缺摘要已独立冻结，4小样wake `5d012f12-2158-4270-9fd1-58314c1e5bcd`，28相关测试通过。5部分caption/旧OCR/图谱同步待收尾，QA0。见audit/20261125-qwen38-build-finalization及T006。
 - 11/25 两项需求当前为4代表→79历史候选经新Flash确诊→专项/组合→全1013对照；旧60/20/953只留历史。预算/视觉日志294项通过未部署。002源码分析及157项既有回归完成，确认字段绑定/OCR核验输入缺口；真实题影响待核，先扩展已有取证和收尾机制。见docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep/需求002代码分析.md，接T006。
 
 - 11/25 Flash恢复旧full在第233条视觉400触警；已核233条结构/全阶段及原5类记录0改0缺，配置无偏移。余26已接续wake13ba3d55；空视觉帧与955场景摘要待补，内容未验收，QA0。见产品项目audit/20261125-qwen38-build-finalization及T006。

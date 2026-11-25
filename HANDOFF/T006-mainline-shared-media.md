@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜四图纠正验收通过，1328旧场景缺摘要独立冻结
+
+四图纠正wait `956ce08c-6dad-48c8-a235-50a51b275666`运行2.584秒成功，0新生成请求。只读验收确认52/52视觉、955/955新摘要逐列匹配success；52原文件SHA、观察文本/词法及955个2048维事件索引通过。对before-apply.db：仅4观察、12文本向量更新；13356资产、6989视觉向量、4324事件正文及facts0行全部保持。6实体仅更新时间，17属性/8既有关系及4新关系逐项核为该图合法证据追加或错误实体撤回；错误南瓜实体rejected、2属性rejected、2关系retracted，错误图/事件关联已移除。其他实体提及保持。证据`visual-apply-v2-review/{verification,content,acceptance}.json`及完整apply归档。三图仅核实原模型文字片段，街摊OCR仍未恢复；旧两帧OCR缺口保留。
+
+独立冻结`legacy-summary-plan.json`：1328条旧video_scene占位摘要，与此前tail完整清单UUID一致，全部有caption；排除已成功955新摘要。独立备份在100 `content/legacy-scene-summaries/before-legacy.db`，不改原955计划。4小样按原caption长度选短/中/长输入，涵盖草地摩天轮、桥梁水域、疑似机翼水域、车辆校徽；用于检查不同输入长度和事实不确定性保留，未读取GT。
+
+新增`repair_legacy_summaries.py`沿原repair_summary/execute路径，只补冻结事件及其episodic文本向量，成功响应复用；校验原观察未变，成功项跳过、既有失败保留，单项输出失败隔离，配置/索引/数据库异常停止。本机5新增＋既有相关共28测试、ruff/compile通过，提交1f188830；传100 SHA d171c18c4f449a75d54b1653ee904fdcae90b85b009543483d1e3761d568c488及编译、freeze验收通过。只新增脚本，无release更改、无服务重启。独立小样wake `5d012f12-2158-4270-9fd1-58314c1e5bcd`，回执`legacy-summary-smoke-launch.json`；结果待回调核验，小样通过后另挂wake接续其余1324条。模型仍Flash/关思考128K/4096/最多4，原提示词保持。
+
+后续对before-legacy.db按1328事件/对应文本向量白名单验收，旧inspect_content_recovery的原3369事件全保持断言不能用于此后阶段；955新摘要必须逐列保持。新备份后/home余1.8G，后续复用此备份，勿重复下载或复制整库；必要原包保存到独立目录。另5部分caption、关联旧事件失效摘要、旧错误/length影响、图谱节点/因果批次同步仍待收尾。8294/8874/网关原三PID保持，.119high不碰，Oracle87.018756不重跑；QA/Judge/消融0，题库线上分保持，不scope finalize、不另建Container争Qdrant。956ce08c已处理不重挂。
+
 ## 2026-11-25｜区域取证已核；四图局部纠正与1328旧场景缺摘要分开收尾
 
 已先登记wake `956ce08c-6dad-48c8-a235-50a51b275666`派发`sentrix-qwen38-visual-apply-v2-20261125`，回执`visual-review-v2-apply-launch.json`；本轮只复用已核验模型响应做4图纠正及索引，0新生成。登记waiting，实际结果待终态验收。
