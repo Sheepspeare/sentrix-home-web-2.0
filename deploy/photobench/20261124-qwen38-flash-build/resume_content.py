@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import httpx
 import repair_content as repair
 from recover_videos import save
 
@@ -40,6 +41,29 @@ def execute(kind, item, repos):
                 return {"kind": kind, "id": identifier, "status": "deferred_missing_visual_evidence"}
     try:
         status = function(item, repos)
+    except httpx.HTTPStatusError as error:
+        response = error.response
+        if response.status_code != 400:
+            raise
+        try:
+            detail = response.json()["error"]
+        except (ValueError, KeyError, TypeError):
+            raise error from None
+        if not (
+            detail.get("code") == "invalid_parameter_error"
+            and detail.get("message", "").startswith(
+                "Model output became abnormal while generating a JSON response for response_format."
+            )
+        ):
+            raise
+        return {
+            "kind": kind,
+            "id": identifier,
+            "status": "failed_model_output",
+            "error": "Upstream aborted abnormal JSON generation",
+            "evidence": str(directory),
+            "upstream_error": detail,
+        }
     except AssertionError as error:
         if str(error) not in OUTPUT_ERRORS:
             raise

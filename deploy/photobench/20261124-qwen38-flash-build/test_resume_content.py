@@ -3,6 +3,7 @@
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import resume_content as resume
 
@@ -54,3 +55,38 @@ def test_successful_response_can_resume_index_without_model_retry(tmp_path, monk
     (path.parent / "accepted-response.json").write_text(json.dumps({"model": "qwen3.8-flash"}))
     monkeypatch.setattr(resume.repair, "repair_visual", lambda *_: "completed")
     assert resume.execute("visual", {"asset_id": "asset"}, None)["status"] == "completed"
+
+
+@pytest.mark.parametrize(
+    ("status", "message", "deferred"),
+    [
+        (
+            400,
+            "Model output became abnormal while generating a JSON response for response_format."
+            " The generation was aborted because the partial output may be incomplete or invalid JSON.",
+            True,
+        ),
+        (400, "Invalid max_tokens parameter", False),
+        (401, "Authentication failed", False),
+        (429, "Rate limit exceeded", False),
+    ],
+)
+def test_only_confirmed_upstream_generation_error_is_isolated(
+    tmp_path, monkeypatch, status, message, deferred
+):
+    monkeypatch.setattr(resume.repair, "CONTENT", tmp_path)
+    response = httpx.Response(
+        status,
+        request=httpx.Request("POST", "http://test"),
+        json={"error": {"code": "invalid_parameter_error", "message": message}},
+    )
+
+    def fail(*_):
+        response.raise_for_status()
+
+    monkeypatch.setattr(resume.repair, "repair_visual", fail)
+    if deferred:
+        assert resume.execute("visual", {"asset_id": "asset"}, None)["status"] == "failed_model_output"
+    else:
+        with pytest.raises(httpx.HTTPStatusError):
+            resume.execute("visual", {"asset_id": "asset"}, None)
