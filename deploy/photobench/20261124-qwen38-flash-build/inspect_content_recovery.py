@@ -15,8 +15,10 @@ def inspect(output):
     plan = json.loads((CONTENT / "plan.json").read_text())
     observations = tuple(t["before"]["id"] for t in plan["visual_targets"])
     events = tuple(e["id"] for e in plan["scene_events"])
+    indexed_events = tuple(sorted(set(events) | {e for t in plan["visual_targets"] for e in t["event_ids"]}))
     op = ",".join("?" for _ in observations)
     ep = ",".join("?" for _ in events)
+    ip = ",".join("?" for _ in indexed_events)
     result = {"read_only": True, "visual": [], "summary": [], "requests": []}
     with connect() as connection:
         connection.execute(
@@ -31,10 +33,41 @@ def inspect(output):
                 connection,
                 "text_vectors",
                 f"NOT ((b.source_type='observation' AND b.source_id IN ({op})) "
-                f"OR (b.source_type='event' AND b.source_id IN ({ep})))",
-                observations + events,
+                f"OR (b.source_type='event' AND b.source_id IN ({ip})))",
+                observations + indexed_events,
             ),
         }
+        linked_changes = differences(
+            connection,
+            "text_vectors",
+            f"b.source_type='event' AND b.source_id IN ({ip}) AND b.source_id NOT IN ({ep})",
+            indexed_events + events,
+        )
+        result["linked_event_index_changes"] = []
+        for vector_id in linked_changes["changed_ids"]:
+            vector = dict(
+                connection.execute("SELECT * FROM text_vectors WHERE id=?", (vector_id,)).fetchone()
+            )
+            observation_id = json.loads(vector["metadata_json"])["observation_id"]
+            matching = connection.execute(
+                "SELECT vector_json,dimension FROM text_vectors WHERE source_type='observation' "
+                "AND source_id=? AND space='episodic' AND model_name=?",
+                (observation_id, vector["model_name"]),
+            ).fetchone()
+            assert observation_id in observations and matching is not None
+            assert (
+                vector["vector_json"] == matching["vector_json"]
+                and vector["dimension"] == matching["dimension"]
+            )
+            assert vector["space"] == "episodic" and vector["dimension"] == 2048
+            result["linked_event_index_changes"].append(
+                {
+                    "vector_id": vector_id,
+                    "event_id": vector["source_id"],
+                    "observation_id": observation_id,
+                    "reason": "IndexObservationText also writes the linked event projection",
+                }
+            )
         for target in plan["visual_targets"]:
             identifier = target["asset_id"]
             current = dict(
@@ -79,7 +112,8 @@ def inspect(output):
                     "vector_dimensions": [
                         r[0]
                         for r in connection.execute(
-                            "SELECT dimension FROM text_vectors WHERE source_type='event' AND source_id=? AND space='episodic'",
+                            "SELECT dimension FROM text_vectors WHERE source_type='event' "
+                            "AND source_id=? AND space='episodic'",
                             (identifier,),
                         )
                     ],
