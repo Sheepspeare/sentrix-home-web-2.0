@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜大预算首4验收，双基线继续
+
+large尾f6ebb1首4全部有答卷，实际共享模型98/6/8/99（内部视觉2/1/1/0）、工具准入115/5/6/99；2题模型额度触发，0工具总额触发。100决策步/3600秒、100/600及各reserve2、planner先行/9工具all_tools已核。Wi-Fi的140条模型操作为96次成功chat＋44次本地PromptTooLongError预检，加2内部视觉共98次HTTP；44预检全部逐项取证，不计HTTP预算。主统计以request_limits及原包，页面通用计数另列。
+
+只读验收18记忆表与快照一致、三原保护进程保持。551共享网关原包完整且HTTP200；409答题请求全部stop/tool_calls，142健康探测中5条8token length单列。40答题请求的输出额度按既有上下文剩余量缩到4096以内；原核验脚本只接受恰4096而失败，f8fe2c81修正为正数且不超过4096并核metadata一致，本机Ruff/编译→100SHA/编译/真实验收→push均通过。只改独立核验脚本，业务release30c67e74保持，未重启。
+
+large83检查点wake c9804024-689b-46f8-bb41-8cbb4ba51ffd已登记后原子去首4暂停，在同run继续余1009；limited原wait f4ff2b2c-3575-41fe-a143-9c48ad98a557保持。新large精确wait/恢复回执见large-priority-monitor-launch.json，不重发POST/重做4成功题。两组4并发，持续429时4→3→2且保留在飞；home约7.5GiB。待评分不计0，原native_v2协议保留。
+
+已保存首4同题机制对照first-four-paired-mechanisms.json：两题两组都触发模型额度，仅为005机制候选，实际失分待Judge。83轨迹就绪后冻结100/30和20/600交叉子集；002按工具可见/准入/送图/识别/答案使用结合代码定位，首4不足以确认程序故障。保留源相册、.119high、Oracle及用户4原改动。本节取代此前large仍待首4的当前状态。
+
+证据：large-first-four-review/{acceptance,verification,local-preflight-errors}.json及完整分页trace；旧wait65bf0f2a已处理。下一回调按实际worker与成功项核验，不盲重跑。
+
 ## 2026-11-26｜有限预算首4题验收，原全量任务继续
 
 limited run尾ea4413首4全部交卷，保持待Judge评分。4个planner均先于Agent执行，冻结9工具all_tools；实际100决策步/3600秒、20模型/30工具、各预留2、共享内部看图已核。4题真实模型尝试18/6/8/19（含内部视觉0/1/1/5），工具准入22/5/6/23；2题stop_code=model_call_limit，0工具总额触发。终止标签step_budget_exhausted不能直接解读为100决策步耗尽。通用model_call_count漏计内部视觉，实验主统计以request_limits与HTTP原包为准，基线业务保持冻结。
