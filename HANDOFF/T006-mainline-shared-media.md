@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v2同8题已启动，低盘告警已处置
+
+新v2有限run为20261126-045653-2026.11.17-atm-sources-addresses-big_model-f9367d，实际build11deb1c6、2并发运行，最新1答/无fatal_error；首8后暂停。独立wake e73cc665-4d53-4e88-b73b-83117db2b7a6启动成功后因/home仅1957777408字节触低2GiB告警，监控退出但QA继续；禁止重放POST。已核这不是答题失败，后续只attach原run监控，原始first-eight证据和回调完整保留。
+
+共享/home几乎满，未删除任何结果/raw或搬活库。已将只读最终快照sentrix.db（2439962624字节）迁到另一ext4磁盘/var/tmp/realmagic-flash-snapshots/atm-flash-no-thinking-final-20261126-v1.db，原快照路径为软链接；SHA a82ad2a317eae4e2236bcf17f68c53a4485d5c425024ef81801616e1b314de82前后相同，目标444，source路径不变。/home恢复4407410688字节，根盘3049046016；后续恢复/检查仍用原路径。脚本本机ccc8ae14验证提交→100SHA/compile→真实迁移验收后push；监控新增existing-run只attach不POST，6测试过。证据v2-limited-rerun/{launch-registration,first-eight/terminal,snapshot-relocation,run-after-disk-fix}.json及callback-e73cc665-reconciled.json。
+
+业务仍仅有限候选11deb1c6；原全量、large候选、相册内容/索引、Judge协议均保持。下一步先独立wake attach f9367d到8或异常，输出first-eight-monitor-2，首8配对v1/基线后决定下一版，不能自动扩大或重跑成功。large独立wake d0fe86c7仍按其本组证据处理，不重复登记。
+
+
 ## 2026-11-26｜v2有限副本发布验收，冻结同8题复测
 
 业务11deb1c6仅切候选8298/8878，511源码SHA/远端编译及真实配置已验：20模型/30工具、各2预留、2worker，推理开/planner/all_tools、Flash关思考128K/4096保持。18记忆表与原快照逐列SHA保持，9保护进程ticks保持（含原双全量4服务及候选large2服务）。相关215测试211通过/4旧toolbox失败保持，部署回归2通过；本机分支已push20c42308并核远端。
