@@ -1,4 +1,6 @@
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -49,11 +51,16 @@ def test_live_launch_is_saved_and_returns_only_at_eight(tmp_path, monkeypatch):
     op = module()
     commands = []
     monkeypatch.setattr(op.time, "sleep", lambda seconds: None)
+    payload = tmp_path / "limited-run-payload.json"
+    payload.write_text(json.dumps({"sentrix_url": "http://127.0.0.1:8298", "qa_concurrency": 2,
+                                   "reasoning": True, "defer_scoring": True}))
 
     def ssh(command):
         commands.append(command)
         if "POST" in command:
             return '{"run_ids": ["candidate-run"]}'
+        if "sha256sum" in command:
+            return hashlib.sha256(payload.read_bytes()).hexdigest() + "  run-payload.json"
         if "tail -n" in command:
             return ""
         if command == "df -Pk /home":
@@ -67,5 +74,16 @@ def test_live_launch_is_saved_and_returns_only_at_eight(tmp_path, monkeypatch):
     monkeypatch.setattr(op, "api", lambda port, path: snapshot)
     assert op.run("limited", tmp_path) == 0
     assert len([c for c in commands if "POST" in c]) == 1
-    assert "8878" in commands[0] and op.BASE in commands[0]
+    post = next(c for c in commands if "POST" in c)
+    assert "8878" in post and op.BASE in post
     assert (tmp_path / "limited-first-eight/launch.json").exists()
+
+
+def test_baseline_product_endpoint_is_rejected_before_network(tmp_path, monkeypatch):
+    op = module()
+    payload = {"sentrix_url": "http://127.0.0.1:8296", "qa_concurrency": 2,
+               "reasoning": True, "defer_scoring": True}
+    (tmp_path / "limited-run-payload.json").write_text(json.dumps(payload))
+    monkeypatch.setattr(op, "ssh", lambda command: pytest.fail("Wrong endpoint must not be contacted"))
+    with pytest.raises(AssertionError):
+        op.run("limited", tmp_path)

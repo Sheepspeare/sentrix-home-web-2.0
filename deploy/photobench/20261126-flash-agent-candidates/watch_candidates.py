@@ -1,6 +1,7 @@
 """Start each candidate once and wait for its eight-question review checkpoint."""
 
 import argparse
+import hashlib
 import json
 import subprocess
 import time
@@ -13,6 +14,7 @@ GATEWAY_LOG = (
     "flash-dual-baseline-20261126/model-requests.jsonl"
 )
 PORTS = {"limited": 8878, "large": 8879}
+PRODUCT_PORTS = {"limited": 8298, "large": 8299}
 CHECKPOINT = 8
 TERMINAL = {"completed", "completed_with_errors", "failed", "cancelled", "interrupted"}
 
@@ -68,14 +70,24 @@ def request_alert(records, started):
     return None
 
 
-def run(group, audit):
+def validate_payload(group, payload):
+    assert payload["sentrix_url"] == f"http://127.0.0.1:{PRODUCT_PORTS[group]}"
+    assert payload["qa_concurrency"] == 2
+    assert payload["reasoning"] is True and payload["defer_scoring"] is True
+
+
+def run(group, audit, output=None):
     port = PORTS[group]
-    output = audit / f"{group}-first-eight"
+    output = output or audit / f"{group}-first-eight"
     output.mkdir()  # Existing intent requires inspection, never another POST.
     started = time.time()
     intent = {"group": group, "at": started, "payload": f"{BASE}/{group}/run-payload.json"}
     save(output / "intent.json", intent)
     try:
+        payload_file = audit / f"{group}-run-payload.json"
+        validate_payload(group, json.loads(payload_file.read_text()))
+        digest = hashlib.sha256(payload_file.read_bytes()).hexdigest()
+        assert ssh(f"sha256sum {intent['payload']}").split()[0] == digest
         reply = json.loads(ssh(
             f"curl --max-time 45 -fsS -X POST http://127.0.0.1:{port}/api/v1/runs "
             f"-H 'Content-Type: application/json' --data-binary @{BASE}/{group}/run-payload.json"
@@ -123,5 +135,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--group", choices=["limited", "large"], required=True)
     parser.add_argument("--audit", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    raise SystemExit(run(args.group, args.audit))
+    raise SystemExit(run(args.group, args.audit, args.output))
