@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26 005/002源码诊断已复现：叙述者人物条件阻塞检索、无进展仅提醒与跨工具重置失败计数；跨检索编号复用且四读取工具强绑最新结果。7项离线复现/60既有测试通过，修复方案见产品audit/20261126-flash-dual-baseline-launch/code-diagnosis及T006；业务未改，活动双基线保持。
+
 - 11/26双基线首4均已验收：先planner/9工具，实际20／30与100／600共享模型额度生效；两组各2题模型额度触发，Judge待补。limited原run已继续，large按验收恢复同run，均4并发；下一检查点为83优先UUID或异常。大组Wi-Fi的140条记录含44次未发HTTP的本地预检，实际共享请求98。见产品项目audit/20261126-flash-dual-baseline-launch及T006。
 
 - 11/26双基线计划已定：20模型／30工具及100／600，两组推理开启、先planner、全工具策略相同，各4题并发全1013；前4+39+40优先后930。005子集交叉组可并行，002依新轨迹定位，Judge可后补。北京时间11/27 17:00汇报；当前未发QA。见产品项目`audit/20261126-flash-dual-baseline-plan/README.md`及T006。
@@ -57,4 +59,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线首4验收通过，原run各4并发继续；83优先、Judge待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线各4并发继续；005循环/002引用已离线定位，候选待实施，Judge待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
