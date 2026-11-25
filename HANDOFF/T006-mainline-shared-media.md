@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v4局部发布验收通过，同11题独立复测接续
+
+业务4bc53cad已仅切large8299/8879，519源码SHA/编译、18记忆表/9保护进程保持、旧v3十一答SHA逐题通过，旧36e9da只取消1002未执行调度。远端真实验收后已push核SHA，未热更原基线/有限v2。新run状态run_created，20261126-064511-2026.11.17-atm-sources-addresses-big_model-f4fd18，独立wake c58f5ea8-7769-4e2f-b128-a6686c6a6149，2并发/100模型600工具/各reserve2、同11题后暂停；思考/上下文/输出/时限/83题库UUID/native_v2延期Judge保持。证据v4-large-rerun/deployment及launch-registration.json。033c4593已验处理不重挂。
+
+当前原limited147、原large57各4并发继续，有限v2诊断45/2并发继续；原三个wake保持。下一检查点固定revision取全轨迹，核文字主体恢复、真实参考日filters及候选日期/统计上界、披萨正确asset与答案证据、原8配对共享HTTP/含内部视觉Token与漏答。v3只证明降本和分组分页链路，质量未通过，Porto长历史循环与局部否认仍待诊断；不自动扩大v4，待Judge不记0。/home不复制库或删raw，源相册/Oracle/119high/主树4原改动保持。
+
 ## 2026-11-26｜v3十一题已验，不扩大；定向补文字主体和参考日
 
 033c4593已核11答暂停，固定revision原包与206条真实HTTP逐调用核验通过，均200/Flash关思考。原8题HTTP244→100、工具262→111、记录Token含内部视觉737万→195万，但蚂蚁医疗visible_text主体仍误当人脸，漏答；不算质量通过/不扩大。鸡翅最终日期合题，但检索未生效时间条件，不能凭最终答案报修复完成。分组模型侧64项/9187字符、1660组总量与续页保留；3旧失败均产生回答，Porto仍51本地预检/73真实HTTP，长历史循环待解决。餐桌引用仍读正确asset_5c08513d3cfe/MOVENPICK，地点归属保留不确定。详见v3-large-rerun/review/{RESULTS.md,acceptance.json,paired-metrics.json,http-archive-exact-verification.json}，待Judge不记0。
