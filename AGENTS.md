@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/25 图谱来源已核：2291摘要/28实体关联事件/57观察及对象邻接变化均有依据；末次40批因果请求无错，23原边保留。局部同步wake `4415faaf-7f69-4852-9e8a-1c858916cb59`待验，0新模型/无重启，QA0；见audit/20261125-qwen38-build-finalization及T006。
+
 - 11/25 五caption/八旧摘要已验，6237新token；截至d8a6227b已push。图谱只读投影差异wake `c6808725-ff81-413b-a9c3-494ff9a04eb9`，0新模型/0图写入，原因果边保留。QA0，见audit/20261125-qwen38-build-finalization及T006。
 
 - 11/25 五caption及索引/17类非目标保护已验；8摘要因NULL/空串比较在请求前中止，4e372572/30测试已修，wake `3d342a7e-bec7-4583-b6bf-284368807e53`仅接8未做摘要。图谱待同步，QA0。见audit/20261125-qwen38-build-finalization及T006。
