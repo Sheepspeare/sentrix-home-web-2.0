@@ -18,7 +18,6 @@ helper = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(helper)
 
 BASE = Path("/home/realmagic/xy/benchmarks/atm-bench/experiments/flash-agent-candidates-20261126")
-BASELINE = BASE.with_name("flash-dual-baseline-20261126")
 GROUPS = {"limited": (8298, 8878, 20, 30), "large": (8299, 8879, 100, 600)}
 BASELINE = BASE.with_name("flash-dual-baseline-20261126")
 PREFIX = "sentrix-flash-candidates"
@@ -130,18 +129,14 @@ def configure_group(group, ports, revision, data):
     for folder in ("results", "runtime"):
         (target / folder).mkdir()
     product_env = helper.load_env(BASELINE / f"{group}-api.env")
+    assert product_env["SENTRIX_VLM_BASE_URL"] == helper.GATEWAY
+    assert int(product_env["SENTRIX_REASONING_MAX_MODEL_CALLS"]) == models
+    assert int(product_env["SENTRIX_REASONING_MAX_TOOL_CALLS"]) == tools
     product_env.update(
         SENTRIX_DATA_DIR=data,
         SENTRIX_API_PORT=product,
         SENTRIX_LLM_CONFIG=BASE / "model-profile.json",
-        SENTRIX_VLM_BASE_URL=helper.GATEWAY,
         SENTRIX_AGENT_TURN_MAX_WORKERS=WORKERS,
-        SENTRIX_REASONING_MAX_STEPS=100,
-        SENTRIX_VLM_REASONING_CONTEXT_TOKENS=131072,
-        SENTRIX_REASONING_MAX_MODEL_CALLS=models,
-        SENTRIX_REASONING_MAX_TOOL_CALLS=tools,
-        SENTRIX_REASONING_MAX_SEARCH_CALLS=100,
-        SENTRIX_REASONING_MAX_OTHER_TOOL_CALLS=500,
     )
     unit(group + "-api", product_env, product, "sentrix.main", BASE / "release/apps/api/src", True)
     evaluation_env = helper.load_env(BASELINE / f"{group}-eval.env")
@@ -168,8 +163,15 @@ def protected_processes():
     for group in GROUPS:
         for role in ("api", "eval"):
             pid = subprocess.check_output(
-                ["systemctl", "--user", "show", f"sentrix-flash-dual-{group}-{role}.service",
-                 "--property=MainPID", "--value"], text=True,
+                [
+                    "systemctl",
+                    "--user",
+                    "show",
+                    f"sentrix-flash-dual-{group}-{role}.service",
+                    "--property=MainPID",
+                    "--value",
+                ],
+                text=True,
             ).strip()
             assert int(pid) > 0, (group, role, pid)
             pids.add(int(pid))
@@ -190,25 +192,7 @@ def prepare():
     assert manifest and all(
         helper.sha(BASE / "release" / name) == digest for name, digest in manifest.items()
     )
-    protected_pids = {4191434, 2427495, 2427487}
-    for group in GROUPS:
-        for role in ("api", "eval"):
-            pid = int(
-                subprocess.check_output(
-                    [
-                        "systemctl",
-                        "--user",
-                        "show",
-                        f"sentrix-flash-dual-{group}-{role}.service",
-                        "--property=MainPID",
-                        "--value",
-                    ],
-                    text=True,
-                ).strip()
-            )
-            assert pid > 0
-            protected_pids.add(pid)
-    protected = {str(pid): Path(f"/proc/{pid}/stat").read_text().split()[21] for pid in protected_pids}
+    protected = protected_processes()
     gateway_health_url = helper.GATEWAY.removesuffix("/v1") + "/health"
     with urllib.request.urlopen(gateway_health_url, timeout=15) as response:
         gateway_health = json.load(response)

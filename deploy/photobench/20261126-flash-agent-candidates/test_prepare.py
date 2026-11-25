@@ -46,9 +46,28 @@ def test_group_configuration_keeps_shared_gateway_and_two_workers(
     baseline = tmp_path / "baseline"
     old = baseline / group
     (old / "config").mkdir(parents=True)
-    (old / "config/runtime_connection.json").write_text(json.dumps({"product_settings": {"unrelated": 7}}))
-    op.helper.env(baseline / f"{group}-api.env", {"SENTRIX_KEEP": "value", "OTHER_SECRET": "not-product"})
-    op.helper.env(baseline / f"{group}-eval.env", {"BENCH_KEEP": "value", "SENTRIX_OLD": "remove"})
+    original = {
+        "product_settings": {
+            "unrelated": 7,
+            "reasoning_max_model_calls": budgets[0],
+            "reasoning_max_tool_calls": budgets[1],
+            "reasoning_max_search_calls": 100,
+            "reasoning_max_other_tool_calls": 500,
+            "agent_turn_workers": 4,
+        },
+        "model_base_url": op.helper.GATEWAY,
+    }
+    (old / "config/runtime_connection.json").write_text(json.dumps(original))
+    op.helper.env(
+        baseline / f"{group}-api.env",
+        {
+            "SENTRIX_KEEP": "value",
+            "SENTRIX_VLM_BASE_URL": op.helper.GATEWAY,
+            "SENTRIX_REASONING_MAX_MODEL_CALLS": budgets[0],
+            "SENTRIX_REASONING_MAX_TOOL_CALLS": budgets[1],
+        },
+    )
+    op.helper.env(baseline / f"{group}-eval.env", {"BENCH_KEEP": "value"})
     monkeypatch.setattr(op, "BASE", base)
     monkeypatch.setattr(op, "BASELINE", baseline)
     units = []
@@ -62,9 +81,7 @@ def test_group_configuration_keeps_shared_gateway_and_two_workers(
     assert settings["reasoning_max_search_calls"] == 100
     assert settings["reasoning_max_other_tool_calls"] == 500
     assert settings["unrelated"] == 7
-    assert json.loads((old / "config/runtime_connection.json").read_text()) == {
-        "product_settings": {"unrelated": 7}
-    }
+    assert json.loads((old / "config/runtime_connection.json").read_text()) == original
     assert connection["sentrix_url"] == f"http://127.0.0.1:{product}"
     assert connection["model_base_url"] == "http://127.0.0.1:18148/v1"
     assert json.loads((target / "dispatch-control.json").read_text()) == {"concurrency": 2}
@@ -72,11 +89,11 @@ def test_group_configuration_keeps_shared_gateway_and_two_workers(
     assert api[0] == f"{group}-api" and api[2] == product
     assert api[1]["SENTRIX_DATA_DIR"] == data
     assert api[1]["SENTRIX_AGENT_TURN_MAX_WORKERS"] == 2
-    assert "OTHER_SECRET" not in api[1]
+    assert api[1]["SENTRIX_KEEP"] == "value"
     assert benchmark[2] == evaluation
     assert benchmark[1]["PHOTOBENCH_RESULTS_ROOT"] == target / "results"
     assert benchmark[1]["PHOTOBENCH_SENTRIX_SERVICE_UNIT"] == f"sentrix-flash-candidates-{group}-api.service"
-    assert "SENTRIX_OLD" not in benchmark[1]
+    assert benchmark[1]["BENCH_KEEP"] == "value"
 
 
 def test_existing_intent_stops_before_any_operations(tmp_path, monkeypatch):
