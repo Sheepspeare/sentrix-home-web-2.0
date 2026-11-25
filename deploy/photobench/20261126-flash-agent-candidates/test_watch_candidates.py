@@ -47,7 +47,8 @@ def test_request_alert_distinguishes_configuration_and_rate_limit(monkeypatch):
     assert op.request_alert([limited] * 3, 990) == "repeated_429"
 
 
-def test_live_launch_is_saved_and_returns_only_at_eight(tmp_path, monkeypatch):
+@pytest.mark.parametrize("attach", [False, True])
+def test_live_launch_is_saved_and_returns_only_at_eight(tmp_path, monkeypatch, attach):
     op = module()
     commands = []
     monkeypatch.setattr(op.time, "sleep", lambda seconds: None)
@@ -67,15 +68,17 @@ def test_live_launch_is_saved_and_returns_only_at_eight(tmp_path, monkeypatch):
             return "Filesystem 1024-blocks Used Available Capacity Mounted on\nx 9 1 3000000 1% /home"
         pytest.fail(command)
 
-    snapshot = {"status": "running", "phases": {"qa_eval": {"progress": {
+    snapshot = {"status": "running", "runtime_snapshot": {"sentrix_url": "http://127.0.0.1:8298"},
+                "phases": {"qa_eval": {"progress": {
         "dispatch_paused": True, "agent_completed": 8,
     }}}}
     monkeypatch.setattr(op, "ssh", ssh)
     monkeypatch.setattr(op, "api", lambda port, path: snapshot)
-    assert op.run("limited", tmp_path) == 0
-    assert len([c for c in commands if "POST" in c]) == 1
-    post = next(c for c in commands if "POST" in c)
-    assert "8878" in post and op.BASE in post
+    assert op.run("limited", tmp_path, existing_run="candidate-run" if attach else "") == 0
+    posts = [c for c in commands if "POST" in c]
+    assert len(posts) == (0 if attach else 1)
+    if posts:
+        assert "8878" in posts[0] and op.BASE in posts[0]
     assert (tmp_path / "limited-first-eight/launch.json").exists()
 
 

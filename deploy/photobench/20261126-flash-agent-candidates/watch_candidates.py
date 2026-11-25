@@ -10,8 +10,7 @@ from pathlib import Path
 BASE = "/home/realmagic/xy/benchmarks/atm-bench/experiments/flash-agent-candidates-20261126"
 SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "192.168.0.100"]
 GATEWAY_LOG = (
-    "/home/realmagic/xy/benchmarks/atm-bench/experiments/"
-    "flash-dual-baseline-20261126/model-requests.jsonl"
+    "/home/realmagic/xy/benchmarks/atm-bench/experiments/flash-dual-baseline-20261126/model-requests.jsonl"
 )
 PORTS = {"limited": 8878, "large": 8879}
 PRODUCT_PORTS = {"limited": 8298, "large": 8299}
@@ -76,22 +75,35 @@ def validate_payload(group, payload):
     assert payload["reasoning"] is True and payload["defer_scoring"] is True
 
 
-def run(group, audit, output=None):
+def run(group, audit, output=None, *, existing_run=""):
     port = PORTS[group]
     output = output or audit / f"{group}-first-eight"
     output.mkdir()  # Existing intent requires inspection, never another POST.
     started = time.time()
-    intent = {"group": group, "at": started, "payload": f"{BASE}/{group}/run-payload.json"}
+    intent = {
+        "group": group,
+        "at": started,
+        "payload": f"{BASE}/{group}/run-payload.json",
+        "existing_run": existing_run or None,
+    }
     save(output / "intent.json", intent)
     try:
         payload_file = audit / f"{group}-run-payload.json"
-        validate_payload(group, json.loads(payload_file.read_text()))
+        payload = json.loads(payload_file.read_text())
+        validate_payload(group, payload)
         digest = hashlib.sha256(payload_file.read_bytes()).hexdigest()
         assert ssh(f"sha256sum {intent['payload']}").split()[0] == digest
-        reply = json.loads(ssh(
-            f"curl --max-time 45 -fsS -X POST http://127.0.0.1:{port}/api/v1/runs "
-            f"-H 'Content-Type: application/json' --data-binary @{BASE}/{group}/run-payload.json"
-        ))
+        if existing_run:
+            snapshot = api(port, f"runs/{existing_run}?include_history=false")
+            assert snapshot["runtime_snapshot"]["sentrix_url"] == payload["sentrix_url"]
+            reply = {"run_ids": [existing_run], "mode": "attach_monitor_no_post"}
+        else:
+            reply = json.loads(
+                ssh(
+                    f"curl --max-time 45 -fsS -X POST http://127.0.0.1:{port}/api/v1/runs "
+                    f"-H 'Content-Type: application/json' --data-binary @{BASE}/{group}/run-payload.json"
+                )
+            )
         save(output / "launch.json", reply)
         assert len(reply["run_ids"]) == 1
         run_id = reply["run_ids"][0]
@@ -112,22 +124,29 @@ def run(group, audit, output=None):
                 time.sleep(15)
                 continue
             reason = request_alert(records, started) or checkpoint(snapshot)
-            if free_bytes < 2 * 1024 ** 3:
+            if free_bytes < 2 * 1024**3:
                 reason = "disk_below_2GiB"
             if reason:
                 save(output / "items.json", api(port, f"runs/{run_id}/items?page=1&page_size=10"))
                 failed = reason != "first_eight_ready" and snapshot.get("status") != "completed"
-                terminal = {"status": "needs_review" if not failed else "failed", "reason": reason,
-                            "run_id": run_id, "at": time.time(), "free_bytes": free_bytes,
-                            "worker_stopped_by_watcher": False}
+                terminal = {
+                    "status": "needs_review" if not failed else "failed",
+                    "reason": reason,
+                    "run_id": run_id,
+                    "at": time.time(),
+                    "free_bytes": free_bytes,
+                    "worker_stopped_by_watcher": False,
+                }
                 save(output / "terminal.json", terminal)
                 print(json.dumps(terminal), flush=True)
                 return 1 if failed else 0
             time.sleep(15)
         raise TimeoutError("First eight checkpoint deadline; inspect live turns before resuming")
     except Exception as error:
-        save(output / "terminal.json", {"status": "failed", "error": str(error), "at": time.time(),
-                                       "worker_stopped_by_watcher": False})
+        save(
+            output / "terminal.json",
+            {"status": "failed", "error": str(error), "at": time.time(), "worker_stopped_by_watcher": False},
+        )
         raise
 
 
@@ -136,5 +155,6 @@ if __name__ == "__main__":
     parser.add_argument("--group", choices=["limited", "large"], required=True)
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--existing-run", default="")
     args = parser.parse_args()
-    raise SystemExit(run(args.group, args.audit, args.output))
+    raise SystemExit(run(args.group, args.audit, args.output, existing_run=args.existing_run))
