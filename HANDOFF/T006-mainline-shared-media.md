@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜上游JSON生成中止已定位，接续16视觉与953摘要
+
+wait `8e2f1652-888f-4d4e-9d8e-86237d061285`运行37.264秒后HTTP400失败，实际新写8视觉，当前32/52保存且逐列匹配；摘要仍2/955。上游错误原文为`invalid_parameter_error`/“Model output became abnormal while generating a JSON response for response_format. The generation was aborted because the partial output may be incomplete or invalid JSON.”，说明该次生成被中止，不能据状态码归因为配置参数错误。目标`asset_abd37b0e8d4c`未写入；另`asset_75deb3249002`仅输出`[]`，也未写入。连原两length共4条生成失败保留；16条尚未开始。旧两帧OCR仍未恢复。
+
+只读inspect核52文件SHA、32成功after、2摘要及白名单外资产13356/视觉6989/观察13304/旧事件3369/文本29932逐列0改0缺，型号/思考无漂移、在途0、测评空闲；8294/8874/网关PID保持。证据`content-resume1-alert/{inspection,terminal,acceptance}.json`。原上游400响应正文已保存，不再猜测其原因。
+
+本机6bc934e8只为已确认400生成中止增加单项失败分类（同时要求400、明确code和message前缀），保留raw不重试，继续独立项；其他400、401/429及配置/索引异常仍停止。17项测试、ruff/compile通过，局部同步`resume_content.py`至100，SHA `d7fe52508583b4ef8fa31c27c9f4734c540251c0f6f2b36c7bd172b9f5a60088`及远端编译通过。活动release/模型参数/生产提示词保持。
+
+已先登记wake `4691994e-79c9-4c35-8aaf-227b9749c09a`，启动`sentrix-qwen38-content-resume2-20261125`，输出`content/resume-2`，回执`content-resume-2-launch.json`。跳过32保存、4失败单列，只处理16未做视觉＋953摘要；仍4并发、Flash/关思考128K/4096。completed_with_gaps退出1应按缺口核验，不能报全库完成。旧8e2f1652已处理，不重挂。
+
+下一步按逐项success及原包核真实进度，退出前在飞成功可能未列progress；只补失败/缺失，保留已有成功和所有失败史。5部分观察、旧错误/截断影响、原失败图相关旧事件摘要、因果图与摘要同步仍待核。不得scope finalize、重启或另建Container；.119high建库与Oracle87.018756保持，QA/Judge/消融未启动，题库/线上分不改。两处AGENTS/T006已更新。
+
 ## 2026-11-25｜两张OCR输出截断，保留24项已写结果并接续独立项
 
 wait `e9f66fff-ff27-49ca-8862-5fd3514491c4`运行76.196秒后因`Model output incomplete`失败，底层补齐脚本已终止、无在途请求。两图`asset_78a95b5d74d8`/`asset_816c96df9415`首轮视觉输出分别重复“杏仁豆腐”和“木瓜”并触4096上限，未写入观察；原始失败请求/响应保留。实际22条新视觉已保存（progress只列19，另3条为退出前已在飞完成），加原小样共24/52，全部success与当前逐列一致。955新摘要尚未进入批量阶段，仅原小样2/955完成。
