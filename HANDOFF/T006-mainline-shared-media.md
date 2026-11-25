@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜旧场景摘要4小样验收，接续剩余1324条
+
+小样wait `5d012f12-2158-4270-9fd1-58314c1e5bcd`成功，service耗时4.627秒。4条实际Flash/关思考/4096/stop，无失败截断，2310输入＋517输出＝2827总token。摘要逐条与提交的观察/真实时间地点核对：摩天轮骑行、泰桥水域、灰色金属结构外海岸、开罗车辆校徽；没有把疑似机翼确认为飞机。4 success与SQLite逐列一致，均补2048维episodic向量。生产activity字段本来裁到20字，原model长activity保存在raw，全文summary完整；该既有投影规则本次不改。
+
+只读脚本`verify_legacy_summaries.py` e962f720/SHA 4a08edb37960bcab5d658ea330df83a6efbfacd67b42945fd20f0765b3aaba2c，ruff/compile、100SHA和真实验收通过。对before-legacy.db：4320条非本轮事件逐列保持（含955成功新摘要及1324未做旧摘要），13356资产/观察、6989视觉、实体/属性/关系、图谱节点边、词法及证据关联保持；文本向量只允许本次4事件episodic改动。完整原请求响应、4success、保护结果和独立验收在`legacy-summary-smoke-review`。后续可用同脚本验全1328，检查所有success/raw及白名单外保持；不套用旧3369事件全保持断言。
+
+全量继续同一1f188830脚本/SHA d171c18c，仅扫描固定1328清单、复用4成功，实际补其余1324；关思考128K/4096/4并发、原提示词。独立wake `33fdc4e6-72d1-418b-9324-87aaf91dba67`，回执`legacy-summary-full-launch.json`，输出100 `content/legacy-scene-summaries/full`。原smoke成功/raw不重做，失败保留且按阶段处理；completed_with_gaps退出1需逐项核验。复用独立before-legacy.db，不新增整库备份或复制；/home余量1.8G记录保留。
+
+另5部分caption、2旧帧和街摊OCR、失效旧事件摘要、历史HTTP/超时/length影响，以及最终图谱节点/因果批次仍待收尾。4条新摘要后图谱未同步，完成本批再做最小续接。8294/8874/网关原三PID保持，.119high不碰，Oracle87.018756不重跑；QA/Judge/消融0，题库线上分保持，不scope finalize、不另建Container争Qdrant。5d012f12已验处理，不重挂。
+
 ## 2026-11-25｜四图纠正验收通过，1328旧场景缺摘要独立冻结
 
 四图纠正wait `956ce08c-6dad-48c8-a235-50a51b275666`运行2.584秒成功，0新生成请求。只读验收确认52/52视觉、955/955新摘要逐列匹配success；52原文件SHA、观察文本/词法及955个2048维事件索引通过。对before-apply.db：仅4观察、12文本向量更新；13356资产、6989视觉向量、4324事件正文及facts0行全部保持。6实体仅更新时间，17属性/8既有关系及4新关系逐项核为该图合法证据追加或错误实体撤回；错误南瓜实体rejected、2属性rejected、2关系retracted，错误图/事件关联已移除。其他实体提及保持。证据`visual-apply-v2-review/{verification,content,acceptance}.json`及完整apply归档。三图仅核实原模型文字片段，街摊OCR仍未恢复；旧两帧OCR缺口保留。
