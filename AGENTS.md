@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26 独立Judge首题6次429已核为周额度耗尽，11/30 00:00东八区恢复；0有效分/余18题未评，停止重试。v5同11题与原双全量/有限v2继续，原wake保持；周五正式分待补。见T006及候选audit/frozen-answer-scoring。
+
 - 11/26 v4已验11答：原8请求244→66，但结构化主体仍触人脸漏答，不扩大；日期检索上界真实生效。v5 871fbef4已局部验收push/同11题复测；冻结19答评分已独立启动；原两全量和有限v2继续，接T006。
 
 - 11/26 v3十一题已验：原8题HTTP244→100但文字主体误判漏答，不扩大；64组分页真实生效，时间仅答案遵守。v4 4bc53cad已局部发布验收push，同11题独立复测已挂wake；原基线/有限v2继续，见T006及候选audit。
@@ -84,4 +86,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线继续；005/002候选双组各2并发QA已启动，首8暂停验收/Judge待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线与候选继续；v5先11题验收，Judge周额度至11/30恢复/正式分待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
