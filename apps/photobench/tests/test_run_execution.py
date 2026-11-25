@@ -2573,7 +2573,9 @@ def test_dispatch_gate_pauses_full_run_then_continues_same_indices(tmp_path, mon
             assert set(dispatched) == {"q0", "q1", "q2", "q3"}
             assert not future.done()
         finally:
-            control.write_text(json.dumps({"concurrency": 2}))
+            replacement = control.with_suffix(".tmp")
+            replacement.write_text(json.dumps({"concurrency": 2}))
+            replacement.replace(control)
         future.result(timeout=5)
     assert sorted(dispatched) == [f"q{i}" for i in range(6)]
     assert [item["qa_id"] for item in state.data["items"]] == [f"q{i}" for i in range(6)]
