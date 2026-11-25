@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v3十一题已验，不扩大；定向补文字主体和参考日
+
+033c4593已核11答暂停，固定revision原包与206条真实HTTP逐调用核验通过，均200/Flash关思考。原8题HTTP244→100、工具262→111、记录Token含内部视觉737万→195万，但蚂蚁医疗visible_text主体仍误当人脸，漏答；不算质量通过/不扩大。鸡翅最终日期合题，但检索未生效时间条件，不能凭最终答案报修复完成。分组模型侧64项/9187字符、1660组总量与续页保留；3旧失败均产生回答，Porto仍51本地预检/73真实HTTP，长历史循环待解决。餐桌引用仍读正确asset_5c08513d3cfe/MOVENPICK，地点归属保留不确定。详见v3-large-rerun/review/{RESULTS.md,acceptance.json,paired-metrics.json,http-archive-exact-verification.json}，待Judge不记0。
+
+v4本机仅补图内文字主体/独立人物照片语义，以及显式历史参考日在planner/检索/统计的传递与相交；124业务+17预算+15部署监控通过，4旧toolbox失败保持，Ruff/compile/mypy通过。拟同11题独立复测，仅切已暂停large8299/8879；先核旧十一答SHA、18表/9保护PID，取消1002未执行，不热更原两全量/有限v2。当前未部署/未新QA，见v4-large-rerun。原基线136/53各4并发，有限v2为39/2并发，原wake保持。
+
 ## 2026-11-26｜v3真实分页验收通过，11题独立复测接续
 
 业务f60aba02已发布large8299/8879，18表/9保护PID/旧8答保持；只读helper缺SQL时间函数的491bc7eb已处理，不重放部署/取消。helper436e89a0本机回归通过→独立ops目录SHA/compile→真实1660地点组26页逐项还原完整统计，总13356资产，每页最多9854字符，0模型请求/无DB写入；原release文件/服务保持。f60与436已push核SHA，证据v3-large-rerun/validation-recovery-1。

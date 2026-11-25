@@ -13,7 +13,7 @@ SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "192.168.0.100"]
 HOST = "192.168.0.100"
 
 
-def run(revision, audit, repo):
+def run(revision, audit, repo, stage="v3"):
     spec = importlib.util.spec_from_file_location(
         "candidate_watch", Path(__file__).with_name("watch_candidates.py")
     )
@@ -28,26 +28,30 @@ def run(revision, audit, repo):
         return subprocess.check_output([*SSH, command], text=True)
 
     def fetch(name, target=None):
-        value = json.loads(remote(f"cat {BASE}/large-v3/{name}"))
+        value = json.loads(remote(f"cat {BASE}/large-{stage}/{name}"))
         watch.save(deployment / (target or name), value)
         return value
 
     subprocess.run(
-        [*SSH, f"{PYTHON} {ops}/revise_limited.py --revision {revision} --group large --stage v3"], check=True
+        [*SSH, f"{PYTHON} {ops}/revise_limited.py --revision {revision} --group large --stage {stage}"],
+        check=True,
     )
     verification = fetch("verification.json")
     fetch("answer-preservation.json")
     assert verification["revision"] == revision
-    assert verification["memory_18_tables_unchanged"] and verification["old_eight_answers_preserved"]
-    remote(
-        f"{PYTHON} {ops}/verify_group_pages.py --release {BASE}/release-{revision[:8]} "
-        f"--database {BASE}/large/data/sentrix.db "
-        "--scope PhotoBench-20261124-221506-2026.11.17-atm-sources-addresses-qwen3.8-flash "
-        f"--output {BASE}/large-v3/group-pagination-verification.json"
+    assert verification["memory_18_tables_unchanged"] and verification["old_answers_preserved"] == (
+        11 if stage == "v4" else 8
     )
-    groups = fetch("group-pagination-verification.json")
-    assert groups["all_pages_equal_full_production_answer"] and groups["groups"] == 1660
-    assert groups["model_requests"] == 0 and groups["max_model_visible_chars"] < 24000
+    if stage == "v3":
+        remote(
+            f"{PYTHON} {ops}/verify_group_pages.py --release {BASE}/release-{revision[:8]} "
+            f"--database {BASE}/large/data/sentrix.db "
+            "--scope PhotoBench-20261124-221506-2026.11.17-atm-sources-addresses-qwen3.8-flash "
+            f"--output {BASE}/large-v3/group-pagination-verification.json"
+        )
+        groups = fetch("group-pagination-verification.json")
+        assert groups["all_pages_equal_full_production_answer"] and groups["groups"] == 1660
+        assert groups["model_requests"] == 0 and groups["max_model_visible_chars"] < 24000
     subprocess.run(["git", "push", "origin", "HEAD"], cwd=repo, check=True)
     branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=repo, text=True).strip()
     pushed = subprocess.check_output(
@@ -57,7 +61,7 @@ def run(revision, audit, repo):
     watch.save(deployment / "push-receipt.json", {"revision": revision, "branch": branch, "verified": True})
     for source, destination in (
         (audit / "large-run-payload.json", f"{BASE}/large/run-payload.json"),
-        (audit / "dispatch-control.json", f"{BASE}/large-v3/dispatch-control.json"),
+        (audit / "dispatch-control.json", f"{BASE}/large-{stage}/dispatch-control.json"),
     ):
         subprocess.run(["scp", "-q", str(source), f"{HOST}:{destination}.tmp"], check=True)
         remote(f"mv {destination}.tmp {destination}")
@@ -69,5 +73,6 @@ if __name__ == "__main__":
     parser.add_argument("--revision", required=True)
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--stage", choices=["v3", "v4"], default="v3")
     args = parser.parse_args()
-    sys.exit(run(args.revision, args.audit, args.repo))
+    sys.exit(run(args.revision, args.audit, args.repo, args.stage))

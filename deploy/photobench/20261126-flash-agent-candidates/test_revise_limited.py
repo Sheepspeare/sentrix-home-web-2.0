@@ -7,7 +7,8 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "group,port,stage", [("limited", 8878, "v2"), ("large", 8879, "v2"), ("large", 8879, "v3")]
+    "group,port,stage",
+    [("limited", 8878, "v2"), ("large", 8879, "v2"), ("large", 8879, "v3"), ("large", 8879, "v4")],
 )
 @pytest.mark.parametrize("changed", [False, True])
 def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
@@ -18,10 +19,11 @@ def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
     )
     op = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(op)
-    accepted = {f"qa-{n}": hashlib.sha256(f"answer-{n}".encode()).hexdigest() for n in range(8)}
-    (tmp_path / f"{group}-{op.STAGES[stage]['accepted']}-accepted-eight.json").write_text(
-        json.dumps(accepted)
-    )
+    count = op.STAGES[stage]["answer_count"]
+    accepted = {f"qa-{n}": hashlib.sha256(f"answer-{n}".encode()).hexdigest() for n in range(count)}
+    (
+        tmp_path / f"{group}-{op.STAGES[stage]['accepted']}-accepted-{op.STAGES[stage]['answer_word']}.json"
+    ).write_text(json.dumps(accepted))
     monkeypatch.setattr(op, "BASE", tmp_path)
 
     def api(actual_port, path):
@@ -36,7 +38,7 @@ def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
         return {
             "status": "cancelled",
             "item_count": 1013,
-            "phases": {"qa_eval": {"progress": {"agent_completed": 8}}},
+            "phases": {"qa_eval": {"progress": {"agent_completed": count}}},
         }
 
     monkeypatch.setattr(op.h, "api", api)
@@ -46,4 +48,6 @@ def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
         assert not (tmp_path / "answer-preservation.json").exists()
     else:
         op.verify_archived_answers(tmp_path, group=group, stage=stage)
-        assert json.loads((tmp_path / "answer-preservation.json").read_text())["verified_answers"] == 8
+        receipt = json.loads((tmp_path / "answer-preservation.json").read_text())
+        assert receipt["verified_answers"] == count
+        assert receipt["unexecuted_rows"] == 1013 - count

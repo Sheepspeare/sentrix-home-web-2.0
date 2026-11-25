@@ -39,6 +39,7 @@ from sentrix.domain.assistant.evidence_ledger import (
     EvidenceType,
     RequirementValueType,
 )
+from sentrix.domain.assistant.reference_time import retrospective_reference_day
 
 # **一处对 1.0 与对 2.0 自己的双重偏离（2026-10-10 回退）。**
 #
@@ -97,7 +98,8 @@ scope 的键只能是 event / time / place / person；能从问题确定的事�
 不确定就输出空对象 {{}}；time 只放时间表达式（年份/日期/季节），地名不能塞进 time。
 题设“今天是 / Today is / as of”给出日期时，以题设日期为参考。回顾“最近一次 / most recently”
 的 time 写“截至YYYY-MM-DD”，包含该日及以前；只问该日才填该日，比较历史时期时保留各自区间。
-person 只填所问事实的主体或要求出镜的人，保留原姓名或别名；同张合照的多人用顿号连接。
+person 只填要求出镜或确认身份的人，保留原姓名或别名；同张合照的多人用顿号连接。
+正文、幻灯片、招牌里的主体或作者放 event，不用人脸姓名筛选；要求某人的照片时另声明照片需求。
 不同人物的独立问题用各自的需求；不把排除的人、拍摄者或尚待识别的人写成人物筛选。
 “我的相册”“我做过什么 / I cooked”等叙述表示当前相册的活动记录，不要求人脸身份，person 留空；
 “我出镜 / photos showing me”“我和某人的合照”才需要保留人物筛选，姓名和真实身份条件不得删除。
@@ -515,6 +517,7 @@ def parse_declaration(
         return None, "scope_mismatch"
 
     requirements: list[EvidenceRequirement] = []
+    reference_day = retrospective_reference_day(question)
     for item in declaration.get("requirements") or []:
         if not isinstance(item, Mapping):
             return None, "invalid_planner_action"
@@ -558,6 +561,9 @@ def parse_declaration(
             ):
                 continue
             scope.append((key_text, value_text))
+
+        if reference_day is not None and not any(key == "time" for key, _ in scope):
+            scope.append(("time", f"截至{reference_day.date().isoformat()}"))
 
         requirements.append(
             EvidenceRequirement(

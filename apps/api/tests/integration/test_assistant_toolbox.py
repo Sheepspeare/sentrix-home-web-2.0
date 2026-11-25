@@ -218,7 +218,8 @@ def run(toolbox, name: str, **arguments: object):
 
 
 @pytest.mark.parametrize("subject", ["研究机构", "论文作者", "正文里的人名"])
-def test_source_text_subject_does_not_require_a_named_face(toolbox, monkeypatch, subject):
+@pytest.mark.parametrize("evidence_type", [EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT])
+def test_text_subject_does_not_require_a_named_face(toolbox, monkeypatch, subject, evidence_type):
     build, _ = toolbox
     requests = []
     original = build._retrieval.execute
@@ -233,9 +234,7 @@ def test_source_text_subject_does_not_require_a_named_face(toolbox, monkeypatch,
         {"query": "海边"},
         scope_id=SCOPE,
         now=NOW,
-        requirements=(
-            EvidenceRequirement("text", EvidenceType.SOURCE_TEXT, "读正文", scope=(("person", subject),)),
-        ),
+        requirements=(EvidenceRequirement("text", evidence_type, "读文字", scope=(("person", subject),)),),
     )
     assert outcome.ok
     assert len(requests) == 1 and requests[0].linked_person_assets is None
@@ -259,15 +258,14 @@ def test_text_source_search_keeps_subject_out_of_face_filters(toolbox, source_ty
 
 
 @pytest.mark.parametrize("with_text", [False, True])
-def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text):
+@pytest.mark.parametrize("text_type", [EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT])
+def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text, text_type):
     build, _ = toolbox
     requirements = [
         EvidenceRequirement("photo", EvidenceType.PHOTO_SET, "某人的照片", scope=(("person", "未确认人物"),))
     ]
     if with_text:
-        requirements.append(
-            EvidenceRequirement("text", EvidenceType.SOURCE_TEXT, "正文", scope=(("person", "研究机构"),))
-        )
+        requirements.append(EvidenceRequirement("text", text_type, "文字", scope=(("person", "研究机构"),)))
     outcome = build.execute(
         "search_memories", {"query": "海边"}, scope_id=SCOPE, now=NOW, requirements=requirements
     )
@@ -1307,3 +1305,45 @@ def test_fact_cutoff_includes_earlier_days_and_excludes_next_day(toolbox):
     )
     assert count.model_visible["value"] == 1
     assert count.observation["filters_not_applied"] == []
+
+
+def test_explicit_question_reference_date_bounds_search_even_when_planner_omits_time(toolbox):
+    build, _ = toolbox
+    for n in range(2):
+        build._observations.add(
+            Observation(
+                id=f"obs_{n}",
+                scope_id=SCOPE,
+                asset_id=f"asset_{n}",
+                source_type="import",
+                captured_at=None,
+                confidence=0.8,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+    build._retrieval._conditions = EvaluateConditions(assets=build._assets, observations=build._observations)
+    result = build.execute(
+        "search_memories",
+        {"query": "海边"},
+        scope_id=SCOPE,
+        now=NOW,
+        question="Today is Aug 1st, 2019. When did I most recently visit the beach?",
+    )
+    assert result.ok
+    assert result.observation["asset_ids"] == ["asset_0"]
+    assert result.observation["filters_applied"] == {"reference_time": "截至2019-08-01"}
+
+
+@pytest.mark.parametrize("time,expected", [(None, 1), ("2019年7月", 0), ("2019年8月2日", 0)])
+def test_fact_question_reference_date_intersects_model_time_filters(toolbox, time, expected):
+    build, _ = toolbox
+    result = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "filters": {"time": time} if time else {}},
+        scope_id=SCOPE,
+        now=NOW,
+        question="今天是2019年8月1日，最近一次去海边是哪天？",
+    )
+    assert result.model_visible["value"] == expected
+    assert "reference_time" in result.observation["filters_applied"]

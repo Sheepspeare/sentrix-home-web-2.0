@@ -173,6 +173,25 @@ def test_a_plain_object_parses():
     assert parse_json('{"action":"declare"}') == {"action": "declare"}
 
 
+def test_planner_retains_an_explicit_reference_day_when_the_model_omits_time():
+    question = "Today is Feb 9th, 2023. When did I most recently cook?"
+    requirements, reason = parse_declaration(
+        declaration("photo_set", scope_body={"event": "做饭"}), scope_id=SCOPE, question=question
+    )
+    assert reason == "" and requirements is not None
+    assert dict(requirements[0].scope) == {"event": "做饭", "time": "截至2023-02-09"}
+
+
+def test_reference_day_does_not_replace_a_narrower_planner_interval():
+    requirements, reason = parse_declaration(
+        declaration("photo_set", scope_body={"time": "2022年12月"}),
+        scope_id=SCOPE,
+        question="Today is Feb 9, 2023. What was my latest stay during December 2022?",
+    )
+    assert reason == "" and requirements is not None
+    assert dict(requirements[0].scope)["time"] == "2022年12月"
+
+
 def test_a_fenced_object_parses():
     assert parse_json('```json\n{"action":"declare"}\n```') == {"action": "declare"}
 

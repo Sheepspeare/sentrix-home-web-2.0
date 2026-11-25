@@ -26,12 +26,24 @@ STAGES = {
         "previous_revision": "7fbb4ed85b6bde8d71d0f7ced1a7eab073c721dc",
         "previous_release": "release",
         "accepted": "v1",
+        "answer_count": 8,
+        "answer_word": "eight",
     },
     "v3": {
         "runs": {"large": "20261126-050817-2026.11.17-atm-sources-addresses-big_model-e9700d"},
         "previous_revision": "11deb1c68068015b1ad31e10579dbd7188707d20",
         "previous_release": "release-11deb1c6",
         "accepted": "v2",
+        "answer_count": 8,
+        "answer_word": "eight",
+    },
+    "v4": {
+        "runs": {"large": "20261126-054519-2026.11.17-atm-sources-addresses-big_model-36e9da"},
+        "previous_revision": "f60aba028e7fc9107638d6f1a603b9b0f76200ae",
+        "previous_release": "release-f60aba02",
+        "accepted": "v3",
+        "answer_count": 11,
+        "answer_word": "eleven",
     },
 }
 
@@ -58,7 +70,7 @@ def start_archive(revision, *, group="limited", stage="v2"):
     assert manifest and all(h.sha(release / name) == digest for name, digest in manifest.items())
     snapshot = h.api(evaluation, f"runs/{old_run}?include_history=false")
     progress = snapshot["phases"]["qa_eval"]["progress"]
-    assert progress["agent_completed"] == 8 and progress["dispatch_paused"]
+    assert progress["agent_completed"] == STAGES[stage]["answer_count"] and progress["dispatch_paused"]
     assert snapshot.get("fatal_error") is None
     protected = candidate.protected_processes()
     for role in ("api", "eval"):
@@ -90,7 +102,10 @@ def start_archive(revision, *, group="limited", stage="v2"):
             "stage": stage,
             "at": time.time(),
             "protected": protected,
-            "scope": f"{group} only; preserve eight prior answers, album and other candidate",
+            "scope": (
+                f"{group} only; preserve {STAGES[stage]['answer_count']} prior answers, "
+                "album and other candidate"
+            ),
         },
     )
     h.save(output / "before-run.json", snapshot)
@@ -106,9 +121,13 @@ def verify_archived_answers(output, *, group="limited", stage="v2"):
     old_run = STAGES[stage]["runs"][group]
     snapshot = h.api(evaluation, f"runs/{old_run}?include_history=false")
     assert snapshot["status"] == "cancelled"
-    assert snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] == 8
-    accepted = json.loads((BASE / f"{group}-{STAGES[stage]['accepted']}-accepted-eight.json").read_text())
-    assert len(accepted) == 8
+    assert snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] == STAGES[stage]["answer_count"]
+    accepted = json.loads(
+        (
+            BASE / f"{group}-{STAGES[stage]['accepted']}-accepted-{STAGES[stage]['answer_word']}.json"
+        ).read_text()
+    )
+    assert len(accepted) == STAGES[stage]["answer_count"]
     for qa_id, digest in accepted.items():
         rows = h.api(evaluation, f"runs/{old_run}/items?search={qa_id}&page=1&page_size=10")["items"]
         assert len(rows) == 1 and rows[0]["qa_id"] == qa_id
@@ -120,7 +139,7 @@ def verify_archived_answers(output, *, group="limited", stage="v2"):
             "verified_answers": len(accepted),
             "answer_sha256": accepted,
             "item_count": snapshot["item_count"],
-            "unexecuted_rows": 1005,
+            "unexecuted_rows": snapshot["item_count"] - len(accepted),
         },
     )
 
@@ -219,7 +238,7 @@ def run(revision, *, group="limited", stage="v2", continue_archived=False):
             "diagnostics": diagnostics,
             "memory_18_tables_unchanged": True,
             "protected_processes_unchanged": protected,
-            "old_eight_answers_preserved": True,
+            "old_answers_preserved": STAGES[stage]["answer_count"],
             "new_qa_started": False,
         },
     )

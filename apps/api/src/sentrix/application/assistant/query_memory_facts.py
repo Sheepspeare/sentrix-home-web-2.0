@@ -30,12 +30,13 @@ observation / model_visible。**这一处的切分与检索工具正好相反**�
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
 from sentrix.domain.assistant.models import AmbiguousPersonName
 from sentrix.domain.assistant.ports import PersonDirectory
+from sentrix.domain.assistant.reference_time import cap_at_reference_day
 from sentrix.domain.retrieval.fact_query import (
     FactOperation,
     FactRejection,
@@ -137,6 +138,7 @@ class QueryMemoryFacts:
         viewer_id: str,
         conversation_id: str,
         now: datetime,
+        reference_day: datetime | None = None,
     ) -> FactAnswer | FactRejection:
         """跑一次统计。**失败也是一种正常返回**（``FactRejection``），不抛异常。"""
         parsed = parse_fact_arguments(arguments)
@@ -178,7 +180,24 @@ class QueryMemoryFacts:
         )
         # 传 ``spec.scope_id`` 而不是入参 ``scope_id``：``scope_mode`` 为
         # all_authorized 时它是 None（跨全部相册），那时候「传进来的那个相册」是错的。
-        return self._dispatch(parsed, derive_filter(spec, scope_id=spec.scope_id), person_names)
+        structured_filter = derive_filter(spec, scope_id=spec.scope_id)
+        if reference_day is not None:
+            bounds = (
+                (
+                    datetime.fromisoformat(structured_filter.time_start or datetime.min.isoformat()),
+                    datetime.fromisoformat(structured_filter.time_end),
+                )
+                if structured_filter.time_end
+                else None
+            )
+            start, end = cap_at_reference_day(bounds, reference_day)
+            structured_filter = replace(
+                structured_filter,
+                time_start=start.isoformat(),
+                time_end=end.isoformat(),
+                applied={**structured_filter.applied, "reference_time": [start.isoformat(), end.isoformat()]},
+            )
+        return self._dispatch(parsed, structured_filter, person_names)
 
     def _dispatch(
         self, request: FactRequest, structured_filter: StructuredFilter, person_names: tuple[str, ...]

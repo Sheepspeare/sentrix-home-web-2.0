@@ -48,6 +48,7 @@ from sentrix.domain.assistant.evidence_ledger import (
 )
 from sentrix.domain.assistant.models import AmbiguousPersonName, Attachment, PersonProfile
 from sentrix.domain.assistant.ports import PersonDirectory, ResultSetRepository
+from sentrix.domain.assistant.reference_time import cap_at_reference_day, retrospective_reference_day
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetEntry
 from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS, SOURCE_TEXT_PAGE_CHARS
 from sentrix.domain.identity.ports import FaceRepository, PersonCropRenderer
@@ -318,12 +319,14 @@ class AssistantToolbox:
                 ),
             )
         if name == "query_memory_facts":
-            return self._facts(arguments, scope_id=scope_id, now=now)
+            return self._facts(arguments, scope_id=scope_id, now=now, question=question)
         return _failure("unknown_tool", f"没有名为 {name} 的工具。")
 
     # ---- query_memory_facts -------------------------------------------------
 
-    def _facts(self, arguments: Mapping[str, Any], *, scope_id: str, now: datetime) -> ToolOutcome:
+    def _facts(
+        self, arguments: Mapping[str, Any], *, scope_id: str, now: datetime, question: str = ""
+    ) -> ToolOutcome:
         """精确统计。**与检索工具相反：这里的 ``total`` 是答案本身，要给模型看。**
 
         ``is_empty_result`` 读的是 ``observation["total"]``，看上去会让「一共 0 张」
@@ -336,6 +339,7 @@ class AssistantToolbox:
             viewer_id="owner",
             conversation_id="tool_loop",
             now=now,
+            reference_day=retrospective_reference_day(question),
         )
         if isinstance(answer, FactRejection):
             return ToolOutcome(
@@ -402,9 +406,10 @@ class AssistantToolbox:
             return _failure("invalid_source_type", "source_type 需为 all、email 或 document")
 
         scopes = [dict(item.scope) for item in requirements]
-        # 正文中的主体由文字检索匹配；人脸目录只约束要求出镜或身份的照片证据。
+        # 文字中的主体由正文/OCR匹配；人脸条件由独立的照片或身份需求提供。
+        text_types = {EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT}
         face_scopes = (
-            [dict(item.scope) for item in requirements if item.evidence_type is not EvidenceType.SOURCE_TEXT]
+            [dict(item.scope) for item in requirements if item.evidence_type not in text_types]
             if source_type == "all"
             else []
         )
@@ -414,7 +419,7 @@ class AssistantToolbox:
             if (
                 not groups
                 and source_type == "all"
-                and not any(item.evidence_type is EvidenceType.SOURCE_TEXT for item in requirements)
+                and not any(item.evidence_type in text_types for item in requirements)
             ):
                 simple = _person_question(question or query)
                 exact_name = simple[0] if simple else ""
@@ -453,6 +458,12 @@ class AssistantToolbox:
         place = next(iter(places)) if groups and len(places) == 1 else ""
         bounds = parse_time_expression(time)
         conditions = [Condition("time", time, key="time")] if bounds else []
+        reference_day = retrospective_reference_day(question)
+        if reference_day is not None:
+            bounds = cap_at_reference_day(bounds, reference_day)
+            cutoff = f"截至{reference_day.date().isoformat()}"
+            if cutoff != time:
+                conditions.append(Condition("time", cutoff, key="reference_time"))
         if place:
             conditions.append(Condition("place", place, key="place", strictness=Strictness.SEMANTIC))
         excluded_scopes = (
@@ -515,7 +526,11 @@ class AssistantToolbox:
                 "graph_primary_asset_ids": list(result.primary_asset_ids),
                 "graph_fused_asset_ids": list(result.fused_asset_ids),
                 "graph_policy": {"intent": graph_intent(query), "direction": graph_direction(query)},
-                "filters_applied": {"time": time} if bounds else {},
+                "filters_applied": {
+                    condition.key: condition.value
+                    for condition in conditions
+                    if condition.dimension == "time"
+                },
             },
         )
 
