@@ -35,6 +35,28 @@ def sha(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def model_failures_since(started, request_log=None):
+    failures = []
+    request_log = request_log or BASE / "model-requests.jsonl"
+    with request_log.open() as stream:
+        for line in stream:
+            item = json.loads(line)
+            if item["started_at"] < started:
+                continue
+            if (
+                item.get("http_status") != 200
+                or item.get("actual_model") != "qwen3.8-flash"
+                or item.get("enable_thinking") is not False
+            ):
+                failures.append(
+                    {
+                        key: item.get(key)
+                        for key in ("id", "http_status", "error_type", "actual_model", "enable_thinking")
+                    }
+                )
+    return failures
+
+
 def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -364,6 +386,12 @@ def run(rows, output, limit):
                         "no_progress_seconds": time.monotonic() - changed,
                     },
                 )
+                failures = model_failures_since(started)
+                if failures:
+                    save(output / "model-request-alert.json", {"at": time.time(), "failures": failures})
+                    raise RuntimeError(
+                        f"New model request failure/configuration mismatch: {job_id}; inspect active job"
+                    )
                 if current["status"] in {"COMPLETED", "DEGRADED", "FAILED", "CANCELLED"}:
                     break
                 if time.monotonic() - changed > 1800:

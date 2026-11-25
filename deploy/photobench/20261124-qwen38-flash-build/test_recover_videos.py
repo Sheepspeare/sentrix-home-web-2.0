@@ -76,3 +76,20 @@ def test_coverage_rejects_frame_without_vector_indexes():
     scene = {"source_scene_index": 0, "source_start_sec": 0.0, "source_end_sec": 1.0}
     with pytest.raises(AssertionError):
         recovery.assert_complete({"asset_id": "asset_fixture", "frames": [frame], "scenes": [scene]}, row)
+
+
+def test_model_health_ignores_original_errors_and_reports_new_failure(tmp_path):
+    log = tmp_path / "requests.jsonl"
+    records = [
+        {"id": "old-error", "started_at": 1, "http_status": 400},
+        {
+            "id": "new-success",
+            "started_at": 11,
+            "http_status": 200,
+            "actual_model": "qwen3.8-flash",
+            "enable_thinking": False,
+        },
+        {"id": "new-error", "started_at": 12, "http_status": 502},
+    ]
+    log.write_text("\n".join(json.dumps(row) for row in records) + "\n")
+    assert [row["id"] for row in recovery.model_failures_since(10, log)] == ["new-error"]
