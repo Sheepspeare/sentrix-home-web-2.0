@@ -337,6 +337,35 @@ def start(run_turn, conversation) -> str:
 # ---- 正常链路 ---------------------------------------------------------------
 
 
+@pytest.mark.parametrize("all_tools", [False, True])
+def test_both_tool_policies_plan_before_acting_and_record_the_frozen_tools(env, all_tools):
+    conversations, turns, conversation, _db = env
+
+    class OrderedModel(ScriptedModel):
+        def complete(self, messages, tools):
+            if tools:
+                assert self.planner_calls
+            return super().complete(messages, tools)
+
+    model = OrderedModel([final("尚未取得票据文字。")], planner=planner_reply("visible_text"))
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox(),
+        use_all_tools=all_tools,
+    )
+    result = runner.run(start(runner, conversation))
+    saved = turns.get(result.turn_id)
+    assert len(model.planner_calls) == 1
+    assert saved.trace["planner"]["status"] == "ok"
+    assert saved.trace["planner"]["tool_selection"] == (
+        "all_tools" if all_tools else "planner_requirements"
+    )
+    assert saved.trace["planner"]["initial_tool_names"] == model.tool_sets[0]
+    assert ("inspect_photo" in model.tool_sets[0]) is all_tools
+
+
 def test_the_full_loop_retrieves_delivers_and_answers(env):
     """交付与作答在**同一步**里完成——这就是 1.0 的 ``final`` 动作形状。
 

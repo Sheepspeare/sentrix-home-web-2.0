@@ -1663,3 +1663,52 @@ def test_invalid_media_definition_is_refused_before_any_work_is_registered(tmp_p
     with pytest.raises(InvalidRequestError, match="QA bad retrieval_media_refs"):
         suites.start_suite(_payload())
     assert suites.active_run_ids() == []
+
+
+@pytest.mark.parametrize("value", ["q1", ["q1", "q1"], ["missing"], [1]])
+def test_suite_rejects_invalid_priority_before_creating_run(tmp_path, value):
+    suites = _suites(tmp_path)
+    with pytest.raises(InvalidRequestError, match="qa_priority_ids"):
+        suites.start_suite(_payload(qa_priority_ids=value))
+
+
+def test_suite_freezes_deferred_scoring_and_priority(tmp_path):
+    captured = []
+    gate = threading.Event()
+
+    def factory(request):
+        captured.append(request)
+        return FakeExecution(request, gate)
+
+    qa_id = "q-priority"
+    suites = _suites(
+        tmp_path, new_execution=factory, albums=FakeAlbums(manifest=MANIFEST, qa_rows=[{"qa_id": qa_id}])
+    )
+    try:
+        suites.start_suite(_payload(defer_scoring=True, qa_priority_ids=[qa_id]))
+        request = captured[0]
+        assert request.defer_scoring is True
+        assert request.qa_priority_ids == (qa_id,)
+        assert request.judge_model == "judge-model"
+        assert request.runtime_snapshot.connection()["execution_budgets"]["defer_scoring"] is True
+    finally:
+        gate.set()
+
+
+def test_resume_keeps_deferred_scoring_and_priority(tmp_path):
+    saved = _cancelled_state()
+    saved.update(defer_scoring=True, qa_priority_ids=["q1"])
+    captured = []
+    gate = threading.Event()
+
+    def factory(request):
+        captured.append(request)
+        return FakeExecution(request, gate)
+
+    suites = _suites(tmp_path, store=FakeRunStore({"run-1": saved}), new_execution=factory)
+    try:
+        suites.resume_run("run-1")
+        assert captured[0].defer_scoring is True
+        assert captured[0].qa_priority_ids == ("q1",)
+    finally:
+        gate.set()

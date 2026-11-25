@@ -2491,3 +2491,90 @@ def test_throughput_subtracts_only_idle_agent_wait_for_judge_backpressure(monkey
     assert phase["agent_judge_only_wait_ms"] == 10000
     result = agent_timing_summary(state.data["items"], state.data["phases"])
     assert result["agent_throughput_latency_ms"] == 1000
+
+
+def test_priority_dispatch_preserves_question_indices_and_skips_inherited(monkeypatch):
+    rows = [{"qa_id": key} for key in ("first", "inherited", "last")]
+    execution, *_ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
+    state = RunState({"run_id": "priority", "scope_id": "s", "qa_snapshot": {"rows": rows}})
+    dispatched = []
+
+    def evaluate(row, *_):
+        dispatched.append(row["qa_id"])
+        return {"qa_id": row["qa_id"], "execution_status": "completed"}
+
+    monkeypatch.setattr(execution, "_evaluate_one", evaluate)
+    execution._phase_qa_eval(
+        state,
+        _request(
+            qa_concurrency=1,
+            qa_priority_ids=("inherited", "last"),
+            prior_items=({"qa_id": "inherited", "execution_status": "completed", "answer": "kept"},),
+        ),
+    )
+    assert dispatched == ["last", "first"]
+    assert [item["qa_id"] for item in state.data["items"]] == ["first", "inherited", "last"]
+    assert state.data["items"][1]["answer"] == "kept"
+    assert [row["qa_id"] for row in state.data["qa_snapshot"]["rows"]] == ["first", "inherited", "last"]
+
+
+def test_deferred_scoring_retains_judge_protocol_without_building_judge():
+    from fakes_execution import FakeHttpClient
+
+    from photobench.application.run_execution.service import JudgeSettings
+
+    execution, *_ = _execution()
+    execution.http = FakeHttpClient()
+    execution.judge_settings = JudgeSettings(judge_url="http://judge/v1", judge_model="judge-model")
+    request = freeze_runtime_request(
+        _request(defer_scoring=True, qa_priority_ids=("q1",), scoring_configs={"atm_qs_v1": {}}),
+        {},
+    )
+    state = execution.prepare(request)
+    assert execution._judge is None
+    assert state.data["judge_model"] == "judge-model"
+    assert state.data["scoring_configs"] == {"atm_qs_v1": {}}
+    assert state.data["defer_scoring"] is True
+    budgets = request.runtime_snapshot.connection()["execution_budgets"]
+    assert budgets["defer_scoring"] is True
+    assert budgets["qa_priority_ids"] == ["q1"]
+    assert execution.http.calls == []
+
+
+def test_dispatch_gate_pauses_full_run_then_continues_same_indices(tmp_path, monkeypatch):
+    import json
+
+    rows = [{"qa_id": f"q{i}"} for i in range(6)]
+    control = tmp_path / "dispatch.json"
+    control.write_text(json.dumps({"concurrency": 4, "pause_after_completed": 4}))
+    execution, *_ = _execution(albums=FakeAlbums(manifest=_manifest(), qa_rows=rows))
+    state = RunState({"run_id": "gate", "scope_id": "s", "qa_snapshot": {"rows": rows}})
+    paused = threading.Event()
+    dispatched = []
+
+    def evaluate(row, *_):
+        dispatched.append(row["qa_id"])
+        return {"qa_id": row["qa_id"], "execution_status": "completed"}
+
+    def persist(*_, **__):
+        if state.data["phases"]["qa_eval"].get("progress", {}).get("dispatch_paused"):
+            paused.set()
+
+    monkeypatch.setattr(execution, "_evaluate_one", evaluate)
+    monkeypatch.setattr(state, "persist", persist)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            execution._phase_qa_eval,
+            state,
+            _request(qa_concurrency=4, qa_concurrency_control_path=str(control)),
+        )
+        try:
+            assert paused.wait(5)
+            assert set(dispatched) == {"q0", "q1", "q2", "q3"}
+            assert not future.done()
+        finally:
+            control.write_text(json.dumps({"concurrency": 2}))
+        future.result(timeout=5)
+    assert sorted(dispatched) == [f"q{i}" for i in range(6)]
+    assert [item["qa_id"] for item in state.data["items"]] == [f"q{i}" for i in range(6)]
+    assert state.data["phases"]["qa_eval"]["progress"]["qa_concurrency"] == 2

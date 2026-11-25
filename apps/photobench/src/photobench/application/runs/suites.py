@@ -348,6 +348,20 @@ class RunSuites:
         models = payload.get("models", [])
         if not isinstance(models, list) or not models:
             raise InvalidRequestError("models must contain at least one model")
+        defer_scoring = payload.get("defer_scoring", False)
+        if not isinstance(defer_scoring, bool):
+            raise InvalidRequestError("defer_scoring must be a boolean")
+        priority_ids = payload.get("qa_priority_ids", [])
+        if not isinstance(priority_ids, list):
+            raise InvalidRequestError("qa_priority_ids must be a list")
+        from photobench.application.run_execution.service import qa_execution_order
+
+        try:
+            qa_execution_order(
+                [] if mode == "build" else self._albums.qa_rows(album_id, qa_set), priority_ids
+            )
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
         graph_enabled = payload.get("graph_enabled", True)
         if not isinstance(graph_enabled, bool):
             raise InvalidRequestError("graph_enabled must be a boolean")
@@ -433,6 +447,9 @@ class RunSuites:
                         payload.get("qa_concurrency", self._budget_defaults.get("qa_concurrency", 0))
                     ),
                     judge_backpressure=payload.get("judge_backpressure", True) is not False,
+                    defer_scoring=defer_scoring,
+                    qa_priority_ids=tuple(priority_ids),
+                    qa_concurrency_control_path=str(payload.get("qa_concurrency_control_path") or ""),
                     turn_timeout=int(
                         payload.get("turn_timeout")
                         or (REASONING_TURN_TIMEOUT if reasoning else DEFAULT_TURN_TIMEOUT)
@@ -839,6 +856,9 @@ class RunSuites:
             graph_enabled=saved.get("graph_enabled") is not False,
             graph_baseline_run_id=str(saved.get("graph_baseline_run_id") or ""),
             reasoning=saved.get("reasoning") is True,
+            defer_scoring=saved.get("defer_scoring") is True,
+            qa_priority_ids=tuple(saved.get("qa_priority_ids") or ()),
+            qa_concurrency_control_path=str(saved.get("qa_concurrency_control_path") or ""),
             turn_timeout=DEFAULT_TURN_TIMEOUT,
             evaluation_prompts=saved.get("evaluation_prompts") or default_evaluation_prompts(),
             judge_use_gt_images=self._gt_image_option(payload, bool(saved.get("judge_use_gt_images"))),
@@ -921,6 +941,11 @@ class RunSuites:
                 turn_timeout=int(budgets.get("turn_timeout") or 900),
                 qa_concurrency=int(budgets.get("qa_concurrency") or 0),
                 judge_backpressure=budgets.get("judge_backpressure", True) is not False,
+                defer_scoring=budgets.get("defer_scoring", request.defer_scoring) is True,
+                qa_priority_ids=tuple(budgets.get("qa_priority_ids", request.qa_priority_ids)),
+                qa_concurrency_control_path=str(
+                    budgets.get("qa_concurrency_control_path", request.qa_concurrency_control_path)
+                ),
                 runtime_snapshot=RunRuntimeSnapshot(json.dumps(inherited), self._build_revision),
                 snapshot_source="resumed_run",
             )
@@ -2298,14 +2323,12 @@ class RunSuites:
             indexed = isinstance(self._store, RunListViews)
             if lock is None:
                 detached = (
-                    copy.deepcopy(self._live_list_entry(state.data))
-                    if indexed else copy.deepcopy(state.data)
+                    copy.deepcopy(self._live_list_entry(state.data)) if indexed else copy.deepcopy(state.data)
                 )
             elif lock.acquire(blocking=False):
                 try:
                     detached = (
-                        copy.deepcopy(self._live_list_entry(state.data))
-                        if indexed else state.snapshot()
+                        copy.deepcopy(self._live_list_entry(state.data)) if indexed else state.snapshot()
                     )
                 finally:
                     lock.release()

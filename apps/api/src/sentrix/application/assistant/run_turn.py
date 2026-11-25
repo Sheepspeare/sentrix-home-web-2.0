@@ -394,6 +394,8 @@ def _turn_trace(session: _Session, planned: PlannerResult | None) -> Mapping[str
             "detail": planned.detail if planned else "",
             "goal": state.question,
             "requirements": requirements,
+            "tool_selection": session.tool_selection,
+            "initial_tool_names": list(session.initial_tool_names),
         },
         "task_state": {
             "requirements": requirements,
@@ -804,6 +806,8 @@ class _Session:
     graph_enabled: bool = True
     reasoning: bool = False
     has_source_text: bool = False
+    tool_selection: str = "not_planned"
+    initial_tool_names: tuple[str, ...] = ()
     debug_calls: list[dict[str, Any]] = field(default_factory=list)
     #: 最近一次「需求 ↔ 事实」的绑定结果。只读投影，不改变账本状态；
     #: 守卫用它决定「提醒、放行还是如实报缺口」。
@@ -1300,7 +1304,13 @@ class RunTurn:
         # planner 已声明本回合需求；工具表冻结，之后不再随结果集/需求销账增删。
         # 这样同一回合的请求是 append-only，前缀缓存可以整段复用；收敛由下面两条
         # 安全阀保证：连续失败移除工具、预算耗尽只留终止动作。
-        frozen_specs = select_turn_tools(session.ledger, has_source_text=session.has_source_text)
+        frozen_specs = (
+            unrestricted_tools()
+            if self._use_all_tools
+            else select_turn_tools(session.ledger, has_source_text=session.has_source_text)
+        )
+        session.tool_selection = "all_tools" if self._use_all_tools else "planner_requirements"
+        session.initial_tool_names = tuple(spec.name for spec in frozen_specs)
 
         while True:
             self._check_cancel(state.turn_id)
@@ -1336,7 +1346,7 @@ class RunTurn:
                 # 推理模式不按证据需求剪枝，发全量契约让模型自己决定下一步。
                 specs = tuple(
                     spec
-                    for spec in unrestricted_tools()
+                    for spec in frozen_specs
                     if spec.name == FINAL_ANSWER_TOOL
                     or (
                         state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES

@@ -49,12 +49,13 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any
 
 from photobench.application.deploy.service import SentrixModelSwitch
+from photobench.application.run_execution.dispatch_control import DispatchControl
 from photobench.application.run_execution.gpu_sampler import PHASE_LABELS, GpuSampler
 from photobench.application.run_execution.import_progress import import_with_progress
 from photobench.application.run_execution.judge import InlineImages, JudgeRunner
@@ -277,6 +278,11 @@ class RunRequest:
     #: 有图 run 可填写对应的无图完整 run，用于配对最终媒体召回率。
     graph_baseline_run_id: str = ""
     judge_backpressure: bool = True
+    #: Save the scoring protocol now and run Judge separately after answers are available.
+    defer_scoring: bool = False
+    #: Dispatch these UUIDs first; question snapshot and result indices retain their original order.
+    qa_priority_ids: tuple[str, ...] = ()
+    qa_concurrency_control_path: str = ""
     runtime_framework: str = ""
     judge_url: str = ""
     judge_model: str = ""
@@ -291,6 +297,22 @@ class RunRequest:
     judge_use_gt_images: bool = False
     runtime_snapshot: RunRuntimeSnapshot | None = None
     snapshot_source: str = "creation_config"
+
+
+def qa_execution_order(
+    rows: Sequence[Mapping[str, Any]], priority_ids: Sequence[str]
+) -> list[tuple[int, Mapping[str, Any]]]:
+    """Order dispatch by UUID while preserving original question indices."""
+    if any(not isinstance(value, str) or not value for value in priority_ids):
+        raise ValueError("qa_priority_ids must contain nonempty strings")
+    if len(set(priority_ids)) != len(priority_ids):
+        raise ValueError("qa_priority_ids contains duplicate IDs")
+    known = {str(row.get("qa_id")) for row in rows}
+    unknown = set(priority_ids) - known
+    if unknown:
+        raise ValueError(f"qa_priority_ids contains unknown IDs: {sorted(unknown)}")
+    rank = {qa_id: index for index, qa_id in enumerate(priority_ids)}
+    return sorted(enumerate(rows), key=lambda pair: rank.get(str(pair[1].get("qa_id")), len(rank)))
 
 
 def freeze_runtime_request(
@@ -327,6 +349,9 @@ def freeze_runtime_request(
             "turn_timeout": request.turn_timeout,
             "qa_concurrency": request.qa_concurrency,
             "judge_backpressure": request.judge_backpressure,
+            "defer_scoring": request.defer_scoring,
+            "qa_priority_ids": list(request.qa_priority_ids),
+            "qa_concurrency_control_path": request.qa_concurrency_control_path,
             "reasoning": request.reasoning,
         },
         required_build_revision=connection.get("product_build_revision")
@@ -730,6 +755,7 @@ class RunExecution:
                 "definition_sha256": qa_fingerprint(rows),
                 "rows": copy.deepcopy(rows),
             }
+        qa_execution_order(snapshot["rows"], request.qa_priority_ids)
         from photobench.domain.datasets.validation import require_valid_targets
 
         # Validate new input before import/Agent work. Recovery keeps its frozen protocol.
@@ -796,6 +822,9 @@ class RunExecution:
             or (self.judge_settings.judge_provider_id if self.judge_settings else ""),
             "judge_prompts": dict(request.judge_prompts),
             "judge_use_gt_images": request.judge_use_gt_images,
+            "defer_scoring": request.defer_scoring,
+            "qa_priority_ids": list(request.qa_priority_ids),
+            "qa_concurrency_control_path": request.qa_concurrency_control_path,
             "scoring_configs": copy.deepcopy(dict(request.scoring_configs)),
             "scoring_profiles": list(request.scoring_configs),
             **copy.deepcopy(dict(request.prior_scoring)),
@@ -839,7 +868,7 @@ class RunExecution:
         ``cancel`` 传的是这一轮的取消信号，所以 judge 的退避与限流等待可取消。
         """
         defaults = self.judge_settings
-        if self.http is None:
+        if request.defer_scoring or self.http is None:
             return None
         judge_url = request.judge_url or (defaults.judge_url if defaults else "")
         judge_model = request.judge_model or (defaults.judge_model if defaults else "")
@@ -2233,6 +2262,7 @@ class RunExecution:
         rows = copy.deepcopy(snapshot["rows"])
         resolved = self._resolve_qa_concurrency(request, state)
         concurrency = resolved.effective
+        control = DispatchControl(request.qa_concurrency_control_path, concurrency)
         judge = self._judge
         judge_concurrency = self._resolve_judge_concurrency(concurrency)
         state.set("qa_concurrency", concurrency)
@@ -2264,7 +2294,11 @@ class RunExecution:
             for index, row in enumerate(rows)
             if (prior := prior_by_qa.get(str(row.get("qa_id")))) is not None
         }
-        pending_rows = [(index, row) for index, row in enumerate(rows) if index not in items]
+        pending_rows = [
+            (index, row)
+            for index, row in qa_execution_order(rows, request.qa_priority_ids)
+            if index not in items
+        ]
         state.record_phase("qa_eval", "agent_timing_version", 2)
         state.record_phase("qa_eval", "agent_execution_total", len(pending_rows))
         state.record_phase("qa_eval", "agent_inherited_count", len(items))
@@ -2347,7 +2381,9 @@ class RunExecution:
                         "judge_skipped": sum(
                             item.get("judge_status") == "skipped" for item in items.values()
                         ),
-                        "qa_concurrency": concurrency,
+                        "qa_concurrency": control.concurrency,
+                        "dispatch_paused": control.paused,
+                        "dispatch_history": list(control.history),
                         "judge_concurrency": judge_concurrency if judge is not None else 0,
                     },
                 )
@@ -2438,7 +2474,7 @@ class RunExecution:
                         judge_wait_started = None
                     while (
                         not queue_exhausted
-                        and len(futures) < concurrency
+                        and control.admission(completed=len(items), inflight=len(futures))
                         and (
                             not request.judge_backpressure
                             or len(futures) + len(judge_futures) < concurrency + 2 * judge_concurrency
@@ -2460,7 +2496,14 @@ class RunExecution:
                 fill_agent_slots()
                 # Drain both pools as work completes. Waiting only on Agent futures
                 # withholds scores for the whole album when one Agent is slow.
-                while futures or judge_futures:
+                while futures or judge_futures or (not queue_exhausted and not state.cancelled):
+                    if not futures and not judge_futures and not state.cancelled:
+                        fill_agent_slots()
+                        record_progress()
+                        state.persist()
+                        if not futures:
+                            time.sleep(1.0)
+                            continue
                     if state.cancelled:
                         for pending in (*futures, *judge_futures):
                             pending.cancel()
