@@ -9,6 +9,7 @@ import httpx
 import pytest
 import repair_content as repair
 from PIL import Image
+from settle_content_smoke import UNSUPPORTED_CAPTION, corrected_semantics
 
 from sentrix.domain.media.models import Asset, AssetStatus, MediaType, Observation
 from sentrix.domain.memories.events import EventRecord
@@ -64,6 +65,25 @@ def test_missing_semantics_excludes_partial_success():
     assert repair.missing_semantics({"place": "precise address"})
     for value in ({"activity": "在吃饭"}, {"objects_json": '["餐盘"]'}, {"ocr_text": "菜单"}):
         assert not repair.missing_semantics(value)
+
+
+def test_review_removes_only_disproven_text_and_preserves_other_visual_fields():
+    observation = SimpleNamespace(
+        caption="桌上有菜。" + UNSUPPORTED_CAPTION,
+        place="原地点",
+        activity="用餐",
+        event_type="餐饮",
+        objects=("铁板",),
+        clothing=(),
+        facts=(),
+        source_text="",
+        confidence=0.65,
+    )
+    semantics = corrected_semantics(observation, repair.EMPTY_SMOKE)
+    assert semantics.caption == "桌上有菜。盘子下方垫着菜单纸。"
+    assert semantics.ocr_text == ""
+    assert semantics.objects == observation.objects and semantics.place == observation.place
+    assert corrected_semantics(observation, repair.OCR_REVIEW).caption == observation.caption
 
 
 def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(tmp_path, monkeypatch):
