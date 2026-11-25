@@ -14,6 +14,6 @@ if __name__ == "__main__":
     parser.add_argument("--run", required=True)
     args = parser.parse_args()
     reader = SplitRunReader(args.results, args.results / args.run)
-    snapshot = thaw(reader.reader.walk(reader.manifest["root"], ["qa_snapshot"]))
+    snapshot = thaw(reader.reader.value(reader.reader.walk(reader.manifest["root"], ["qa_snapshot"])))
     assert snapshot["definition_sha256"] == qa_fingerprint(snapshot["rows"])
     print(json.dumps({"read_revision": reader.revision, "qa_snapshot": snapshot}, ensure_ascii=False))
