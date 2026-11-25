@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜五描述及索引验收通过；修正摘要来源类型判断后接续
+
+wait `5db4bd99-051a-4436-9b92-5bf5297075e5`运行7.269秒后退出1。真实success为5条caption，8条摘要均未发起模型请求且正文保持。原因：SQLite中的source_type=NULL经生产仓储`_row_to_event`转为空字符串，新增修复脚本以None比较导致失败。修正期望值采用相同规范化，不改数据库原字段。回归使用真实仓储映射覆盖NULL/空串/video_scene及嵌入失败复用；30项相关测试、ruff/compile通过，提交4e372572。两脚本仅同步repair目录，100编译/SHA及只读验收通过；未改release、未重启。
+
+`verify-captions`已核5条success与当前SQLite逐列一致，仅caption/revision/updated变化；原activity/objects/facts/OCR等保持，源文件SHA、两观察文本向量/关联event投影与词法通过。17类非目标表行数/SHA均保持，含原955＋1328成功摘要；8待补事件与before逐列保持、无模型请求。证据`photo-content-tail-review/{acceptance.json,caption-verification.json,photo-content-tail}`；原失败终态和所有成功记录保留。
+
+新wake `3d342a7e-bec7-4583-b6bf-284368807e53`，unit `sentrix-qwen38-photo-content-tail-resume1-20261125`，回执`photo-content-tail-resume-launch.json`。resume校验原冻结计划并跳过5success，只做8未开始摘要；Flash关思考128K/4096/4并发和原提示词保持。新进度/终态在`content/photo-content-tail/resume-1-{progress,terminal}.json`，原terminal/progress保持。后续先核真实success/原包和8摘要事实，再验文本索引与非目标保护。中断仅接失败阶段，不能再整批重放resume。
+
+图谱2283事件节点、5观察及旧错误投影同步与最终因果/历史失败审计仍待收尾；旧2帧及街摊OCR未恢复。8294/8874/网关PID保持、.119high不碰、Oracle87.018756不重跑、QA/Judge/消融0、题库线上分保持。/home仅1.7G，不复制整库。代码4e372572及前轮未推提交待远端摘要验收后push。5db4bd99已处理不重挂。
+
 ## 2026-11-25｜五张描述候选核验通过，接续局部内容收尾
 
 wait `05503437-84a2-4346-80e3-009cf8c71feb`退出0，真实service运行4.375秒；5原始请求响应均实际qwen3.8-flash、关思考、4096输出上限、stop，无失败截断。共4020输入＋317输出＝4337token。逐张对原图核验后，梯田观景台描述删除“黄昏时分，”和“或架着三脚架”，分别因为不能确定晨昏、图中不足以支持多人架三脚架；其他候选保留原响应。选择与原包SHA在`partial-caption-review/{acceptance.json,partial-captions/reviewed-selection.json}`，未手填新描述或读取GT。
