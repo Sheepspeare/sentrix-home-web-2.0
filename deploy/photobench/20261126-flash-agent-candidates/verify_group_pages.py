@@ -16,8 +16,18 @@ class ReadOnlyDatabase:
 
     @contextmanager
     def connect(self):
+        from sentrix.domain.media.capture_time import time_sort_key
+        from sentrix.infrastructure.persistence.database import _capture_in_bounds
+
         with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as db:
             db.row_factory = sqlite3.Row
+            db.create_function(
+                "capture_sort_key",
+                1,
+                lambda value: time_sort_key(datetime.fromisoformat(value) if value else None),
+                deterministic=True,
+            )
+            db.create_function("capture_in_bounds", 3, _capture_in_bounds, deterministic=True)
             db.execute("pragma query_only=on")
             yield db
 

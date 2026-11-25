@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v3候选已发布，验收脚本函数缺失已本机修复
+
+491bc7eb失败已核：large8299/8879实际已切f60aba02，517文件/18表/9保护PID及旧8答SHA通过，旧v2仅8答取消1005未执行；新QA0。失败来自独立只读verify_group_pages连接未注册生产SQLite capture_sort_key，业务连接本来已注册。源release不修改/服务不再切换，修helper沿用生产time_sort_key/_capture_in_bounds，只读UDF与拒写回归1项通过，Ruff通过。提交后仅同步helper到独立ops目录，接续真实1660分组验收→push→原子payload/control→独立wake一次启动11题；不重跑部署/取消。
+
+原两全量最新limited102/large38，各4并发；有限v2到83诊断16/2并发继续。所有原wake保持。证据v3-large-rerun/deployment/{verification,answer-preservation}.json、initial-validation-failure.log及callback-491bc7eb-reconciled.json。此刻11题尚未发，恢复不得误报已跑。
+
 ## 2026-11-26｜v3通用时间/分页与最小来源代码完成，准备独立11题
 
 本机修普通活动time条件不再依赖人脸、planner题设参考日按“截至YYYY-MM-DD”保留历史上界，解析器/统计支持同表达；分组模型输出每页64项，真实total/group_count/next_offset保留，不重复value+rows。planner照片文字不再无故追加邮件佐证，明确邮件来源仍保留。FinalGuard局部否认本轮未改。业务312项308通过/4既有失败，部署监控13项通过，Ruff/compile和4模块mypy通过。
