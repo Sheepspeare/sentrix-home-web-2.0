@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜原建库终态核验，开始局部视频恢复小样
+
+原build于08:15:08完成，pipeline receipt已completed，qa_count/items均0；8874 active-work空，18138 active/inflight均0。3759照片、6742邮件、533视频源观察全覆盖，3759照片视觉向量齐全；533视频仍仅274有场景，259缺口保持，不能直接验收相册。恢复前观察12401、视觉/人脸向量5969、文本向量28171，快照见产品项目audit/20261125-qwen38-build-finalization/inventory-before.json。原网关累计10082成功、20次400和1次连接超时，178次length；内容完整性和具体失败落库仍待核。
+
+恢复脚本ee536af5已本机提交，含抽帧业务回归共17项通过、ruff通过；远端脚本和冻结计划SHA一致，活动两模块原SHA与e6294735完全匹配。已登记并提交独立wake b3c7643c-b7d4-40c8-912c-6085d97b8a19，远端unit sentrix-qwen38-video-recovery-smoke-20261125。任务先确认空闲并做SQLite一致性备份，再仅覆盖ee6594ae两模块、重启8294一次，通过现有产品job恢复首条asset_427c5b857233（复用2帧，补1帧），暂未验收小样结果。8874/18138及7保护单元保持，模型配置不改。原fc462190已消费、健康cd5efb52已cancelled/进程退出，不重复登记。
+
+接手读recovery-smoke-launch.json和精确wait日志、远端deployment.json及smoke/terminal.json。小样完整验收后，另挂wake运行同脚本run --output .../repair-ee6594ae/full，跳过已完成样本，仅补余下258视频。8294独占Qdrant，不另建Container；不盲重放deploy-smoke。保存原analysis、696已有图片/时间和成功记录；原库备份预定repair-ee6594ae/before-recovery/sentrix.db。恢复代码远端验收后push。QA/Judge/消融均未授权启动，Oracle已验收分数87.018756%保持。
+
+
 ## 2026-11-25｜259条视频只读验证验收
 
 3655e653已终态验收：259/259通过，955张计划帧中696张已有文件SHA一致、259张缺失帧全部临时抽取成功，耗时24.946秒；0模型请求/0相册写入。原视频与analysis SHA、259 ID均一致。已冻结recovery-plans.json，保持696帧的原文件和原时间，仅259缺失帧用校正后的解码时间，场景边界/原选帧序号保留。新增真实SQLite的局部帧失败恢复回归，15专项通过，覆盖补观察/场景及再次执行0新增。
