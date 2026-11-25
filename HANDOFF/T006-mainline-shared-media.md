@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜大预算首8验收，v1不扩大，v2副本发布
+
+大预算v1的8题已配对原基线：共享模型HTTP244→125、工具准入262→143；记录Token含内部视觉7,369,073→3,632,890。Wi-Fi98→4；NeurIPS因正文主体被强当人脸名而漏答；鸡翅99→73但Token增加且无视题设2023-02-09，回答2025年，v1不扩大。披萨旧结果集rs_8aebff66d44f/photo_2经多次新检索后仍正确读asset_5c08513d3cfe及MOVENPICK，引用修复实测生效。主分待Judge，成本下降未构成质量验收。证据large-first-eight-review/{RESULTS.md,acceptance.json,paired-metrics.json}。
+
+旧wake d0fe86c7仅迁移前低2GiB告警，当前/home约4.3GB；未重发QA/未重复快照迁移。已有v1八答及raw完整保存，取消余下1005题调度后逐题答案SHA通过。部署脚本133c2d5a支持按组隔离，10测试/Ruff/compile通过；本机提交→100脚本SHA78ef0e9b核验→真实发布验收→push。初次系统Python3.10缺hashlib.file_digest，停在源码校验前、无intent/配置变更/重启；保留空阶段目录为large-v2-preflight-python310-failed后用现有Python3.12运行，未重放取消。
+
+业务11deb1c6仅将大预算8299/8879切为与有限v2一致的修复：正文主体/人脸语义及完整历史预留收尾。511源码SHA、18记忆表、9保护进程ticks及旧8答案保持；100/600、各reserve2、2worker、推理/planner/all_tools及Flash关思考128K4096均保持。原两全量基线和有限v2进程未动。大预算同8题复测payload/control已冻结，83UUID及评分协议不变，先蚂蚁/NeurIPS/鸡翅，8答暂停；登记独立wake后一次启动，不扩大v1。有限v2原wake64799a78保持。题设日期未进入检索的通用缺陷待下一轮轨迹定位，禁止用GT或题号专设策略。
+
+
 ## 2026-11-26｜v2同8题已启动，低盘告警已处置
 
 新v2有限run为20261126-045653-2026.11.17-atm-sources-addresses-big_model-f9367d，实际build11deb1c6、2并发运行，最新1答/无fatal_error；首8后暂停。独立wake e73cc665-4d53-4e88-b73b-83117db2b7a6启动成功后因/home仅1957777408字节触低2GiB告警，监控退出但QA继续；禁止重放POST。已核这不是答题失败，后续只attach原run监控，原始first-eight证据和回调完整保留。
