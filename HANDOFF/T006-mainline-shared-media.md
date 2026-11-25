@@ -1,5 +1,18 @@
 # T006 主线集成与跨相册媒体共享
 
+
+
+## 2026-11-26｜候选准备验收与启动目标纠正
+
+候选准备已验收：release7fbb4ed8，18记忆表/各6989缓存与最终快照一致，0新嵌入；真实题库1013/SHA13d07b33及共同ATM native_v2协议匹配。各2并发，20/30和100/600，首8暂停，完整83优先顺序保持。原基线最新limited55/large19均running/4并发，原83监控保持。
+
+首两次启动因payload仍指向原8296/8297，版本/worker数核验中断，QA0/无答卷，失败run尾6ed573/3f1d57及first-eight全部原包保留。已将仅sentrix_url改至候选8298/8299，SHA核后原子落地；watcher48bfe1c7增加发前目标和payload SHA校验，10项部署/监控测试、Ruff/编译通过。本机7保护进程ticks再核保持，原活动基线无重启。失败回调fcde2dbe/08ea0ab5已处理，不重复发POST或重做成功。
+
+纠正后两个独立wake已登记并启动watcher：limited49ab8050-0296-481b-95c3-ba45dfd74ea4、large d0fe86c7-fa75-48a8-b108-d0d816650c00；新证据分别first-eight-v2，纠正后limited run尾790fec、large尾2211ea均model_deploy/scope_setup完成、qa_eval运行中，runtime_snapshot分别指8298/8299；真实回执已保存candidate-relaunch.json。各2并发首8完成暂停，独立wake49ab8050/d0fe86c7保持。旧监控输出不可覆盖。到首8或异常自动续接，告警不停止worker；核8题实际共享HTTP/Token/耗时及完整取证与最终答案，再按原协议补Judge，质量未测前不报收益，不自动扩大。
+
+005查第一人称活动人物条件与重复取证收敛，002查result_set_id+handle到正确asset及实际图片证据使用；4额外多步题查误收尾。/home约2.7GiB，低2GiB告警；候选最低2并发，原基线持续429按4→3→2减新调度，保留在飞和所有成功。源相册/119high/Oracle及主树4份用户改动保持。代码候选分支已push51192652；最新48bfe1c7及本轮交接在启动验收后push。
+
+
 ## 2026-11-26｜候选代码完成，独立实验准备
 
 候选已本机提交07dd8c94，部署配置整理7fbb4ed8；510源码包已同步100，包SHA/远端编译通过。独立实例准备已由wake2d6ddf14-5b31-44eb-a8ee-086d4f60e4e4启动，终态验收后立即启动两组各2并发优先8题；此刻尚未候选QA。prepare按18表/独立缓存与实际预算验收，失败按阶段续；远端验收后push。实验payload和8题清单已冻结，见本审计目录。

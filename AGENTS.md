@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 两需求候选已在独立分支实现：第一人称活动条件、跨检索引用绑定、重复取证收敛；业务272项/部署5项通过，4旧失败单列。原双基线继续；候选8298/8878、8299/8879各2并发，优先8题验收后扩大，效果待实测。见产品audit/20261126-flash-agent-candidates及T006。
+- 11/26 005/002候选准备通过；首次目标误指原端口在QA前拦截，0答卷/原进程保持。已纠正8298/8299，双组QA正在运行，各2并发首8暂停验收，回执见产品audit/20261126-flash-agent-candidates/candidate-relaunch.json及T006。
 
 - 11/26 005/002源码诊断已复现：叙述者人物条件阻塞检索、无进展仅提醒与跨工具重置失败计数；跨检索编号复用且四读取工具强绑最新结果。7项离线复现/60既有测试通过，修复方案见产品audit/20261126-flash-dual-baseline-launch/code-diagnosis及T006；业务未改，活动双基线保持。
 
@@ -61,4 +61,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线各4并发继续；005循环/002引用已离线定位，候选待实施，Judge待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线继续；005/002候选双组各2并发QA已启动，首8暂停验收/Judge待补 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
