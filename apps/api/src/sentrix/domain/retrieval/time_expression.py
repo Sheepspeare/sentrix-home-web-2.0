@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # 范围两端的连接词。1.0 的字面量。
@@ -51,7 +51,18 @@ def parse_time_expression(value: str | None) -> tuple[datetime, datetime] | None
             zone = ZoneInfo(zone_suffix.group(2))
         except ZoneInfoNotFoundError:
             return None
-        return (bounds[0].replace(tzinfo=zone), bounds[1].replace(tzinfo=zone)) if bounds else None
+        if bounds is None:
+            return None
+        start = bounds[0].replace(tzinfo=UTC if bounds[0] == datetime.min else zone)
+        return start, bounds[1].replace(tzinfo=zone)
+
+    cutoff = re.fullmatch(r"截至\s*((?:19|20)\d{2}-\d{2}-\d{2})", cleaned)
+    if cutoff:
+        try:
+            end = datetime.fromisoformat(cutoff.group(1)) + timedelta(days=1)
+        except ValueError:
+            return None
+        return datetime.min, end
 
     month_range = _MONTH_RANGE.fullmatch(cleaned)
     if month_range:

@@ -313,3 +313,21 @@ def test_aliases_are_used_for_matching():
         evaluate(condition, make_asset(), make_observation(), context=context).status
         is not ConditionStatus.MATCHED
     )
+
+
+@pytest.mark.parametrize("suffix", ["", "[Asia/Shanghai]"])
+def test_cutoff_is_an_upper_bound_including_the_reference_day(suffix):
+    from zoneinfo import ZoneInfo
+
+    from sentrix.domain.media.capture_time import within_time_bounds
+
+    bounds = parse_time_expression("截至2023-02-09" + suffix)
+    zone = ZoneInfo("Asia/Shanghai") if suffix else None
+    assert within_time_bounds(bounds, datetime(2019, 1, 1, tzinfo=zone))
+    assert within_time_bounds(bounds, datetime(2023, 2, 9, 23, 59, 59, tzinfo=zone))
+    assert not within_time_bounds(bounds, datetime(2023, 2, 10, tzinfo=zone))
+    assert not within_time_bounds(bounds, datetime(2024, 9, 18, tzinfo=zone))
+
+
+def test_invalid_cutoff_does_not_become_a_day_filter():
+    assert parse_time_expression("截至2023-02-30") is None

@@ -49,6 +49,7 @@ from sentrix.domain.retrieval.structured_query import StructuredFilter, derive_f
 
 # 附几条代表观察。1.0 ``_fact_samples`` 里的 ``limit=3``。
 SAMPLE_LIMIT = 3
+GROUP_PAGE_SIZE = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +65,7 @@ class FactAnswer:
     samples: tuple[Mapping[str, Any], ...] = ()
     filters_applied: Mapping[str, Any] = field(default_factory=dict)
     person_names: tuple[str, ...] = ()
+    offset: int = 0
 
     @property
     def coverage(self) -> Mapping[str, Any]:
@@ -84,7 +86,7 @@ class FactAnswer:
 
     def visible(self) -> Mapping[str, Any]:
         """发给模型的那一份。``samples`` 里只有三个键——切分在 ``_sample_rows``。"""
-        return {
+        visible: dict[str, Any] = {
             "status": "ok",
             "fact_type": self.fact_type,
             "subject": self.subject.value,
@@ -96,6 +98,17 @@ class FactAnswer:
             "samples": [dict(sample) for sample in self.samples],
             "coverage": dict(self.coverage),
         }
+        if self.unit == "original_asset_breakdown":
+            page = self.rows[self.offset : self.offset + GROUP_PAGE_SIZE]
+            end = self.offset + len(page)
+            visible["value"] = [dict(row) for row in page]
+            del visible["rows"]
+            visible.update(
+                group_count=len(self.rows),
+                offset=self.offset,
+                next_offset=end if end < len(self.rows) else None,
+            )
+        return visible
 
 
 def _unit(request: FactRequest) -> str:
@@ -205,6 +218,7 @@ class QueryMemoryFacts:
             rows=rows,
             samples=samples,
             person_names=person_names,
+            offset=request.offset,
             filters_applied={
                 **structured_filter.applied,
                 "scope_id": structured_filter.scope_id,

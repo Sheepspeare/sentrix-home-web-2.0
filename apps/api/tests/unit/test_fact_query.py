@@ -313,3 +313,17 @@ def test_the_spec_carries_nothing_the_tool_did_not_ask_for():
 
     assert not hasattr(spec, "structured")
     assert not hasattr(spec, "answer_type")
+
+
+@pytest.mark.parametrize("offset", [-1, 1.5, "64", True, None])
+def test_group_offset_must_be_a_nonnegative_integer(offset):
+    assert parse(operation="group", subject="asset", group_by="place", offset=offset) == FactRejection(
+        "unsupported_filter", "invalid_offset"
+    )
+
+
+def test_group_offset_is_preserved_and_count_rejects_pagination():
+    assert request(operation="group", subject="asset", group_by="place", offset=64).offset == 64
+    assert parse(operation="count", subject="asset", offset=64) == FactRejection(
+        "unsupported_filter", "offset_requires_group"
+    )

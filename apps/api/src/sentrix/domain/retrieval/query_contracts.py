@@ -272,6 +272,11 @@ def resolve_time_expression(value: str | None, *, now: datetime) -> str | None:
     v = str(value or "").strip()
     if not v:
         return None
+    if re.fullmatch(r"(?:截至\s*)?20\d{2}-\d{2}-\d{2}(?:\[[^\]]+\])?", v):
+        try:
+            return v if parse_time_expression(v) is not None else None
+        except ValueError:
+            return None
     year, month = now.year, now.month
 
     month_rel = re.search(r"(去年|今年|前年)\s*(\d{1,2}|[一二三四五六七八九十]+)\s*月", v)

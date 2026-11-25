@@ -90,3 +90,15 @@ def test_baseline_product_endpoint_is_rejected_before_network(tmp_path, monkeypa
     monkeypatch.setattr(op, "ssh", lambda command: pytest.fail("Wrong endpoint must not be contacted"))
     with pytest.raises(AssertionError):
         op.run("limited", tmp_path)
+
+
+def test_eleven_question_review_waits_for_the_actual_paused_checkpoint():
+    op = module()
+    snapshot = {"status": "running", "phases": {"qa_eval": {"progress": {
+        "dispatch_paused": False, "agent_completed": 11,
+    }}}}
+    assert op.checkpoint(snapshot, 11) is None
+    snapshot["phases"]["qa_eval"]["progress"].update(dispatch_paused=True, agent_completed=8)
+    assert op.checkpoint(snapshot, 11) is None
+    snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] = 11
+    assert op.checkpoint(snapshot, 11) == "review_checkpoint_ready"

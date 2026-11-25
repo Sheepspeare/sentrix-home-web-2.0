@@ -20,6 +20,20 @@ OLD_RUNS = {
     "limited": "20261126-043228-2026.11.17-atm-sources-addresses-big_model-790fec",
     "large": "20261126-043228-2026.11.17-atm-sources-addresses-big_model-2211ea",
 }
+STAGES = {
+    "v2": {
+        "runs": OLD_RUNS,
+        "previous_revision": "7fbb4ed85b6bde8d71d0f7ced1a7eab073c721dc",
+        "previous_release": "release",
+        "accepted": "v1",
+    },
+    "v3": {
+        "runs": {"large": "20261126-050817-2026.11.17-atm-sources-addresses-big_model-e9700d"},
+        "previous_revision": "11deb1c68068015b1ad31e10579dbd7188707d20",
+        "previous_release": "release-11deb1c6",
+        "accepted": "v2",
+    },
+}
 
 
 def wait_for(check, seconds=45):
@@ -33,10 +47,10 @@ def wait_for(check, seconds=45):
         time.sleep(1)
 
 
-def start_archive(revision, *, group="limited"):
+def start_archive(revision, *, group="limited", stage="v2"):
     product, evaluation, _models, _tools = candidate.GROUPS[group]
-    old_run = OLD_RUNS[group]
-    output = BASE / f"{group}-v2"
+    old_run = STAGES[stage]["runs"][group]
+    output = BASE / f"{group}-{stage}"
     output.mkdir()  # A prior intent requires inspection, not replay.
     release = BASE / f"release-{revision[:8]}"
     assert json.loads((release / "build-info.json").read_text())["revision"] == revision
@@ -73,6 +87,7 @@ def start_archive(revision, *, group="limited"):
             "revision": revision,
             "release": str(release),
             "previous_run": old_run,
+            "stage": stage,
             "at": time.time(),
             "protected": protected,
             "scope": f"{group} only; preserve eight prior answers, album and other candidate",
@@ -86,13 +101,13 @@ def start_archive(revision, *, group="limited"):
     return output, release, protected
 
 
-def verify_archived_answers(output, *, group="limited"):
+def verify_archived_answers(output, *, group="limited", stage="v2"):
     evaluation = candidate.GROUPS[group][1]
-    old_run = OLD_RUNS[group]
+    old_run = STAGES[stage]["runs"][group]
     snapshot = h.api(evaluation, f"runs/{old_run}?include_history=false")
     assert snapshot["status"] == "cancelled"
     assert snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] == 8
-    accepted = json.loads((BASE / f"{group}-v1-accepted-eight.json").read_text())
+    accepted = json.loads((BASE / f"{group}-{STAGES[stage]['accepted']}-accepted-eight.json").read_text())
     assert len(accepted) == 8
     for qa_id, digest in accepted.items():
         rows = h.api(evaluation, f"runs/{old_run}/items?search={qa_id}&page=1&page_size=10")["items"]
@@ -110,10 +125,10 @@ def verify_archived_answers(output, *, group="limited"):
     )
 
 
-def run(revision, *, group="limited", continue_archived=False):
+def run(revision, *, group="limited", stage="v2", continue_archived=False):
     product, evaluation, models, tools = candidate.GROUPS[group]
     if continue_archived:
-        output = BASE / f"{group}-v2"
+        output = BASE / f"{group}-{stage}"
         intent = json.loads((output / "intent.json").read_text())
         assert intent["revision"] == revision
         assert not (output / "configured.json").exists()
@@ -126,8 +141,8 @@ def run(revision, *, group="limited", continue_archived=False):
         manifest = json.loads((release / "source-sha256.json").read_text())
         assert all(h.sha(release / name) == digest for name, digest in manifest.items())
     else:
-        output, release, protected = start_archive(revision, group=group)
-    verify_archived_answers(output, group=group)
+        output, release, protected = start_archive(revision, group=group, stage=stage)
+    verify_archived_answers(output, group=group, stage=stage)
     data = BASE / group / "data"
     units = [candidate.unit_name(group + "-" + role) for role in ("eval", "api")]
     subprocess.run(["systemctl", "--user", "stop", *units], check=True)
@@ -141,8 +156,9 @@ def run(revision, *, group="limited", continue_archived=False):
         path = root / unit
         old = path.read_text()
         (output / unit).write_text(old)
-        assert str(BASE / "release") in old
-        path.write_text(old.replace(str(BASE / "release"), str(release)))
+        previous_release = str(BASE / STAGES[stage]["previous_release"])
+        assert previous_release in old
+        path.write_text(old.replace(previous_release, str(release)))
     env_path = BASE / f"{group}-eval.env"
     (output / "before-eval.env").write_bytes(env_path.read_bytes())
     (output / "before-eval.env").chmod(0o600)
@@ -154,7 +170,7 @@ def run(revision, *, group="limited", continue_archived=False):
     config = json.loads(config_path.read_text())
     h.save(output / "before-runtime-connection.json", config)
     assert config["sentrix_url"] == f"http://127.0.0.1:{product}"
-    assert config["product_build_revision"] == "7fbb4ed85b6bde8d71d0f7ced1a7eab073c721dc"
+    assert config["product_build_revision"] == STAGES[stage]["previous_revision"]
     config["product_build_revision"] = revision
     h.save(config_path, config)
     h.save(output / "configured.json", {"revision": revision, "at": time.time()})
@@ -213,6 +229,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--revision", required=True)
     parser.add_argument("--group", choices=["limited", "large"], default="limited")
+    parser.add_argument("--stage", choices=STAGES, default="v2")
     parser.add_argument("--continue-archived", action="store_true")
     args = parser.parse_args()
-    run(args.revision, group=args.group, continue_archived=args.continue_archived)
+    run(args.revision, group=args.group, stage=args.stage, continue_archived=args.continue_archived)

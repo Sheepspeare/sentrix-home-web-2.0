@@ -449,7 +449,7 @@ class AssistantToolbox:
 
         times = {scope["time"] for scope in scopes if scope.get("time")}
         places = {scope["place"] for scope in scopes if scope.get("place")}
-        time = next(iter(times)) if groups and len(times) == 1 else ""
+        time = next(iter(times)) if len(times) == 1 else ""
         place = next(iter(places)) if groups and len(places) == 1 else ""
         bounds = parse_time_expression(time)
         conditions = [Condition("time", time, key="time")] if bounds else []

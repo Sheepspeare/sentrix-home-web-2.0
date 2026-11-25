@@ -322,6 +322,14 @@ QUERY_MEMORY_FACTS = ToolSpec(
                 "enum": ["month", "place", "media", "status"],
                 "description": "只在 operation=group 时需要。status 只能配 subject=processing。",
             },
+            "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "description": (
+                    "group 分页起点，默认0；每页最多64组。按 next_offset 原参数续页，"
+                    "total是全部匹配资产数，group_count是全部组数，value仅当前页。"
+                ),
+            },
             "filters": _object_schema(
                 {
                     "time": {

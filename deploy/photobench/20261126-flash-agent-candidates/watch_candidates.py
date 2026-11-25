@@ -45,13 +45,13 @@ def api(port, path):
     return json.loads(ssh(f"curl --max-time 45 -fsS http://127.0.0.1:{port}/api/v1/{path}"))
 
 
-def checkpoint(snapshot):
+def checkpoint(snapshot, target=CHECKPOINT):
     phase = (snapshot.get("phases") or {}).get("qa_eval") or {}
     progress = phase.get("progress") or {}
     if snapshot.get("status") in TERMINAL:
         return "run_terminal"
-    if progress.get("dispatch_paused") and progress.get("agent_completed", 0) >= CHECKPOINT:
-        return "first_eight_ready"
+    if progress.get("dispatch_paused") and progress.get("agent_completed", 0) >= target:
+        return "first_eight_ready" if target == 8 else "review_checkpoint_ready"
     return None
 
 
@@ -75,7 +75,7 @@ def validate_payload(group, payload):
     assert payload["reasoning"] is True and payload["defer_scoring"] is True
 
 
-def run(group, audit, output=None, *, existing_run=""):
+def run(group, audit, output=None, *, existing_run="", target=CHECKPOINT):
     port = PORTS[group]
     output = output or audit / f"{group}-first-eight"
     output.mkdir()  # Existing intent requires inspection, never another POST.
@@ -85,6 +85,7 @@ def run(group, audit, output=None, *, existing_run=""):
         "at": started,
         "payload": f"{BASE}/{group}/run-payload.json",
         "existing_run": existing_run or None,
+        "checkpoint": target,
     }
     save(output / "intent.json", intent)
     try:
@@ -123,12 +124,18 @@ def run(group, audit, output=None, *, existing_run=""):
                     raise
                 time.sleep(15)
                 continue
-            reason = request_alert(records, started) or checkpoint(snapshot)
+            reason = request_alert(records, started) or checkpoint(snapshot, target)
             if free_bytes < 2 * 1024**3:
                 reason = "disk_below_2GiB"
             if reason:
-                save(output / "items.json", api(port, f"runs/{run_id}/items?page=1&page_size=10"))
-                failed = reason != "first_eight_ready" and snapshot.get("status") != "completed"
+                save(
+                    output / "items.json",
+                    api(port, f"runs/{run_id}/items?page=1&page_size={max(10, target)}"),
+                )
+                failed = (
+                    reason not in {"first_eight_ready", "review_checkpoint_ready"}
+                    and snapshot.get("status") != "completed"
+                )
                 terminal = {
                     "status": "needs_review" if not failed else "failed",
                     "reason": reason,
@@ -141,7 +148,7 @@ def run(group, audit, output=None, *, existing_run=""):
                 print(json.dumps(terminal), flush=True)
                 return 1 if failed else 0
             time.sleep(15)
-        raise TimeoutError("First eight checkpoint deadline; inspect live turns before resuming")
+        raise TimeoutError("Review checkpoint deadline; inspect live turns before resuming")
     except Exception as error:
         save(
             output / "terminal.json",
@@ -156,5 +163,9 @@ if __name__ == "__main__":
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--existing-run", default="")
+    parser.add_argument("--checkpoint", type=int, default=CHECKPOINT)
     args = parser.parse_args()
-    raise SystemExit(run(args.group, args.audit, args.output, existing_run=args.existing_run))
+    assert args.checkpoint > 0
+    raise SystemExit(
+        run(args.group, args.audit, args.output, existing_run=args.existing_run, target=args.checkpoint)
+    )

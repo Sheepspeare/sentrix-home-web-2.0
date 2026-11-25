@@ -6,10 +6,12 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("group,port", [("limited", 8878), ("large", 8879)])
+@pytest.mark.parametrize(
+    "group,port,stage", [("limited", 8878, "v2"), ("large", 8879, "v2"), ("large", 8879, "v3")]
+)
 @pytest.mark.parametrize("changed", [False, True])
 def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
-    tmp_path, monkeypatch, changed, group, port
+    tmp_path, monkeypatch, changed, group, port, stage
 ):
     spec = importlib.util.spec_from_file_location(
         "revise_limited", Path(__file__).with_name("revise_limited.py")
@@ -17,7 +19,9 @@ def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
     op = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(op)
     accepted = {f"qa-{n}": hashlib.sha256(f"answer-{n}".encode()).hexdigest() for n in range(8)}
-    (tmp_path / f"{group}-v1-accepted-eight.json").write_text(json.dumps(accepted))
+    (tmp_path / f"{group}-{op.STAGES[stage]['accepted']}-accepted-eight.json").write_text(
+        json.dumps(accepted)
+    )
     monkeypatch.setattr(op, "BASE", tmp_path)
 
     def api(actual_port, path):
@@ -38,8 +42,8 @@ def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(
     monkeypatch.setattr(op.h, "api", api)
     if changed:
         with pytest.raises(AssertionError):
-            op.verify_archived_answers(tmp_path, group=group)
+            op.verify_archived_answers(tmp_path, group=group, stage=stage)
         assert not (tmp_path / "answer-preservation.json").exists()
     else:
-        op.verify_archived_answers(tmp_path, group=group)
+        op.verify_archived_answers(tmp_path, group=group, stage=stage)
         assert json.loads((tmp_path / "answer-preservation.json").read_text())["verified_answers"] == 8

@@ -251,3 +251,12 @@ def test_media_type_synonyms(value, expected):
 @pytest.mark.parametrize("value", ["", None, "什么东西"])
 def test_unknown_media_type_returns_none(value):
     assert parse_media_type(value) is None
+
+
+@pytest.mark.parametrize("value", ["截至2023-02-09", "2023-02-09", "截至2023-02-09[Asia/Shanghai]"])
+def test_resolver_keeps_explicit_reference_dates(value):
+    assert resolve_time_expression(value, now=NOW) == value
+
+
+def test_invalid_iso_reference_date_is_unresolved():
+    assert resolve_time_expression("2023-02-30", now=NOW) is None

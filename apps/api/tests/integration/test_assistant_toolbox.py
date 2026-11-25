@@ -18,6 +18,7 @@ import pytest
 from sentrix.application.assistant.query_memory_facts import QueryMemoryFacts
 from sentrix.application.assistant.tools import AssistantToolbox, is_empty_result
 from sentrix.application.identity.person_directory import EntityPersonDirectory
+from sentrix.application.retrieval.evaluate_conditions import EvaluateConditions
 from sentrix.application.retrieval.retrieve_entity import RetrieveEntity
 from sentrix.application.retrieval.retrieve_evidence import RetrieveEvidence
 from sentrix.application.retrieval.retrieve_lexical import RetrieveLexical
@@ -1241,3 +1242,68 @@ def test_delivery_rejects_another_turn_or_scope_batch(toolbox):
 def test_first_page_keeps_the_batch_identity(toolbox):
     result = run(toolbox, "search_memories", query="海边")
     assert result.model_visible["result_set_id"] == result.observation["result_set_id"]
+
+
+@pytest.mark.parametrize(
+    "time,expected",
+    [
+        ("2019年8月1日", {"asset_0"}),
+        ("截至2019-08-01", {"asset_0"}),
+        ("截至2019-07-31", set()),
+    ],
+)
+def test_activity_time_is_applied_without_a_face_scope(toolbox, time, expected):
+    build, _ = toolbox
+    for n in range(2):
+        build._observations.add(
+            Observation(
+                id=f"obs_{n}",
+                scope_id=SCOPE,
+                asset_id=f"asset_{n}",
+                source_type="import",
+                captured_at=None,
+                confidence=0.8,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+    build._retrieval._conditions = EvaluateConditions(assets=build._assets, observations=build._observations)
+    outcome = build.execute(
+        "search_memories",
+        {"query": "海边"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(
+            EvidenceRequirement("photo", EvidenceType.PHOTO_SET, "活动照片", scope=(("time", time),)),
+        ),
+    )
+    assert outcome.ok
+    assert set(outcome.observation["asset_ids"]) == expected
+    assert outcome.observation["filters_applied"] == {"time": time}
+
+
+def test_distinct_requirement_times_do_not_become_a_single_filter(toolbox):
+    build, _ = toolbox
+    outcome = build.execute(
+        "search_memories",
+        {"query": "海边"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=tuple(
+            EvidenceRequirement(
+                f"p{day}", EvidenceType.PHOTO_SET, "比较两日", scope=(("time", f"2019年8月{day}日"),)
+            )
+            for day in (1, 2)
+        ),
+    )
+    assert outcome.ok
+    assert set(outcome.observation["asset_ids"]) == {"asset_0", "asset_1"}
+    assert outcome.observation["filters_applied"] == {}
+
+
+def test_fact_cutoff_includes_earlier_days_and_excludes_next_day(toolbox):
+    count = run(
+        toolbox, "query_memory_facts", operation="count", subject="asset", filters={"time": "截至2019-08-01"}
+    )
+    assert count.model_visible["value"] == 1
+    assert count.observation["filters_not_applied"] == []
