@@ -23,7 +23,7 @@ def test_output_failure_retains_gap_and_next_item_runs(tmp_path, monkeypatch):
 
     def repair(item, repos):
         if item["asset_id"] == "bad":
-            raise AssertionError("Model output incomplete")
+            raise resume.repair.ModelOutputError("Model output incomplete")
         return "completed"
 
     monkeypatch.setattr(resume.repair, "repair_visual", repair)

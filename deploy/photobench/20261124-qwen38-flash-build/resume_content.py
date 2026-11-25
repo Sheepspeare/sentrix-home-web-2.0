@@ -10,14 +10,6 @@ import httpx
 import repair_content as repair
 from recover_videos import save
 
-OUTPUT_ERRORS = {
-    "Model output incomplete",
-    "Model output is not JSON",
-    "Unparseable visual output",
-    "Missing visual caption after observation",
-    "Missing model summary",
-}
-
 
 def execute(kind, item, repos):
     identifier = item.get("asset_id", item.get("id"))
@@ -64,9 +56,7 @@ def execute(kind, item, repos):
             "evidence": str(directory),
             "upstream_error": detail,
         }
-    except AssertionError as error:
-        if str(error) not in OUTPUT_ERRORS:
-            raise
+    except repair.ModelOutputError as error:
         return {
             "kind": kind,
             "id": identifier,

@@ -23,6 +23,10 @@ OCR_REVIEW = "asset_042fdf27e328"
 EMPTY_SMOKE = "asset_ad16dcecda08"
 
 
+class ModelOutputError(AssertionError):
+    """A response cannot supply content; no observation or summary may be applied."""
+
+
 def missing_semantics(row):
     return not any(
         str(row.get(field) or "").strip() for field in ("caption", "activity", "ocr_text")
@@ -130,14 +134,22 @@ def completion(directory, messages, *, json_mode=False):
         payload = response.json()
         assert payload["model"] == MODEL
         choice = payload["choices"][0]
-        assert choice["finish_reason"] == "stop", "Model output incomplete"
+        if choice["finish_reason"] != "stop":
+            raise ModelOutputError("Model output incomplete")
         assert not choice["message"].get("reasoning_content"), "Unexpected thinking output"
-        assert choice["message"].get("content"), "Empty model output"
-        parsed = parse_json_object(choice["message"]["content"])
-        assert parsed is not None, "Model output is not JSON"
+        content = choice["message"].get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise ModelOutputError("Empty model output")
+        parsed = parse_json_object(content)
+        if parsed is None:
+            raise ModelOutputError("Model output is not JSON")
         if not json_mode:
-            assert parsed.get("summary") and parsed.get("title")
-            assert parsed["title"] not in PLACEHOLDER_TITLES
+            if not all(
+                isinstance(parsed.get(field), str) and parsed[field].strip() for field in ("summary", "title")
+            ):
+                raise ModelOutputError("Missing summary or title in model output")
+            if parsed["title"] in PLACEHOLDER_TITLES:
+                raise ModelOutputError("Model returned placeholder summary title")
         save(accepted, payload)
         return payload
     finally:
@@ -213,12 +225,14 @@ def repair_visual(target, repos):
                 directory / f"model-{self.calls}", [{"role": "user", "content": content}], json_mode=True
             )
             parsed = parse_json_object(payload["choices"][0]["message"]["content"])
-            assert parsed is not None, "Unparseable visual output"
+            if parsed is None:
+                raise ModelOutputError("Unparseable visual output")
             return parsed
 
     observer = RecordedObserver(ENDPOINT, FixedModelName(ENDPOINT, MODEL), max_tokens=4096)
     semantics = observer.observe(Path(asset.path))
-    assert semantics is not None and semantics.caption.strip(), "Missing visual caption after observation"
+    if semantics is None or not semantics.caption.strip():
+        raise ModelOutputError("Missing visual caption after observation")
     original = repos.observations.get(before["id"])
     assert original is not None
     if target["mode"] == "ocr_only":
@@ -311,7 +325,8 @@ def repair_summary(before, repos):
         [{"role": "system", "content": build_system_prompt()}, {"role": "user", "content": evidence}],
     )
     projection = projection_from_reply(payload["choices"][0]["message"]["content"], event=event)
-    assert projection is not None and projection.summary.strip(), "Missing model summary"
+    if projection is None or not projection.summary.strip():
+        raise ModelOutputError("Missing model summary")
     summary = _with_speech(projection.summary, event.source_metadata)
     current = snapshot("events", identifier)
     if current == before:

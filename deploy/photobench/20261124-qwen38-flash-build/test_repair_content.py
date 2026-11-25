@@ -67,6 +67,24 @@ def test_missing_semantics_excludes_partial_success():
         assert not repair.missing_semantics(value)
 
 
+@pytest.mark.parametrize(
+    "content",
+    [{"event_type": "日常"}, {"title": "标题", "summary": ""}, {"title": ["标题"], "summary": "正文"}],
+)
+def test_summary_missing_required_fields_is_rejected_before_acceptance(tmp_path, monkeypatch, content):
+    monkeypatch.setattr(
+        repair.httpx,
+        "post",
+        lambda *a, **k: httpx.Response(
+            200, request=httpx.Request("POST", "http://test"), json=response(content)
+        ),
+    )
+    with pytest.raises(repair.ModelOutputError, match="Missing summary or title"):
+        repair.completion(tmp_path, [{"role": "user", "content": "真实观察"}])
+    assert not (tmp_path / "accepted-response.json").exists()
+    assert (tmp_path / "attempt-001/response.json").exists()
+
+
 def test_review_removes_only_disproven_text_and_preserves_other_visual_fields():
     observation = SimpleNamespace(
         caption="桌上有菜。" + UNSUPPORTED_CAPTION,
