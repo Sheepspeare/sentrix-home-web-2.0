@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜区域取证已核；四图局部纠正与1328旧场景缺摘要分开收尾
+
+只读wait `8d159645-736b-4b04-b6af-6834e4ca45b6`12.539秒结束，7次均Flash/关思考/4096/stop，2680输入＋610输出＝3290总token；5候选格式通过、2未通过，未写相册。逐图核验后仅选原模型返回中可确认的行：菜单图只留招聘两行；街摊OCR全部不采；柜台告示选5行，海报只留编号/标题/ECCV。其余错品名/价格/作者/机构不采，不补写人工转录；两全景描述删无依据杂物和等候推断。完整原包/裁图/逐项排除原因与SHA在`visual-review-v2-review/{visual-review-v2,acceptance.json}`及`reviewed-selection.json`。
+
+新增`apply_visual_review.py`仅纠正4观察：补78a95b5d74d8缺描述；街摊更新描述、去错误南瓜和招牌facts并清空OCR；另两图保持可用描述、替换为核实文字片段。三条有限OCR标`partial_verified_excerpts`，街摊标OCR未恢复；不称全文OCR恢复。备份旧success和写入前整库至`visual-review-v2/apply`，复用现有响应，0新增生成请求，仅走现有文本/词法/实体索引链。已查事实表为0；误识别南瓜实体`entity_3b03bd7b0e1e`仅关联该图，单独归档后置rejected、属性置rejected、撤回两关系、移除该图/事件错误关联，实体和失败原包保留。脚本0ad3f085/SHA b6d9dbfa6589ddd45be2d6fde7db321c7667bb8e9f447ec9cabca49b9e2aedc7，本机32测试/ruff/compile及远端SHA/编译通过。只新增脚本、更新只读tail probe，不改release或重启。
+
+只读tail probe纠正了旧占位判断：原通用占位标题集合未包含“视频场景 N”，加查`视频场景 · %`发现**1328条原成功视频的场景仍只有起止秒数**。这批在原3369事件内，尚未修；955新场景内容摘要已保存且不重做。当前图谱构建于12:22:50 UTC，955个事件节点摘要落后于events，后续需要局部同步；失败因果批次另核。五条部分观察确有activity/objects/facts，仅caption空，须保留成功字段、单列补缺，不整体覆盖。51原失败图关联52事件中，另有旧摘要仍声称缺视觉信息，须按实际观察筛确有失效项；不能把非空当已完整。证据`visual-review-v2-review/tail-before-apply.json`。前一份`tail-before.json`的summary_gaps=0仅按较窄占位集合，历史保留，不作为全库无缺口结论。
+
+接手验四图实际修改、success/SQLite/文本/词法及错误实体撤回，955成功摘要和所有白名单外内容对本轮`before-apply.db`保持。然后冻结1328真实缺摘要清单，沿现有repair_summary局部续接、先小样后分批；另5 caption、旧错误/length与两OCR未恢复、关联旧事件失效摘要和图谱/因果收尾继续。新长任务先独立wake。8294/8874/网关三PID保持，.119 high与Oracle87.018756保持；QA/Judge/消融0，不改题库线上分，不scope finalize、不另建Container争Qdrant。8d159645已处理，不重挂。
+
 ## 2026-11-25｜955摘要已保存；四图OCR未通过事实核验，改为先暂存区域证据
 
 已先登记独立wake `8d159645-736b-4b04-b6af-6834e4ca45b6`，派发`sentrix-qwen38-visual-review-v2-20261125`；回执`visual-review-v2-launch.json`。登记状态waiting，结果待回调核验。脚本提交cec5a49b、远端SHA `6be5d4155e86916cf9af06bd1b72f863fd22ddbeb035aa18864e882d1fa4b086`和编译通过，仅新增暂存脚本；无相册写入或服务重启。
