@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/25 .100 Flash相册构建及工程修复已验收：摘要占位/事件图谱差异均0，23因果边保持；3处OCR质量缺口单列。最后wait4415faaf已处理，勿重复发布；无QA/消融，.119未操作。见audit/20261125-qwen38-build-finalization/RESULTS.md及T006。
+
 - 11/25 图谱来源已核：2291摘要/28实体关联事件/57观察及对象邻接变化均有依据；末次40批因果请求无错，23原边保留。局部同步wake `4415faaf-7f69-4852-9e8a-1c858916cb59`待验，0新模型/无重启，QA0；见audit/20261125-qwen38-build-finalization及T006。
 
 - 11/25 五caption/八旧摘要已验，6237新token；截至d8a6227b已push。图谱只读投影差异wake `c6808725-ff81-413b-a9c3-494ff9a04eb9`，0新模型/0图写入，原因果边保留。QA0，见audit/20261125-qwen38-build-finalization及T006。
