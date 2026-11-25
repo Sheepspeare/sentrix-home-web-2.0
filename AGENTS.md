@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 .100关思考最终相册快照准备：freeze_album.py/760344d8，3测试/Ruff及远端SHA/编译通过，独立快照执行待验。已核.119 Github/sentrix-psh=psh/a5daf519；现有两模式均planner，普通筛工具/推理全工具，cloud普通profile也可能不限次数。先4题冻结实际条件，再Flash改前全1013、专项/组合和最终全量。QA0，未部署需求改动，见产品项目audit/20261126-flash-baseline-freeze及T006。
+- 11/26 .100关思考最终相册快照已验收：18表与源一致、25441文件/499源码SHA通过，约5.6GiB；副本需映射assets绝对路径并从保存向量建独立缓存。freeze760344d8/verify d969e62e本机验证提交→100SHA/真实验收通过。.119psh已有planner，无需移植；后续4题预检→改前全1013→专项/组合→优选全量。QA0/需求改动未部署，见产品项目audit/20261126-flash-baseline-freeze/RESULTS.md及T006。
 
 - 11/25 .100关思考Flash相册已结项：11034原素材/533视频覆盖，摘要占位与事件图谱差异0，23因果边保持。三处OCR定向取证后仍不可靠，用户明确模型/源图限制不再追修；候选未写库，27d72ee3已处理、无待续OCR任务。无QA/消融，.119保持。见产品项目audit/20261125-qwen38-build-finalization/RESULTS.md及T006。
 

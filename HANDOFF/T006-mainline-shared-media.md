@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+快照已验收：wake `f5771440-9f93-4a98-b905-79bed517ec1d`已处理，无待续快照任务；见产品项目audit/20261126-flash-baseline-freeze/freeze-acceptance.json。
+
+## 2026-11-26｜相册固定验收完成
+
+快照atm-flash-no-thinking-final-20261126-v1在.100 snapshots独立保存，约5.6GiB；SQLite quick_check、18表与原库一致、25441文件/14407内容inode独立且只读、499源码成员SHA全部通过。原3759图/533视频/6742邮件、13356资产/观察、4324事件、6989视觉/31036文本向量、71122节点/292835边及23原因果边保持。0新模型/嵌入请求，三服务原PID保持，QA0。
+
+核验脚本d969e62e先本机Ruff/compile提交→100SHA18d0bff2/compile→真实只读验收18.705秒。freeze760344d8/06ded813/d969e62e及本轮文档待验收后push核SHA，用户四原改动保持。产物见产品项目audit/20261126-flash-baseline-freeze/{RESULTS.md,freeze-acceptance.json,acceptance/independent-verification.json}。源SQLite/媒体和快照均不再操作。
+
+恢复发现assets.path均绝对路径，13356项可映射到归档。克隆QA前仅在可写副本映射旧根到新根，隔离旧导入/清理作业；从6989原向量建副本Qdrant，不打开在线缓存、不重新嵌入。详见恢复与基线使用.md。下一步4题冻结QA配置→全1013改前基线→候选确诊/专项组合→优选全量，本次回调不发全量QA或移植planner；97803b70未部署，119high/Oracle/旧分保持。下方“待快照验收”为历史状态，以本节为准。
+
 ## 2026-11-26｜最终Flash相册快照与psh planner核查
 
 用户要求固定.100关闭思考最终相册后准备Qwen3.8 Flash改前基线，并核.119 Github下psh。只读确认`/home/asus/Github/sentrix-psh`为psh/a5daf519、干净；8872当前无监听，主仓库main和image-memory-v3另列。现有两模式均有planner，普通按需求冻结工具，推理全工具；无需移植旧planner。当前cloud普通profile可次数不限，网关固定enable_thinking=False，工具/预算/实际模型思考应分别登记。
