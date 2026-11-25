@@ -1,5 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜第二次恢复告警已核，接续最后15条
+
+终态wait `13ba3d55-7441-4371-8fdb-5251d13abc83`因一条新429退出，底层worker继续。已等实际视频`asset_797180d49f3c`到COMPLETED，并核244/259结构与全部阶段、0活动job、15未开始、原5类记录逐列0改0缺。533源视频观察齐全，目前15条尚无场景。该阶段累计526请求：522成功、3次429、1次500，配置偏移0；17次length按用途留待核，不将8token健康探测算内容失败。429/500来自MEMORY_GRAPH因果判定批次3/9/20/36，当前作业虽完成，因果图内容仍需最后核验，不能据结构验收全库。
+
+只读诊断脚本6507ebda已本机compile/ruff、提交后同步验SHA455e6897bfad80fd73efd12f0ac56b2c2d0487e8baa46dc022bfb5f825718eed，远端运行通过并已push。新增按准确phase/job取证，未改产品代码、未重启8294；8294PID4191434及8874/网关和7保护单元保持。证据`resume1-alert-13ba3d55/{terminal,progress,model-request-alert,inventory,review,review-final,acceptance}.json`保留全部失败史；未取得上游错误正文，不推断具体限流原因。
+
+已先登记独立wake `5b484335-59eb-4be9-af04-fc7d40bd5a07`，再启动`sentrix-qwen38-video-recovery-resume2-20261125`，输出`repair-ee6594ae/full-resume-2`。仍用6a470191/SHA7762e933脚本，逐条验证并跳过244已完成，只补15未做；关思考128K/4096/最多4、单视频worker和失败告警保持。启动回执`recovery-resume-2-launch.json`；首进度`resume2-first-progress.json`。
+
+仍待完整533/955覆盖及真实检索验收；补空视觉asset_ad16dcecda08、对原图核asset_042fdf27e328、最小局部补955场景内容摘要，核历史请求失败/截断与最终因果图。不能用全scope finalize覆盖旧成功摘要，不能另建Container抢Qdrant，不启动QA/Judge/消融，不改题库/线上分。Oracle87.018756%保持。
+
+
 ## 2026-11-25｜需求002源码分析，收敛字段取证方案
 
 用户要求先结合代码说明怎么修。完成本机d9241640主链审阅及6文件157项既有测试，纯函数小样复现类别尝试/销账与具体字段取得不同、OCR金额核验输入丢失、座位号等断言覆盖不足。普通模式文字需求可能不开放inspect；应用推理模式全工具已包含，不能混同模型high。报告与可复现脚本见产品项目`audit/20261125-agent-ablation-prep/需求002代码分析.md`及同目录JSON；真实模型请求0、相册写入0，真实题因果待核。
