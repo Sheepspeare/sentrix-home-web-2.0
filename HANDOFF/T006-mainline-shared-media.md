@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜1007项均有去向，48视觉/952摘要保存；仅重试7失败项
+
+wait `3ae08615-8a44-4da9-a7cf-3cecd825d11f`正常处理至`completed_with_gaps`，7分23.830秒、退出1为保留缺口。1007条去向唯一完整（52视觉＋955摘要），新完成898摘要，累计48/52视觉＋952/955摘要保存且与success逐列一致。52文件SHA、已保存观察文本/词法和952个2048维事件索引通过；白名单外资产13356/视觉6989/观察13304/旧事件3369/文本29932逐列0改0缺。稳定三PID/配置保持、在途0，未新QA。证据`content-resume3-review/{inspection,terminal,acceptance}.json`。
+
+7缺口为4照片生成失败（78a95b5d74d8/816c96df9415重复OCR length、abd37b0e8d4c上游JSON400、75deb3249002返回[]）及3摘要（ef5cddefa5ad/d288e05deee5/d787d97ea1f7格式/字段失效）。后三者原输入正常，输出偏离、示例人名混入或仅video_summary，不允许据模型自称将输入归为攻击。4原图已目视，为菜单/街边甜品摊位/菜单柜台/会议海报，保留图片；7项原失败raw均完整保留。旧ad16dcecda08/042fdf27e328两OCR仍未恢复，独立列项。
+
+针对7项的一轮修复脚本`retry_content_gaps.py`初版1ed8db70、复用已有失败分类8efcf712，本机23测试/ruff/compile通过、传100核SHA `aab5092f717848edd1509c0e3809de3418bc234b10ddb3a04188a364a5ca9d0a`及远端编译通过。仅失败照片在原观察提示后补1000字OCR上限、不顺延编号价格及不确定不抄；仅失败摘要改为无示例人名的同义事实约束并开启JSON对象格式，输入观察/participants/真实时间地点保持。repair_content新增独立response_json开关且保留摘要必需字段校验，SHA `fa0fbb0637e0375ee6960a4c3a1c553f0a3d3491577015446caca9f7e0eb63ca`。仍Flash/关思考128K/4096/4并发，不改活动release或重启。方法变化只作用于失败7项，后续模型对比须保留此构建修复记录。
+
+已先登记wake `228ea346-d1be-468c-ba8e-18c054239ca8`，启动`sentrix-qwen38-content-gapretry1-20261125`，回执`content-gap-retry-launch.json`，新raw与intent在`content/gap-retry-v1`。成功后才将新success发布原位置并带定向证据/方法，不覆盖原失败raw；既有48/952成功不重做。此脚本intent存在即拒重复，出错后按真实阶段诊断。下一步对4新OCR/描述逐张核原图，3摘要逐条核原观察与时间人物，再检查索引/白名单外保护。只读inspect原始请求统计不含新gap-retry目录，需另核定向raw。
+
+尚不能验收相册内容：7失败待定向结果，旧2OCR、另5部分观察、旧错误/超时/502及length落库影响、51原失败图关联旧event摘要和最终因果图同步仍待核。保持原3759图/6742邮件/274旧视频成功与历史，不scope finalize、不另建Container争Qdrant、不重启。.119high建库与Oracle87.018756保持，QA/Judge/消融0、题库线上分保持。3ae08615已验处理不重挂。
+
 ## 2026-11-25｜视觉48项保存，摘要54项；隔离缺字段摘要后接续900项
 
 wait `4691994e-79c9-4c35-8aaf-227b9749c09a`运行52.293秒后在摘要模型输出缺title/summary处触空AssertionError；新增16视觉、52摘要，现48/52视觉和54/955摘要保存，逐列与success匹配。四条既有视觉失败未重试；旧两帧OCR仍未恢复。失败摘要`evt_ef5cddefa5ad`收到合法女子遛狗观察，输出却称输入污染、编造王建国与6月15日等内容并缺必需字段，未写入；不能把模型的自述当输入确有污染的证据。精确请求/响应在`content-resume2-alert/evt_ef5cddefa5ad`。
