@@ -223,7 +223,7 @@ class TaskState:
         """
         return self.profile.max_inspections is None or self.inspection_calls < self.profile.max_inspections
 
-    def can_step(self) -> bool:
+    def can_step(self, *, final: bool = False) -> bool:
         """还能不能再问一次模型。
 
         与 1.0 一致：模型步只看墙钟有没有走完，**不检查 final_reserve**
@@ -231,7 +231,7 @@ class TaskState:
         1.0 实测出的「预算耗尽后空答案」的成因。
         """
         within_steps = self.profile.max_steps is None or self.model_steps < self.profile.max_steps
-        within_requests = self.request_budget is None or self.request_budget.can_model()
+        within_requests = self.request_budget is None or self.request_budget.can_model(final=final)
         return within_steps and within_requests and self.wall_remaining() > 0
 
     def can_call_tool(self) -> bool:

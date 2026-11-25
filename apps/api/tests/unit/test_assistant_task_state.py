@@ -101,6 +101,23 @@ def test_step_budget_stops_at_the_profile_limit():
     assert state.can_step() is False
 
 
+def test_final_request_uses_reserved_quota_and_still_obeys_steps_and_wall_time():
+    from sentrix.domain.assistant.request_budget import RequestBudget
+
+    state = make_state()
+    state.request_budget = RequestBudget(max_model_calls=5, model_attempts=3)
+    assert not state.can_step()
+    assert state.can_step(final=True)
+    state.request_budget.model_attempts = 5
+    assert not state.can_step(final=True)
+    state.request_budget.model_attempts = 3
+    state.model_steps = state.profile.max_steps
+    assert not state.can_step(final=True)
+    state.model_steps = 0
+    state.started_at -= state.profile.wall_time_s + 1
+    assert not state.can_step(final=True)
+
+
 def test_a_denied_call_consumes_the_tool_budget():
     """**被拒也计价。**（§3.4 A）
 

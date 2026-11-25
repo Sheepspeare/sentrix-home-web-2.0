@@ -791,9 +791,9 @@ class _Session:
     best_coverage: float = -1.0
     # 连续几轮「一条有用的结果都没拿到」。见 ``_converse`` 的护栏。
     stalled_rounds: int = 0
-    # 重复受阻后用完整历史收尾；新取证仍可在提醒后继续。
-    converge_after_stall: bool = False
-    convergence_calls: int = 0
+    # 重复受阻或普通请求额度耗尽后，用完整历史与预留额度收尾。
+    finalization_code: str = ""
+    finalization_calls: int = 0
     evidence_signatures: set[str] = field(default_factory=set)
     retrieved_evidence_ids: set[str] = field(default_factory=set)
     # 输出被 max_tokens 切断后，只提高一次输出预算重试（云端）。
@@ -1319,10 +1319,35 @@ class RunTurn:
 
         while True:
             self._check_cancel(state.turn_id)
-            if session.converge_after_stall and session.convergence_calls >= 2:
+            if session.finalization_code and session.finalization_calls >= 2:
                 state.finish(TerminationReason.ANSWERED_WITH_GAP)
                 return self._stop(session, TerminationReason.ANSWERED_WITH_GAP, retry_final=False)
-            if not state.can_step():
+            if (
+                not session.finalization_code
+                and state.request_budget is not None
+                and not state.request_budget.can_model()
+                and state.can_step(final=True)
+            ):
+                session.finalization_code = "model_call_limit"
+                state.request_budget.stop_code = "model_call_limit"
+                self._publish(
+                    session,
+                    state.emit(
+                        ProgressStage.FINALIZING,
+                        ProgressStatus.RUNNING,
+                        "取证请求额度已用完，正在基于已有证据整理回答…",
+                        kind="guard",
+                        payload={"code": "model_call_limit", "phase": "finalization"},
+                    ),
+                )
+                messages.append(
+                    ChatMessage(
+                        ChatRole.USER,
+                        "取证请求额度已用完。现在使用已有工具结果提交最终回答，"
+                        "区分已确认与尚未确认的信息，不再检索或看图。",
+                    )
+                )
+            if not state.can_step(final=bool(session.finalization_code)):
                 if state.request_budget is not None and not state.request_budget.can_model():
                     state.request_budget.stop_code = "model_call_limit"
                 reason = (
@@ -1331,7 +1356,7 @@ class RunTurn:
                     else TerminationReason.STEP_BUDGET_EXHAUSTED
                 )
                 state.finish(reason)
-                return self._stop(session, reason)
+                return self._stop(session, reason, retry_final=not session.finalization_code)
 
             state.model_steps += 1
             state.phase = ACTING
@@ -1348,7 +1373,7 @@ class RunTurn:
             #    （正常回合不触发，工具表仍是单一变体）；
             # 2. 工具预算/作答保留耗尽时只发终止动作，物理上逼模型开口，而不是继续
             #    发注定被拒的调用。
-            if session.converge_after_stall or not state.can_call_tool():
+            if session.finalization_code or not state.can_call_tool():
                 specs = tuple(spec for spec in frozen_specs if spec.name == FINAL_ANSWER_TOOL)
             elif self._use_all_tools:
                 # 推理模式不按证据需求剪枝，发全量契约让模型自己决定下一步。
@@ -1368,8 +1393,8 @@ class RunTurn:
                     if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
                 )
             try:
-                if session.converge_after_stall:
-                    session.convergence_calls += 1
+                if session.finalization_code:
+                    session.finalization_calls += 1
                     with final_model_request():
                         reply = self._complete_recorded(session, messages, specs)
                 else:
@@ -1515,11 +1540,17 @@ class RunTurn:
                         )
                     )
                     continue
-                if session.converge_after_stall:
+                if session.finalization_code:
                     messages.append(
                         ChatMessage(
                             ChatRole.TOOL,
-                            '{"error":"evidence_stalled","message":"取证已重复受阻，请基于已取得的证据提交回答，说明尚未确认的信息。"}',
+                            json.dumps(
+                                {
+                                    "error": session.finalization_code,
+                                    "message": "请基于已取得的证据提交回答，说明尚未确认的信息。",
+                                },
+                                ensure_ascii=False,
+                            ),
                             tool_call_id=call.call_id,
                         )
                     )
@@ -1537,7 +1568,7 @@ class RunTurn:
                 messages.append(ChatMessage(ChatRole.USER, session.pending_reminder))
                 continue
 
-            if session.converge_after_stall:
+            if session.finalization_code:
                 continue
 
             # 空结果的新查询仍可探索；只有重复受阻/回放且无新证据才累计停滞。
@@ -1546,7 +1577,7 @@ class RunTurn:
                 if state.block_guard_code("stalled_on_denials"):
                     messages.append(ChatMessage(ChatRole.USER, STALLED_NUDGE))
                 else:
-                    session.converge_after_stall = True
+                    session.finalization_code = "evidence_stalled"
                     self._publish(
                         session,
                         state.emit(

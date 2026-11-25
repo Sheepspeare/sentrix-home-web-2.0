@@ -24,7 +24,7 @@ from sentrix.application.retrieval.retrieve_lexical import RetrieveLexical
 from sentrix.application.retrieval.retrieve_metadata import RetrieveMetadata
 from sentrix.application.retrieval.retrieve_text_ann import RetrieveTextAnn
 from sentrix.application.retrieval.retrieve_visual import RetrieveVisual
-from sentrix.domain.assistant.evidence_ledger import EvidenceType
+from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement, EvidenceType
 from sentrix.domain.assistant.models import PersonProfile, PersonRelationship
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet
 from sentrix.domain.identity.models import ENTITY_STATUS_CONFIRMED, FACE_VALIDITY_VERIFIED
@@ -214,6 +214,63 @@ def toolbox(migrations_ready_db, tmp_path):
 def run(toolbox, name: str, **arguments: object):
     build, _result_sets = toolbox
     return build.execute(name, arguments, scope_id=SCOPE, now=NOW)
+
+
+@pytest.mark.parametrize("subject", ["研究机构", "论文作者", "正文里的人名"])
+def test_source_text_subject_does_not_require_a_named_face(toolbox, monkeypatch, subject):
+    build, _ = toolbox
+    requests = []
+    original = build._retrieval.execute
+
+    def retrieve(request):
+        requests.append(request)
+        return original(request)
+
+    monkeypatch.setattr(build._retrieval, "execute", retrieve)
+    outcome = build.execute(
+        "search_memories",
+        {"query": "海边"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(
+            EvidenceRequirement("text", EvidenceType.SOURCE_TEXT, "读正文", scope=(("person", subject),)),
+        ),
+    )
+    assert outcome.ok
+    assert len(requests) == 1 and requests[0].linked_person_assets is None
+    assert requests[0].text == "海边"
+
+
+@pytest.mark.parametrize("source_type", ["email", "document"])
+def test_text_source_search_keeps_subject_out_of_face_filters(toolbox, source_type, monkeypatch):
+    build, _ = toolbox
+    monkeypatch.setattr(build._retrieval, "_assets", build._assets)
+    outcome = build.execute(
+        "search_memories",
+        {"query": "研究进展", "source_type": source_type},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(
+            EvidenceRequirement("photo", EvidenceType.PHOTO_SET, "记录", scope=(("person", "某作者"),)),
+        ),
+    )
+    assert outcome.ok
+
+
+@pytest.mark.parametrize("with_text", [False, True])
+def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text):
+    build, _ = toolbox
+    requirements = [
+        EvidenceRequirement("photo", EvidenceType.PHOTO_SET, "某人的照片", scope=(("person", "未确认人物"),))
+    ]
+    if with_text:
+        requirements.append(
+            EvidenceRequirement("text", EvidenceType.SOURCE_TEXT, "正文", scope=(("person", "研究机构"),))
+        )
+    outcome = build.execute(
+        "search_memories", {"query": "海边"}, scope_id=SCOPE, now=NOW, requirements=requirements
+    )
+    assert outcome.failure_reason == "unresolved_person"
 
 
 def test_read_source_text_requires_a_text_handle_in_the_current_scope(toolbox):

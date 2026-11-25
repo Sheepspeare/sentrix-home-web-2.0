@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26候选limited首8：模型HTTP91→70，但正文人物过滤造成退化、预算收尾丢历史；v1不扩大。v2两通用修复211测试通过/4旧失败保持，待仅有限副本复测；原全量与large候选保持。见T006及产品audit/20261126-flash-agent-candidates。
+
+
 - 11/26 005/002候选准备通过；首次目标误指原端口在QA前拦截，0答卷/原进程保持。已纠正8298/8299，双组QA正在运行，各2并发首8暂停验收，回执见产品audit/20261126-flash-agent-candidates/candidate-relaunch.json及T006。
 
 - 11/26 005/002源码诊断已复现：叙述者人物条件阻塞检索、无进展仅提醒与跨工具重置失败计数；跨检索编号复用且四读取工具强绑最新结果。7项离线复现/60既有测试通过，修复方案见产品audit/20261126-flash-dual-baseline-launch/code-diagnosis及T006；业务未改，活动双基线保持。

@@ -402,10 +402,20 @@ class AssistantToolbox:
             return _failure("invalid_source_type", "source_type 需为 all、email 或 document")
 
         scopes = [dict(item.scope) for item in requirements]
-        names = tuple(dict.fromkeys(scope["person"] for scope in scopes if scope.get("person")))
+        # 正文中的主体由文字检索匹配；人脸目录只约束要求出镜或身份的照片证据。
+        face_scopes = (
+            [dict(item.scope) for item in requirements if item.evidence_type is not EvidenceType.SOURCE_TEXT]
+            if source_type == "all"
+            else []
+        )
+        names = tuple(dict.fromkeys(scope["person"] for scope in face_scopes if scope.get("person")))
         try:
             groups = [self._search_people(name, scope_id) for name in names]
-            if not groups:
+            if (
+                not groups
+                and source_type == "all"
+                and not any(item.evidence_type is EvidenceType.SOURCE_TEXT for item in requirements)
+            ):
                 simple = _person_question(question or query)
                 exact_name = simple[0] if simple else ""
                 if not exact_name and query == question.strip().rstrip("？?。!！"):

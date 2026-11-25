@@ -1096,6 +1096,81 @@ def test_reasoning_stops_repeated_denied_calls_and_persists_true_attempt_budget(
     assert current_request_budget() is None
 
 
+@pytest.mark.parametrize("unwanted_tool", [False, True])
+def test_model_reserve_finalization_keeps_tool_evidence_and_shared_limit(env, unwanted_tool):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+    from sentrix.domain.assistant.request_budget import admit_model_attempt
+
+    class CountedModel(ScriptedModel):
+        def complete(self, messages, tools):
+            admit_model_attempt(10)
+            return super().complete(messages, tools)
+
+    conversations, turns, conversation, _db = env
+    replies = [
+        tool_call("search_memories", "search", query="票据"),
+        tool_call("read_photo_text", "read", asset_handle="photo_1"),
+    ]
+    if unwanted_tool:
+        replies.append(tool_call("inspect_photo", "extra", asset_handle="photo_1"))
+    replies.append(final("票据上写的金额是137元。"))
+    model = CountedModel(replies, planner=planner_reply("photo_set", "visible_text"))
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "read_photo_text": ToolOutcome(
+                observation={"text": "票据金额137元"}, model_visible={"text": "票据金额137元"}
+            ),
+        }
+    )
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=toolbox,
+        profile=replace(REASONING_PROFILE, max_model_calls=5),
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+    assert result.answer == "票据上写的金额是137元。"
+    assert [name for name, _ in toolbox.calls] == ["search_memories", "read_photo_text"]
+    for messages, specs in zip(model.calls[2:], model.tool_sets[2:], strict=True):
+        assert specs == [FINAL_ANSWER_TOOL]
+        assert any(m.role is ChatRole.TOOL and "137" in m.content for m in messages)
+    budget = turns.get(result.turn_id).trace["budget"]["request_limits"]
+    assert budget["stop_code"] == "model_call_limit"
+    assert budget["model_attempts"] <= 5
+    assert len(model.calls) == (4 if unwanted_tool else 3)
+    assert any(
+        e.payload.get("code") == "model_call_limit" and e.payload.get("phase") == "finalization"
+        for _, _, e in turns.events_after(result.turn_id, 0)
+    )
+
+
+def test_reserved_finalization_obeys_strict_step_limit(env):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+    from sentrix.domain.assistant.request_budget import admit_model_attempt
+
+    class CountedModel(ScriptedModel):
+        def complete(self, messages, tools):
+            admit_model_attempt(10)
+            return super().complete(messages, tools)
+
+    conversations, turns, conversation, _db = env
+    model = CountedModel([tool_call("search_memories", "search", query="海边")])
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox({"search_memories": SEARCH_OK}),
+        profile=replace(REASONING_PROFILE, max_model_calls=4, max_steps=1, strict_model_step_budget=True),
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+    assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
+    assert len(model.calls) == 1
+
+
 def test_strict_context_budget_preserves_history_and_does_not_retry_cropped_input(env):
     conversations, turns, conversation, _db = env
     model = ScriptedModel(

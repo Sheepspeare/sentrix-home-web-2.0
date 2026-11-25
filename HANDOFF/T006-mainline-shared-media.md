@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜有限候选首8验收，v1停止扩大并修两项通用缺陷
+
+49ab8050已核first_eight_ready，limited原run790fec完成8题并暂停。配对原limited基线同8题：共享模型HTTP91→70、工具准入93→62；model_calls口径Token822848→468434，尚未归并工具内部视觉Token。Judge待补、并发/排队不同，不能据此宣布质量保持或因果时延收益。蚂蚁医疗因source_text主体被当人脸名而拒答，基线本可回答；NeurIPS也受该拦截。鸡翅无第一人称阻塞后仍在请求额度用尽时丢取证历史，只剩候选数量。披萨跨检索result_set_id+handle已正确读餐桌，但最终将品牌和附近酒店合并为一家，质量未通过。证据产品audit/20261126-flash-agent-candidates/limited-first-eight-review/RESULTS.md及acceptance.json。
+
+v2只修正文主体/人脸过滤语义与完整历史预算收尾：source_text主体和显式email/document检索不做人脸强筛，混合需求中的明确照片人物保留；普通请求额度用完时仅final_answer，最多两次既有预留，严格步数/墙钟/总额照常约束。215相关测试211通过，4原toolbox失败对照保持；Ruff/compile/diff通过。新增有限组局部发布脚本，拟先归档已暂停v1八答并结束剩余调度，确认无活动turn后仅切8298/8878至独立release，再同8题复测。此刻v2未部署/未发QA。large候选及两个全量基线保持，large独立wake d0fe86c7不重挂。不得直接扩大v1。
+
+
 
 
 ## 2026-11-26｜候选准备验收与启动目标纠正
