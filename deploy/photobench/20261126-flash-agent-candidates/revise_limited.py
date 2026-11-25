@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import sqlite3
@@ -29,7 +30,7 @@ def wait_for(check, seconds=45):
         time.sleep(1)
 
 
-def run(revision):
+def start_archive(revision):
     output = BASE / "limited-v2"
     output.mkdir()  # A prior intent requires inspection, not replay.
     release = BASE / f"release-{revision[:8]}"
@@ -69,8 +70,49 @@ def run(revision):
     wait_for(lambda: h.api(8878, f"runs/{OLD_RUN}?include_history=false")["status"] == "cancelled")
     wait_for(lambda: not h.api(8878, "active-work")["work"])
     h.save(output / "archived-run.json", h.api(8878, f"runs/{OLD_RUN}?include_history=false"))
-    assert h.api(8878, f"runs/{OLD_RUN}?include_history=false")["item_count"] == 8
+    return output, release, protected
 
+
+def verify_archived_answers(output):
+    snapshot = h.api(8878, f"runs/{OLD_RUN}?include_history=false")
+    assert snapshot["status"] == "cancelled"
+    assert snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] == 8
+    accepted = json.loads((BASE / "limited-v1-accepted-eight.json").read_text())
+    assert len(accepted) == 8
+    for qa_id, digest in accepted.items():
+        rows = h.api(8878, f"runs/{OLD_RUN}/items?search={qa_id}&page=1&page_size=10")["items"]
+        assert len(rows) == 1 and rows[0]["qa_id"] == qa_id
+        item = h.api(8878, f"runs/{OLD_RUN}/items/{rows[0]['index']}")["item"]
+        assert hashlib.sha256(item["answer"].encode()).hexdigest() == digest
+    h.save(
+        output / "answer-preservation.json",
+        {
+            "verified_answers": len(accepted),
+            "answer_sha256": accepted,
+            "item_count": snapshot["item_count"],
+            "unexecuted_rows": 1005,
+        },
+    )
+
+
+def run(revision, *, continue_archived=False):
+    if continue_archived:
+        output = BASE / "limited-v2"
+        intent = json.loads((output / "intent.json").read_text())
+        assert intent["revision"] == revision
+        assert not (output / "configured.json").exists()
+        assert not h.api(8878, "active-work")["work"]
+        release = Path(intent["release"])
+        protected = intent["protected"]
+        assert all(
+            Path(f"/proc/{pid}/stat").read_text().split()[21] == tick for pid, tick in protected.items()
+        )
+        manifest = json.loads((release / "source-sha256.json").read_text())
+        assert all(h.sha(release / name) == digest for name, digest in manifest.items())
+    else:
+        output, release, protected = start_archive(revision)
+    verify_archived_answers(output)
+    data = BASE / "limited/data"
     units = [candidate.unit_name("limited-" + role) for role in ("eval", "api")]
     subprocess.run(["systemctl", "--user", "stop", *units], check=True)
     source = json.loads((h.SNAPSHOT / "memory-fingerprints.json").read_text())
@@ -141,7 +183,7 @@ def run(revision):
         {
             "revision": revision,
             "at": time.time(),
-            "files_verified": len(manifest),
+            "files_verified": len(json.loads((release / "source-sha256.json").read_text())),
             "diagnostics": diagnostics,
             "memory_18_tables_unchanged": True,
             "protected_processes_unchanged": protected,
@@ -154,5 +196,6 @@ def run(revision):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--continue-archived", action="store_true")
     args = parser.parse_args()
-    run(args.revision)
+    run(args.revision, continue_archived=args.continue_archived)
