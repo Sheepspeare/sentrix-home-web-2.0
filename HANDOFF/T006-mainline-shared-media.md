@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v3真实分页验收通过，11题独立复测接续
+
+业务f60aba02已发布large8299/8879，18表/9保护PID/旧8答保持；只读helper缺SQL时间函数的491bc7eb已处理，不重放部署/取消。helper436e89a0本机回归通过→独立ops目录SHA/compile→真实1660地点组26页逐项还原完整统计，总13356资产，每页最多9854字符，0模型请求/无DB写入；原release文件/服务保持。f60与436已push核SHA，证据v3-large-rerun/validation-recovery-1。
+
+新11题复测状态run_created，run 20261126-054519-2026.11.17-atm-sources-addresses-big_model-36e9da，独立wake 033c4593-a3d5-4cf6-ac5a-4cf4a1d81a9b；2并发/100模型600工具各reserve2，原8+3真实溢出题，11后暂停。payload/control原子更新与SHA保持，完整1013及83UUID集合/思考/时限/Judge协议不变。没有重复旧8成功；本轮独立版本对照。原两全量102/38各4并发、有限v2诊断16/2并发继续，原三个wake保持。到11先锁revision取证/事实核验/配对共享HTTP+含内部视觉Token，不自动扩大、不提前报质量通过；Judge待补。见qa-launch-registration.json及first-eleven。
+
 ## 2026-11-26｜v3候选已发布，验收脚本函数缺失已本机修复
 
 491bc7eb失败已核：large8299/8879实际已切f60aba02，517文件/18表/9保护PID及旧8答SHA通过，旧v2仅8答取消1005未执行；新QA0。失败来自独立只读verify_group_pages连接未注册生产SQLite capture_sort_key，业务连接本来已注册。源release不修改/服务不再切换，修helper沿用生产time_sort_key/_capture_in_bounds，只读UDF与拒写回归1项通过，Ruff通过。提交后仅同步helper到独立ops目录，接续真实1660分组验收→push→原子payload/control→独立wake一次启动11题；不重跑部署/取消。
