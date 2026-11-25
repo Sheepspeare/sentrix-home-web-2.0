@@ -221,8 +221,9 @@ class Settings(BaseSettings):
 
     # 整册导入的预取窗口：同时在飞的**推理**数。Mac profile 默认 2；llama-server 单槽
     # 加 CPU 人脸推理时，4 个 worker 会堆积请求并放大内存压力。server 默认 4。
-    # 可通过 SENTRIX_ALBUM_WORKERS 显式覆盖；提交仍始终串行保序。
-    album_workers: int = Field(default=4, ge=1, le=4)
+    # 上限 16 是防止配置笔误的兜底，实际取多少由部署按端点槽位和内存决定：
+    # 云端多槽代理可以把 SENTRIX_ALBUM_WORKERS 提到 8；提交仍始终串行保序。
+    album_workers: int = Field(default=4, ge=1, le=16)
 
     # 体验入口逐文件导入的在飞窗口：多个作业的 prepare_image 同时请求主模型，
     # 单用户也能吃满 8100 的多个槽位。提交仍按认领顺序串行（事件归属是语义的一部分）。

@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from sentrix.config import Settings
 
 
@@ -17,6 +20,17 @@ def test_env_override_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTRIX_API_PORT", "9001")
 
     assert Settings().api_port == 9001
+
+
+def test_album_workers_accepts_cloud_concurrency_and_rejects_typos(tmp_path, monkeypatch):
+    """云端多槽代理可以把在飞窗口提到 8；上限只挡配置笔误。"""
+    monkeypatch.setenv("SENTRIX_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("SENTRIX_ALBUM_WORKERS", "8")
+    assert Settings().album_workers == 8
+
+    monkeypatch.setenv("SENTRIX_ALBUM_WORKERS", "17")
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_required_dirs_are_derived_not_read_from_env(tmp_path, monkeypatch):
