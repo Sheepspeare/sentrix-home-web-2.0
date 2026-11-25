@@ -105,7 +105,7 @@ def plan():
     print(json.dumps({"planned_visual": len(targets), "scene_events": len(events)}))
 
 
-def completion(directory, messages, *, json_mode=False):
+def completion(directory, messages, *, json_mode=False, response_json=False):
     from sentrix.application.memories.summarize_event import PLACEHOLDER_TITLES
     from sentrix.infrastructure.media.vlm_observer import parse_json_object
 
@@ -123,7 +123,7 @@ def completion(directory, messages, *, json_mode=False):
         "stream": False,
         "enable_thinking": False,
     }
-    if json_mode:
+    if json_mode or response_json:
         body["response_format"] = {"type": "json_object"}
     save(attempt_dir / "request.json", body)
     started = time.time()
