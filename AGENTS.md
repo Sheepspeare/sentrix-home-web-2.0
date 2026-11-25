@@ -2,7 +2,7 @@
 
 - 11/25 建库期间已本机补独立D/M/T、视觉HTTP事实与4/60/20/953选题，294项通过；未部署/新QA。先代表题→子集→全量确认，见docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep，接T006。
 
-- 11/25 Flash恢复首视频3场景/观察/向量/词法及真实Qdrant检索已验，原5类记录逐列保持；8294仅两模块修复/PID4191434。余258视频已提交full wake 8c184359，新模型失败/阶段停滞会唤醒；新场景摘要与旧请求失败质量仍待局部收尾，QA0。见产品项目audit/20261125-qwen38-build-finalization及T006。
+- 11/25 Flash恢复旧full在第233条视觉400触警；已核233条结构/全阶段及原5类记录0改0缺，配置无偏移。余26已接续wake13ba3d55；空视觉帧与955场景摘要待补，内容未验收，QA0。见产品项目audit/20261125-qwen38-build-finalization及T006。
 
 
 
