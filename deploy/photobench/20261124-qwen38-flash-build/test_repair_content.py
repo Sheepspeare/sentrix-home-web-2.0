@@ -1,7 +1,7 @@
 """Content recovery retains responses across index failure and limits field writes."""
 
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -104,7 +104,7 @@ def test_review_removes_only_disproven_text_and_preserves_other_visual_fields():
     assert corrected_semantics(observation, repair.OCR_REVIEW).caption == observation.caption
 
 
-@pytest.mark.parametrize("source_type", ["video_scene", None])
+@pytest.mark.parametrize("source_type", ["video_scene", None, ""])
 def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(
     tmp_path, monkeypatch, source_type
 ):
@@ -126,6 +126,18 @@ def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(
         created_at=now,
         source_type=source_type,
     )
+    from sentrix.infrastructure.persistence.repositories.events import _row_to_event
+
+    row = {
+        **asdict(event),
+        "time_start": now.isoformat(),
+        "time_end": now.isoformat(),
+        "created_at": now.isoformat(),
+        "aggregation_breakdown_json": "{}",
+        "source_metadata_json": "{}",
+    }
+    event = _row_to_event(row)
+    assert event.source_type == (source_type or "")
     observation = SimpleNamespace(
         id="obs", caption="桌上有一盘菜", activity="用餐", place="餐馆", objects=(), clothing=(), ocr_text=""
     )

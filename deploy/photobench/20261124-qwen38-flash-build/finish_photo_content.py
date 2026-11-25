@@ -184,8 +184,8 @@ def summarize(item, repos):
     return {"kind": "summary", "id": event["id"], "status": status}
 
 
-def verify(plan):
-    saved = {"captions": [], "summaries": []}
+def verify(plan, *, captions_only=False):
+    saved = {"captions": [], "summaries": [], "pending_summaries": []}
     with connect() as connection:
         assert protected_fingerprints(connection, plan) == plan["protected_before"], (
             "Protected records changed"
@@ -227,6 +227,11 @@ def verify(plan):
         for item in plan["stale_events"]:
             before = item["event"]
             directory = OUTPUT / "summary" / before["id"]
+            if captions_only:
+                assert repair.snapshot("events", before["id"]) == before
+                assert not list(directory.glob("model/attempt-*/request.json"))
+                saved["pending_summaries"].append(before["id"])
+                continue
             success = json.loads((directory / "success.json").read_text())
             current = repair.snapshot("events", before["id"])
             assert current == success["after"] and current["revision"] == before["revision"] + 1
@@ -252,15 +257,22 @@ def verify(plan):
             saved["summaries"].append(
                 {"id": before["id"], "title": current["title"], "summary": current["summary"]}
             )
-    save(OUTPUT / "verification.json", {"status": "storage_indexes_and_protection_verified", **saved})
+    filename = "caption-verification.json" if captions_only else "verification.json"
+    save(OUTPUT / filename, {"status": "storage_indexes_and_protection_verified", **saved})
 
 
-def run():
+def run(*, resume=False):
     repair.assert_idle()
     health = repair.call(18138, "/health")
     assert health["active_requests"] == health["inflight_requests"] == 0
     assert health["model"] == repair.MODEL and health["enable_thinking"] is False
-    plan = freeze()
+    if resume:
+        plan = json.loads((OUTPUT / "plan.json").read_text())
+        assert sha(STAGED / "reviewed-selection.json") == plan["selection_sha256"]
+        assert sha(CONTENT / "stale-linked-event-candidates.json") == plan["stale_sha256"]
+        verify(plan, captions_only=True)
+    else:
+        plan = freeze()
     repair.CONTENT = OUTPUT
     repos = repair.repositories()
     progress = {"status": "running", "started_at": time.time(), "results": []}
@@ -275,13 +287,13 @@ def run():
                     repos,
                 )
             )
-            save(OUTPUT / "progress.json", progress)
+            save(OUTPUT / ("resume-1-progress.json" if resume else "progress.json"), progress)
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [pool.submit(summarize, item, repos) for item in plan["stale_events"]]
             try:
                 for future in as_completed(futures):
                     progress["results"].append(future.result())
-                    save(OUTPUT / "progress.json", progress)
+                    save(OUTPUT / ("resume-1-progress.json" if resume else "progress.json"), progress)
             except Exception:
                 for future in futures:
                     future.cancel()
@@ -293,14 +305,15 @@ def run():
         raise
     finally:
         progress["finished_at"] = time.time()
-        save(OUTPUT / "terminal.json", progress)
+        save(OUTPUT / ("resume-1-terminal.json" if resume else "terminal.json"), progress)
         print(json.dumps(progress))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("run", "verify"))
-    if parser.parse_args().action == "run":
-        run()
+    parser.add_argument("action", choices=("run", "resume", "verify", "verify-captions"))
+    action = parser.parse_args().action
+    if action in ("run", "resume"):
+        run(resume=action == "resume")
     else:
-        verify(json.loads((OUTPUT / "plan.json").read_text()))
+        verify(json.loads((OUTPUT / "plan.json").read_text()), captions_only=action == "verify-captions")
