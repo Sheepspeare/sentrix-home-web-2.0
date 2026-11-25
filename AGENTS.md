@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26有限v2首8已核：正文主体漏答恢复，但HTTP91未降、记录Token增约48.1%，整体降本未通过/质量待Judge；同run原8SHA保持、2并发续83后暂停。新病灶为planner证据类型强迫回搜与局部否认误拦，尚未改业务。候选83监控ee8e06d1，原两全量及large v2保持，见产品audit/20261126-flash-agent-candidates/v2-limited-rerun及T006。
+
+
 - 11/26原双全量基线78/31题、各4并发继续；旧83监控f4ff2b2c/c9804024仅迁移前低盘告警，已核修复并按原run重挂只读通知，未重发答题。候选v2双预算同8题并行保持，见双基线audit和T006。
 
 
