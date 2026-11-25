@@ -40,7 +40,7 @@ def run(revision, audit, repo, stage="v3"):
     fetch("answer-preservation.json")
     assert verification["revision"] == revision
     assert verification["memory_18_tables_unchanged"] and verification["old_answers_preserved"] == (
-        11 if stage in {"v4", "v5"} else 8
+        11 if stage in {"v4", "v5", "v6"} else 8
     )
     if stage == "v3":
         remote(
@@ -73,6 +73,6 @@ if __name__ == "__main__":
     parser.add_argument("--revision", required=True)
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--repo", type=Path, required=True)
-    parser.add_argument("--stage", choices=["v3", "v4", "v5"], default="v3")
+    parser.add_argument("--stage", choices=["v3", "v4", "v5", "v6"], default="v3")
     args = parser.parse_args()
     sys.exit(run(args.revision, args.audit, args.repo, args.stage))

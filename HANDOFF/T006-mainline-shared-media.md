@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v5十一题已核，下一版只验证同图证据复用
+
+97eaead8已验11答暂停，固定revision与234真实HTTP原包均200/Flash关思考。原8共享HTTP244→164、工具262→168、记录Token737万→331万；NeurIPS/Glasgow不再unresolved_person并读正文，但NeurIPS缺房间、鸡翅菜品证据不足，不接受质量、不扩大。紫裙29次视觉、Porto20次上下文压缩，现有进展签名把回显问题/编号误算新证据。披萨本轮确实读正确餐桌asset_5c08513d3cfe；鸡翅16轮search上界与所有预览日期实际遵守2023-02-09。Judge周额度恢复11/30，0分有效，不重试。
+
+v6本机仅规范证据签名，并对同原图重复inspect提醒一次按原问题复用字段；新观察/新图继续，无新看图限次，不改FinalGuard/历史压缩。85回合+17预算+28部署评分监控通过、Ruff/format/compile通过；mypy原2项history类型错误shadow-file对照保持。准备只切已暂停large同11题；原两全量/有限v2继续，旧11答与18表/9保护PID保留。当前未新部署/QA，后续本机提交→同步SHA→远端验收→push，长任务先wake。证据候选audit/v5-large-rerun/review及v6-large-rerun。
+
 ## 2026-11-26｜独立Judge周额度阻塞已核，答题实验继续
 
 55a1c315已核处理：首题atm-12fc8be9的6次HTTP均429 / AccountQuotaExceeded，明确weekly usage quota，恢复时间2026-11-30 00:00东八区；周五11/27 17:00前不自然恢复。有效分0，余18题未送评，原large评分未启动；独立score_saved已退出，19份输入/冻结协议/失败状态SHA本机与100一致。原失败请求、terminal保留，launch-registration已标blocked_provider_weekly_quota，原run写入0/Agent0。不重复Judge、不降低Flash并发、不换协议混分，周五报告正式分待补。生产JudgeRunner对额度错误重试6次且诊断HTTP状态为null/service_error，此回调只记录，未改活动业务。恢复后核input/protocol SHA，用--resume仅补missing；当前无新重试wake。

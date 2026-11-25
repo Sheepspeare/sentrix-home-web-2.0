@@ -2250,3 +2250,99 @@ def test_final_passes_batch_bound_image_references_to_delivery(env):
     assert result.answer == "这是餐桌照片。"
     delivery = [arguments for name, arguments in toolbox.calls if name == FINAL_ANSWER_TOOL]
     assert delivery == [{"result_set_id": "rs_1", "handles": references}]
+
+
+class InspectionEvidenceToolbox(StubToolbox):
+    def __init__(self, outcomes):
+        super().__init__({"search_memories": SEARCH_OK, FINAL_ANSWER_TOOL: DELIVER_OK})
+        self.outcomes = iter(outcomes)
+
+    def execute(self, name, arguments, **kwargs):
+        if name in {"inspect_photo", "read_photo_text", "read_source_text"}:
+            self.calls.append((name, dict(arguments)))
+            asset_id, text = next(self.outcomes)
+            return ToolOutcome(
+                observation={"asset_id": asset_id},
+                model_visible={
+                    "result_set_id": arguments.get("result_set_id", "rs_1"),
+                    "asset_handle": arguments["asset_handle"],
+                    "question": arguments.get("question", ""),
+                    "observation": text,
+                    "certainty": "supported",
+                },
+            )
+        return super().execute(name, arguments, **kwargs)
+
+
+@pytest.mark.parametrize("tool", ["inspect_photo", "read_photo_text", "read_source_text"])
+def test_rephrasing_or_renumbering_the_same_evidence_does_not_reset_stall(env, tool):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+
+    conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "q1", query="海边"),
+            *[
+                tool_call(tool, f"i{i}", asset_handle=f"photo_{i % 2 + 1}", question=f"核对文字{i}")
+                for i in range(4)
+            ],
+            final_call("照片里的招牌写着海边餐厅。", "photo_1"),
+        ]
+    )
+    toolbox = InspectionEvidenceToolbox([("asset_same", "海边餐厅")] * 4)
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=toolbox,
+        profile=REASONING_PROFILE,
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+
+    assert result.answer == "照片里的招牌写着海边餐厅。"
+    assert model.tool_sets[-1] == [FINAL_ANSWER_TOOL]
+    assert any(
+        e.payload.get("code") == "evidence_stalled" for _, _, e in turns.events_after(result.turn_id, 0)
+    )
+
+
+@pytest.mark.parametrize("same_asset", [True, False])
+def test_new_visual_evidence_remains_callable_after_one_reuse_reminder(env, same_asset):
+    from sentrix.application.assistant.run_turn import VISUAL_REUSE_NUDGE
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+
+    conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "q1", query="海边"),
+            *[
+                tool_call("inspect_photo", f"i{i}", asset_handle="photo_1", question=f"核对字段{i}")
+                for i in range(5)
+            ],
+            final_call("照片里的招牌写着海边餐厅。", "photo_1"),
+        ]
+    )
+    toolbox = InspectionEvidenceToolbox(
+        [
+            ("asset_same" if same_asset else f"asset_{i}", f"新增字段{i}" if same_asset else "相同店名")
+            for i in range(5)
+        ]
+    )
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=toolbox,
+        profile=REASONING_PROFILE,
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+
+    assert "inspect_photo" in model.tool_sets[-1]
+    events = [e for _, _, e in turns.events_after(result.turn_id, 0)]
+    assert not any(e.payload.get("code") == "evidence_stalled" for e in events)
+    assert sum(e.payload.get("code") == "visual_evidence_reuse" for e in events) == int(same_asset)
+    hints = [m for m in model.calls[-1] if m.role == ChatRole.TOOL and VISUAL_REUSE_NUDGE in m.content]
+    assert len(hints) == int(same_asset)
+    assert len([name for name, _ in toolbox.calls if name == "inspect_photo"]) == 5

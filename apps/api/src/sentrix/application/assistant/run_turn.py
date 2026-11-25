@@ -32,7 +32,7 @@ import re
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -233,6 +233,11 @@ STALLED_NUDGE = "连续调用未取得新证据。不要重试刚被拒的工具
 
 # 连续几轮全白跑之后提醒。取 2：一轮是偶发（某张图刚好读不到字），两轮就是卡住了。
 STALLED_ROUNDS_BEFORE_NUDGE = 2
+
+VISUAL_REUSE_NUDGE = (
+    "这张原图本轮已经查看过。先按用户原问题核对所需字段，复用已确认的文字和观察；"
+    "足够回答就提交答案。仍缺必要字段时可继续取证，避免为题目未问的信息反复查看同一图。"
+)
 
 # ---- 收尾前的三条一次性提醒（1.0 ``runtime.py:2540-2660``）----------------------
 #
@@ -796,6 +801,8 @@ class _Session:
     finalization_calls: int = 0
     evidence_signatures: set[str] = field(default_factory=set)
     retrieved_evidence_ids: set[str] = field(default_factory=set)
+    inspected_asset_ids: set[str] = field(default_factory=set)
+    visual_reuse_nudged: bool = False
     # 输出被 max_tokens 切断后，只提高一次输出预算重试（云端）。
     output_boost_tried: bool = False
     # **正文工具调用的纠正只给一次。** 再犯说明模型这一轮压不住这个格式，
@@ -2438,6 +2445,26 @@ class RunTurn:
             requirements=session.ledger.requirements,
         )
         duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        if call.name == "inspect_photo" and outcome.ok:
+            asset_id = str(outcome.observation.get("asset_id") or "")
+            if asset_id:
+                if asset_id in session.inspected_asset_ids and not session.visual_reuse_nudged:
+                    session.visual_reuse_nudged = True
+                    outcome = replace(
+                        outcome,
+                        model_visible={**outcome.model_visible, "reuse_hint": VISUAL_REUSE_NUDGE},
+                    )
+                    self._publish(
+                        session,
+                        state.emit(
+                            ProgressStage.RECOVERING,
+                            ProgressStatus.RUNNING,
+                            "正在复用已查看图片的证据…",
+                            kind="guard",
+                            payload={"code": "visual_evidence_reuse", "asset_id": asset_id},
+                        ),
+                    )
+                session.inspected_asset_ids.add(asset_id)
         state.record(
             ToolCallRecord(
                 call_id=call.call_id,
@@ -2515,6 +2542,16 @@ class RunTurn:
 
         visible = dict(outcome.model_visible)
         evidence = {key: value for key, value in visible.items() if key != "result_set_id"}
+        if call.name in {"inspect_photo", "read_photo_text", "read_source_text"}:
+            evidence_asset_id = outcome.observation.get("asset_id")
+            if evidence_asset_id:
+                # 以实际素材识别证据；回显问句和结果集内编号不产生新信息。
+                evidence = {
+                    key: value
+                    for key, value in evidence.items()
+                    if key not in {"asset_handle", "question", "reuse_hint"}
+                }
+                evidence["asset_id"] = evidence_asset_id
         evidence_signature = call.name + json.dumps(evidence, ensure_ascii=False, sort_keys=True)
         new_evidence = evidence_signature not in session.evidence_signatures
         if outcome.ok:
