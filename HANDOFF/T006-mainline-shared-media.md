@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜五描述与八摘要验收；转入图谱只读差异核对
+
+wait `3d342a7e-bec7-4583-b6bf-284368807e53`成功，service18.185秒。5caption直接复用、success SHA保持；8旧图片摘要完成，8次实际Flash/关思考4096/stop，无失败截断，5253输入＋984输出＝6237token。逐条与当前caption/activity/OCR和真实时间地点核主要事实，截图CPU14%、106/128GB和82%均有OCR依据。success与SQLite、2048事件向量及17类非目标保护通过，原955+1328摘要保持。证据`photo-content-tail-resume-review/{acceptance.json,photo-content-tail}`，所有旧失败史保持。本机截至d8a6227b已push并核上游相同SHA。
+
+新增只读`stage_graph_refresh.py`，用生产BuildMemoryGraph和SQLite仓储生成当前节点/普通边投影，CaptureGraph接住结果，仅存差异、无相册/图谱写入；不创建Container、不打开Qdrant。causal_judge=None避免重评，原所有asset_causes_asset:*边完整保留。三生产构图模块SHA与本机一致。两项新增测试、ruff/compile通过，提交d8652581后传100 SHA888493f33e2a27e0d1409ba0043fb75ed07e2559cc13f72e39171bb1b1e49df9及编译通过，release/服务保持。
+
+独立wake `c6808725-ff81-413b-a9c3-494ff9a04eb9`，unit `sentrix-qwen38-graph-stage-20261125`，回执`graph-refresh-stage-launch.json`；输出100 `content/graph-refresh/{before,proposal,request-audit,terminal}.json`。预期需同步2291事件摘要及补内容/纠错观察、错误实体/概念/fact和撤回关系的投影；实际差异逐项核来源后再局部写图。暂存前后17表SHA相同为只读检查。最后一次图谱MEMORY_GRAPH精确起止取末视频job终态，网关原请求按该窗口核HTTP/截断，不从早期429/500推断最终缺口。
+
+旧两帧与街摊OCR仍未恢复，3图仅部分核实文字；历史HTTP/超时/length具体影响仍待最终内容审计。保持8294/8874/网关PID，.119high与Oracle保持、QA/Judge/消融0、题库线上分保持。无scope finalize/重建模型因果、无整库新备份。d8652581及交接待stage验收后push；3d342a7e已处理不重挂。
+
 ## 2026-11-25｜五描述及索引验收通过；修正摘要来源类型判断后接续
 
 wait `5db4bd99-051a-4436-9b92-5bf5297075e5`运行7.269秒后退出1。真实success为5条caption，8条摘要均未发起模型请求且正文保持。原因：SQLite中的source_type=NULL经生产仓储`_row_to_event`转为空字符串，新增修复脚本以None比较导致失败。修正期望值采用相同规范化，不改数据库原字段。回归使用真实仓储映射覆盖NULL/空串/video_scene及嵌入失败复用；30项相关测试、ruff/compile通过，提交4e372572。两脚本仅同步repair目录，100编译/SHA及只读验收通过；未改release、未重启。
