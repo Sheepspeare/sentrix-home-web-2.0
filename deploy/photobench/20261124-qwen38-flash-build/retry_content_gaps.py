@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import repair_content as repair
 from recover_videos import save, sha
+from resume_content import execute as execute_recovery
 
 VISUAL_IDS = frozenset(
     {
@@ -100,18 +101,16 @@ def main():
 
     def execute(kind, item):
         identifier = item.get("asset_id", item.get("id"))
-        function = repair.repair_visual if kind == "visual" else repair.repair_summary
-        try:
-            status = function(item, repos)
-        except repair.ModelOutputError as error:
-            return {"kind": kind, "id": identifier, "status": "failed_model_output", "error": str(error)}
+        result = execute_recovery(kind, item, repos)
+        if result["status"] != "completed":
+            return result
         success = json.loads((output / kind / identifier / "success.json").read_text())
         success["targeted_retry_evidence"] = str(output / kind / identifier)
         success["strategy"] = (
             "bounded_ocr" if kind == "visual" else "summary_without_named_examples_json_mode"
         )
         save(original / kind / identifier / "success.json", success)
-        return {"kind": kind, "id": identifier, "status": status}
+        return result
 
     try:
         for kind, items in (("visual", visuals), ("summary", summaries)):
