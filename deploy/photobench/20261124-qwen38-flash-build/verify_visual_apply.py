@@ -77,7 +77,8 @@ def main():
                 oid = json.loads(row["metadata_json"])["observation_id"]
                 assert oid in targets
                 match = connection.execute(
-                    "SELECT vector_json FROM text_vectors WHERE source_type='observation' AND source_id=? AND space=? AND model_name=?",
+                    "SELECT vector_json FROM text_vectors WHERE source_type='observation' "
+                "AND source_id=? AND space=? AND model_name=?",
                     (oid, row["space"], row["model_name"]),
                 ).fetchone()
                 assert match is not None and match[0] == row["vector_json"]
@@ -107,7 +108,8 @@ def main():
         )
         assert (
             connection.execute(
-                "SELECT count(*) FROM relationships WHERE (subject_entity_id=? OR object_entity_id=?) AND status!='retracted'",
+                "SELECT count(*) FROM relationships WHERE "
+                "(subject_entity_id=? OR object_entity_id=?) AND status!='retracted'",
                 (DISPROVEN_ENTITY, DISPROVEN_ENTITY),
             ).fetchone()[0]
             == 0
