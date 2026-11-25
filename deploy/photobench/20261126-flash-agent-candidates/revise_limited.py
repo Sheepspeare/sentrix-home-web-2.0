@@ -1,4 +1,4 @@
-"""Switch only the reviewed, paused limited candidate to a committed release."""
+"""Switch one reviewed, paused candidate while preserving the other instances."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ candidate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(candidate)
 h = candidate.helper
 BASE = candidate.BASE
-OLD_RUN = "20261126-043228-2026.11.17-atm-sources-addresses-big_model-790fec"
+OLD_RUNS = {
+    "limited": "20261126-043228-2026.11.17-atm-sources-addresses-big_model-790fec",
+    "large": "20261126-043228-2026.11.17-atm-sources-addresses-big_model-2211ea",
+}
 
 
 def wait_for(check, seconds=45):
@@ -30,25 +33,35 @@ def wait_for(check, seconds=45):
         time.sleep(1)
 
 
-def start_archive(revision):
-    output = BASE / "limited-v2"
+def start_archive(revision, *, group="limited"):
+    product, evaluation, _models, _tools = candidate.GROUPS[group]
+    old_run = OLD_RUNS[group]
+    output = BASE / f"{group}-v2"
     output.mkdir()  # A prior intent requires inspection, not replay.
     release = BASE / f"release-{revision[:8]}"
     assert json.loads((release / "build-info.json").read_text())["revision"] == revision
     manifest = json.loads((release / "source-sha256.json").read_text())
     assert manifest and all(h.sha(release / name) == digest for name, digest in manifest.items())
-    snapshot = h.api(8878, f"runs/{OLD_RUN}?include_history=false")
+    snapshot = h.api(evaluation, f"runs/{old_run}?include_history=false")
     progress = snapshot["phases"]["qa_eval"]["progress"]
     assert progress["agent_completed"] == 8 and progress["dispatch_paused"]
     assert snapshot.get("fatal_error") is None
     protected = candidate.protected_processes()
     for role in ("api", "eval"):
         pid = subprocess.check_output(
-            ["systemctl", "--user", "show", "-p", "MainPID", "--value", candidate.unit_name("large-" + role)],
+            [
+                "systemctl",
+                "--user",
+                "show",
+                "-p",
+                "MainPID",
+                "--value",
+                candidate.unit_name(("large" if group == "limited" else "limited") + "-" + role),
+            ],
             text=True,
         ).strip()
         protected[pid] = Path(f"/proc/{pid}/stat").read_text().split()[21]
-    data = BASE / "limited/data"
+    data = BASE / group / "data"
     with sqlite3.connect(f"file:{data}/sentrix.db?mode=ro", uri=True) as db:
         active = db.execute(
             "select count(*) from agent_turns where status in ('pending','running')"
@@ -59,30 +72,32 @@ def start_archive(revision):
         {
             "revision": revision,
             "release": str(release),
-            "previous_run": OLD_RUN,
+            "previous_run": old_run,
             "at": time.time(),
             "protected": protected,
-            "scope": "limited only; preserve eight prior answers, album and large candidate",
+            "scope": f"{group} only; preserve eight prior answers, album and other candidate",
         },
     )
     h.save(output / "before-run.json", snapshot)
-    h.save(output / "cancel-dispatch.json", h.api(8878, f"runs/{OLD_RUN}/cancel", {}))
-    wait_for(lambda: h.api(8878, f"runs/{OLD_RUN}?include_history=false")["status"] == "cancelled")
-    wait_for(lambda: not h.api(8878, "active-work")["work"])
-    h.save(output / "archived-run.json", h.api(8878, f"runs/{OLD_RUN}?include_history=false"))
+    h.save(output / "cancel-dispatch.json", h.api(evaluation, f"runs/{old_run}/cancel", {}))
+    wait_for(lambda: h.api(evaluation, f"runs/{old_run}?include_history=false")["status"] == "cancelled")
+    wait_for(lambda: not h.api(evaluation, "active-work")["work"])
+    h.save(output / "archived-run.json", h.api(evaluation, f"runs/{old_run}?include_history=false"))
     return output, release, protected
 
 
-def verify_archived_answers(output):
-    snapshot = h.api(8878, f"runs/{OLD_RUN}?include_history=false")
+def verify_archived_answers(output, *, group="limited"):
+    evaluation = candidate.GROUPS[group][1]
+    old_run = OLD_RUNS[group]
+    snapshot = h.api(evaluation, f"runs/{old_run}?include_history=false")
     assert snapshot["status"] == "cancelled"
     assert snapshot["phases"]["qa_eval"]["progress"]["agent_completed"] == 8
-    accepted = json.loads((BASE / "limited-v1-accepted-eight.json").read_text())
+    accepted = json.loads((BASE / f"{group}-v1-accepted-eight.json").read_text())
     assert len(accepted) == 8
     for qa_id, digest in accepted.items():
-        rows = h.api(8878, f"runs/{OLD_RUN}/items?search={qa_id}&page=1&page_size=10")["items"]
+        rows = h.api(evaluation, f"runs/{old_run}/items?search={qa_id}&page=1&page_size=10")["items"]
         assert len(rows) == 1 and rows[0]["qa_id"] == qa_id
-        item = h.api(8878, f"runs/{OLD_RUN}/items/{rows[0]['index']}")["item"]
+        item = h.api(evaluation, f"runs/{old_run}/items/{rows[0]['index']}")["item"]
         assert hashlib.sha256(item["answer"].encode()).hexdigest() == digest
     h.save(
         output / "answer-preservation.json",
@@ -95,13 +110,14 @@ def verify_archived_answers(output):
     )
 
 
-def run(revision, *, continue_archived=False):
+def run(revision, *, group="limited", continue_archived=False):
+    product, evaluation, models, tools = candidate.GROUPS[group]
     if continue_archived:
-        output = BASE / "limited-v2"
+        output = BASE / f"{group}-v2"
         intent = json.loads((output / "intent.json").read_text())
         assert intent["revision"] == revision
         assert not (output / "configured.json").exists()
-        assert not h.api(8878, "active-work")["work"]
+        assert not h.api(evaluation, "active-work")["work"]
         release = Path(intent["release"])
         protected = intent["protected"]
         assert all(
@@ -110,10 +126,10 @@ def run(revision, *, continue_archived=False):
         manifest = json.loads((release / "source-sha256.json").read_text())
         assert all(h.sha(release / name) == digest for name, digest in manifest.items())
     else:
-        output, release, protected = start_archive(revision)
-    verify_archived_answers(output)
-    data = BASE / "limited/data"
-    units = [candidate.unit_name("limited-" + role) for role in ("eval", "api")]
+        output, release, protected = start_archive(revision, group=group)
+    verify_archived_answers(output, group=group)
+    data = BASE / group / "data"
+    units = [candidate.unit_name(group + "-" + role) for role in ("eval", "api")]
     subprocess.run(["systemctl", "--user", "stop", *units], check=True)
     source = json.loads((h.SNAPSHOT / "memory-fingerprints.json").read_text())
     with sqlite3.connect(f"file:{data}/sentrix.db?mode=ro", uri=True) as db:
@@ -127,17 +143,17 @@ def run(revision, *, continue_archived=False):
         (output / unit).write_text(old)
         assert str(BASE / "release") in old
         path.write_text(old.replace(str(BASE / "release"), str(release)))
-    env_path = BASE / "limited-eval.env"
+    env_path = BASE / f"{group}-eval.env"
     (output / "before-eval.env").write_bytes(env_path.read_bytes())
     (output / "before-eval.env").chmod(0o600)
     values = h.load_env(env_path)
     values["PHOTOBENCH_SENTRIX_REPO_ROOT"] = release
     values["PHOTOBENCH_BUILD_REVISION"] = revision
     h.env(env_path, values)
-    config_path = BASE / "limited/config/runtime_connection.json"
+    config_path = BASE / group / "config/runtime_connection.json"
     config = json.loads(config_path.read_text())
     h.save(output / "before-runtime-connection.json", config)
-    assert config["sentrix_url"] == "http://127.0.0.1:8298"
+    assert config["sentrix_url"] == f"http://127.0.0.1:{product}"
     assert config["product_build_revision"] == "7fbb4ed85b6bde8d71d0f7ced1a7eab073c721dc"
     config["product_build_revision"] = revision
     h.save(config_path, config)
@@ -147,7 +163,7 @@ def run(revision, *, continue_archived=False):
 
     def healthy():
         try:
-            return h.api(8298, "health/live")["build_revision"] == revision
+            return h.api(product, "health/live")["build_revision"] == revision
         except OSError:
             return False
 
@@ -155,18 +171,18 @@ def run(revision, *, continue_archived=False):
 
     def configured():
         try:
-            return h.api(8878, "config")["runtime_config"]["product_build_revision"] == revision
+            return h.api(evaluation, "config")["runtime_config"]["product_build_revision"] == revision
         except OSError:
             return False
 
     wait_for(configured)
-    diagnostics = h.api(8298, "diagnostics")
+    diagnostics = h.api(product, "diagnostics")
     assert diagnostics["build_revision"] == revision
     assert diagnostics["database"] == "ok" and diagnostics["embeddings"] == "ok"
     actual = diagnostics["runtime_configuration"]
     for key, value in {
-        "reasoning_max_model_calls": 20,
-        "reasoning_max_tool_calls": 30,
+        "reasoning_max_model_calls": models,
+        "reasoning_max_tool_calls": tools,
         "reasoning_max_search_calls": 100,
         "reasoning_max_other_tool_calls": 500,
         "agent_turn_workers": 2,
@@ -196,6 +212,7 @@ def run(revision, *, continue_archived=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--group", choices=["limited", "large"], default="limited")
     parser.add_argument("--continue-archived", action="store_true")
     args = parser.parse_args()
-    run(args.revision, continue_archived=args.continue_archived)
+    run(args.revision, group=args.group, continue_archived=args.continue_archived)
