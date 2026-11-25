@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜视觉48项保存，摘要54项；隔离缺字段摘要后接续900项
+
+wait `4691994e-79c9-4c35-8aaf-227b9749c09a`运行52.293秒后在摘要模型输出缺title/summary处触空AssertionError；新增16视觉、52摘要，现48/52视觉和54/955摘要保存，逐列与success匹配。四条既有视觉失败未重试；旧两帧OCR仍未恢复。失败摘要`evt_ef5cddefa5ad`收到合法女子遛狗观察，输出却称输入污染、编造王建国与6月15日等内容并缺必需字段，未写入；不能把模型的自述当输入确有污染的证据。精确请求/响应在`content-resume2-alert/evt_ef5cddefa5ad`。
+
+只读inspect确认52原文件SHA、白名单外资产13356/视觉6989/观察13304/旧事件3369/文本29932逐列0改0缺；41关联旧event文本投影已逐项核为合法观察同向量，旧event正文保持。在途0、测评空闲、型号/思考无漂移，稳定三PID保持。验收仅为部分写入保护，未做全库内容质量验收；证据`content-resume2-alert/{inspection,terminal,acceptance}.json`。
+
+本机55a2421b将模型输出失效归为专用`ModelOutputError`，统一覆盖截断/空正文/非JSON/缺或非字符串title-summary/占位标题/缺caption，替换调度中的错误字符串清单；型号/思考/索引/DB及其余HTTP故障继续停止。原模型、生产提示词和写入逻辑保持。20测试、ruff/compile通过，两个脚本同步100并核SHA、远端编译通过：repair_content `13f803f107cd2b5513302e12bc4c6b8f0518f2f6c9188fdcbad9c42a8d62645b`；resume_content `1c6f37d39d2afd7cce6434a32d6b8a3f144d530c2568e6bb6c53ed43f9c7b59f`。仅部署独立脚本，活动release不改、服务不重启。
+
+已先挂wake `3ae08615-8a44-4da9-a7cf-3cecd825d11f`，启动`sentrix-qwen38-content-resume3-20261125`，输出`content/resume-3`，回执`content-resume-3-launch.json`。复用48视觉和54摘要，保留4视觉＋1摘要生成失败，接续900尚未处理摘要；Flash/关思考128K/4096/4并发保持。登记waiting仅表示派发；completed_with_gaps/退出1需按缺口核验。
+
+接手按实际success核（退出前在飞完成可能未列progress），保留所有成功raw与失败历史；只补失败/缺失，不整批重跑。内容真实性须结合原图/原观察核异常，输出字段通过不等于事实通过。剩余4视觉/1摘要失败、旧两OCR、5部分观察、旧错误/截断影响、原失败图旧事件摘要及因果图同步仍待收尾。不能scope finalize、重启或另建Container争Qdrant；.119high建库及Oracle87.018756保持，QA/Judge/消融未启动、题库线上分保持。4691994e已处理不重挂。
+
 ## 2026-11-25｜上游JSON生成中止已定位，接续16视觉与953摘要
 
 wait `8e2f1652-888f-4d4e-9d8e-86237d061285`运行37.264秒后HTTP400失败，实际新写8视觉，当前32/52保存且逐列匹配；摘要仍2/955。上游错误原文为`invalid_parameter_error`/“Model output became abnormal while generating a JSON response for response_format. The generation was aborted because the partial output may be incomplete or invalid JSON.”，说明该次生成被中止，不能据状态码归因为配置参数错误。目标`asset_abd37b0e8d4c`未写入；另`asset_75deb3249002`仅输出`[]`，也未写入。连原两length共4条生成失败保留；16条尚未开始。旧两帧OCR仍未恢复。
