@@ -43,6 +43,14 @@ def inspect(output):
                     )
                 ]
                 row["derived"][oid] = {"entity_mentions": mentions}
+                row["derived"][oid]["entity_observations"] = [
+                    dict(r)
+                    for r in connection.execute(
+                        "SELECT eo.*,e.canonical_name,e.status FROM entity_observations eo "
+                        "JOIN entities e ON e.id=eo.entity_id WHERE observation_id=?",
+                        (oid,),
+                    )
+                ]
                 for table in ("facts", "entity_properties", "relationships", "event_entities"):
                     row["derived"][oid][table] = [
                         dict(r)
@@ -67,7 +75,8 @@ def inspect(output):
             dict(r)
             for r in connection.execute(
                 "SELECT id,title,summary,source_type,source_asset_id FROM events WHERE scope_id=? "
-                "AND (trim(summary)='' OR title IN (?,?,?))",
+                "AND (trim(summary)='' OR title IN (?,?,?) OR "
+                "(source_type='video_scene' AND summary LIKE '视频场景 · %'))",
                 (SCOPE, *sorted(PLACEHOLDER_TITLES)),
             )
         ]
@@ -77,6 +86,24 @@ def inspect(output):
             ]
             for table in ("assets", "observations", "events", "facts", "entities")
         }
+        result["graph_build"] = [
+            dict(r)
+            for r in connection.execute("SELECT * FROM memory_graph_builds WHERE scope_id=?", (SCOPE,))
+        ]
+        result["event_graph_mismatches"] = []
+        for node in connection.execute(
+            "SELECT id,label,attributes_json FROM memory_graph_nodes WHERE scope_id=? AND node_type='event'",
+            (SCOPE,),
+        ):
+            attributes = json.loads(node["attributes_json"])
+            identifier = attributes.get("event_id", node["id"].removeprefix("event:"))
+            event = connection.execute(
+                "SELECT title,summary FROM events WHERE id=?", (identifier,)
+            ).fetchone()
+            if event is not None and (
+                node["label"] != event["title"] or attributes.get("summary") != event["summary"]
+            ):
+                result["event_graph_mismatches"].append(identifier)
     result["gateway"] = call(18138, "/health")
     result["active_work"] = call(8874, "/api/v1/active-work")
     save(output, result)
