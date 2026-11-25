@@ -575,3 +575,25 @@ def test_confirms_visual_only_is_false_when_a_face_is_bound(bundle):
     outcome = run(bundle, RecordingInspector(), RecordingCrops(), question="有吗")
 
     assert outcome.observation["confirms_visual_only"] is False
+
+
+def test_inspection_uses_the_explicit_earlier_batch_with_duplicate_handle(bundle, tmp_path):
+    second_path = tmp_path / "landscape.jpg"
+    second_path.write_bytes(b"different")
+    first = bundle["assets"].get(ASSET_ID)
+    bundle["assets"].add(replace(first, id="landscape", path=str(second_path), content_sha256="other"))
+    sets = bundle["result_sets"]
+    sets.add(ResultSet("rs_table", SCOPE, "餐桌", ("landscape", ASSET_ID), NOW))
+    sets.add(ResultSet("rs_landscape", SCOPE, "风景", (ASSET_ID, "landscape"), NOW))
+    inspector = RecordingInspector()
+    toolbox = build(bundle, inspector, RecordingCrops())
+    result = toolbox.execute(
+        "inspect_photo",
+        {"result_set_id": "rs_table", "asset_handle": "photo_2", "question": "店名"},
+        scope_id=SCOPE,
+        now=NOW,
+    )
+    assert result.ok
+    assert inspector.calls[0]["path"] == str(bundle["photo"])
+    assert result.observation["asset_id"] == ASSET_ID
+    assert result.model_visible["result_set_id"] == "rs_table"

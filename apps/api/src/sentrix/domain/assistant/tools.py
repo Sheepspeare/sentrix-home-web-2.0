@@ -97,7 +97,7 @@ SEARCH_MEMORIES = ToolSpec(
     description=(
         "按内容词检索照片、视频、邮件或文档（人/物/场景/地点/语音/正文内容）。"
         "source_type 可限定 email 或 document；混合图文用 all。文本预览包含标题、摘要和来源ID。"
-        "返回一个结果集摘要，其中 preview 是排在最前的几张。"
+        "返回 result_set_id 和候选 preview；photo_N 只在该结果集内有效，回看或交付时一并引用 result_set_id。"
         "每条 preview 自带 captured_at（拍摄时间）/ place（**拍摄地的行政区划**，"
         "形如「河北省石家庄市正定县 · 正定北门里村附近」，由照片的 GPS 反解而来；"
         "没有 GPS 的照片这一格为空）/ people（已确认人物）/ "
@@ -143,7 +143,8 @@ SEARCH_MEMORIES = ToolSpec(
     required=("query",),
     free_description=(
         f"按内容词检索照片、视频、邮件或文档，返回结果集摘要与最多 "
-        f"{_SEARCH_LIMIT} 条 preview。"
+        f"{_SEARCH_LIMIT} 条 preview。返回的 result_set_id 标识本次检索，"
+        "读取和交付照片时连同 handle 一起填写。"
         "source_type 可限定 email 或 document，混合题用 all；文本返回标题、摘要、来源ID与正文预览。"
         "每条 preview 带 captured_at（拍摄时间）、place（拍摄地的行政区划，由 GPS 反解；无 GPS 时为空）、"
         "people（已确认人物）、people_count（照片上一共几个人）、media_kind（image/video）、"
@@ -205,7 +206,7 @@ FINAL_ANSWER = ToolSpec(
     description=(
         "给出最终回答并结束本轮。answer 是要说给用户的那段话；"
         "要把照片展示给用户，就在**同一次调用**里把 handle 填进 selected_image_handles。"
-        "handle 必须来自当前结果集（例如 photo_1），最多 6 张；"
+        "每张照片使用 {result_set_id, asset_handle} 指明检索批次和编号，最多 6 张；"
         "搜索返回的全部候选不能直接当作要展示的图片。不展示照片就留空数组。"
     ),
     parameters=_object_schema(
@@ -228,9 +229,18 @@ FINAL_ANSWER = ToolSpec(
             },
             "selected_image_handles": {
                 "type": "array",
-                "items": {"type": "string"},
+                "items": {
+                    "oneOf": [
+                        _object_schema(
+                            {"result_set_id": {"type": "string"}, "asset_handle": {"type": "string"}},
+                            ["result_set_id", "asset_handle"],
+                        ),
+                        {"type": "string"},
+                    ],
+                },
                 "description": (
-                    f"当前结果集中要展示的照片 handle，最多 {MAX_DELIVERED_PHOTOS} 张；不展示填 []。"
+                    "要展示的照片引用，使用对应预览的 result_set_id 和 asset_handle，"
+                    f"最多 {MAX_DELIVERED_PHOTOS} 张；不展示填 []。"
                 ),
                 "maxItems": MAX_DELIVERED_PHOTOS,
             },
@@ -253,7 +263,7 @@ FINAL_ANSWER = ToolSpec(
     free_description=(
         "给出最终回答并结束本轮。answer 是要说给用户的中文回答；"
         "要展示的照片在同一次调用里填进 selected_image_handles"
-        "（来自当前结果集的 handle，例如 photo_1，最多 6 张）。不展示照片就填空数组。"
+        "（每项填写 result_set_id 和 asset_handle，最多 6 张）。不展示照片就填空数组。"
         "邮件/文档先 read_source_text，再在 source_citations 引用 result_set_id 和 asset_handle。"
     ),
 )
@@ -358,7 +368,7 @@ QUERY_PHOTO_PEOPLE = ToolSpec(
     brief="核对照片的人脸绑定：已确认姓名与未确认人数；不推断亲属关系。",
     description=(
         "读取一张已检索照片自己的已确认人物和未确认同行者。"
-        "asset_handle 必须来自当前 search_memories preview；不会把其他候选照片的人名移植过来。"
+        "asset_handle 必须来自指定 result_set_id 的 search_memories preview；不会把其他照片的人名移植过来。"
         "未确认的人**没有名字**，只报个数，不要给他们安名字。"
         # 1.0 这里逐个人回的是 `get_effective_family_membership`（家庭图谱，S7）。
         # 2.0 没有图谱，只有实体上的 family_role——描述里如实说清楚，
@@ -368,6 +378,10 @@ QUERY_PHOTO_PEOPLE = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            "result_set_id": {
+                "type": "string",
+                "description": "目标预览所属的结果集 id；跨次检索必须填写，省略时使用最新结果集。",
+            },
             "asset_handle": {
                 "type": "string",
                 "description": "从预览选择要核对的照片 handle（photo_1…）。",
@@ -391,7 +405,8 @@ QUERY_PHOTO_PEOPLE = ToolSpec(
     satisfies=(EvidenceType.PHOTO_IDENTITY,),
     required=("asset_handle",),
     free_description=(
-        "读取一张已检索照片自己的已确认人物和未确认同行者。asset_handle 必须来自当前结果集的 preview。"
+        "读取一张已检索照片自己的已确认人物和未确认同行者。"
+        "asset_handle 必须来自指定 result_set_id 的 preview。"
         "未确认的人没有名字，只报个数；membership 一栏来自人物实体上的家庭角色，尚无可推断亲属关系的图谱。"
     ),
 )
@@ -414,6 +429,10 @@ INSPECT_PHOTO = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            "result_set_id": {
+                "type": "string",
+                "description": "目标预览所属的结果集 id；跨次检索必须填写，省略时使用最新结果集。",
+            },
             "question": {
                 "type": "string",
                 "description": "要从这张图确认的具体问题，保留用户原意。",
@@ -434,7 +453,7 @@ INSPECT_PHOTO = ToolSpec(
     satisfies=(EvidenceType.VISUAL_OBSERVATION, EvidenceType.PHOTO_IDENTITY),
     # 1.0 的 ``required_inputs=("asset_handle", "question")`` 与它自己的描述
     # （「asset_handle …可省略」）**互相矛盾**。2.0 保留描述里那条行为（省略就用第一张），
-    # 所以这里只把 ``question`` 列为必填；``result_set_id`` 由后端注入。照 required_inputs 抄会
+    # 所以这里只把 ``question`` 列为必填；省略 ``result_set_id`` 时使用最新集合。照 required_inputs 抄会
     # 让「可省略」当场失效（策略层会以 ``missing_argument`` 拒掉）。
     required=("question",),
     cost_class=CostClass.EXPENSIVE,
@@ -461,6 +480,10 @@ READ_PHOTO_TEXT = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            "result_set_id": {
+                "type": "string",
+                "description": "目标预览所属的结果集 id；跨次检索必须填写，省略时使用最新结果集。",
+            },
             "asset_handle": {
                 "type": "string",
                 "description": "预览中的照片 handle；省略时读第一张。",
@@ -500,12 +523,16 @@ READ_SOURCE_TEXT = ToolSpec(
     name="read_source_text",
     brief="读取文本候选原文，长文按 next_offset 续读。",
     description=(
-        "读取当前检索结果中 media_kind=text 的资料原文。使用预览给出的 asset_handle。"
+        "读取指定 result_set_id 中 media_kind=text 的资料原文。使用该预览给出的 asset_handle。"
         "返回正文片段和 next_offset。还有下一段时，用同一 handle 和 next_offset 续读。"
     ),
     parameters=_object_schema(
         {
-            "asset_handle": {"type": "string", "description": "当前检索预览中的文本资料 handle。"},
+            "result_set_id": {
+                "type": "string",
+                "description": "目标预览所属的结果集 id；跨次检索必须填写，省略时使用最新结果集。",
+            },
+            "asset_handle": {"type": "string", "description": "对应结果集预览中的文本资料 handle。"},
             "offset": {"type": "integer", "minimum": 0, "description": "从第几个字符读取，默认从 0 开始。"},
         },
         ["asset_handle"],

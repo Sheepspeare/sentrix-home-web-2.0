@@ -480,6 +480,15 @@ def test_read_photo_text_costs_a_photo_slot_like_1_0():
 def test_reading_a_fourth_photo_is_denied(make_state):
     """连读第 4 张被拒——这是「每轮 3 次」在 ``read_photo_text`` 上的落点。"""
     state = make_state()
+    state.record(
+        ToolCallRecord(
+            call_id="search",
+            tool="search_memories",
+            signature="search",
+            status="ok",
+            observation={"result_set_id": "rs_1"},
+        )
+    )
     policy = ToolPolicy()
     for index in range(DEFAULT_PROFILE.max_inspections):
         allowed = policy.decide(
@@ -507,6 +516,15 @@ def test_the_inspection_denial_states_the_real_limit(make_state):
     from dataclasses import replace
 
     state = make_state()
+    state.record(
+        ToolCallRecord(
+            call_id="search",
+            tool="search_memories",
+            signature="search",
+            status="ok",
+            observation={"result_set_id": "rs_1"},
+        )
+    )
     for index in range(DEFAULT_PROFILE.max_inspections):
         state.record(
             ToolCallRecord(call_id=f"c{index}", tool="inspect_photo", signature=f"s{index}", status="ok")
@@ -520,6 +538,15 @@ def test_the_inspection_denial_states_the_real_limit(make_state):
 
     # 换个 profile，文案跟着换——这才叫「现取」。
     tight = make_state(profile=replace(DEFAULT_PROFILE, max_inspections=1))
+    tight.record(
+        ToolCallRecord(
+            call_id="search",
+            tool="search_memories",
+            signature="search",
+            status="ok",
+            observation={"result_set_id": "rs_1"},
+        )
+    )
     tight.record(ToolCallRecord(call_id="c0", tool="inspect_photo", signature="s0", status="ok"))
     assert (
         "最多 1 次"
@@ -538,6 +565,15 @@ def test_a_stuck_tool_is_refused_before_the_budget_code(make_state):
     已经卡住了**：预算类拒绝每次的原因都完全合法，可连试六次就是卡住。
     """
     state = make_state()
+    state.record(
+        ToolCallRecord(
+            call_id="search",
+            tool="search_memories",
+            signature="search",
+            status="ok",
+            observation={"result_set_id": "rs_1"},
+        )
+    )
     for index in range(DEFAULT_PROFILE.max_inspections):
         state.record(
             ToolCallRecord(call_id=f"ok{index}", tool="inspect_photo", signature=f"s{index}", status="ok")
@@ -651,3 +687,36 @@ def test_the_page_cap_comes_before_the_tool_budget(make_state):
     decision = ToolPolicy().decide(call("get_result_page", result_set_id="rs_1", page=9), state)
 
     assert decision.code == "page_call_limit"
+
+
+@pytest.mark.parametrize(
+    "tool,extra",
+    [
+        ("inspect_photo", {"question": "餐桌上的招牌"}),
+        ("read_photo_text", {}),
+        ("query_photo_people", {}),
+        ("read_source_text", {}),
+    ],
+)
+def test_read_preserves_the_explicit_batch_across_searches(make_state, tool, extra):
+    state = make_state(profile=REASONING_PROFILE)
+    for set_id in ("rs_table", "rs_landscape"):
+        state.record(
+            ToolCallRecord(
+                call_id=set_id,
+                tool="search_memories",
+                signature=set_id,
+                status="ok",
+                observation={"result_set_id": set_id},
+            )
+        )
+    policy = ToolPolicy()
+    explicit = policy.decide(call(tool, result_set_id="rs_table", asset_handle="photo_2", **extra), state)
+    current = policy.decide(call(tool, asset_handle="photo_2", **extra), state)
+    assert explicit.action is ToolAction.EXECUTE
+    assert explicit.arguments["result_set_id"] == "rs_table"
+    assert current.arguments["result_set_id"] == "rs_landscape"
+    foreign = policy.decide(call(tool, result_set_id="rs_other_turn", asset_handle="photo_2", **extra), state)
+    assert foreign.action is ToolAction.DENY
+    assert foreign.code == "unknown_result_set"
+    assert "result_set_id" in TOOLS_BY_NAME[tool].parameters["properties"]

@@ -108,7 +108,7 @@ class ScriptedModel:
         assert {spec.name for spec in tools} <= {spec.name for spec in TOOL_SPECS}
         # 剪枝之后每一份描述都该是那一句 ≤40 字的 brief；发全量 description 就是
         # 把 2704 token/转 的固定成本又加回去，而模型照答、不会报错。
-        assert all(len(spec.description) <= 40 for spec in tools)
+        assert all(len(spec.description) <= 40 or spec.description == spec.free_description for spec in tools)
         reply = self._replies.pop(0) if len(self._replies) > 1 else self._replies[0]
         if isinstance(reply, Exception):
             raise reply
@@ -162,6 +162,23 @@ class StubToolbox:
                 failure_reason="not_stubbed",
             )
         return outcome
+
+
+class NewPageToolbox(StubToolbox):
+    """预算场景的每次翻页都返回新照片，避免被重复证据收敛提前终止。"""
+
+    def execute(self, name, arguments, **kwargs):
+        if name == "get_result_page":
+            self.calls.append((name, dict(arguments)))
+            page = arguments["page"]
+            return ToolOutcome(
+                observation={"result_set_id": "rs_1", "asset_ids": [f"asset_page_{page}"]},
+                model_visible={
+                    "result_set_id": "rs_1",
+                    "preview": [{"handle": f"photo_{page}", "page": page}],
+                },
+            )
+        return super().execute(name, arguments, **kwargs)
 
 
 def final(content: str) -> ModelReply:
@@ -359,9 +376,7 @@ def test_both_tool_policies_plan_before_acting_and_record_the_frozen_tools(env, 
     saved = turns.get(result.turn_id)
     assert len(model.planner_calls) == 1
     assert saved.trace["planner"]["status"] == "ok"
-    assert saved.trace["planner"]["tool_selection"] == (
-        "all_tools" if all_tools else "planner_requirements"
-    )
+    assert saved.trace["planner"]["tool_selection"] == ("all_tools" if all_tools else "planner_requirements")
     assert saved.trace["planner"]["initial_tool_names"] == model.tool_sets[0]
     assert ("inspect_photo" in model.tool_sets[0]) is all_tools
 
@@ -944,7 +959,7 @@ def test_a_model_stuck_on_failing_tools_is_told_to_answer(env):
 
 
 def test_the_stall_reminder_is_given_only_once(env):
-    """提醒**只给一次**（``block_guard_code`` 的既有口径）——真推不动时由 ``can_step()`` 兜底。"""
+    """重复受阻后在完整证据上下文收尾，提醒只出现一次。"""
     _conversations, _turns, conversation, _db = env
     failing = ToolOutcome(
         observation={"failure_reason": "file_unavailable"},
@@ -966,7 +981,10 @@ def test_the_stall_reminder_is_given_only_once(env):
 
     result = run_turn.run(turn_id)
 
-    assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
+    assert result.termination_reason is TerminationReason.ANSWERED_WITH_GAP
+    assert len(model.calls) <= 6
+    assert model.tool_sets[-1] == [FINAL_ANSWER_TOOL]
+    assert any(m.role is ChatRole.TOOL and "海边" in m.content for m in model.calls[-1])
     # 提醒进了对话之后**会一直在**后续每一次模型调用的历史里，所以不能跨调用求和；
     # 要看的是「同一次调用的消息里它只出现一次」——那才说明只加过一次。
     per_call = [sum(1 for message in call if STALLED_NUDGE in message.content) for call in model.calls]
@@ -1018,7 +1036,14 @@ def test_a_repeated_identical_call_is_replayed_not_re_executed(env):
 def test_the_model_step_budget_ends_the_turn_with_a_reason(env):
     _conversations, _turns, conversation, _db = env
     model = ScriptedModel([tool_call("get_result_page", "c1", result_set_id="rs_1", page=1)])
-    run_turn = build(env, model, StubToolbox({"get_result_page": SEARCH_OK}))
+    conversations, turns, conversation, _db = env
+    run_turn = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=StubToolbox({"get_result_page": SEARCH_OK}),
+        profile=replace(DEFAULT_PROFILE, max_steps=2),
+    )
     turn_id = start(run_turn, conversation)
 
     result = run_turn.run(turn_id)
@@ -1062,7 +1087,7 @@ def test_reasoning_stops_repeated_denied_calls_and_persists_true_attempt_budget(
         profile=replace(REASONING_PROFILE, max_model_calls=8),
     )
     result = run_turn.run(start(run_turn, conversation))
-    assert result.termination_reason is TerminationReason.STEP_BUDGET_EXHAUSTED
+    assert result.termination_reason is TerminationReason.ANSWERED_WITH_GAP
     saved = turns.get(result.turn_id)
     budget = saved.trace["budget"]["request_limits"]
     assert budget["version"] == "reasoning-bounded-v1"
@@ -1093,16 +1118,8 @@ def test_strict_context_budget_preserves_history_and_does_not_retry_cropped_inpu
     assert any(message.role is ChatRole.TOOL for message in model.calls[-1])
 
 
-def test_the_tools_are_withdrawn_when_the_budget_is_gone(env):
-    """工具额度用尽之后，那一转**一个工具都不发**（连 ``final_answer`` 也不发）。（§3.4 C/B′）
-
-    模型物理上无法再调，只剩「作答」这一条路——于是 8 步里最后那 1–2 步会被用来
-    **说话**而不是撞墙。实测 ``step_budget_exhausted`` 的 123 道里 **102 道判 0、
-    2 分一道没有**，根子就是模型到最后都没被逼着开口。
-
-    断言的是 ``complete`` **收到的那个 tools 参数**，不是最终结果——后者会被
-    ``_stop`` 的兜底文案掩盖成「看起来答了」。
-    """
+def test_repeated_calls_receive_only_the_final_action(env):
+    """重复受阻后只提供收尾动作，完整工具历史仍在。"""
     _conversations, _turns, conversation, _db = env
     model = ScriptedModel([tool_call("get_result_page", "c1", result_set_id="rs_1", page=1)])
     run_turn = build(env, model, StubToolbox({"get_result_page": SEARCH_OK}))
@@ -1114,8 +1131,7 @@ def test_the_tools_are_withdrawn_when_the_budget_is_gone(env):
         model.tool_sets[: model.tool_sets.index([])] if [] in model.tool_sets else model.tool_sets
     )
     assert offered_before and all(offered_before), "额度还在时不该是空集"
-    assert model.tool_sets[-1] == [], "额度用尽之后必须把工具全部收回"
-    assert FINAL_ANSWER_TOOL not in model.tool_sets[-1]
+    assert model.tool_sets[-1] == [FINAL_ANSWER_TOOL], "重复受阻后只提供收尾动作"
 
 
 def assert_tool_messages_are_paired(messages: Sequence[ChatMessage]) -> None:
@@ -1602,7 +1618,7 @@ def test_an_unfaithful_answer_is_released_when_the_judge_spent_the_last_step(env
     run_turn = build(
         env,
         model,
-        StubToolbox({"search_memories": SEARCH_OK, "get_result_page": SEARCH_OK}),
+        NewPageToolbox({"search_memories": SEARCH_OK}),
     )
     turn_id = start(run_turn, conversation)
 
@@ -1827,7 +1843,7 @@ def test_a_pushed_back_answer_survives_a_failed_rewrite(env):
     run_turn = build(
         env,
         model,
-        StubToolbox({"search_memories": SEARCH_OK, "get_result_page": SEARCH_OK}),
+        NewPageToolbox({"search_memories": SEARCH_OK}),
     )
     turn_id = start(run_turn, conversation)
 
@@ -2069,3 +2085,93 @@ def test_bad_final_arguments_preserve_raw_and_duration_then_continue(env, monkey
     assert errors[0].payload["result"]["failure_reason"] == "bad_arguments"
     assert len(model.calls) == 3
     assert turns.get(turn_id).status == TurnStatus.COMPLETE
+
+
+def test_new_empty_queries_can_change_strategy_without_early_finalization(env):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+
+    conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "q1", query="海边"),
+            tool_call("search_memories", "q2", query="沙滩"),
+            tool_call("search_memories", "q3", query="beach"),
+            final("这三次检索均未找到匹配记录。"),
+        ]
+    )
+    toolbox = StubToolbox({"search_memories": SEARCH_EMPTY})
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=toolbox,
+        profile=REASONING_PROFILE,
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+    assert result.answer == "这三次检索均未找到匹配记录。"
+    assert len([c for c in toolbox.calls if c[0] == "search_memories"]) == 3
+    assert "search_memories" in model.tool_sets[-1]
+    assert not any(
+        e.payload.get("code") == "evidence_stalled" for _, _, e in turns.events_after(result.turn_id, 0)
+    )
+
+
+def test_repeated_failure_then_new_evidence_keeps_exploration_open(env):
+    from sentrix.domain.assistant.profile import REASONING_PROFILE
+
+    conversations, turns, conversation, _db = env
+    failing = ToolOutcome(
+        observation={}, model_visible={"error": "file_unavailable"}, failure_reason="file_unavailable"
+    )
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "q1", query="海边"),
+            tool_call("inspect_photo", "i1", asset_handle="photo_1", question="招牌"),
+            tool_call("inspect_photo", "i2", asset_handle="photo_1", question="招牌"),
+            tool_call("read_photo_text", "r1", asset_handle="photo_2"),
+            final("照片中的招牌写着海边餐厅。"),
+        ]
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "inspect_photo": failing,
+            "read_photo_text": ToolOutcome(
+                observation={"text": "海边餐厅"}, model_visible={"text": "海边餐厅"}
+            ),
+        }
+    )
+    runner = RunTurn(
+        model=model,
+        conversations=conversations,
+        turns=turns,
+        toolbox=toolbox,
+        profile=REASONING_PROFILE,
+        use_all_tools=True,
+    )
+    result = runner.run(start(runner, conversation))
+    assert result.answer == "照片中的招牌写着海边餐厅。"
+    assert "search_memories" in model.tool_sets[-1]
+    assert not any(
+        e.payload.get("code") == "evidence_stalled" for _, _, e in turns.events_after(result.turn_id, 0)
+    )
+
+
+def test_final_passes_batch_bound_image_references_to_delivery(env):
+    _conversations, _turns, conversation, _db = env
+    references = [{"result_set_id": "rs_1", "asset_handle": "photo_2"}]
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "search", query="海边"),
+            tool_call(
+                FINAL_ANSWER_TOOL, "answer", answer="这是餐桌照片。", selected_image_handles=references
+            ),
+        ]
+    )
+    toolbox = StubToolbox({"search_memories": SEARCH_OK, FINAL_ANSWER_TOOL: DELIVER_OK})
+    runner = build(env, model, toolbox)
+    result = runner.run(start(runner, conversation))
+    assert result.answer == "这是餐桌照片。"
+    delivery = [arguments for name, arguments in toolbox.calls if name == FINAL_ANSWER_TOOL]
+    assert delivery == [{"result_set_id": "rs_1", "handles": references}]

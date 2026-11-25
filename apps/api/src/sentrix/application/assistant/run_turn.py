@@ -791,6 +791,11 @@ class _Session:
     best_coverage: float = -1.0
     # 连续几轮「一条有用的结果都没拿到」。见 ``_converse`` 的护栏。
     stalled_rounds: int = 0
+    # 重复受阻后用完整历史收尾；新取证仍可在提醒后继续。
+    converge_after_stall: bool = False
+    convergence_calls: int = 0
+    evidence_signatures: set[str] = field(default_factory=set)
+    retrieved_evidence_ids: set[str] = field(default_factory=set)
     # 输出被 max_tokens 切断后，只提高一次输出预算重试（云端）。
     output_boost_tried: bool = False
     # **正文工具调用的纠正只给一次。** 再犯说明模型这一轮压不住这个格式，
@@ -1314,6 +1319,9 @@ class RunTurn:
 
         while True:
             self._check_cancel(state.turn_id)
+            if session.converge_after_stall and session.convergence_calls >= 2:
+                state.finish(TerminationReason.ANSWERED_WITH_GAP)
+                return self._stop(session, TerminationReason.ANSWERED_WITH_GAP, retry_final=False)
             if not state.can_step():
                 if state.request_budget is not None and not state.request_budget.can_model():
                     state.request_budget.stop_code = "model_call_limit"
@@ -1340,7 +1348,7 @@ class RunTurn:
             #    （正常回合不触发，工具表仍是单一变体）；
             # 2. 工具预算/作答保留耗尽时只发终止动作，物理上逼模型开口，而不是继续
             #    发注定被拒的调用。
-            if not state.can_call_tool():
+            if session.converge_after_stall or not state.can_call_tool():
                 specs = tuple(spec for spec in frozen_specs if spec.name == FINAL_ANSWER_TOOL)
             elif self._use_all_tools:
                 # 推理模式不按证据需求剪枝，发全量契约让模型自己决定下一步。
@@ -1360,7 +1368,12 @@ class RunTurn:
                     if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
                 )
             try:
-                reply = self._complete_recorded(session, messages, specs)
+                if session.converge_after_stall:
+                    session.convergence_calls += 1
+                    with final_model_request():
+                        reply = self._complete_recorded(session, messages, specs)
+                else:
+                    reply = self._complete_recorded(session, messages, specs)
             except PromptTooLongError as error:
                 if state.profile.strict_model_step_budget:
                     return self._model_error_stop(session, error)
@@ -1502,6 +1515,15 @@ class RunTurn:
                         )
                     )
                     continue
+                if session.converge_after_stall:
+                    messages.append(
+                        ChatMessage(
+                            ChatRole.TOOL,
+                            '{"error":"evidence_stalled","message":"取证已重复受阻，请基于已取得的证据提交回答，说明尚未确认的信息。"}',
+                            tool_call_id=call.call_id,
+                        )
+                    )
+                    continue
                 text, attachments, empty, got_something = self._run_tool(session, call)
                 productive = productive or got_something
                 session.delivered = session.delivered.merge(attachments)
@@ -1515,25 +1537,33 @@ class RunTurn:
                 messages.append(ChatMessage(ChatRole.USER, session.pending_reminder))
                 continue
 
-            # 循环级的活性护栏：连续几轮一条有用的结果都没拿到，就该让模型收口。
-            # 提醒**只给一次**（``block_guard_code`` 的既有口径），再犯就照走——
-            # 不能因为模型不改就一直转，``can_step()`` 是最后一道闸。
-            session.stalled_rounds = 0 if productive else session.stalled_rounds + 1
-            if session.stalled_rounds >= STALLED_ROUNDS_BEFORE_NUDGE and state.block_guard_code(
-                "stalled_on_denials"
-            ):
-                self._publish(
-                    session,
-                    state.emit(
-                        ProgressStage.RECOVERING,
-                        ProgressStatus.RUNNING,
-                        "连续几轮工具调用都没有结果，让它基于已有内容作答…",
-                        kind="guard",
-                        payload={"code": "stalled_on_denials"},
-                    ),
-                )
-                messages.append(ChatMessage(ChatRole.USER, STALLED_NUDGE))
+            if session.converge_after_stall:
                 continue
+
+            # 空结果的新查询仍可探索；只有重复受阻/回放且无新证据才累计停滞。
+            session.stalled_rounds = 0 if productive else session.stalled_rounds + 1
+            if session.stalled_rounds >= STALLED_ROUNDS_BEFORE_NUDGE:
+                if state.block_guard_code("stalled_on_denials"):
+                    messages.append(ChatMessage(ChatRole.USER, STALLED_NUDGE))
+                else:
+                    session.converge_after_stall = True
+                    self._publish(
+                        session,
+                        state.emit(
+                            ProgressStage.FINALIZING,
+                            ProgressStatus.RUNNING,
+                            "取证重复受阻，正在基于已有证据整理回答…",
+                            kind="guard",
+                            payload={"code": "evidence_stalled", "stalled_rounds": session.stalled_rounds},
+                        ),
+                    )
+                    messages.append(
+                        ChatMessage(
+                            ChatRole.USER,
+                            "取证仍未推进。现在只提交已有证据支持的结论，并明确尚未确认的内容；"
+                            "不要将受阻的检索说成无匹配记录。",
+                        )
+                    )
 
     def _model_error_stop(self, session: _Session, error: Exception) -> str:
         """模型这一侧的失败收尾。
@@ -1611,7 +1641,9 @@ class RunTurn:
             session.last_answer = answer
         raw_handles = arguments.get("selected_image_handles")
         handles = (
-            [item for item in raw_handles if isinstance(item, str)] if isinstance(raw_handles, list) else []
+            [item for item in raw_handles if isinstance(item, (str, dict))]
+            if isinstance(raw_handles, list)
+            else []
         )
 
         raw_citations = arguments.get("source_citations") or []
@@ -2347,8 +2379,8 @@ class RunTurn:
                 )
             )
             self._tool_event(session, call, ProgressStatus.OK, decision.reason, "tool_result")
-            # 回放**算拿到了东西**：模型手上多了一份（它刚问过的）结果，不算白跑。
-            return json.dumps(dict(decision.replay), ensure_ascii=False), (), False, True
+            # 回放保留证据，但没有新增信息。
+            return json.dumps(dict(decision.replay), ensure_ascii=False), (), False, False
 
         self._tool_event(
             session,
@@ -2450,11 +2482,22 @@ class RunTurn:
                 extra={"duration_ms": duration_ms, "result": _tool_result_shape(outcome)},
             )
 
+        visible = dict(outcome.model_visible)
+        evidence = {key: value for key, value in visible.items() if key != "result_set_id"}
+        evidence_signature = call.name + json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+        new_evidence = evidence_signature not in session.evidence_signatures
+        if outcome.ok:
+            session.evidence_signatures.add(evidence_signature)
+        if call.name in {"search_memories", "get_result_page"} and outcome.ok:
+            ids = {str(value) for value in outcome.observation.get("asset_ids", ())}
+            # 空结果的新查询可以换词；同一批候选换序不算取得新证据。
+            new_evidence = not ids or bool(ids - session.retrieved_evidence_ids)
+            session.retrieved_evidence_ids.update(ids)
         return (
-            json.dumps(dict(outcome.model_visible), ensure_ascii=False),
+            json.dumps(visible, ensure_ascii=False),
             outcome.attachments,
             is_empty_result(outcome),
-            outcome.ok,
+            outcome.ok and new_evidence,
         )
 
     # ---- 装配与辅助 ---------------------------------------------------------

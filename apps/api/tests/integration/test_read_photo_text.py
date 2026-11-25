@@ -148,8 +148,8 @@ def test_the_tool_does_not_take_a_question():
     spec = TOOLS_BY_NAME["read_photo_text"]
 
     assert "question" not in spec.parameters["properties"]
-    # The active result-set ID is injected by ToolPolicy, not supplied by the model.
-    assert "result_set_id" not in spec.parameters["properties"]
+    # An explicit batch identifies older previews; omitted IDs use the latest batch.
+    assert "result_set_id" in spec.parameters["properties"]
     assert spec.required == ()
 
 

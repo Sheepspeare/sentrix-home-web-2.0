@@ -97,6 +97,8 @@ scope 的键只能是 event / time / place / person；能从问题确定的事�
 不确定就输出空对象 {{}}；time 只放时间表达式（年份/日期/季节），地名不能塞进 time。
 person 只填所问事实的主体或要求出镜的人，保留原姓名或别名；同张合照的多人用顿号连接。
 不同人物的独立问题用各自的需求；不把排除的人、拍摄者或尚待识别的人写成人物筛选。
+“我的相册”“我做过什么 / I cooked”等叙述表示当前相册的活动记录，不要求人脸身份，person 留空；
+“我出镜 / photos showing me”“我和某人的合照”才需要保留人物筛选，姓名和真实身份条件不得删除。
 任何字段都禁止输出 <...> 占位符；scope 里禁止写“未知”“unknown”“n/a”。
 
 只声明回答问题所必需的最小证据集合，不要把检索步骤本身当成答案证据。规则：
@@ -171,6 +173,42 @@ _HEX_DIGITS = re.compile(r"^[0-9a-f]+$")
 _ANGLE_PLACEHOLDER = re.compile(r"<[^>]*>")
 
 _UNKNOWN_SCOPE_VALUES = frozenset({"未知", "unknown", "n/a", "na", "none", "null", "-"})
+_NARRATOR_PERSON_VALUES = frozenset({"我", "我的", "本人", "i", "me", "my", "myself"})
+_ALBUM_OWNERSHIP = re.compile(
+    r"(?:我的|my\s+)(?:相册|照片|图片|视频|记录|album\b|photos?\b|pictures?\b|videos?\b|records?\b)",
+    re.IGNORECASE,
+)
+_NARRATOR_RECORD = re.compile(
+    r"我(?:曾经|最近|最后|上次|以前|曾|自己|亲自|又|还|也|在|于|所|有|何时|什么时候)*"
+    r"(?:做|制作|煮|炖|烤|吃|喝|去|到|参观|游览|旅行|购买|买|预订|入住|收到|发送|拍摄|拍的|拍过)"
+    r"|\bi\s+(?:(?:did|have|had|most|recently|last|ever|previously|just|personally)\s+)*"
+    r"(?:make|made|cook(?:ed)?|bak(?:e|ed)|eat|ate|drink|drank|visit(?:ed)?|travel(?:led|ed)?|"
+    r"buy|bought|book(?:ed)?|stay(?:ed)?|receiv(?:e|ed)|send|sent|take|took)\b"
+    r"|\b(?:made|cooked|baked|taken|booked|bought|sent)\s+by\s+me\b",
+    re.IGNORECASE,
+)
+_SELF_APPEARANCE = re.compile(
+    r"(?:我|本人).{0,12}(?:出镜|入镜|合影|合照|自拍|穿着|戴着|站在|坐在|拿着|抱着|骑着|长相)"
+    r"|(?:照片|图片|画面|视频).{0,6}(?:中|里|上).{0,6}(?:有我|的我|是我)"
+    r"|\b(?:show(?:ing|s)?|featur(?:e|es|ing)|depict(?:ing|s)?)\s+(?:me|myself)\b"
+    r"|\b(?:photos?|pictures?|images?|videos?|portraits?|selfies)\s+(?:of|with)\s+(?:me|myself)\b"
+    r"|\b(?:me\s+(?:and|with)|(?:and|with)\s+me)\b"
+    r"|\bi\s+(?:(?:am|was|have|had)\s+)*(?:wear(?:ing)?|wore|stand(?:ing)?|stood|"
+    r"sit(?:ting)?|sat|hold(?:ing)?|held|rid(?:e|ing)|rode|look(?:ing)?)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_narrator_scope(person: str, *, question: str, evidence_type: EvidenceType) -> bool:
+    """相册活动的第一人称叙述不依赖人脸姓名；明确出镜或身份需求保留。"""
+    if person.casefold() not in _NARRATOR_PERSON_VALUES:
+        return False
+    if evidence_type in {EvidenceType.PERSON_PROFILE, EvidenceType.PHOTO_IDENTITY}:
+        return False
+    narrator_record = _NARRATOR_RECORD.search(question) or (
+        person.casefold() in {"我的", "my"} and _ALBUM_OWNERSHIP.search(question)
+    )
+    return bool(narrator_record) and not _SELF_APPEARANCE.search(question)
 
 
 def planner_evidence_types(*, has_source_text: bool = False) -> tuple[str, ...]:
@@ -507,6 +545,10 @@ def parse_declaration(
             if not value_text or _ANGLE_PLACEHOLDER.search(value_text):
                 continue
             if value_text.lower() in _UNKNOWN_SCOPE_VALUES:
+                continue
+            if key_text == "person" and _is_narrator_scope(
+                value_text, question=question, evidence_type=evidence_type
+            ):
                 continue
             scope.append((key_text, value_text))
 

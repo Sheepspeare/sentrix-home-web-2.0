@@ -1119,3 +1119,68 @@ def test_memory_facts_rejects_a_person_that_was_never_confirmed(toolbox):
 
     assert outcome.failure_reason == "person_not_named_in_current_album"
     assert outcome.model_visible["status"] == "unresolved_person"
+
+
+def test_batch_bound_photo_delivery_and_ocr_do_not_follow_the_latest_search(toolbox, migrations_ready_db):
+    build, sets = toolbox
+    observations = SqliteObservationRepository(migrations_ready_db)
+    for i in range(2):
+        observations.add(
+            Observation(
+                id=f"ocr-{i}",
+                scope_id=SCOPE,
+                asset_id=f"asset_{i}",
+                source_type="image",
+                captured_at=NOW,
+                confidence=1.0,
+                created_at=NOW,
+                updated_at=NOW,
+                ocr_text=f"菜单{i}",
+            )
+        )
+    sets.add(ResultSet("rs_table", SCOPE, "餐桌", ("asset_1", "asset_0"), NOW))
+    sets.add(ResultSet("rs_landscape", SCOPE, "风景", ("asset_0", "asset_1"), NOW))
+    # photo_2 deliberately names different assets in the two batches.
+    first = run(toolbox, "read_photo_text", result_set_id="rs_table", asset_handle="photo_2")
+    second = run(toolbox, "read_photo_text", result_set_id="rs_landscape", asset_handle="photo_2")
+    assert first.observation["asset_id"] == "asset_0"
+    assert second.observation["asset_id"] == "asset_1"
+    outcome = build.deliver(
+        "rs_landscape",
+        [
+            {"result_set_id": "rs_table", "asset_handle": "photo_2"},
+            {"result_set_id": "rs_landscape", "asset_handle": "photo_2"},
+        ],
+        scope_id=SCOPE,
+        fallback_result_set_ids=("rs_table",),
+    )
+    assert outcome.ok
+    assert [item.asset_id for item in outcome.attachments] == ["asset_0", "asset_1"]
+    assert [row["result_set_id"] for row in outcome.observation["references"]] == ["rs_table", "rs_landscape"]
+    legacy = build.deliver("rs_landscape", ["photo_2"], scope_id=SCOPE, fallback_result_set_ids=("rs_table",))
+    assert [item.asset_id for item in legacy.attachments] == ["asset_1"]
+
+
+def test_delivery_rejects_another_turn_or_scope_batch(toolbox):
+    build, sets = toolbox
+    sets.add(ResultSet("rs_current", SCOPE, "餐桌", ("asset_0",), NOW))
+    sets.add(ResultSet("rs_previous_turn", SCOPE, "餐桌", ("asset_0",), NOW))
+    sets.add(ResultSet("rs_other_scope", "other", "餐桌", ("asset_0",), NOW))
+    for batch, allowed, reason in [
+        ("rs_previous_turn", (), "unknown_result_set"),
+        ("rs_missing", ("rs_missing",), "unknown_result_set"),
+        ("rs_other_scope", ("rs_other_scope",), "scope_mismatch"),
+    ]:
+        result = build.deliver(
+            "rs_current",
+            [{"result_set_id": batch, "asset_handle": "photo_1"}],
+            scope_id=SCOPE,
+            fallback_result_set_ids=allowed,
+        )
+        assert result.failure_reason == reason
+        assert result.attachments == ()
+
+
+def test_first_page_keeps_the_batch_identity(toolbox):
+    result = run(toolbox, "search_memories", query="海边")
+    assert result.model_visible["result_set_id"] == result.observation["result_set_id"]

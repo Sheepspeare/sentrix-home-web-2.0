@@ -78,11 +78,20 @@ class ToolPolicy:
                 action=ToolAction.DENY, code="bad_arguments", reason=f"参数不是合法 JSON：{error}"
             )
 
-        # 读取候选的工具由后端注入本轮结果集 ID。
-        # 即使非严格模式下模型额外写了一个 ID，也以当前回合状态覆盖。
+        # 显式批次必须来自本回合检索；旧调用省略批次时使用最新集合。
         arguments = dict(arguments)
         if call.name in {"inspect_photo", "read_photo_text", "query_photo_people", "read_source_text"}:
-            arguments["result_set_id"] = state.current_result_set_id or ""
+            if "result_set_id" in arguments:
+                result_set_id = str(arguments["result_set_id"] or "").strip()
+                if result_set_id not in state.result_set_ids:
+                    return ToolDecision(
+                        action=ToolAction.DENY,
+                        code="unknown_result_set",
+                        reason="请使用本回合检索预览给出的 result_set_id。",
+                    )
+                arguments["result_set_id"] = result_set_id
+            else:
+                arguments["result_set_id"] = state.current_result_set_id or ""
 
         # **「缺」的判据是「键不在 / 是 null / 是空串」，不是「falsy」。**
         #

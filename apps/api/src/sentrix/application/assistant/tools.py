@@ -606,7 +606,7 @@ class AssistantToolbox:
         # 第一页只保留模型真正需要读的候选与合影汇总；内部 observation 仍保存全部
         # 控制字段，JIT / 证据绑定 / 翻页判定继续从 observation 读。
         if page_no == 1:
-            for key in ("result_set_id", "query", "page", "page_size", "total", "has_more", "can_inspect"):
+            for key in ("query", "page", "page_size", "total", "has_more", "can_inspect"):
                 model_visible.pop(key, None)
         if not preview and page.total:
             # **越界页仍然是 ``ok``**（1.0 的行为，``test_a_page_past_the_end_is_empty_not_an_error``
@@ -874,34 +874,13 @@ class AssistantToolbox:
         完成（1.0 ``runtime.py:309`` 的 ``final`` 动作字段）。走 ``execute()`` 那条路
         等于把它重新变成一次独立的工具调用——那正是这一版要修掉的东西。
 
-        ``fallback_result_set_ids`` 是本轮更早的结果集。模型可能先检索 A、再检索 B，
-        最后交付 A 里的 handle；只认 ``current_result_set_id`` 会把这种正确交付判成
-        ``unknown_result_set``（实测 41 次）。按顺序尝试，第一个存在且 scope 匹配的胜出。
+        每个引用显式绑定结果集与 handle。旧字符串引用使用当前集合；
+        ``fallback_result_set_ids`` 仅声明本回合允许引用的批次。
         """
-        candidates = [result_set_id, *fallback_result_set_ids]
-        result_set = None
-        for candidate in candidates:
-            if not candidate:
-                continue
-            found = self._result_sets.get(candidate)
-            if found is not None and found.scope_id == scope_id:
-                result_set = found
-                break
-        if result_set is None:
-            # **空交付在没有结果集时是合法的。** 模型明确回答「这轮不交图」，
-            # 不该因为一次检索都没做就变成 unknown_result_set。
-            if not handles:
-                return ToolOutcome(
-                    observation={"result_set_id": "", "delivered": 0, "rejected": []},
-                    model_visible={
-                        "result_set_id": "",
-                        "delivered": 0,
-                        "rejected": [],
-                        "note": "这一轮没有要展示给用户的照片。",
-                    },
-                )
-            return _failure("unknown_result_set", "结果集不存在。请先调用 search_memories。")
-
+        allowed_ids = {value for value in (result_set_id, *fallback_result_set_ids) if value}
+        result_set = self._result_sets.get(result_set_id) if result_set_id else None
+        if result_set is not None and result_set.scope_id != scope_id:
+            return _failure("scope_mismatch", "这个结果集不属于当前相册。")
         raw_handles = handles
         if not isinstance(raw_handles, (list, tuple)):
             return _failure("missing_handle", 'handles 必须是 handle 数组，例如 ["photo_1"]。')
@@ -912,9 +891,9 @@ class AssistantToolbox:
         # 被记成一次失败——同一件事在策略层合法、在交付层是错误码。
         if not raw_handles:
             return ToolOutcome(
-                observation={"result_set_id": result_set.id, "delivered": 0, "rejected": []},
+                observation={"result_set_id": result_set_id, "delivered": 0, "rejected": []},
                 model_visible={
-                    "result_set_id": result_set.id,
+                    "result_set_id": result_set_id,
                     "delivered": 0,
                     "rejected": [],
                     "note": "这一轮没有要展示给用户的照片。",
@@ -923,21 +902,32 @@ class AssistantToolbox:
 
         attachments: list[Attachment] = []
         rejected: list[str] = []
+        references: list[dict[str, str]] = []
         seen: set[str] = set()
         for item in raw_handles:
-            handle = str(item or "").strip()
-            # 去重与上限照 1.0 ``_normalize_selected_image_handles``（``runtime.py:239-251``）：
-            # 重复的忽略，凑够 ``MAX_DELIVERED_PHOTOS`` 就停。2.0 此前两者都没有——上限
-            # 只在 JSON Schema 的 ``maxItems`` 里声明，那不保证端点会守。
-            if not handle or handle in seen:
-                continue
-            if len(attachments) >= MAX_DELIVERED_PHOTOS:
-                break
-            seen.add(handle)
-            asset_id = result_set.resolve(handle)
+            if isinstance(item, Mapping):
+                set_id = str(item.get("result_set_id") or "").strip()
+                handle = str(item.get("asset_handle") or "").strip()
+            elif isinstance(item, str):
+                set_id, handle = result_set_id, item.strip()
+            else:
+                return _failure("bad_handle", "照片引用须填写 result_set_id 和 asset_handle。")
+            if set_id not in allowed_ids:
+                return _failure("unknown_result_set", "照片引用的结果集不属于本回合。")
+            selected_set = self._result_sets.get(set_id)
+            if selected_set is None:
+                return _failure("unknown_result_set", "引用的结果集不存在。")
+            if selected_set.scope_id != scope_id:
+                return _failure("scope_mismatch", "这个结果集不属于当前相册。")
+            asset_id = selected_set.resolve(handle)
             if asset_id is None:
                 rejected.append(handle)
                 continue
+            if asset_id in seen:
+                continue
+            if len(attachments) >= MAX_DELIVERED_PHOTOS:
+                break
+            seen.add(asset_id)
             asset = self._assets.get(asset_id)
             if asset is None:
                 # 向量还在、资产没了。产品硬约束第 5 条：只返回**可打开的**原图。
@@ -947,6 +937,7 @@ class AssistantToolbox:
             if asset.media_type is MediaType.TEXT:
                 rejected.append(handle)
                 continue
+            references.append({"result_set_id": set_id, "asset_handle": handle, "asset_id": asset_id})
             attachments.append(
                 Attachment(
                     handle=handle,
@@ -963,12 +954,17 @@ class AssistantToolbox:
             )
         return ToolOutcome(
             observation={
-                "result_set_id": result_set.id,
+                "result_set_id": result_set_id,
+                "references": references,
                 "delivered": len(attachments),
                 "rejected": rejected,
             },
             model_visible={
-                "result_set_id": result_set.id,
+                "result_set_id": result_set_id,
+                "references": [
+                    {"result_set_id": ref["result_set_id"], "asset_handle": ref["asset_handle"]}
+                    for ref in references
+                ],
                 "delivered": len(attachments),
                 "rejected": rejected,
                 # **交的是什么，让模型自己看得见。** 此前只有条数，「我交的这张是照片
@@ -1099,6 +1095,7 @@ class AssistantToolbox:
                 "described_people_count": described,
             },
             model_visible={
+                "result_set_id": result_set.id,
                 "asset_handle": handle,
                 "people": [
                     {
@@ -1298,6 +1295,7 @@ class AssistantToolbox:
                 "unconfirmed_people_count": unconfirmed,
             },
             model_visible={
+                "result_set_id": result_set.id,
                 "asset_handle": handle,
                 "question": asked,
                 "observation": str(parsed.get("observation") or parsed.get("scene") or ""),
@@ -1360,6 +1358,7 @@ class AssistantToolbox:
                 "full_text": text,
             },
             model_visible={
+                "result_set_id": result_set.id,
                 "asset_handle": handle,
                 "full_text": text[: self._limits.read_text_chars],
                 "text_regions": [
