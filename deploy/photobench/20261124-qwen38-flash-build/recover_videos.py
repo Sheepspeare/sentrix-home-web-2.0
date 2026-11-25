@@ -6,16 +6,28 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from operate import BASE, DATA, PRODUCT_UNIT, assert_idle, call, process_env, processes
+from operate import BASE, DATA, PRODUCT_UNIT, assert_idle, call, process_env, processes, systemctl
 from probe_finalization import SCOPE, inspect
 
 ROOT = BASE / "repair-ee6594ae"
 RUN = "20261124-221506-2026.11.17-atm-sources-addresses-qwen3.8-flash-9b48ee"
+
+PATCHES = {
+    "video_keyframes.py": (
+        "422395b96c63bc5176165174b7edc99946cce6694a62f9706c673591de41d7f8",
+        "67850fe3e1be19a9c7e1f570b44cb78155603992d290508cc790fe6173ee28a9",
+    ),
+    "svd_katna_scene_planner.py": (
+        "690d84f6d2d6ed60c5e5022e5c00449c22371dc3801a5f7235ee87b5847bd4cd",
+        "944cd91d46a69e3eeba00400cc85d8798106233ede8bc7a025fc966eebd2f13c",
+    ),
+}
 
 
 def sha(path):
@@ -211,6 +223,85 @@ def prepare(row):
     return job
 
 
+def deploy():
+    """Apply the committed two-file repair once, after saving the idle database."""
+    receipt_path = ROOT / "deployment.json"
+    assert not receipt_path.exists() and not (ROOT / "deployment-intent.json").exists()
+    assert_idle()
+    gateway = call(18138, "/health")
+    assert gateway["active_requests"] == gateway["inflight_requests"] == 0
+    before = processes()
+    evaluation_pid = systemctl("show", "sentrix-atm100-doubao-photobench.service", "-p", "MainPID", "--value")
+    gateway_pid = systemctl("show", "sentrix-atm100-qwen38-flash-gateway.service", "-p", "MainPID", "--value")
+    product_pid = systemctl("show", PRODUCT_UNIT, "-p", "MainPID", "--value")
+    with connect() as connection:
+        operations = connection.execute(
+            "SELECT operation_id,status FROM pipeline_receipts WHERE scope_id=?", (SCOPE,)
+        ).fetchall()
+        assert operations and all(row["status"] == "completed" for row in operations)
+        assert connection.execute("SELECT count(*) FROM video_jobs").fetchone()[0] == 0
+    media = BASE / "release/apps/api/src/sentrix/infrastructure/media"
+    for name, (old, new) in PATCHES.items():
+        assert sha(media / name) == old and sha(ROOT / name) == new, name
+    assert shutil.disk_usage(DATA).free > 6 * 1024**3
+    save(
+        ROOT / "deployment-intent.json",
+        {
+            "at": time.time(),
+            "product_pid": product_pid,
+            "protected_pids": before,
+            "evaluation_pid": evaluation_pid,
+            "gateway_pid": gateway_pid,
+        },
+    )
+    backup = ROOT / "before-recovery"
+    backup.mkdir()
+    with connect() as source, sqlite3.connect(backup / "sentrix.db") as target:
+        source.backup(target)
+        assert target.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    for name, (_, new) in PATCHES.items():
+        shutil.copy2(media / name, backup / name)
+        temporary = media / (name + ".repair.tmp")
+        shutil.copy2(ROOT / name, temporary)
+        os.replace(temporary, media / name)
+        assert sha(media / name) == new
+    systemctl("restart", PRODUCT_UNIT)
+    deadline = time.monotonic() + 240
+    while True:
+        try:
+            health = call(8294, "/api/v1/health", timeout=15)
+            assert health["embeddings"] == "ok"
+            break
+        except Exception:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(5)
+    assert processes() == before
+    assert (
+        systemctl("show", "sentrix-atm100-doubao-photobench.service", "-p", "MainPID", "--value")
+        == evaluation_pid
+    )
+    assert (
+        systemctl("show", "sentrix-atm100-qwen38-flash-gateway.service", "-p", "MainPID", "--value")
+        == gateway_pid
+    )
+    save(
+        receipt_path,
+        {
+            "at": time.time(),
+            "business_fix_commit": "ee6594ae",
+            "patches": PATCHES,
+            "old_product_pid": product_pid,
+            "new_product_pid": systemctl("show", PRODUCT_UNIT, "-p", "MainPID", "--value"),
+            "protected_pids": before,
+            "evaluation_pid": evaluation_pid,
+            "gateway_pid": gateway_pid,
+            "sqlite_backup": str(backup / "sentrix.db"),
+            "health": health,
+        },
+    )
+
+
 def run(rows, output, limit):
     assert_idle()
     assert call(18138, "/health")["active_requests"] == 0
@@ -330,7 +421,7 @@ def run(rows, output, limit):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["inventory", "run"])
+    parser.add_argument("action", choices=["inventory", "run", "deploy-smoke"])
     parser.add_argument("--plans", type=Path, default=ROOT / "recovery-plans.json")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=0)
@@ -339,6 +430,9 @@ def main():
     if args.action == "inventory":
         inventory(args.output, rows)
         return 0
+    if args.action == "deploy-smoke":
+        deploy()
+        return run(rows, args.output, 1)
     return run(rows, args.output, args.limit)
 
 
