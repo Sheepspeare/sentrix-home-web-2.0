@@ -1,5 +1,6 @@
 """Read-only review of a recovery alert, including content and retained records."""
 
+import argparse
 import json
 import time
 from collections import Counter
@@ -20,14 +21,25 @@ from verify_video_smoke import differences
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--phase", default="full")
+    parser.add_argument("--output", type=str)
+    args = parser.parse_args()
+    phase = ROOT / args.phase
     rows = plans(ROOT / "recovery-plans.json")
-    previous = json.loads((ROOT / "full/terminal.json").read_text())
-    alert = json.loads((ROOT / "full/model-request-alert.json").read_text())
+    previous = json.loads((phase / "terminal.json").read_text())
+    alert = json.loads((phase / "model-request-alert.json").read_text())
+    progress = json.loads((phase / "progress.json").read_text())
+    alert_job_id = progress["current"]["job_id"]
+    alert_asset_id = progress["current"]["asset_id"]
     accepted_ids = {row["asset_id"] for row in previous["results"]}
     result = {
         "observed_at": time.time(),
         "read_only": True,
         "scope_id": SCOPE,
+        "phase": args.phase,
+        "alert_job_id": alert_job_id,
+        "alert_asset_id": alert_asset_id,
         "previous_terminal": {k: v for k, v in previous.items() if k != "results"},
         "alert": alert,
         "previous_completed_count": len(accepted_ids),
@@ -80,12 +92,12 @@ def main():
             for row in connection.execute(
                 "SELECT a.id AS asset_id,a.parent_asset_id,a.source_scene_index,o.* FROM observations o "
                 "JOIN assets a ON o.asset_id=a.id WHERE a.parent_asset_id=? ORDER BY a.source_scene_index",
-                ("asset_d16e0021b5e6",),
+                (alert_asset_id,),
             )
         ]
         result["alert_video_observations"] = frame_rows
-        result["alert_video_job"] = call(8294, "/api/v1/video-jobs/vjob_repair38_d16e0021b5e6")
-        result["alert_video_coverage"] = coverage(connection, "asset_d16e0021b5e6")
+        result["alert_video_job"] = call(8294, f"/api/v1/video-jobs/{alert_job_id}")
+        result["alert_video_coverage"] = coverage(connection, alert_asset_id)
         connection.execute(
             "ATTACH DATABASE ? AS old", ((ROOT / "before-recovery/sentrix.db").as_uri() + "?mode=ro",)
         )
@@ -120,7 +132,10 @@ def main():
 
     boundary = datetime.fromisoformat(started).timestamp()
     result["alert_video_requests"] = [row for row in selected if row["started_at"] >= boundary]
-    save(ROOT / "alert-8c184359-review.json", result)
+    from pathlib import Path
+
+    output = Path(args.output) if args.output else phase / "review.json"
+    save(output, result)
     print(
         json.dumps(
             {
