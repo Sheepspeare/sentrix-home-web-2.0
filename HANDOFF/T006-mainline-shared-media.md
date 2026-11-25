@@ -2,6 +2,8 @@
 
 ## 2026-11-25｜区域取证已核；四图局部纠正与1328旧场景缺摘要分开收尾
 
+已先登记wake `956ce08c-6dad-48c8-a235-50a51b275666`派发`sentrix-qwen38-visual-apply-v2-20261125`，回执`visual-review-v2-apply-launch.json`；本轮只复用已核验模型响应做4图纠正及索引，0新生成。登记waiting，实际结果待终态验收。
+
 只读wait `8d159645-736b-4b04-b6af-6834e4ca45b6`12.539秒结束，7次均Flash/关思考/4096/stop，2680输入＋610输出＝3290总token；5候选格式通过、2未通过，未写相册。逐图核验后仅选原模型返回中可确认的行：菜单图只留招聘两行；街摊OCR全部不采；柜台告示选5行，海报只留编号/标题/ECCV。其余错品名/价格/作者/机构不采，不补写人工转录；两全景描述删无依据杂物和等候推断。完整原包/裁图/逐项排除原因与SHA在`visual-review-v2-review/{visual-review-v2,acceptance.json}`及`reviewed-selection.json`。
 
 新增`apply_visual_review.py`仅纠正4观察：补78a95b5d74d8缺描述；街摊更新描述、去错误南瓜和招牌facts并清空OCR；另两图保持可用描述、替换为核实文字片段。三条有限OCR标`partial_verified_excerpts`，街摊标OCR未恢复；不称全文OCR恢复。备份旧success和写入前整库至`visual-review-v2/apply`，复用现有响应，0新增生成请求，仅走现有文本/词法/实体索引链。已查事实表为0；误识别南瓜实体`entity_3b03bd7b0e1e`仅关联该图，单独归档后置rejected、属性置rejected、撤回两关系、移除该图/事件错误关联，实体和失败原包保留。脚本0ad3f085/SHA b6d9dbfa6589ddd45be2d6fde7db321c7667bb8e9f447ec9cabca49b9e2aedc7，本机32测试/ruff/compile及远端SHA/编译通过。只新增脚本、更新只读tail probe，不改release或重启。
