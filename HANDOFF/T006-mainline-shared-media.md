@@ -10,7 +10,7 @@
 
 纠正后两个独立wake已登记并启动watcher：limited49ab8050-0296-481b-95c3-ba45dfd74ea4、large d0fe86c7-fa75-48a8-b108-d0d816650c00；新证据分别first-eight-v2，纠正后limited run尾790fec、large尾2211ea均model_deploy/scope_setup完成、qa_eval运行中，runtime_snapshot分别指8298/8299；真实回执已保存candidate-relaunch.json。各2并发首8完成暂停，独立wake49ab8050/d0fe86c7保持。旧监控输出不可覆盖。到首8或异常自动续接，告警不停止worker；核8题实际共享HTTP/Token/耗时及完整取证与最终答案，再按原协议补Judge，质量未测前不报收益，不自动扩大。
 
-005查第一人称活动人物条件与重复取证收敛，002查result_set_id+handle到正确asset及实际图片证据使用；4额外多步题查误收尾。/home约2.7GiB，低2GiB告警；候选最低2并发，原基线持续429按4→3→2减新调度，保留在飞和所有成功。源相册/119high/Oracle及主树4份用户改动保持。代码候选分支已push51192652；最新48bfe1c7及本轮交接在启动验收后push。
+005查第一人称活动人物条件与重复取证收敛，002查result_set_id+handle到正确asset及实际图片证据使用；4额外多步题查误收尾。/home约2.7GiB，低2GiB告警；候选最低2并发，原基线持续429按4→3→2减新调度，保留在飞和所有成功。源相册/119high/Oracle及主树4份用户改动保持。候选业务及监控修复已push并核远端SHA，见产品审计push-receipt.json；业务运行release7fbb4ed8保持。
 
 
 ## 2026-11-26｜候选代码完成，独立实验准备
