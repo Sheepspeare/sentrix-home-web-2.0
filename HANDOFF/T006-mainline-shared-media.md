@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜五张描述候选核验通过，接续局部内容收尾
+
+wait `05503437-84a2-4346-80e3-009cf8c71feb`退出0，真实service运行4.375秒；5原始请求响应均实际qwen3.8-flash、关思考、4096输出上限、stop，无失败截断。共4020输入＋317输出＝4337token。逐张对原图核验后，梯田观景台描述删除“黄昏时分，”和“或架着三脚架”，分别因为不能确定晨昏、图中不足以支持多人架三脚架；其他候选保留原响应。选择与原包SHA在`partial-caption-review/{acceptance.json,partial-captions/reviewed-selection.json}`，未手填新描述或读取GT。
+
+新增`finish_photo_content.py`，只补这5观察的caption及文本/词法/关联event投影，保留原有activity/objects/facts/OCR等成功字段，不重跑实体facts抽取；复用5响应，0新生成。随后仅重做冻结8条失效旧图片event摘要并同步2048维episodic向量，原观察/提示词和Flash关思考128K/4096/最多4保持。`repair_summary`只新增显式source_type参数，默认video_scene保持，本轮8项显式null。29项相关测试/ruff/compile通过，提交cf5cf99a；100两脚本编译/SHA通过，原repair_content另存归档，不改release、不重启。详见`photo-content-tail-deployment.json`。
+
+独立wake `5db4bd99-051a-4436-9b92-5bf5297075e5`，unit `sentrix-qwen38-photo-content-tail-20261125`，输出100 `content/photo-content-tail`，回执`photo-content-tail-launch.json`。先冻结局部before和17类非目标表行数/SHA，再写5caption/8摘要；复用before-legacy.db，不复制整库。运行后的storage/index校验与8摘要事实验收分别记录，终态`completed_pending_fact_review`仍须对原证据核事实。中断只续失败阶段，已成功响应和success保持，不重放整个run。
+
+原1328旧摘要与955新摘要保持；图谱2283事件节点和相关观察/错误投影同步、最终因果批次与历史HTTP/length实际影响待本轮后处理。旧2帧及街摊OCR未恢复，3图仅部分核实文字。8294/8874/网关三PID保持、.119high不碰、Oracle87.018756不重跑；QA/Judge/消融0，题库线上分保持。05503437已处理不重挂。c2552fae/e2c9e6ae/cf5cf99a及交接提交待远端验收后push。
+
 ## 2026-11-25｜1328旧场景摘要补齐验收；转入五张照片描述缺口
 
 全量wait `33fdc4e6-72d1-418b-9324-87aaf91dba67`退出0，service耗时607.547秒，新完成1324、复用4小样，1328去向唯一完整。全部1328 success与SQLite逐列匹配，原输入观察保持、2048维事件文本索引齐全；1328原请求响应均实际Flash/关思考/4096/stop，无失败/截断或重复请求，含小样761358输入＋158605输出＝919963总token。小样4success SHA保持。逐列保护检查确认白名单外资产/观察/视觉/955新摘要/实体/词法/图谱保持。原包、本轮终态/verify与独立验收在`legacy-summary-full-review`；8条系统抽样及最长输出对照原证据，未发现旧污染输出标记，未宣称逐题人工验全部事实。
