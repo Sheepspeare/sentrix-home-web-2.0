@@ -129,7 +129,8 @@ def inventory(output, rows):
             dict(row)
             for row in connection.execute(
                 "SELECT a.id,a.status,(SELECT count(*) FROM events e WHERE e.source_asset_id=a.id "
-                "AND source_type='video_scene') AS scenes FROM assets a WHERE scope_id=? AND media_type='video' "
+                "AND source_type='video_scene') AS scenes FROM assets a "
+                "WHERE scope_id=? AND media_type='video' "
                 "AND parent_asset_id IS NULL",
                 (SCOPE,),
             )
