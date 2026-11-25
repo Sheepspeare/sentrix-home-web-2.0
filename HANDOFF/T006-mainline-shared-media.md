@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v5发布验收通过，11题复测与冻结答卷评分并行
+
+业务871fbef4仅切large8299/8879，522源码包SHA/compile、18表/9保护PID/v4十一答SHA保持；只取消v4余1002未执行调度。远端真实验收→push核SHA后一次启动新run 20261126-070857-2026.11.17-atm-sources-addresses-big_model-e0beaf，wake 97eaead8-01a4-434c-a489-bace0e2179e0；2并发/100模型600工具各reserve2/同11题后暂停，思考/预算/83及1013题库/原native_v2协议保持。只收窄人脸强筛至照片/画面/身份证据，非照片主体不再触发；质量待新实测，不自动扩大。
+
+独立冻结评分已登记wake 55a1c315-6334-43e4-a983-d865b0c34485，先v4十一答+原large八答，共19；source qa_snapshot真实完整1013行/定义SHA核验，19原答案与runtime_turn一致，输入/协议/评分代码SHA已远端核，生产ProfileScoring/冻结协议、无GT图片。原run不写/Agent0；原API运行中禁止补评，因此采用独立导出评分。score_saved首Judge错误即停，成功项续评不重算，失败原包保留；当前状态registered_job_running，不能报分已出或限额恢复。后续全量正式补评分须明确复用/导入办法。
+
+最新原limited174/原large58各4并发继续，有限v2为53/2继续，三个原wake保持；新v5 None答/running。c58f5ea8已验处理不重挂，原v4仅证明降本与参考日链路、未接受质量。源相册/Oracle/119high/原保护服务/主树四改动保持。证据候选audit/v5-large-rerun及frozen-answer-scoring。北京时间11/27 15点统计17点汇报。
+
 ## 2026-11-26｜v4十一题取证完成，定向收窄人脸筛选语义
 
 c58f5ea8已验11答暂停，95条真实HTTP逐调用原包均200。原8题244→66请求/262→70工具/737万→64万Token，但NeurIPS仍被structured_fact主体人脸强筛拦住，不接受质量、不扩大。蚂蚁原图/OCR恢复，鸡翅8轮真实检索均应用截至2023-02-09；最终菜品证据仍不足。披萨本次仅预览文字/正确asset交付，没有再次原图回看；Porto本轮无上下文失败。见候选audit/v4-large-rerun/review。
