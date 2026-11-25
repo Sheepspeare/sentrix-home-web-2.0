@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v2有限副本发布验收，冻结同8题复测
+
+业务11deb1c6仅切候选8298/8878，511源码SHA/远端编译及真实配置已验：20模型/30工具、各2预留、2worker，推理开/planner/all_tools、Flash关思考128K/4096保持。18记忆表与原快照逐列SHA保持，9保护进程ticks保持（含原双全量4服务及候选large2服务）。相关215测试211通过/4旧toolbox失败保持，部署回归2通过；本机分支已push20c42308并核远端。
+
+旧limited v1的8题已归档并逐题按原答案SHA验保持，停止其余调度，run790fec为cancelled。取消任务会补1005未执行占位行，item_count从8变1013但agent_completed仍8；初部署在此断言中止，服务尚未切换。已本机修订脚本20c42308、核远端SHA，显式--continue-archived只接配置阶段，未重放取消/QA。原release7fbb4ed8保持，新增release-11deb1c6，部署证据limited-v2-deployment/verification.json及answer-preservation.json。不得按item_count误报执行1013。
+
+v2-limited-rerun已冻结同8题：先蚂蚁医疗/NeurIPS/鸡翅，再其余5，完整1013题库/83优先UUID不变；原评分协议延后Judge。原payload唯一实验差别为版本与优先顺序/独立control路径；2并发、8答暂停。准备先独立wake再POST，未通过这轮质量验收前不扩大。最新原基线69/29题、候选large8题，均保持原版本/原监控；large d0fe86c7检查点由其独立回调处理，不重挂。
+
+
 ## 2026-11-26｜有限候选首8验收，v1停止扩大并修两项通用缺陷
 
 49ab8050已核first_eight_ready，limited原run790fec完成8题并暂停。配对原limited基线同8题：共享模型HTTP91→70、工具准入93→62；model_calls口径Token822848→468434，尚未归并工具内部视觉Token。Judge待补、并发/排队不同，不能据此宣布质量保持或因果时延收益。蚂蚁医疗因source_text主体被当人脸名而拒答，基线本可回答；NeurIPS也受该拦截。鸡翅无第一人称阻塞后仍在请求额度用尽时丢取证历史，只剩候选数量。披萨跨检索result_set_id+handle已正确读餐桌，但最终将品牌和附近酒店合并为一家，质量未通过。证据产品audit/20261126-flash-agent-candidates/limited-first-eight-review/RESULTS.md及acceptance.json。
