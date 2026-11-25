@@ -1358,6 +1358,7 @@ def test_reasoning_resume_freezes_limits_and_sampling_only_for_explicit_product_
     saved["reasoning"] = True
     prior_settings = {
         "chat_timeout_s": 120,
+        "reasoning_max_steps": 999,
         "reasoning_max_model_calls": 999,
         "vlm_generation_profile": "legacy",
     }
@@ -1373,6 +1374,7 @@ def test_reasoning_resume_freezes_limits_and_sampling_only_for_explicit_product_
         new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
     )
     limits = {
+        "reasoning_max_steps": 100,
         "reasoning_max_model_calls": 100,
         "reasoning_max_tool_calls": 600,
         "reasoning_max_search_calls": 100,

@@ -495,6 +495,7 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
         "retinaface_providers",
         "agent_max_steps",
         "agent_max_tool_calls",
+        "reasoning_max_steps",
         "reasoning_max_model_calls",
         "reasoning_max_tool_calls",
         "reasoning_max_search_calls",
@@ -509,6 +510,7 @@ def _validated_product_settings(value: Any) -> dict[str, Any]:
     for key, minimum in (
         ("agent_max_steps", 3),
         ("agent_max_tool_calls", 0),
+        ("reasoning_max_steps", 3),
         ("vlm_context_tokens", 1),
         ("reasoning_max_model_calls", 3),
         ("reasoning_max_tool_calls", 3),

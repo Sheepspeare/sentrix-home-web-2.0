@@ -94,3 +94,15 @@ def test_reasoning_context_can_be_declared_for_cloud_proxy(monkeypatch):
     assert settings.vlm_reasoning_context_tokens == 131072
     assert settings.runtime_configuration()["vlm_reasoning_context_tokens"] == 131072
     assert settings.vlm_context_tokens == 16384
+
+
+def test_reasoning_steps_resolve_legacy_default_and_explicit_override(monkeypatch):
+    monkeypatch.delenv("SENTRIX_REASONING_MAX_STEPS", raising=False)
+    settings = Settings(reasoning_max_model_calls=20)
+    assert settings.reasoning_step_limit == 20
+    assert settings.runtime_configuration()["reasoning_max_steps"] == 20
+    monkeypatch.setenv("SENTRIX_REASONING_MAX_STEPS", "100")
+    settings = Settings(reasoning_max_model_calls=20)
+    assert settings.reasoning_step_limit == 100
+    assert settings.runtime_configuration()["reasoning_max_steps"] == 100
+    assert settings.runtime_configuration()["reasoning_max_model_calls"] == 20

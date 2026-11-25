@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     def runtime_configuration(self) -> dict[str, Any]:
         """Non-secret startup facts, never a benchmark policy."""
-        return {
+        configuration = {
             key: getattr(self, key)
             for key in (
                 "deployment_profile",
@@ -98,6 +98,7 @@ class Settings(BaseSettings):
                 "vlm_timeout_s",
                 "agent_max_steps",
                 "agent_max_tool_calls",
+                "reasoning_max_steps",
                 "reasoning_max_model_calls",
                 "reasoning_max_tool_calls",
                 "reasoning_max_search_calls",
@@ -111,6 +112,17 @@ class Settings(BaseSettings):
                 "retinaface_providers",
             )
         }
+        configuration["reasoning_max_steps"] = self.reasoning_step_limit
+        return configuration
+
+    @property
+    def reasoning_step_limit(self) -> int:
+        """Resolved Agent step limit; omitted overrides retain the existing M-bound policy."""
+        return (
+            self.reasoning_max_model_calls
+            if self.reasoning_max_steps is None
+            else self.reasoning_max_steps
+        )
 
     # Web 的构建产物（``apps/web/dist``，``vite build`` 的产物，``.gitignore`` 里）。
     # **它是本模块里第二个可配的根，和开头那句「data_dir 是唯一可配的根」是有出入
@@ -182,6 +194,8 @@ class Settings(BaseSettings):
     agent_turn_workers: int = Field(default=1, ge=1, le=64, validation_alias="SENTRIX_AGENT_TURN_MAX_WORKERS")
     agent_max_steps: int = Field(default=8, ge=3)
     agent_max_tool_calls: int = Field(default=6, ge=0)
+    # None inherits the model-request limit; it does not mean unlimited steps.
+    reasoning_max_steps: int | None = Field(default=None, ge=3)
     reasoning_max_model_calls: int = Field(default=100, ge=3)
     reasoning_max_tool_calls: int = Field(default=600, ge=3)
     reasoning_max_search_calls: int = Field(default=100, ge=1)

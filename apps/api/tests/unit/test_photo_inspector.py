@@ -353,6 +353,96 @@ def test_the_wire_body_has_a_single_image_block_without_a_crop(inspector_factory
     assert [block["type"] for block in content] == ["text", "image_url"]
 
 
+def test_recorded_inspection_distinguishes_image_blocks_from_tool_calls(inspector_factory, photo, crop):
+    result, facts = inspector_factory().inspect_recorded(photo, QUESTION, crop=crop)
+    assert result is not None and len(facts) == 1
+    fact = facts[0]
+    assert fact["image_count"] == 2
+    assert fact["http_attempts"] == [{"image_count": 2, "request_sent": True, "http_status": 200}]
+    assert fact["requested_model"] == "fake-vlm"
+    assert fact["diagnostics"]["request_sent"] is True
+    assert "data:image" not in json.dumps(facts)
+
+
+def test_visual_budget_denial_records_no_http_attempt(inspector_factory, photo):
+    from sentrix.domain.assistant.request_budget import (
+        RequestBudget,
+        RequestBudgetExceeded,
+        reset_request_budget,
+        set_request_budget,
+    )
+    from sentrix.infrastructure.media.vlm_observer import chat_json
+
+    inspector = inspector_factory()
+    budget = RequestBudget(max_model_calls=3)
+    budget.admit_model(10, kind="chat")
+    token = set_request_budget(budget)
+    facts = []
+    try:
+        with pytest.raises(RequestBudgetExceeded, match="model_call_limit"):
+            chat_json(inspector._endpoint, inspector._model, "test", "data:image/jpeg;base64,AA==", 5, facts)
+    finally:
+        reset_request_budget(token)
+    assert _RecordingEndpoint.posts == []
+    assert facts[0]["image_count"] == 1 and facts[0]["http_attempts"] == []
+    assert facts[0]["diagnostics"]["request_sent"] is False
+    assert facts[0]["diagnostics"]["budget_code"] == "model_call_limit"
+
+
+def test_visual_format_retry_records_two_http_attempts_and_shared_model_usage(inspector_factory, monkeypatch):
+    import httpx
+
+    from sentrix.domain.assistant.request_budget import (
+        RequestBudget,
+        reset_request_budget,
+        set_request_budget,
+    )
+    from sentrix.infrastructure.media import vlm_observer
+
+    inspector = inspector_factory()
+    requests = []
+
+    def post(endpoint, *, json, **kwargs):
+        requests.append(dict(json))
+        status = 400 if len(requests) == 1 else 200
+        return httpx.Response(
+            status,
+            request=httpx.Request("POST", endpoint),
+            json={
+                "model": "served-vision-revision",
+                "choices": [{"message": {"content": '{"observation":"ok"}'}, "finish_reason": "stop"}],
+                "usage": {"completion_tokens_details": {"reasoning_tokens": 7}},
+            },
+        )
+
+    monkeypatch.setattr(vlm_observer.httpx, "post", post)
+    budget = RequestBudget(max_model_calls=4)
+    token = set_request_budget(budget)
+    facts = []
+    try:
+        parsed = vlm_observer.chat_json(
+            inspector._endpoint,
+            inspector._model,
+            "test",
+            "data:image/jpeg;base64,AA==",
+            5,
+            facts,
+            json_mode=True,
+        )
+    finally:
+        reset_request_budget(token)
+    assert parsed == {"observation": "ok"}
+    assert "response_format" in requests[0] and "response_format" not in requests[1]
+    assert facts[0]["http_attempts"] == [
+        {"image_count": 1, "request_sent": True, "http_status": 400},
+        {"image_count": 1, "request_sent": True, "http_status": 200},
+    ]
+    assert budget.model_attempts_by_kind == {"tool_vlm": 2}
+    assert facts[0]["response_model"] == "served-vision-revision"
+    assert facts[0]["finish_reason"] == "stop"
+    assert facts[0]["usage"]["completion_tokens_details"]["reasoning_tokens"] == 7
+
+
 def test_qwen_inspection_requests_json_before_exact_token_counting(photo: Path, crop: Path) -> None:
     """The visual client must request the JSON contract it requires from the reply."""
     requests: list[tuple[str, dict[str, Any]]] = []

@@ -901,6 +901,7 @@ class RunSuites:
                     **{
                         key: configured[key]
                         for key in (
+                            "reasoning_max_steps",
                             "reasoning_max_model_calls",
                             "reasoning_max_tool_calls",
                             "reasoning_max_search_calls",

@@ -197,6 +197,11 @@ def test_restart_passes_frozen_mac_profile_and_cpu_providers(tmp_path: Path, mon
             "retinaface_providers": "CPUExecutionProvider",
             "agent_max_steps": 30,
             "agent_max_tool_calls": 30,
+            "reasoning_max_steps": 100,
+            "reasoning_max_model_calls": 20,
+            "reasoning_max_tool_calls": 60,
+            "reasoning_max_search_calls": 100,
+            "reasoning_max_other_tool_calls": 500,
             "vlm_generation_profile": "qwen35_nonthinking",
             "vlm_exact_output_budget": True,
             "vlm_context_tokens": 65536,
@@ -232,6 +237,11 @@ def test_restart_passes_frozen_mac_profile_and_cpu_providers(tmp_path: Path, mon
     assert env["SENTRIX_CHAT_TIMEOUT_S"] == "180.0"
     assert env["SENTRIX_AGENT_MAX_STEPS"] == "30"
     assert env["SENTRIX_AGENT_MAX_TOOL_CALLS"] == "30"
+    assert env["SENTRIX_REASONING_MAX_STEPS"] == "100"
+    assert env["SENTRIX_REASONING_MAX_MODEL_CALLS"] == "20"
+    assert env["SENTRIX_REASONING_MAX_TOOL_CALLS"] == "60"
+    assert env["SENTRIX_REASONING_MAX_SEARCH_CALLS"] == "100"
+    assert env["SENTRIX_REASONING_MAX_OTHER_TOOL_CALLS"] == "500"
     assert env["SENTRIX_VLM_GENERATION_PROFILE"] == "qwen35_nonthinking"
     assert env["SENTRIX_VLM_EXACT_OUTPUT_BUDGET"] == "True"
     assert env["SENTRIX_VLM_CONTEXT_TOKENS"] == "65536"

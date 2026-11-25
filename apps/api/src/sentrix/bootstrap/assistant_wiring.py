@@ -138,7 +138,7 @@ def build_run_turn(container: Container, *, reasoning: bool = False) -> RunTurn:
         profile = replace(
             profile,
             name=REASONING_PROFILE.name,
-            max_steps=container.settings.reasoning_max_model_calls,
+            max_steps=container.settings.reasoning_step_limit,
             max_model_calls=container.settings.reasoning_max_model_calls,
             max_tool_calls=container.settings.reasoning_max_tool_calls,
             max_search_calls=container.settings.reasoning_max_search_calls,

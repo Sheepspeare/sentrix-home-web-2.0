@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜建库期间完成预算及看图本机准备
+
+用户确认建库与本机调试并行；执行顺序更新为4代表题→固定60题预算/看图对照→原配置与优选配置全1013确认，替代旧先全量基线再子集顺序。预算/答题提示词可复用同一验收相册；关思考与high相册分别冻结，首轮固定S0。相册身份改变、建库方法改变需另组；两台硬件/并发/输出差异单列。
+
+新增reasoning_max_steps，显式设置D与真实请求M独立，未设置继承M保持旧行为；runtime_configuration公开解析后的D。配置校验/快照/显式升级续跑和裸进程D/M/T/分类额度传递已补。视觉事实增加图片数、HTTP尝试/返回状态、requested/response_model、finish_reason和usage；不记录图片字节/密钥。预算拒绝保持异常传播，适配器记录不等同于线上持久化链路已验。未改提示词或建库内容。
+
+294项本机回归通过（0失败/0跳过）；修正一条读字旧测试为后端注入result_set_id的现行契约。修改Ruff通过，test_suites.py原2项格式诊断与HEAD一致；diff检查通过。离线生成器deploy/photobench/20261125-agent-ablation-prep/prepare.py及测试已备；60题=36图/12视频/12邮件，覆盖14能力和9模态题型组合，含4指定代表，另20稳定性候选/953验证清单。只读旧Q4/Plus/豆包，不读本轮Flash/Oracle分；需求准确故障run绑定仍待补。
+
+入口docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep/README.md。当前未部署/远端操作/外部模型请求，活动建库及原wake保持。下一步本机补逐题统计/V1候选，相册验收且目标空闲后按提交→同步核SHA→真实4题→锁定组配置执行。不限次数未实现。原release.py、旧limits-plan.md及两份uv.lock用户改动保留。
+
 ## 2026-11-25｜恢复小样验收，接续其余258条视频
 
 小样asset_427c5b857233已COMPLETED，处理130.47秒：复用原2张文件，补1缺失帧，形成3场景/3观察，新增3视觉向量与9文本向量（含事件），3帧词法行41/37/39。原视频、analysis和已有图片SHA/时间保持；Qdrant真实搜索命中该视频，visual_ann/lexical/text_ann/graph均ok，其中text_ann使用sqlite_exact。逐列对比恢复前一致性备份：原资产12142、观察12401、事件3369、视觉/人脸向量5969、文本向量28171，0缺失/0改写。51次新请求均qwen3.8-flash/关思考/stop/无错，包含3次图像请求。

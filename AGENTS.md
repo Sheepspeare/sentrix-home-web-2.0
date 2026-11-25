@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/25 建库期间已本机补独立D/M/T、视觉HTTP事实与4/60/20/953选题，294项通过；未部署/新QA。先代表题→子集→全量确认，见docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep，接T006。
+
 - 11/25 Flash恢复首视频3场景/观察/向量/词法及真实Qdrant检索已验，原5类记录逐列保持；8294仅两模块修复/PID4191434。余258视频已提交full wake 8c184359，新模型失败/阶段停滞会唤醒；新场景摘要与旧请求失败质量仍待局部收尾，QA0。见产品项目audit/20261125-qwen38-build-finalization及T006。
 
 
@@ -47,4 +49,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | Oracle87.018756%已验收；Flash首视频恢复已验，余258及摘要待完成 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | 双相册构建；独立预算/视觉日志294项通过，60题候选已冻结未部署 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

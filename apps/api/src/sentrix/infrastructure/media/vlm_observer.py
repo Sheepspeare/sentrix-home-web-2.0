@@ -50,7 +50,7 @@ from PIL import Image, ImageOps
 
 from sentrix.domain.assistant.intent import json_output_fact
 from sentrix.domain.assistant.ports import ModelServiceError
-from sentrix.domain.assistant.request_budget import admit_model_attempt
+from sentrix.domain.assistant.request_budget import RequestBudgetExceeded, admit_model_attempt
 from sentrix.domain.assistant.request_context import request_slot
 from sentrix.domain.media.models import MODEL_FACT_CONFIDENCE, ObservationFact
 from sentrix.domain.media.ports import ObservationSemantics
@@ -271,6 +271,8 @@ def chat_json(
         "call_id": uuid.uuid4().hex,
         "status": "error",
         "role": "tool_internal",
+        "image_count": len(content) - 1,
+        "http_attempts": [],
         "json_output": json_output_fact(),
         "diagnostics": {"request_sent": False},
     }
@@ -285,23 +287,34 @@ def chat_json(
             "messages": [{"role": "user", "content": content}],
             "max_tokens": max_tokens,
         }
+        fact["requested_model"] = body["model"]
         slot = request_slot()
         if slot is not None and allow_id_slot:
             body["id_slot"] = slot
         if json_mode or model.generation_profile == "qwen35_nonthinking":
             body["response_format"] = {"type": "json_object"}
         fact["diagnostics"].update(model.apply_output_budget(body, timeout_s=timeout_s))
-        fact["diagnostics"]["request_sent"] = None
-        timeout = admit_model_attempt(timeout_s, kind="tool_vlm")
-        response = httpx.post(endpoint, json=body, timeout=timeout, headers=model_auth_headers(api_key))
+
+        def send() -> httpx.Response:
+            timeout = admit_model_attempt(timeout_s, kind="tool_vlm")
+            attempt: dict[str, Any] = {"image_count": fact["image_count"], "request_sent": None}
+            fact["http_attempts"].append(attempt)
+            fact["diagnostics"]["request_sent"] = None
+            response = httpx.post(endpoint, json=body, timeout=timeout, headers=model_auth_headers(api_key))
+            attempt.update(request_sent=True, http_status=response.status_code)
+            fact["diagnostics"].update(request_sent=True, http_status=response.status_code)
+            return response
+
+        response = send()
         if response.status_code in {400, 422} and "response_format" in body:
             # 端点不认 response_format 时退回普通提示；只退回一次。
             body.pop("response_format", None)
-            timeout = admit_model_attempt(timeout_s, kind="tool_vlm")
-            response = httpx.post(endpoint, json=body, timeout=timeout, headers=model_auth_headers(api_key))
-        fact["diagnostics"].update(request_sent=True, http_status=response.status_code)
+            response = send()
         response.raise_for_status()
         payload = response.json()
+        fact["response_model"] = payload.get("model")
+        fact["finish_reason"] = (payload.get("choices") or [{}])[0].get("finish_reason")
+        fact["usage"] = dict(payload.get("usage") or {})
         if (payload.get("choices") or [{}])[0].get("finish_reason") == "length":
             fact["diagnostics"]["error_category"] = "output_truncated"
             fact.update(error_type="OutputTruncatedError", error="vision generation reached context limit")
@@ -322,6 +335,10 @@ def chat_json(
                 }
             )
         return parsed
+    except RequestBudgetExceeded as error:
+        fact.update(error_type=type(error).__name__, error=error.code)
+        fact["diagnostics"].update(error_category="request_budget_exhausted", budget_code=error.code)
+        raise
     except (httpx.HTTPError, ModelServiceError, ValueError) as error:
         fact.update(error_type=type(error).__name__, error=str(error))
         fact["diagnostics"]["error_category"] = (

@@ -131,6 +131,54 @@ def test_reasoning_preserves_cloud_model_policies(isolated_app):
     assert reasoning._use_all_tools and not normal._use_all_tools
 
 
+@pytest.mark.parametrize(
+    "steps,models,tools", [(100, 20, 60), (100, 100, 60), (100, 20, 600), (100, 100, 600), (20, 100, 600)]
+)
+def test_reasoning_ablation_budgets_are_independent(isolated_app, steps, models, tools):
+    from sentrix.bootstrap.assistant_wiring import build_run_turn
+    from sentrix.domain.assistant.request_budget import RequestBudgetExceeded
+    from sentrix.domain.assistant.task_state import TaskState
+
+    container = isolated_app.state.container
+    settings = container.settings.model_copy(
+        update={
+            "reasoning_max_steps": steps,
+            "reasoning_max_model_calls": models,
+            "reasoning_max_tool_calls": tools,
+        }
+    )
+    runner = build_run_turn(replace(container, settings=settings), reasoning=True)
+    assert runner._use_all_tools
+    profile = runner._profile
+    assert (profile.max_steps, profile.max_model_calls, profile.max_tool_calls) == (steps, models, tools)
+    assert profile.max_inspections is None and profile.max_page_calls is None
+    assert (profile.max_search_calls, profile.max_other_tool_calls) == (100, 500)
+
+    state = TaskState("t", "c", "s", "q", profile)
+    budget = state.request_budget
+    assert budget is not None
+    # D can stop the loop while the shared real-request budget is still unused.
+    state.model_steps = steps
+    assert not state.can_step() and budget.model_attempts == 0
+    state.model_steps = 0
+    for _ in range(models - budget.reserve):
+        budget.admit_model(10, kind="tool_utility_vlm")
+    assert not state.can_step() and state.model_steps == 0
+    with pytest.raises(RequestBudgetExceeded, match="model_call_limit"):
+        budget.admit_model(10, kind="chat")
+    assert budget.model_attempts_by_kind == {"tool_utility_vlm": models - budget.reserve}
+
+    # T has its own admission counter and retains the two final-answer reservations.
+    other_calls = min(tools, 500) - budget.reserve
+    assert all(budget.admit_tool("read_photo_text") for _ in range(other_calls))
+    if tools == 600:
+        assert all(budget.admit_tool("search_memories") for _ in range(100))
+    assert not budget.admit_tool("inspect_photo")
+    assert budget.admit_tool("final_answer")
+    assert budget.admit_tool("final_answer")
+    assert budget.tool_admitted == tools
+
+
 def test_specific_claim_keeps_other_turns_pending_and_fences_expired_attempts(isolated_app):
     container = isolated_app.state.container
     turns = container.turn_repository

@@ -148,7 +148,9 @@ def test_the_tool_does_not_take_a_question():
     spec = TOOLS_BY_NAME["read_photo_text"]
 
     assert "question" not in spec.parameters["properties"]
-    assert spec.required == ("result_set_id",)
+    # The active result-set ID is injected by ToolPolicy, not supplied by the model.
+    assert "result_set_id" not in spec.parameters["properties"]
+    assert spec.required == ()
 
 
 # ---- 读已落库的那份 ---------------------------------------------------------------
