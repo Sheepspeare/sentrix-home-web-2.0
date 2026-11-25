@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26双基线计划已定：20模型／30工具及100／600，两组推理开启、先planner、全工具策略相同，各4题并发全1013；前4+39+40优先后930。005子集交叉组可并行，002依新轨迹定位，Judge可后补。北京时间11/27 17:00汇报；当前未发QA。见产品项目`audit/20261126-flash-dual-baseline-plan/README.md`及T006。
+
 - 11/26 .100关思考最终相册快照已验收：18表与源一致、25441文件/499源码SHA通过，约5.6GiB；副本需映射assets绝对路径并从保存向量建独立缓存。freeze760344d8/verify d969e62e本机验证提交→100SHA/真实验收通过。.119psh已有planner，无需移植；后续4题预检→改前全1013→专项/组合→优选全量。QA0/需求改动未部署，见产品项目audit/20261126-flash-baseline-freeze/RESULTS.md及T006。
 
 - 11/25 .100关思考Flash相册已结项：11034原素材/533视频覆盖，摘要占位与事件图谱差异0，23因果边保持。三处OCR定向取证后仍不可靠，用户明确模型/源图限制不再追修；候选未写库，27d72ee3已处理、无待续OCR任务。无QA/消融，.119保持。见产品项目audit/20261125-qwen38-build-finalization/RESULTS.md及T006。
@@ -53,4 +55,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-25 | 双相册构建；79候选待确诊，002代码分析/157回归完成，未新QA | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 双基线20／30和100／600各4并发计划已定；83优先，待启动前验收 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
