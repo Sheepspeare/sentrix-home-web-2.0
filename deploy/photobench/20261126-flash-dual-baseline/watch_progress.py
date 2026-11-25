@@ -19,7 +19,7 @@ def priority_ready(port, run_id, targets):
     return False
 
 
-def watch(group, run_id, audit, output, *, instance="baseline"):
+def watch(group, run_id, audit, output, *, instance="baseline", checkpoint="priority"):
     output.mkdir()
     port = {
         "baseline": {"limited": 8876, "large": 8877},
@@ -37,6 +37,7 @@ def watch(group, run_id, audit, output, *, instance="baseline"):
             "mutates_run": False,
             "instance": instance,
             "evaluation_port": port,
+            "checkpoint": checkpoint,
         },
     )
     failures = 0
@@ -64,7 +65,8 @@ def watch(group, run_id, audit, output, *, instance="baseline"):
             if snapshot.get("status") in TERMINAL:
                 reason = "run_terminal"
             if (
-                not reason
+                checkpoint == "priority"
+                and not reason
                 and progress.get("agent_completed", 0) >= len(targets)
                 and priority_ready(port, run_id, targets)
             ):
@@ -82,7 +84,10 @@ def watch(group, run_id, audit, output, *, instance="baseline"):
                 }
                 save(output / "terminal.json", result)
                 print(json.dumps(result), flush=True)
-                return 0 if reason == "priority_subset_ready" else 1
+                return 0 if (
+                    reason == "priority_subset_ready"
+                    or (reason == "run_terminal" and snapshot.get("status") == "completed")
+                ) else 1
             time.sleep(20)
         raise TimeoutError("Progress watcher deadline; inspect live work")
     except Exception as error:
@@ -95,7 +100,11 @@ if __name__ == "__main__":
     parser.add_argument("--group", choices=["limited", "large"], required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--instance", choices=["baseline", "candidate"], default="baseline")
+    parser.add_argument("--checkpoint", choices=["priority", "terminal"], default="priority")
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    raise SystemExit(watch(args.group, args.run_id, args.audit, args.output, instance=args.instance))
+    raise SystemExit(watch(
+        args.group, args.run_id, args.audit, args.output,
+        instance=args.instance, checkpoint=args.checkpoint,
+    ))
