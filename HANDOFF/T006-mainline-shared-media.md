@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜内容小样纠正验收，接续剩余50视觉与953摘要
+
+小样wait `14511dd3-1dec-4863-9bfc-a00c2f48ab58`退出0，写入、文本/词法和事件episodic索引通过；对原图核验发现两帧OCR仍编造菜单和长递增价格，内容未通过。只读定向OCR复核第一帧再次编造并触4096输出上限，第二帧未再请求；保留全部原始失败证据，停止重复OCR请求。
+
+局部纠正脚本`settle_content_smoke.py`本机6e9652ab，8测试/ruff/compile通过，仅脚本同步100并核SHA `8495378d628a82bb018e8aac36090b5359bb58d9766dd79d2314d5662b9db0f4`。两帧`asset_ad16dcecda08`、`asset_042fdf27e328`的无依据OCR清空，状态`unrecovered_unsupported_text_removed`；第一caption只删“VIP SPECIAL”断言，第二成功caption保持。只重生成受影响`evt_45f85ad13474`，另一摘要保持。新增1次Flash/stop/关思考请求，603输入＋104输出；所有旧success/raw保留在`content/smoke-review-v1`。2.842秒完成，无服务重启、活动release改动或Qdrant新实例。
+
+纠正后与`before-content.db`逐列比：资产13356/视觉6989全保持；排除两观察、两事件及其文本行后，观察13354/事件4322/文本31030均0改0缺。文件SHA与词法/文本/2048维事件向量通过。独立验收`content-settlement-acceptance.json`状态`accepted_limited_cleanup_ocr_unrecovered`，两OCR仍未恢复，不算完整内容验收。旧技术核验JSON的content_status为历史固定文案，新内容结论以此验收为准。
+
+已先登记新wake `e9f66fff-ff27-49ca-8862-5fd3514491c4`，启动`sentrix-qwen38-content-full-20261125`，回执`content-full-launch.json`。沿用repair_content.py/6a391973/SHAe3345cf6及冻结52视觉/955场景清单，跳过已处理2视觉/2摘要，接续50视觉和953摘要，4并发、关思考128K/4096和原生产提示词。保留两OCR未恢复标记；原始模型请求/响应和成功结果可复用。登记状态waiting仅表示已派发，实际完成需终态证据核验。本轮不轮询模型，后续由wake接续。
+
+接手先读新回执、精确wait日志与远端`repair-ee6594ae/content/full/{terminal,progress}.json`，核真实活动任务及52/955去向、各索引、白名单外逐列保护和事实质量；只补失败/缺失，不整批重复请求。另5部分观察、旧错误/超时/502及length影响、相关旧事件摘要、最终因果批次与更新同步仍待核。禁止全scope finalize、重启现役服务或另建Container；.119high建库及Oracle87.018756%保持，不启动QA/Judge/消融，不改题库/线上分。原14511dd3已处理，无需重挂。
+
 ## 2026-11-25｜259条结构恢复验收，启动内容补齐小样
 
 最后15条wait `5b484335-59eb-4be9-af04-fc7d40bd5a07`正常完成，退出0、耗时44分51秒；259/259恢复视频及955帧的全部job阶段、原视频/analysis/696已有帧SHA与时间、场景和观察关联、视觉/文本向量及词法覆盖通过。533/533视频均有场景；3759照片/6742邮件/533视频源观察齐全。对恢复前备份逐列比较原资产12142、观察12401、事件3369、视觉5969、文本28171，0改0缺。验证脚本1a565df2/da7f37f6，本机compile/ruff、同步SHA417c4957及远端运行通过。证据`full-recovery-acceptance/{terminal,progress,final-inventory,verification}.json`。
