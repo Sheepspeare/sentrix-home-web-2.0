@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜有限原基线83已齐，完整取证与全量监控接续
+
+原limited ea4413的83优先UUID已完整取证，回调时全run84答且4并发继续。按最终stop_code，40/83模型额度触发（48.2%）、2/83工具额度触发（2.4%）；14自然回答、26带缺口回答、40预算耗尽、3本地上下文预检失败。共享HTTP1206=1136主模型+70内部视觉，83本地预检不计HTTP；工具准入1292、记录Token17026623，中位题耗时300.3秒，主分全部待Judge。83题终态不可当全正确，3失败答案为系统说明。
+
+新增程序病灶：3条query_memory_facts按place分组结果JSON约22.5万字符，下一提示词约31万Token，超131072本地停止，HTTP未失败。保留原基线并归档context-overflow-diagnosis.json供候选修复；不混成上游故障。取证固定每题trace_storage.revision并验证qa_id/所有分页；初轮运行中index变化造成分页拼接失败的只读原包单列保留，不纳统计。原8题budget/模型元数据/答案与旧报告一致。
+
+证据产品audit/20261126-flash-dual-baseline-launch/limited-priority-83-review/{RESULTS.md,acceptance.json,summary.json,rows.json,baseline/}。11d5f1f1已验处理，全1013终态/异常新wake fb1b011f-e888-4f49-9229-38538012c6bb先行接管；原run业务30c67e74/4并发持续，无POST/热更/重答。监控954de317支持--checkpoint terminal，6本机测试/Ruff/compile通过，仅本机只读ops，不改远端release。large原83监控a375e19f与候选limited83 ee8e06d1、large8 993ff352保持；旧83回调不再重挂。
+
+
 ## 2026-11-26｜有限v2首8复测完成，同run继续83诊断
 
 有限v2 f9367d首8原包已核并与原limited/v1配对：共享模型HTTP91→70→91，工具准入93→62→96，记录Token（含去重内部视觉）831260→473750→1231166。v2恢复蚂蚁医疗/NeurIPS的正文主体取证，鸡翅遵守题设日期；事实与Judge仍待验，紫裙新增尺码及披萨门店亦未核实。整体降本未通过；本8题最多18HTTP，完整历史预算收尾仅测试覆盖、尚未真实触发。证据v2-limited-rerun/review/{RESULTS.md,acceptance.json,paired-metrics.json}。
