@@ -8,7 +8,13 @@ import pytest
 
 @pytest.mark.parametrize(
     "group,port,stage",
-    [("limited", 8878, "v2"), ("large", 8879, "v2"), ("large", 8879, "v3"), ("large", 8879, "v4")],
+    [
+        ("limited", 8878, "v2"),
+        ("large", 8879, "v2"),
+        ("large", 8879, "v3"),
+        ("large", 8879, "v4"),
+        ("large", 8879, "v5"),
+    ],
 )
 @pytest.mark.parametrize("changed", [False, True])
 def test_cancelled_placeholder_rows_do_not_replace_answer_preservation_check(

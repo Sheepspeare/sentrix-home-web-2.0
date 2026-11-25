@@ -45,6 +45,14 @@ STAGES = {
         "answer_count": 11,
         "answer_word": "eleven",
     },
+    "v5": {
+        "runs": {"large": "20261126-064511-2026.11.17-atm-sources-addresses-big_model-f4fd18"},
+        "previous_revision": "4bc53cad92f31b93859f9de3d90d52ee53a2783f",
+        "previous_release": "release-4bc53cad",
+        "accepted": "v4",
+        "answer_count": 11,
+        "answer_word": "eleven",
+    },
 }
 
 

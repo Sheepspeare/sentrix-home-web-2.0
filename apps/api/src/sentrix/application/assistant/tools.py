@@ -406,10 +406,16 @@ class AssistantToolbox:
             return _failure("invalid_source_type", "source_type 需为 all、email 或 document")
 
         scopes = [dict(item.scope) for item in requirements]
-        # 文字中的主体由正文/OCR匹配；人脸条件由独立的照片或身份需求提供。
-        text_types = {EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT}
+        # 人脸筛选只来自照片、画面或身份需求；统计、正文和转写中的主体不要求出镜。
+        face_types = {
+            EvidenceType.PHOTO_SET,
+            EvidenceType.DELIVERED_PHOTO,
+            EvidenceType.PHOTO_IDENTITY,
+            EvidenceType.PERSON_PROFILE,
+            EvidenceType.VISUAL_OBSERVATION,
+        }
         face_scopes = (
-            [dict(item.scope) for item in requirements if item.evidence_type not in text_types]
+            [dict(item.scope) for item in requirements if item.evidence_type in face_types]
             if source_type == "all"
             else []
         )
@@ -419,7 +425,7 @@ class AssistantToolbox:
             if (
                 not groups
                 and source_type == "all"
-                and not any(item.evidence_type in text_types for item in requirements)
+                and (not requirements or any(item.evidence_type in face_types for item in requirements))
             ):
                 simple = _person_question(question or query)
                 exact_name = simple[0] if simple else ""

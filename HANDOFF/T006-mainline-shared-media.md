@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v4十一题取证完成，定向收窄人脸筛选语义
+
+c58f5ea8已验11答暂停，95条真实HTTP逐调用原包均200。原8题244→66请求/262→70工具/737万→64万Token，但NeurIPS仍被structured_fact主体人脸强筛拦住，不接受质量、不扩大。蚂蚁原图/OCR恢复，鸡翅8轮真实检索均应用截至2023-02-09；最终菜品证据仍不足。披萨本次仅预览文字/正确asset交付，没有再次原图回看；Porto本轮无上下文失败。见候选audit/v4-large-rerun/review。
+
+本机v5只把人脸强筛限定到照片/画面/身份需求，结构化、正文、OCR和语音主体不触发；独立照片人物条件保留，125相关业务通过/4旧toolbox失败保持、mypy/Ruff/compile通过。部署与独立答卷评分20测试通过。拟仅切已暂停large同11题复测，原基线/有限v2不热更。新增score_saved复用生产ProfileScoring与冻结native_v2协议，独立导出评分、原run不写、Agent0、失败即停/成功续评不重复；尚未请求Judge。原基线162/58各4并发、有限v2为49/2继续，三原wake保持。下一步本机提交→远端SHA/局部验收push后启动v5与既有答卷评分，长任务先wake。
+
 ## 2026-11-26｜v4局部发布验收通过，同11题独立复测接续
 
 业务4bc53cad已仅切large8299/8879，519源码SHA/编译、18记忆表/9保护进程保持、旧v3十一答SHA逐题通过，旧36e9da只取消1002未执行调度。远端真实验收后已push核SHA，未热更原基线/有限v2。新run状态run_created，20261126-064511-2026.11.17-atm-sources-addresses-big_model-f4fd18，独立wake c58f5ea8-7769-4e2f-b128-a6686c6a6149，2并发/100模型600工具/各reserve2、同11题后暂停；思考/上下文/输出/时限/83题库UUID/native_v2延期Judge保持。证据v4-large-rerun/deployment及launch-registration.json。033c4593已验处理不重挂。

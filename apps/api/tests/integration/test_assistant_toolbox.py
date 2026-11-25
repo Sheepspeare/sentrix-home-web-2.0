@@ -218,7 +218,15 @@ def run(toolbox, name: str, **arguments: object):
 
 
 @pytest.mark.parametrize("subject", ["研究机构", "论文作者", "正文里的人名"])
-@pytest.mark.parametrize("evidence_type", [EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT])
+@pytest.mark.parametrize(
+    "evidence_type",
+    [
+        EvidenceType.SOURCE_TEXT,
+        EvidenceType.VISIBLE_TEXT,
+        EvidenceType.STRUCTURED_FACT,
+        EvidenceType.SPOKEN_CONTENT,
+    ],
+)
 def test_text_subject_does_not_require_a_named_face(toolbox, monkeypatch, subject, evidence_type):
     build, _ = toolbox
     requests = []
@@ -258,7 +266,15 @@ def test_text_source_search_keeps_subject_out_of_face_filters(toolbox, source_ty
 
 
 @pytest.mark.parametrize("with_text", [False, True])
-@pytest.mark.parametrize("text_type", [EvidenceType.SOURCE_TEXT, EvidenceType.VISIBLE_TEXT])
+@pytest.mark.parametrize(
+    "text_type",
+    [
+        EvidenceType.SOURCE_TEXT,
+        EvidenceType.VISIBLE_TEXT,
+        EvidenceType.STRUCTURED_FACT,
+        EvidenceType.SPOKEN_CONTENT,
+    ],
+)
 def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text, text_type):
     build, _ = toolbox
     requirements = [
