@@ -299,7 +299,7 @@ def repair_visual(target, repos):
     return "completed"
 
 
-def repair_summary(before, repos):
+def repair_summary(before, repos, *, source_type="video_scene"):
     from sentrix.application.memories.summarize_event import (
         build_evidence,
         build_system_prompt,
@@ -316,7 +316,7 @@ def repair_summary(before, repos):
         assert snapshot("events", identifier) == success["after"]
         return "reused"
     event = repos.events.get(identifier)
-    assert event is not None and event.scope_id == SCOPE and event.source_type == "video_scene"
+    assert event is not None and event.scope_id == SCOPE and event.source_type == source_type
     observations = [repos.observations.get(oid) for oid in repos.events.observation_ids(identifier)]
     assert observations and all(o is not None and o.caption.strip() for o in observations)
     evidence = build_evidence(event, observations, repos.participants.list_participants(identifier))

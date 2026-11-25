@@ -104,7 +104,10 @@ def test_review_removes_only_disproven_text_and_preserves_other_visual_fields():
     assert corrected_semantics(observation, repair.OCR_REVIEW).caption == observation.caption
 
 
-def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(tmp_path, monkeypatch):
+@pytest.mark.parametrize("source_type", ["video_scene", None])
+def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(
+    tmp_path, monkeypatch, source_type
+):
     now = datetime.now(UTC)
     event = EventRecord(
         id="evt_fixture",
@@ -121,7 +124,7 @@ def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(t
         aggregation_score=0,
         aggregation_breakdown={},
         created_at=now,
-        source_type="video_scene",
+        source_type=source_type,
     )
     observation = SimpleNamespace(
         id="obs", caption="桌上有一盘菜", activity="用餐", place="餐馆", objects=(), clothing=(), ocr_text=""
@@ -156,9 +159,9 @@ def test_summary_resume_after_embedding_failure_does_not_repeat_model_or_apply(t
     monkeypatch.setattr(repair, "snapshot", lambda *_: dict(state))
     monkeypatch.setattr(repair.httpx, "post", post)
     with pytest.raises(AssertionError, match="embedding"):
-        repair.repair_summary(before, repos)
-    assert repair.repair_summary(before, repos) == "completed"
-    assert repair.repair_summary(before, repos) == "reused"
+        repair.repair_summary(before, repos, source_type=source_type)
+    assert repair.repair_summary(before, repos, source_type=source_type) == "completed"
+    assert repair.repair_summary(before, repos, source_type=source_type) == "reused"
     assert len(model_calls) == len(applied) == len(vectors) == 1
     assert vectors[0].source_id == event.id and vectors[0].metadata == {"observation_id": "obs"}
 
