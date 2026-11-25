@@ -1,6 +1,19 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜有限预算首4题验收，原全量任务继续
+
+limited run尾ea4413首4全部交卷，保持待Judge评分。4个planner均先于Agent执行，冻结9工具all_tools；实际100决策步/3600秒、20模型/30工具、各预留2、共享内部看图已核。4题真实模型尝试18/6/8/19（含内部视觉0/1/1/5），工具准入22/5/6/23；2题stop_code=model_call_limit，0工具总额触发。终止标签step_budget_exhausted不能直接解读为100决策步耗尽。通用model_call_count漏计内部视觉，实验主统计以request_limits与HTTP原包为准，基线业务保持冻结。
+
+只读验收18记忆表与快照规范化指纹相同；277现存共享网关原包完整、均HTTP200，202答题请求stop/tool_calls，无答题截断；75健康探测中2次8token length单列。原三保护PID/启动时钟保持。脚本verify_checkpoint已本机验证提交44fd732c、100编译/SHA/真实执行通过。
+
+4题中至少已复现模型额度机制，是否失分由后补原ATM评分确认。005先保留机制候选，预算触发而回答正确的题不强纳修复集；002继续基于新轨迹取证。large仍由独立首4wait65bf0f2a监控，不重复POST/改其控制。limited只去首4暂停、同run继续余1009，不重做4题。新watch_progress仅观察已有run、逐UUID确认83优先题全部终态，并监控连续429/模型漂移与/home低于2GiB；不停止产品worker。下一精确wake与继续回执见产品audit/20261126-flash-dual-baseline-launch/limited-priority-monitor-launch.json。
+
+证据：limited-first-four-review/{acceptance,verification}.json及4项完整item/预算/planner和可分页trace；旧wake6d7b933f已验处理。用户4份原修改保持，后续代码与监控提交在远端验收后push。
+
+
 ## 2026-11-26｜双基线准备已验收，冻结首4题启动配置
+
+启动回执：{"limited": {"wait_id": "6d7b933f-de9f-4a05-939b-c5906c61c4d2", "status": "qa_started", "payload_sha256": "359a63dd38035d9cc4fa2df53c5f342344a51d29919f99ca943d745700960be1", "launch": {"suite_id": "suite-20261126-025319-6cb384", "run_ids": ["20261126-025319-2026.11.17-atm-sources-addresses-big_model-ea4413"], "album_id": "2026.11.17-atm-sources-addresses", "models": ["big_model"], "qa_set": "atm-bench", "mode": "reuse", "graph_enabled": true, "reasoning": true, "existing_scope_id": "PhotoBench-20261124-221506-2026.11.17-atm-sources-addresses-qwen3.8-flash", "current_model_snapshot": null}}, "large": {"wait_id": "65bf0f2a-b564-4c9c-a251-6d9a25347f39", "status": "qa_started", "payload_sha256": "6836b4174b7afe2b105ed1db5595e3754cbf353e21bd06867f6843d0a4ed7677", "launch": {"suite_id": "suite-20261126-025319-358f1d", "run_ids": ["20261126-025319-2026.11.17-atm-sources-addresses-big_model-f6ebb1"], "album_id": "2026.11.17-atm-sources-addresses", "models": ["big_model"], "qa_set": "atm-bench", "mode": "reuse", "graph_enabled": true, "reasoning": true, "existing_scope_id": "PhotoBench-20261124-221506-2026.11.17-atm-sources-addresses-qwen3.8-flash", "current_model_snapshot": null}}}。运行代码30c67e74、共同代码/监控已push871e34cf。两个独立wake到首4或异常即续接，精确run保存baseline-launch.json；不重放POST。
 
 准备wait a40cff4d已验收：独立8296/8876、8297/8877及18148健康，共同代码30c67e74，实际20模型/30工具和100/600。18记忆表仅规范化素材绝对路径后与最终快照一致，各6989已有向量缓存与检索验收通过，0新增嵌入；原8294/8874/网关PID与启动时钟保持。/home可用约7.6GiB，派生缓存在/dev/shm，重启后需按保存向量重建。
 
