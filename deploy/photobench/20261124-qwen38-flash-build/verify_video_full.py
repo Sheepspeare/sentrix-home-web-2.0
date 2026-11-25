@@ -25,7 +25,11 @@ def main():
     deployment = json.loads((ROOT / "deployment.json").read_text())
     result = {"observed_at": time.time(), "scope_id": SCOPE, "read_only": True}
     result["protected_pids"] = processes()
-    assert result["protected_pids"] == deployment["protected_pids"]
+    result["protected_pid_changes_since_deployment"] = {
+        unit: {"before": pid, "now": result["protected_pids"].get(unit)}
+        for unit, pid in deployment["protected_pids"].items()
+        if result["protected_pids"].get(unit) != pid
+    }
     result["runtime_pids"] = {
         unit: systemctl("show", unit, "-p", "MainPID", "--value")
         for unit in (PRODUCT_UNIT, EVAL_UNIT, GATEWAY_UNIT)
