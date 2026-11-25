@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-25｜两张OCR输出截断，保留24项已写结果并接续独立项
+
+wait `e9f66fff-ff27-49ca-8862-5fd3514491c4`运行76.196秒后因`Model output incomplete`失败，底层补齐脚本已终止、无在途请求。两图`asset_78a95b5d74d8`/`asset_816c96df9415`首轮视觉输出分别重复“杏仁豆腐”和“木瓜”并触4096上限，未写入观察；原始失败请求/响应保留。实际22条新视觉已保存（progress只列19，另3条为退出前已在飞完成），加原小样共24/52，全部success与当前逐列一致。955新摘要尚未进入批量阶段，仅原小样2/955完成。
+
+只读核验`inspect_content_recovery.py`本机提交80758109后补完善于372458f1，已编译/ruff、传100核SHA `b8720de7dd8a4b548cbd3cb82022ab47bf221d8e8d0d6c0c500cb8e881995d6c`及远端运行通过。所有52源文件SHA保持。白名单外资产13356/视觉6989/观察13304/旧事件3369/文本29932逐列0改0缺。此前检测到22条旧事件文本向量变化，源码确认生产`IndexObservationText`同时写关联event的episodic投影；已逐项核metadata为本次合法观察，向量与其episodic完全相等、2048维，旧event正文保持。该关联向量范围明确纳入合法白名单，不能继续沿用仅955事件向量的旧比较口径。证据`content-full-alert-e9f66fff/{inspection,reviewed,acceptance,terminal}.json`，原检查结果保持。
+
+新局部调度脚本`resume_content.py`372458f1/SHA `b289452eb286cd438ece21ec97c5da579e87c9f2b12f7f0f0f492f6c6069fbdc`，和原补齐脚本共13测试、ruff/compile通过，已传100并核SHA。只调整失败项调度，原生产提示词、模型、观察/摘要及索引逻辑不改。已有success逐列核对后跳过，已有未成功模型尝试记deferred不盲重试；新输出截断/格式等单项生成失败保留并继续独立项，摘要缺caption则记缺口；型号/思考偏移、HTTP、数据库/索引等意外异常仍停。完成但有缺口输出`completed_with_gaps`并退出1，仍须质量验收。
+
+已先挂新wake `8e2f1652-888f-4d4e-9d8e-86237d061285`，启动`sentrix-qwen38-content-resume1-20261125`，回执`content-resume-1-launch.json`，远端输出`content/resume-1`。4并发、Flash/关思考128K/4096保持，只处理26未做视觉和953摘要；24已保存复用，2既有length保留待核。原小样两帧ad16dcecda08/042fdf27e328 OCR仍未恢复，已清空无依据文字，不能合称已修好。
+
+接手读新精确日志和terminal/progress，按逐项success核真实写入（退出前在飞完成可能未列progress）；运行只读inspect重新核52/955去向、事实/索引/文件及关联向量白名单外保护，保留所有raw和失败史，只补失败/缺失。5部分观察、旧错误/超时/502与length内容影响、原失败图的旧事件摘要及因果图同步仍待收尾。保持8294PID4191434/8874PID2427495/网关2427487，不scope finalize、不另建Container/重启；.119high建库和Oracle87.018756保持，QA/Judge/消融均0。e9f66fff已处理，不重复挂。
+
 ## 2026-11-25｜内容小样纠正验收，接续剩余50视觉与953摘要
 
 小样wait `14511dd3-1dec-4863-9bfc-a00c2f48ab58`退出0，写入、文本/词法和事件episodic索引通过；对原图核验发现两帧OCR仍编造菜单和长递增价格，内容未通过。只读定向OCR复核第一帧再次编造并触4096输出上限，第二帧未再请求；保留全部原始失败证据，停止重复OCR请求。

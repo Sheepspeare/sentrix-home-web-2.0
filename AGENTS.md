@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/25 Flash259视频/955帧结构已验；内容小样OCR幻觉已清空并明确两项未恢复，白名单外数据/索引保护通过。剩余50视觉＋953摘要已挂新wake e9f66fff，4并发原参数，QA0；见audit/20261125-qwen38-build-finalization及T006。
+- 11/25 Flash结构259视频/955帧已验；内容24/52视觉、2/955摘要保存且索引保持，2新OCR length未落库、2旧OCR未恢复。26视觉＋953摘要接续wake8e2f1652，4并发原参数；13测试通过，未重启/QA0。见audit/20261125-qwen38-build-finalization及T006。
 
 - 11/25 两项需求当前为4代表→79历史候选经新Flash确诊→专项/组合→全1013对照；旧60/20/953只留历史。预算/视觉日志294项通过未部署。002源码分析及157项既有回归完成，确认字段绑定/OCR核验输入缺口；真实题影响待核，先扩展已有取证和收尾机制。见docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep/需求002代码分析.md，接T006。
 
