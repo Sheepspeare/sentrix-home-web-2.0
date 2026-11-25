@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26 .100关思考最终相册快照准备：freeze_album.py/760344d8，3测试/Ruff及远端SHA/编译通过，独立快照执行待验。已核.119 Github/sentrix-psh=psh/a5daf519；现有两模式均planner，普通筛工具/推理全工具，cloud普通profile也可能不限次数。先4题冻结实际条件，再Flash改前全1013、专项/组合和最终全量。QA0，未部署需求改动，见产品项目audit/20261126-flash-baseline-freeze及T006。
+
 - 11/25 .100关思考Flash相册已结项：11034原素材/533视频覆盖，摘要占位与事件图谱差异0，23因果边保持。三处OCR定向取证后仍不可靠，用户明确模型/源图限制不再追修；候选未写库，27d72ee3已处理、无待续OCR任务。无QA/消融，.119保持。见产品项目audit/20261125-qwen38-build-finalization/RESULTS.md及T006。
 
 - 11/25 两项需求当前为4代表→79历史候选经新Flash确诊→专项/组合→全1013对照；旧60/20/953只留历史。预算/视觉日志294项通过未部署。002源码分析及157项既有回归完成，确认字段绑定/OCR核验输入缺口；真实题影响待核，先扩展已有取证和收尾机制。见docs/refactor/2026-11-25-agent-budget-view-ablation-prep.md及产品项目audit/20261125-agent-ablation-prep/需求002代码分析.md，接T006。

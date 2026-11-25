@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜最终Flash相册快照与psh planner核查
+
+用户要求固定.100关闭思考最终相册后准备Qwen3.8 Flash改前基线，并核.119 Github下psh。只读确认`/home/asus/Github/sentrix-psh`为psh/a5daf519、干净；8872当前无监听，主仓库main和image-memory-v3另列。现有两模式均有planner，普通按需求冻结工具，推理全工具；无需移植旧planner。当前cloud普通profile可次数不限，网关固定enable_thinking=False，工具/预算/实际模型思考应分别登记。
+
+新增freeze_album.py及3测试，提交760344d8；Ruff/测试与远端编译/SHA3b63520b通过，只传100 repair-ee6594ae/freeze-20261126-v1。备份SQLite并独立复制媒体，保存权威向量/词法/图谱和实际release源码，不打开在线Qdrant、不改release/重启。快照IDatm-flash-no-thinking-final-20261126-v1；当前待独立wake终态验收。克隆评测前用SQLite保存的向量建副本缓存并核检索，不新请求嵌入。线上三PID保持，QA0、.119high与Oracle保持，用户4份原改动不变。
+
+完整证据和新顺序在产品项目audit/20261126-flash-baseline-freeze/README.md：4题预检→选定planner/端侧参考有限预算下全1013改前基线→79候选确诊和专项/组合→最优全1013。8决策步/6工具/2搜索/3精读/180秒是现有参考配置，实际profile与原独立model_calls未配置必须登记；不把历史全工具大预算当同条件。97803b70等需求改动不提前混进baseline。快照回调后核真正完成、文件及记忆SHA，更新两边T006/AGENTS并push；不要重放现有输出目录。基线QA具体启动配置另冻结，此轮未发QA/Judge或部署业务改动。
+
 ## 2026-11-25｜用户明确模型识别缺口不阻塞结项，停止OCR追加
 
 当前结论：.100关闭思考相册的构建与工程修复已完成。用户明确原图不清、模型自身能力造成的识别不准无需继续纠结，取代上一节“必须应用三处OCR后再结项”的安排；本轮停止追加识别和写回，三处保留为模型/源图质量限制。
