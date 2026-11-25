@@ -33,7 +33,9 @@ def verify(group):
         assert raw['request']['model'] == 'qwen3.8-flash'
         assert raw['request']['enable_thinking'] is False
         assert record.get('actual_model') in {None, 'qwen3.8-flash'}
-        assert raw['request'].get('max_tokens') in {8, 4096}
+        output_tokens = raw['request'].get('max_tokens')
+        assert isinstance(output_tokens, int) and 0 < output_tokens <= 4096
+        assert output_tokens == record.get('max_tokens')
         if record.get('max_tokens') != 8:
             assert raw['request'].get('temperature') == 0
     return {
@@ -46,6 +48,8 @@ def verify(group):
         )),
         'health_finish_counts': dict(Counter(reason for r in records if r not in qa
                                             for reason in r.get('finish_reasons', []))),
+        'qa_output_token_limits': dict(Counter(str(record['max_tokens']) for record in qa)),
+        'qa_output_limit_reduced_for_context': sum(record['max_tokens'] < 4096 for record in qa),
         'model': 'qwen3.8-flash', 'enable_thinking': False, 'max_tokens': 4096, 'temperature': 0,
     }
 
