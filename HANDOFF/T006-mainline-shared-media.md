@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜双全量83检查点监控恢复，原答题未中断
+
+f4ff2b2c有限组与c9804024大预算组原监控均因迁移前/home低2GiB退出，仅告警、未停止worker；当前磁盘约4.28GB，先前只读快照迁移已经解决，无再次迁移/删除/重发QA。核原run有限ea4413已78题、大预算f6ebb1已31题，running/无fatal_error、各4并发、未暂停；原四服务及三保护PID起始时间保持。共享网关最近500请求均HTTP200、Flash关思考无漂移。有限83优先UUID已有78条已保存，剩5条未到检查点，评分全部延后，不计0。
+
+已保存limited-priority-monitor-recovery/{acceptance,limited-run,large-run,items,request-metadata}.json与两旧wait的reconciled.json，保留旧告警终态。需为两组分别以新目录只读attach原run至83优先题或异常，不发送POST/不改control/不重启；到83再下载轨迹并另挂全1013终态通知。原候选v2两组各2并发复测8题（limited f9367d/wake64799a78、large e9700d/wake993ff352），独立保持；v1已因漏答/题设日期问题不扩大，按新实测继续005/002，不机械等待全1013或强做预算交叉。长期目标降开销/保质量/提高性能和北京时间11/27 17点汇报不变。
+
+
 ## 2026-11-26｜大预算首8验收，v1不扩大，v2副本发布
 
 大预算v1的8题已配对原基线：共享模型HTTP244→125、工具准入262→143；记录Token含内部视觉7,369,073→3,632,890。Wi-Fi98→4；NeurIPS因正文主体被强当人脸名而漏答；鸡翅99→73但Token增加且无视题设2023-02-09，回答2025年，v1不扩大。披萨旧结果集rs_8aebff66d44f/photo_2经多次新检索后仍正确读asset_5c08513d3cfe及MOVENPICK，引用修复实测生效。主分待Judge，成本下降未构成质量验收。证据large-first-eight-review/{RESULTS.md,acceptance.json,paired-metrics.json}。
@@ -1103,3 +1110,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 本轮隔离树codex/q4-trace-quarantine-20261119已完成格式3内容引用/分块存储、增量保存与已提交轨迹释放，概览/题页/单题轻读，节点50条分页、内容256KiB内分块，Judge请求按需读取，同版本trace/SFT流式导出及显式旧存档迁移。后端1692项通过；前端832项通过，1项ChatView失败已在e24f8fb基线复现，专项40项和构建通过。真实含18条异常轨迹的101题迁移峰值RSS1.23GB，48读/4写及导出压测进行中。审计在产品项目audit/20261119-full-lazy-results；新发布脚本deploy/photobench/20261119-full-lazy，不执行旧脚本。当前线上仍fcb32bd，尚未声明新版本已上线。待压测验收后按已授权流程停两精确run，空闲后迁移和切8872/8874，先新wake再原scope续评。
 
 大预算v2复测已登记并启动：wake993ff352-d4db-477b-8ded-e02619c05fce；回执与实际run见v2-large-rerun/launch-registration.json。2并发到8暂停，有限v2原wake64799a78保持。候选部署代码及交接已push6be37684，原v1不扩大。
+
+恢复监控已登记：limited wake11d5f1f1-1668-4c47-a3ca-97939db08ce3、large wakea375e19f-e64a-4218-842e-d576c5553660，只读attach原run至83或异常。原f4ff2b2c/c9804024已处理，若迟到回调按reconciled.json核对，不再重挂。见priority-monitor-recovery-registration.json。
