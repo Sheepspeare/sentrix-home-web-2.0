@@ -31,6 +31,7 @@ STAGES = {
         "previous_revision": "5c45b791b348a468eba8ec4c5194f86a1145a537",
         "previous_release": "release-5c45b791",
         "accepted": "v9",
+        "protection_file": "large-v10-protected.json",
         "answer_count": 16,
         "answer_word": "sixteen",
     },
@@ -48,7 +49,8 @@ def configure(stage=STAGE):
     op.STAGES[stage] = previous
 
     def protected():
-        values = json.loads((op.BASE / "intent.json").read_text())["protected"]
+        protection_file = previous.get("protection_file", "intent.json")
+        values = json.loads((op.BASE / protection_file).read_text())["protected"]
         assert all(Path(f"/proc/{pid}/stat").read_text().split()[21] == tick for pid, tick in values.items())
         return values
 

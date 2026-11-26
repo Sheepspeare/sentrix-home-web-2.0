@@ -27,4 +27,7 @@ def test_revision_targets_only_the_paused_parallel_run(
     assert stage["previous_revision"].startswith(previous_revision)
     assert stage["previous_release"] == previous_release
     assert stage["answer_count"] == 16
+    assert stage.get("protection_file", "intent.json") == (
+        "large-v10-protected.json" if stage_name == "parallel-v10" else "intent.json"
+    )
     assert op.BASE.name == "flash-query-v7-parallel-20261126"
