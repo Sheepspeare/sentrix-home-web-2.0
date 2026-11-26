@@ -1,5 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜旧Doubao代码Flash双预算同16与同裁判对照验收
+
+两组16均结束并暂停，完整48份新/历史答卷按UUID/revision读取全content/trace全部分页核read_revision。新有限0complete13partial3failed，大组1complete6partial9failed；早期仅5次失败的描述现更新为最终12次：5本地PromptTooLong终止＋大组7整题3600秒wall_time_limit。有限9模型额度触发，大组无模型/工具额度触发。原产品334源码/相册/6742邮件/Planner/16K2048及关思考保持；并发16与历史不同，时延不能单归模型。
+
+Agent有限228HTTP/1376036Token/15视觉/230工具、大组491HTTP/3514580Token/26视觉/517工具；719请求按usage/cache/完整query或视觉问题/response工具ID/精确时间窗唯一匹配，全部200/关思考。旧视觉观察未存finish_reason，按实际已存usage/图像/视觉问题及时间唯一核对，无歧义；没有填造该字段。健康检查139/127单列，136/378本地超长预检不计HTTP；41视觉图像非空载荷SHA已保存。19MB原包已本机取证且远端保持，14保护PIDticks及旧5评分stateSHA全保持。
+
+三组各2Judge并发跨组同时、原生产score_saved/ProfileScoring/native_v2/noGT/Flash关思考温0max2048，全部直连云端。44HTTP按responseID/完整request与response JSON SHA/usage/时间唯一匹配原包全200，合47939Token，另3程序分。有限16有效4分=25%，大组16有效6分=37.5%；历史Doubao15有效7分=46.67%、1execution_failed缺分保持不记0。共同15：有限26.67%/大40%/历史46.67%；有限0改善3退化12持平，大1改善2退化12持平。旧Doubao裁判15题40%保留，不混分。质量未接受全量，不自动扩大1013，002005未结项。
+
+评分工具dd52ca84/6d605093本机3测试/Ruff/compile、commit/push后独立上传171文件包SHAeddd74a4并compile；源只用于新评分进程、不热更Agent。新评分wake4662862b已在当前轮提前验完并reconciled，原QA检查点acfb1833也reconciled，迟到仅读回执；不得重放launch/prepare/QA/评分。证据候选audit/doubao-code-direct/recovery-1/{review,judge-same16-1}/{RESULTS,acceptance,collection-receipt,agent-http-exact-verification,judge-http-exact-verification,score-summary,paired-scores}。原全量wakea38f0e0a/7a6f8cfa与持续Judge344c03b8保持，后续新增答卷由原任务补评；原成功评分不重算。
+
+
 ## 2026-11-26｜原双基线新增答卷持续评分恢复
 
 此前771/296是固定快照任务，结束后未自动接入新增答卷。用户要求继续评分，本机新增follow_saved_judging.py并以4596252e验证提交push；3项只补缺分/复用成功/拒绝无效diagnostic回归、Ruff及compile通过。真实UUID定位/固定revision全content分页GET预检通过，初始limited862已答/771分缺91，large332已答/296分缺36。每组2个Judge并发，跨组同时；已实测各峰值2、跨组峰值4，成功payload关思考且无reasoning_content，旧5个state文件SHA保持。当前已完成批次统计见baseline-follow-1/started-verification.json，均分随范围变化，异覆盖不直接公平对照；所有新增HTTP唯一共享raw核验待终态。

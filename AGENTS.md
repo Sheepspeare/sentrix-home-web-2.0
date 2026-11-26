@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26原Doubao代码Flash直连同16已验：有限QS25%、大组37.5%；同Flash裁判共同15题为26.67%/40%/历史豆包46.67%。719Agent与44Judge HTTP唯一原包全200/关思考；大组7题达1小时上限，保持16暂停不扩大。见T006及doubao-code-direct/recovery-1/judge-same16-1/RESULTS.md。
+
+
 - 11/26原双基线已接持续Flash补评：旧771/296有效分完整复用，各2评分并发、跨组同时；新增答卷每30秒检查，只补缺分，至11/27北京15:00或原run终态。见T006及候选audit/flash-judge-20261126/baseline-follow-1。
 
 
