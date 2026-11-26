@@ -170,3 +170,29 @@ def test_saved_response_tool_ids_disambiguate_identical_concurrent_requests(tmp_
     log.write_text("\n".join(json.dumps(r) for r in records))
     with pytest.raises(AssertionError, match="extra archive"):
         m.verify(config)
+
+
+@pytest.mark.parametrize(
+    ("call_type", "section"),
+    [
+        ("faithfulness_judge", "\n完整对话轨迹（含全部工具返回与 captured_at 等元数据）：\n"),
+        ("claim_verifier", "\n待核验 claim（time）："),
+    ],
+)
+def test_verifier_requires_full_question_in_its_recorded_prompt_format(call_type, section):
+    m = module()
+    expected = {"start": 0, "end": 2, "internal": False, "qa_id": "q", "call_type": call_type}
+    record = {"started_at": 1}
+    questions = {"q": "Full original question?"}
+    content = "用户问题：Full original question?" + section + "saved evidence"
+    request = {"messages": [{"role": "user", "content": content}]}
+    assert m.matches(expected, record, request, questions)
+    assert not m.matches(expected, record, request, {"q": "original question?"})
+    assert not m.matches({**expected, "call_type": "agent"}, record, request, questions)
+    assert not m.matches(expected, record, {"messages": [{"role": "tool", "content": content}]}, questions)
+    assert not m.matches(
+        expected,
+        record,
+        {"messages": [{"role": "user", "content": "用户问题：Full original question?\nother context"}]},
+        questions,
+    )

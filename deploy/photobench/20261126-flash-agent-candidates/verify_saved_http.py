@@ -22,6 +22,19 @@ def matches(expected, record, request, questions, response=None):
     messages = request.get("messages", [])
     texts = [m["content"].strip() for m in messages if isinstance(m.get("content"), str)]
     if not expected["internal"]:
+        verifier_sections = {
+            "faithfulness_judge": "\n完整对话轨迹（含全部工具返回与 captured_at 等元数据）：\n",
+            "claim_verifier": "\n待核验 claim（",
+        }
+        section = verifier_sections.get(expected.get("call_type"))
+        if section:
+            prefix = f"用户问题：{questions[expected['qa_id']]}{section}"
+            return any(
+                m.get("role") == "user"
+                and isinstance(m.get("content"), str)
+                and m["content"].startswith(prefix)
+                for m in messages
+            )
         return questions[expected["qa_id"]].strip() in texts
     parts = [
         p.get("text", "")
@@ -118,7 +131,7 @@ def verify(config):
         "budget_finalization": finalization,
         "match": (
             "usage/finish/image, cached tokens and response tool-call IDs when recorded, "
-            "full question or visual prompt, "
+            "full question in the recorded call-type format or visual prompt, "
             "per-turn time window; one use per call/raw"
         ),
         "generated_model_requests": 0,
