@@ -1,4 +1,4 @@
-"""Loopback Qwen adapter for fixed-budget, nonthinking benchmark runs.
+"""Loopback Qwen adapter with request-scoped thinking and shared concurrency.
 
 Credentials come from QWEN_API_KEY; metadata goes to FLASH_REQUEST_LOG.
 The adapter preserves messages, tools, generation budgets and response bodies.
@@ -20,6 +20,48 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+
+
+def normalize_thinking(body: dict[str, Any], config: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Use native request options, template options, then service defaults."""
+    body = dict(body)
+    template = body.pop("chat_template_kwargs", None) or {}
+    thinking = body.pop("thinking", None)
+    if not isinstance(template, dict):
+        raise ValueError("chat_template_kwargs must be an object")
+    if "enable_thinking" in body:
+        enabled, source = body["enable_thinking"], "request.enable_thinking"
+    elif "enable_thinking" in template:
+        enabled, source = template["enable_thinking"], "request.chat_template_kwargs"
+    elif thinking is not None:
+        if isinstance(thinking, dict):
+            kind = thinking.get("type")
+            if kind not in {"enabled", "disabled"}:
+                raise ValueError("thinking.type must be enabled or disabled")
+            enabled = kind == "enabled"
+        else:
+            enabled = thinking
+        source = "request.thinking"
+    else:
+        enabled, source = config.get("enable_thinking", False), "service_default"
+    if not isinstance(enabled, bool):
+        raise ValueError("enable_thinking must be a boolean")
+    body["enable_thinking"] = enabled
+    if enabled:
+        if "reasoning_effort" not in body and config.get("reasoning_effort"):
+            body["reasoning_effort"] = config["reasoning_effort"]
+        if "max_tokens" in body and "max_completion_tokens" not in body:
+            body["max_completion_tokens"] = body.pop("max_tokens")
+    budget = body.get("thinking_budget", template.get("thinking_budget"))
+    if budget is None and isinstance(thinking, dict):
+        budget = thinking.get("budget_tokens")
+    if budget is None and enabled:
+        budget = config.get("thinking_budget")
+    if budget is not None:
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
+            raise ValueError("thinking_budget must be a positive integer")
+        body["thinking_budget"] = budget
+    return body, source
 
 
 def create_app() -> FastAPI:
@@ -52,7 +94,8 @@ def create_app() -> FastAPI:
             "active_requests": active,
             "inflight_requests": inflight,
             "max_concurrency": int(config.get("max_concurrency", 8)),
-            "enable_thinking": False,
+            "enable_thinking": config.get("enable_thinking", False),
+            "thinking_request_override": True,
             "credential_configured": True,
             "upstream_reachability": "actual requests only",
         }
@@ -91,15 +134,20 @@ def create_app() -> FastAPI:
             return JSONResponse(
                 {"error": {"message": "model mismatch or streaming requested"}}, status_code=400
             )
-        body.pop("chat_template_kwargs", None)
-        body.pop("thinking", None)
-        body["enable_thinking"] = False
+        try:
+            body, thinking_source = normalize_thinking(body, config)
+        except ValueError as error:
+            return JSONResponse({"error": {"message": str(error)}}, status_code=400)
         started = time.time()
         record: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "started_at": started,
             "requested_model": model,
-            "enable_thinking": False,
+            "enable_thinking": body["enable_thinking"],
+            "thinking_source": thinking_source,
+            "thinking_budget": body.get("thinking_budget"),
+            "reasoning_effort": body.get("reasoning_effort"),
+            "max_completion_tokens": body.get("max_completion_tokens"),
             "max_tokens": body.get("max_tokens"),
             "has_tools": bool(body.get("tools")),
             "has_image": any(

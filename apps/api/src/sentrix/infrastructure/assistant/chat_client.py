@@ -797,11 +797,19 @@ class OpenAIChatModel:
                 effective_format = None
         if effective_format is not None:
             payload["response_format"] = dict(effective_format)
-        if chat_template_kwargs is not None and self._payload_config.get("allow_chat_template_kwargs", True):
-            payload["chat_template_kwargs"] = dict(chat_template_kwargs)
         extra_body = self._payload_config.get("extra_body")
         if isinstance(extra_body, Mapping):
             payload.update(extra_body)
+        if chat_template_kwargs is not None and self._payload_config.get("allow_chat_template_kwargs", True):
+            defaults = payload.get("chat_template_kwargs")
+            payload["chat_template_kwargs"] = {
+                **(dict(defaults) if isinstance(defaults, Mapping) else {}),
+                **chat_template_kwargs,
+            }
+            # Explicit call options also replace the role's native provider defaults.
+            for key in ("enable_thinking", "thinking_budget"):
+                if key in chat_template_kwargs and key in payload:
+                    payload[key] = chat_template_kwargs[key]
 
         exact_budget = self._model.apply_output_budget(payload, timeout_s=self._timeout_s)
         diagnostics = {

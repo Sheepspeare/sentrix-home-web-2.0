@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜思考参数按调用生效，high配置只读核验
+
+用户进一步要求共享入口支持思考开关覆盖：网关原强制关思考改为原生enable_thinking优先、模板参数其次、服务默认最后；兼容thinking enabled/disabled并统一预算格式，实际开关／来源／预算／强度写原包日志。客户端角色extra_body原先覆盖显式模板参数，已调整合并顺序并让本次enable_thinking／thinking_budget覆盖角色同名默认。系统reasoning仍与模型thinking分别处理。
+
+119的18138网关真实health为enable_thinking=true／reasoning_effort=high／8槽／inflight0，源码明确开思考并用max_completion_tokens。保持119服务及high相册原样。100共享入口准备24槽、服务默认false，现冻结QA角色和Flash Judge显式false保持。网关变更与扩容合并一次优雅切换，不部署活动业务客户端。新回归覆盖双向开关／默认／原生与模板优先级／预算与非法值。聊天客户端全模块两项预算断言失败须与原HEAD复核，不能报全过。
+
+
 ## 2026-11-26｜Judge按任务各2并发，共享网关扩容
 
 用户明确要求每个测评任务各2评分并发，多个任务同时评分；只续缺失，Agent并发保持。原串行补评在组边界交接，v8 16／原large83／v6 83共182份完整成功评分复用。原recovery-2最后FileNotFoundError来自预置交接目录，不是模型故障。新score_saved支持独立线程池、失败停本组新调度且保存另一在飞成功；156相关评分测试通过。新parallel-3准备加入v9固定revision16答，共380份。

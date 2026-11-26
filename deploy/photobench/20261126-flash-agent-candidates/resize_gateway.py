@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -15,6 +16,10 @@ EXPECTED = "665c9afbd193f7ce7ff4a240e2078b0d1478be13cab591687848a3f06ed8a659"
 
 
 def main():
+    release = Path(sys.argv[1])
+    replacement = release / "gateway.py"
+    digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
+    assert digest == sys.argv[2]
     output = BASE / "gateway-resize-24"
     output.mkdir()
 
@@ -65,6 +70,11 @@ def main():
         time.sleep(0.2)
     save("idle-boundary.json", {"at": time.time(), "health": state})
     config["max_concurrency"] = 24
+    config["enable_thinking"] = False
+    original = BASE / "scripts/gateway.py"
+    (output / "gateway-before.py").write_bytes(original.read_bytes())
+    original.write_bytes(replacement.read_bytes())
+    save("source-verification.json", {"old_sha256": EXPECTED, "new_sha256": digest})
     temporary = path.with_suffix(".resize.tmp")
     temporary.write_text(json.dumps(config, indent=2) + "\n")
     temporary.chmod(path.stat().st_mode & 0o777)
@@ -82,7 +92,9 @@ def main():
                         "at": time.time(),
                         "health": state,
                         "pid": pid(),
-                        "gateway_source_unchanged": True,
+                        "gateway_sha256": digest,
+                        "thinking_default": False,
+                        "thinking_request_override": state.get("thinking_request_override"),
                     },
                 )
                 print(json.dumps(state))
