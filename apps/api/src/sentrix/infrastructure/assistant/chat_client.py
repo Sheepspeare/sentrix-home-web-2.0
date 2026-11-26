@@ -806,9 +806,12 @@ class OpenAIChatModel:
                 **(dict(defaults) if isinstance(defaults, Mapping) else {}),
                 **chat_template_kwargs,
             }
-            # Explicit call options also replace the role's native provider defaults.
+        if chat_template_kwargs is not None:
+            # Endpoints that disable template kwargs use native provider options.
             for key in ("enable_thinking", "thinking_budget"):
-                if key in chat_template_kwargs and key in payload:
+                if key in chat_template_kwargs and (
+                    key in payload or not self._payload_config.get("allow_chat_template_kwargs", True)
+                ):
                     payload[key] = chat_template_kwargs[key]
 
         exact_budget = self._model.apply_output_budget(payload, timeout_s=self._timeout_s)

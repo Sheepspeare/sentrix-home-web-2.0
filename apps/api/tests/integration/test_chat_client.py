@@ -991,16 +991,18 @@ def test_cloud_reasoning_expands_application_budget_and_preserves_provider_optio
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_explicit_thinking_replaces_role_defaults(server, enabled):
+@pytest.mark.parametrize("allow_template", [True, False])
+def test_explicit_thinking_replaces_role_defaults(server, enabled, allow_template):
     _Handler.response = reply("ok")
     model = OpenAIChatModel(
         server,
         ServedModel(server),
         payload_config={
+            "allow_chat_template_kwargs": allow_template,
             "extra_body": {
                 "enable_thinking": not enabled,
                 "chat_template_kwargs": {"enable_thinking": not enabled, "other": "keep"},
-            }
+            },
         },
     )
     model.complete_structured(
@@ -1011,4 +1013,5 @@ def test_explicit_thinking_replaces_role_defaults(server, enabled):
     )
     body = _Handler.received[-1]["body"]
     assert body["enable_thinking"] is enabled
-    assert body["chat_template_kwargs"] == {"enable_thinking": enabled, "other": "keep"}
+    if allow_template:
+        assert body["chat_template_kwargs"] == {"enable_thinking": enabled, "other": "keep"}

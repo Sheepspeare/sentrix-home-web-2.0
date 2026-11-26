@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜24槽与按请求思考参数已上线，Judge并行补评交接
+
+100共享18148已在inflight0边界于15:55:03优雅重启，实际24槽／默认enable_thinking=false／thinking_request_override=true；gateway.py SHA328461c1，源码与远端编译通过，提交cc8e2c14已push。只有网关及其配置／优雅退出dropin变更，活动Agent业务和答题并发保持。119的18138仍true／high／8槽，未修改。证据flash-judge-20261126/gateway-capacity-24/{acceptance,terminal,idle-boundary,source-verification}.json。
+
+新parallel-3冻结七组380份；复用原v8 16＋原large83＋v6 83共182份评分，剩198份只补missing。每组各2并发，七组独立同时调度；单组失败保存另一在飞结果，其他组继续。Judge仍qwen3.8-flash关思考／温0／2048／原提示词与无GT图及元数据，Agent0新请求。实际启动／wait见parallel-3/launch-registration与started；不能重放旧recovery-2。
+
+本机客户端修复含allow_chat_template_kwargs=false时将显式思考参数送入原生字段；只提交本机，不热更冻结Agent。网关11项／评分并发5项通过，客户端相关回归通过；整模块两项预算失败用旧HEAD的_post复现，保持原失败。本轮不据成本或supported标签接受002／005质量。v9完整16固定revision取证已完成，4complete12partial0failed，292预算HTTP／294工具／5572245Token待原包唯一核验；字段仍有引用／条件状态问题待本轮评分后继续定位。
+
+
 ## 2026-11-26｜思考参数按调用生效，high配置只读核验
 
 用户进一步要求共享入口支持思考开关覆盖：网关原强制关思考改为原生enable_thinking优先、模板参数其次、服务默认最后；兼容thinking enabled/disabled并统一预算格式，实际开关／来源／预算／强度写原包日志。客户端角色extra_body原先覆盖显式模板参数，已调整合并顺序并让本次enable_thinking／thinking_budget覆盖角色同名默认。系统reasoning仍与模型thinking分别处理。
