@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v6只读监控触发磁盘告警，旧恢复备份开始无损归档
+
+v6到83监控eb57d4cd在15答时因/home可用空间低2GiB终止；真实worker正常、无fatal_error，原limited/large基线252/69答各4并发继续，有限v2为83答暂停。未POST、部署、取消或重做答卷。已找到四份旧建库恢复数据库合计约9.5GB，lsof核无打开、WAL空；抽样压缩比约22%。仅将这些已退休备份归档gzip，逐份解压全量SHA/size一致后释放未压缩副本，receipt保留原校验与恢复方法。活动数据库、最终相册快照、raw及答卷保持。
+
+归档工具8c63930a本机2测试/Ruff/format通过，已传独立ops-storage-8c63930a并核SHA/compile；独立wake b2cf52da-90af-49c2-b543-e1792c7df447先登记后执行，待归档真实验收再push。证据候选audit/storage-recovery-20261126及callback-eb57d4cd-reconciled.json。下一步取远端terminal/receipt和盘余量，按旧wake真实状态恢复只读监控，v6仍同run到83暂停，不自动扩大；失败仅续未完成阶段。Judge周额度11/30前不重试。
+
 ## 2026-11-26｜v6十一题已核，同run继续83题诊断
 
 3ccfa64a/120cba同11题固定revision取证，119真实共享HTTP均200，0本地预检；原8对照large：HTTP244→68、工具262→66、含去重视觉Token7369073→568587。紫裙29→1视觉，型号/£59有原OCR与一次原图读取支持；NeurIPS真实OCR含Hall E/15:05–15:25并用于答案，蚂蚁CMB/pubMedQA及披萨asset_5c08513d3cfe保持。鸡翅14轮检索和按月统计真实守2023-02-09上界，明确鸡腿不是所求鸡翅。质量待原协议Judge；本轮无同asset重复inspect、未触发新增同图提醒，不能把单次降幅归因于该提示。Porto仍未解决，March结构化下旬/省略年份区间解析被忽略的新问题保留诊断，模型侧64组分页/total/group_count/next_offset实际保持。
