@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜相同缓存并发响应用轨迹工具ID区分，恢复第二次原包核验
+
+c0acf2ca在原large阶段因第一步Agent的两个并发原包冲突失败，候选核验尚未启动、两组无整组成功receipt。两响应输入／Token／缓存2048一致，保存工具轨迹精确对应large的两个tool_call_id，因此不按耗时猜测或任意选包。helper c8ff439b增加可选完整响应工具ID约束；原large2503／v6的482次工具响应都有完整保存ID，工具名多重集与模型记录一致，配置来源SHA已存。原缓存／问题／时间／usage与一包一次约束保持。
+
+本机3测试／Ruff／format／compile通过，代码先提交后传独立ops-http-toolids-c8ff439b，SHA7930e326／远端compile通过；真实冲突仅选large91544cd3、排limiteda9001c69，Agent/Judge0。远端验收后已push业务审计helper提交c8ff439ba3c3080949b5f3375fc71f87afbae34a，未修改运行release或调度。新wake c672d3a8-654b-42cb-8404-13e0d44eab47已先登记后启动，独立目录large-priority-83-review/http-recovery-2继续2781＋562次原包核验；不能据小验收宣布整组通过。旧http-recovery-1与失败原包／日志保持，c0回调已reconciled。
+
+原三路实验监控3d304eca／22da8147／286c0dcb保持，不重复QA／采集。刚核home7.4GiB／root2.6GiB，归档与快照不重做。查询条件与PhotoBench身份改造仍为设计未实现；Judge周额度11/30北京时间00恢复前不重试，正式质量待补。整组成功后更新summary／acceptance／RESULTS，并核同图提醒的实际传递与后续重复取证、补条件转换病灶。证据http-recovery-2/{helper-deployment,collision-acceptance,tool-id-provenance,launch-registration}.json。
+
 ## 2026-11-26｜原包核验并发冲突已定位，仅恢复只读核验
 
 HTTP核验wait1d0ab285在baseline-large阶段遇到extra archive matches退出，尚无整组成功receipt，候选核验未开始；原失败stdout/stderr及joblog保持。两原基线几乎同时发相同问题的Planner，输入SHA／1057输入132输出Token及时间窗一致，但large缓存Token0、limited1024，原helper少了这条可核对约束。只读helper0515ca76增加已记录cached_tokens匹配，保留歧义和唯一raw检查；2本机测试/Ruff/format/compile通过，独立ops目录SHA69ae2f2e及远端compile通过。真实冲突原包验收仅匹配large 4b5301e0、排除limited 9e91f86b，0模型请求；未修改活动release／调度。
