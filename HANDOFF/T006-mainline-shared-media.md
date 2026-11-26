@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原双基线新增答卷持续评分恢复
+
+此前771/296是固定快照任务，结束后未自动接入新增答卷。用户要求继续评分，本机新增follow_saved_judging.py并以4596252e验证提交push；3项只补缺分/复用成功/拒绝无效diagnostic回归、Ruff及compile通过。真实UUID定位/固定revision全content分页GET预检通过，初始limited862已答/771分缺91，large332已答/296分缺36。每组2个Judge并发，跨组同时；已实测各峰值2、跨组峰值4，成功payload关思考且无reasoning_content，旧5个state文件SHA保持。当前已完成批次统计见baseline-follow-1/started-verification.json，均分随范围变化，异覆盖不直接公平对照；所有新增HTTP唯一共享raw核验待终态。
+
+沿原生产score_saved/ProfileScoring/native_v2/Flash关思考温0max2048/noGT，旧有限771和大组296完整复用；每批16，追平每30秒GET新增，仅缺分进入Judge。独立18158转10018148/24槽，终结只关自身forward；不改Agent/run/QA4并发/预算，不重答。新有效wake344c03b8-fe4d-4d24-82b2-42307a150fbb已注册，目标原chat01a20d13-6178-7312-b64e-a50c8a233ca5；不可重复启动。任一失败保留在飞成功、停止新增，读具体阶段只续missing。两个原run终态或11/27北京时间15:00取数截止结束回调；随后合并共同UUID公平配对、覆盖与有效QS，未评分不记0。原两全量wake及新直连旧代码实验acfb1833保持，后者与其Judge仍直连云端，不混入此原基线评分。
+
+
 
 ## 2026-11-26｜模型同轮工具组合触发旧上下文压缩缺口
 

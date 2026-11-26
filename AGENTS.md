@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26原双基线已接持续Flash补评：旧771/296有效分完整复用，各2评分并发、跨组同时；新增答卷每30秒检查，只补缺分，至11/27北京15:00或原run终态。见T006及候选audit/flash-judge-20261126/baseline-follow-1。
+
+
 - 11/26三题轨迹已定位旧压缩缺口：Flash同轮搜索＋巨量统计被整轮保护；豆包单独统计可丢弃继续，豆包Glasgow/Porto亦有溢出且答案错。见T006及doubao-code-direct/recovery-1/trajectory-comparison/RESULTS.md；活动实验保持。
 
 
