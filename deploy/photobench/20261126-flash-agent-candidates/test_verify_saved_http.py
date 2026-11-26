@@ -79,6 +79,20 @@ def test_same_signature_and_question_from_other_run_is_excluded(tmp_path):
     with pytest.raises(AssertionError, match="extra archive"):
         m.verify(config)
 
+    # Concurrent identical planner requests can have different recorded cache usage.
+    for record, cached in zip(records, [0, 1024], strict=True):
+        record["started_at"] = 1
+        record["usage"]["prompt_tokens_details"] = {"cached_tokens": cached}
+    log.write_text("\n".join(json.dumps(r) for r in records))
+    config["expected"][0]["cached_tokens"] = 0
+    assert m.verify(config)["requests"][0]["id"] == "0"
+
+    # Matching cache usage still does not justify choosing an arbitrary archive.
+    records[1]["usage"]["prompt_tokens_details"]["cached_tokens"] = 0
+    log.write_text("\n".join(json.dumps(r) for r in records))
+    with pytest.raises(AssertionError, match="extra archive"):
+        m.verify(config)
+
 
 def test_vision_prompt_disambiguates_same_usage():
     e = {"start": 0, "end": 2, "internal": True, "asked": "read label"}

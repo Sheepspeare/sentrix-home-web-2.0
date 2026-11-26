@@ -11,6 +11,10 @@ from pathlib import Path
 def matches(expected, record, request, questions):
     if not expected["start"] <= record["started_at"] <= expected["end"]:
         return False
+    if "cached_tokens" in expected:
+        cached = (record.get("usage") or {}).get("prompt_tokens_details") or {}
+        if cached.get("cached_tokens") != expected["cached_tokens"]:
+            return False
     messages = request.get("messages", [])
     texts = [m["content"].strip() for m in messages if isinstance(m.get("content"), str)]
     if not expected["internal"]:
@@ -104,7 +108,8 @@ def verify(config):
         "requests": requests,
         "budget_finalization": finalization,
         "match": (
-            "usage/finish/image, full question or visual prompt, per-turn time window; one use per call/raw"
+            "usage/finish/image, cached tokens when recorded, full question or visual prompt, "
+            "per-turn time window; one use per call/raw"
         ),
         "generated_model_requests": 0,
     }
