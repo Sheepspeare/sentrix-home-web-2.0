@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27 02:02｜大预算16并发与云端直连切换已交后台
+
+用户确认大预算全量提至16并发并参照旧Doubao代码直连实验，直接调用云端。当前调度池及产品线程池都固定8，DispatchControl拒绝升并发，因此不能直接改文件宣称16生效。已在旧run835e7b完成20题时将pause_after_completed设20，只停新调度；最近22题结束、6题在飞，原题自然结束后才切换。目标报告先按接下来的2026-11-27北京中午记录，不承诺完成时间；此前全量已经01:48:10启动，不撤销该事实。
+
+本机5ec6bdcc新增resume显式qa_concurrency和已配置model_base_url覆盖，保留源冻结快照/预算/题库/已完成项；104项续跑与传输回归通过，Ruff及compile通过。独立ops-fusion-direct16-5ec6bdcc四文件SHA/compile已验，尚未因为上传而切服务。业务产品bc736153、相册及100/600各reserve2、128K/4096/temp0/retry3保持。重启时复制独立评测目录仅覆盖suites，不写共享旧评测源码；复用既有transport/sitecustomize处理云端鉴权、关思考、压缩原包，原密钥只进程内使用，不输出提交。
+
+融合audit/compact-query-v3/direct-cloud-16/run-switch-and-watch.py已由wake23da4c65-f753-45be-9b63-d77e67195878启动，target本侧聊01a215f5。后台先等无pending/running，固定所有旧答SHA，再取消未执行调度；仅8303/8883切16线程与直连配置，单次resume生成新run，并核继承答案SHA/原题库/真实16在飞。阶段回执在remote，resume-response存在就必须attach，不能重放。远端真实验收后脚本自动push本地提交。当前仍待在飞题收尾，16是否生效以remote/started及实际turn为准。
+
+旧独立Judge跟随835e7b终态自然完成后，driver将有效分及对应diagnostic合成带源SHA与旧答SHA的新seed，继续同Flash native_v2关思考2并发，仅补新答，不写原分；QA/Planner/视觉直连，Judge原传输协议保持。新全量及评分终态或真实持续429/鉴权/过程异常将触发此wake，之后核实际worker与原包再调整，仅降低新调度、不取消在飞、不重答成功。源原包逐HTTP验收仍待全量后补。有限83 run35dfdb/8并发/wake0e841faa保持，原c50是8并发全量启动通知，迟到只读回执，不重复接续。用户未授权给主聊发消息，未用子Agent。
+
 ## 2026-11-27 01:45｜同代码有限预算83题已独立启动
 
 用户要求保留大预算全量接续，另测当前业务bc736153的20模型/30工具版，采用主对话原83题及原有限基线顺序。本机新增准备helper e491a6a6，经5项参数验证、Ruff/format/compile后提交；远端SHA/compile、18记忆表、388业务源码、保护进程及保存向量索引验收后push。新增8304/8884独立实例，媒体复用、0新embedding，未改大预算或其他实例。

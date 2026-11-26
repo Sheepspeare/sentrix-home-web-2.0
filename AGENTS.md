@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/27 02:02侧聊新授权大预算改16并发且QA/Planner/内部视觉直连云端。旧835e7b从20答处停止新增调度，在飞自然结束后保留答卷、单次resume新run；当前切换后台运行，不能称16已生效。续跑接口5ec6bdcc支持显式并发/已配置模型地址，104测试及远端SHA/compile通过；仅独立评测副本改suites，产品仍bc736153。wake23da4c65跟至切换异常或全1013+Judge终态，Judge2复用旧分，有限83保持。详见融合audit/compact-query-v3/direct-cloud-16及T006。
+
 - 11/27 01:45新增同bc736153有限预算原83题已实际运行：8304/8884、run35dfdb，20模型/30工具各reserve2、8答题并发，83后暂停；复用Flash非思考相册、0新embedding。已核1/83、worker alive、fatal=null，后续固定revision取证及Flash Judge2并发；主对照原30c有限83。原大预算全量接续不改。见融合audit/limited-83-bc及T006。
 
 - 11/27 01:31侧聊已确认bc版全1013授权：当前同16完成13、3在飞。全量接续wrapper已实际运行／waitc50e9852，等现有16取证及Flash评分齐后同run835e7b原子扩1013，复用16答及16分，答题8／Judge2；复用原Flash关思考相册，不重建。此时全量尚未启动，以full-run/started为准。005主对照30c原基线；002按看图支持及缺证引导评价，非回看率越高越好。见融合audit/compact-query-v3及T006。
