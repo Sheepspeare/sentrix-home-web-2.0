@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜查询条件全链路诊断与改造计划
+
+用户明确要求优先解决自然语言到查询条件，范围含地点、人物、媒体和来源，也包含“最近一次旅行／第三天”等事件依赖。核原limited83、候选v2 limited83，以及当前v6即时27题，合计193份回合（题目有重叠），未按参考答案设计策略。v6逐题固定revision、核qa_id及content分页read_revision，只读GET，Agent/Judge请求0，原run继续2并发至83暂停。
+
+确认时间格式／区间未落实；地点只在有人脸组时传入搜索，place又混合GPS／酒店所在地／航班路线；喂猫视频用户和猫仍误作人脸姓名4次拒绝；Porto第三天、Glasgow最近旅行缺可执行依赖；商品数量和事件时间被错用资产统计。原基线／v2／v6分别6题8调用、4题4调用、2题4调用在统计返回ok时未落实非空请求条件。该计数是链路症状，不是答错率；地点统计零结果的行政数据／别名根因仍待核。
+
+推荐复用现有Planner模型调用，加入从工具注册表生成的能力说明并输出共用类型条件；Agent引用所属需求、按证据补全事件锚点，后端统一转换到搜索／SQL并反馈实际和未执行条件。区分拍摄地与正文／目的地、拍摄时间与事件时间；必要条件未知时允许明确标识的探索，精确统计不得静默放宽。保留现有分页，优先修上游。阶段为真实病灶契约→共同执行→Planner/Agent贯通→独立小批及83题验收；原活动版本不热更。当前只完成方案，没有新业务实现、部署或QA。
+
+完整方案：/Users/jzousz/.codex/worktrees/flash-agent-candidates/sentrix-local1171-resume-20261031/docs/refactor/2026-11-26-query-condition-plan.md。证据：候选audit/query-condition-review/{README.md,trace-condition-index.json,source-manifest.json,current-v6/receipt.json}；193组planner/tools来源SHA已固定。当前有效三路wake仍按storage-recovery-20261126/monitor-recovery-registration.json，不重复登记。Judge周额度保持待恢复，正式质量未接受。
+
+
+
 ## 2026-11-26｜磁盘恢复验收完成，三路只读监控已接续
 
 四份已退休的建库恢复备份由9497915392字节无损归档为2718656033字节，逐份解压完整SHA/字节数与原件一致，压缩文件SHA再核一致，释放6.31GiB；/home可用8.26GiB。原备份内容完整保留于各自.db.gz及.db.archive.json，恢复时解压至新文件并核source_sha256后恢复原路径。活动DB、最终快照、答卷/raw保持；没有QA POST、服务切换或重启。归档工具8c63930a已真实远端验收，证据候选audit/storage-recovery-20261126/acceptance.json。
