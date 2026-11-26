@@ -1736,3 +1736,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - 11/27历史74.41%核查：当前334产品源333同，仅晚期压缩修复不同且未新增历史有效分；三评分提示词SHA一致/native_v2，纠正“协议不同”为裁判模型不同。当前大组共同61题旧豆包69.95%/Flash52.46%仍有差距，原因待同裁判扩大配对；见T006及historical75-code-comparison。
 
 详细报告：`/Users/jzousz/Documents/ChatGPT/产品项目/audit/20261126-flash-agent-candidates/doubao-code-flash-memory-direct/full-1013/historical75-code-comparison/RESULTS.md`。本轮只读取证；同16同裁判旧相册Doubao46.67%/Flash大40%，新Flash相册53.33%且相册不同，不据此判断全量排名。保持既有128K排空及重跑范围授权，不热改压缩逻辑。
+
+- 11/27双组128K已生效（有限02:41:45、大03:22:36），16K边界89/81题；原run/evalPID与16QA/2Judge保持。正式retest须全量终态后按逐题错误补，313K异常不重跑；见T006/context-128k验收与补跑计划。
