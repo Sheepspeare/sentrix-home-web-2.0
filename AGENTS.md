@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26三题轨迹已定位旧压缩缺口：Flash同轮搜索＋巨量统计被整轮保护；豆包单独统计可丢弃继续，豆包Glasgow/Porto亦有溢出且答案错。见T006及doubao-code-direct/recovery-1/trajectory-comparison/RESULTS.md；活动实验保持。
+
+
 - 11/26直连Flash五次失败已核本地提示词22.6万–23.6万Token超过旧16K上限；历史豆包同16仅15有效分/6分（40%），1缺分，旧Judge口径单列。见T006及doubao-code-direct/recovery-1/failure-and-doubao-same16.md。
 
 

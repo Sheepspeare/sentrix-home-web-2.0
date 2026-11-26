@@ -1,6 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
 
+## 2026-11-26｜模型同轮工具组合触发旧上下文压缩缺口
+
+三题固定revision逐工具核对完成，详见doubao-code-direct/recovery-1/trajectory-comparison/RESULTS.md。豆包Glasgow也有6次prompt_too_long、Porto83次，之前仅确认三月的表述已补齐；历史三题为1执行失败未评分＋2答案错0分。Flash在同一assistant回复并调搜索和group/place，最新search保护整轮，统计约22万Token无法丢弃，预览缩短也无效；豆包三月首步只统计，可整轮删除后恢复到2623Token继续，最终502。源码_round_trip_spans/_drop_oldest_tool_round_trip/_compact_latest_preview_round_trip与实际tool_calls对应；未改活动代码/协议/答卷，不重答，后续完整16取证评分保持。
+
+
 ## 2026-11-26｜直连Flash五次失败与历史豆包同16核对
 
 五次失败均本地prompt_too_long：limited Glasgow236028Token、三月225613、Porto225685，large后三月/Porto同量级，旧上限16384；界面model_error不能归因云端或16并发。失败item及large三月固定revision trace/错误已保存，尚非全16完整取证，不重答QA。
