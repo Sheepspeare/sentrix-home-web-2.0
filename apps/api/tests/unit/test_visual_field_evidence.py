@@ -83,6 +83,26 @@ def test_readable_ocr_can_satisfy_field_without_another_visual_call():
     assert result.citations == (("ocr", "座位 12A"),)
 
 
+def test_ocr_line_wrapping_preserves_the_original_quote():
+    fact = replace(OCR, value="Model ABC\nSkirt £59")
+    result = parse_field_reviews(
+        response(supported(quote="Model ABC Skirt")), requirements=[REQ], facts=[fact]
+    )[0]
+    assert result.verdict is ClaimVerdict.SUPPORTED
+    assert result.citations == (("ocr", "Model ABC\nSkirt"),)
+
+
+def test_rewritten_citation_requests_citation_repair_instead_of_new_image():
+    result = parse_field_reviews(response(supported(quote="座位...12A")), requirements=[REQ], facts=[OCR])[0]
+    assert result.verdict is ClaimVerdict.AMBIGUOUS
+    assert result.citation_error
+    assert not result.citations
+    uncertain = parse_field_reviews(
+        response(supported(quote="座位...12A")), requirements=[REQ], facts=[replace(OCR, confidence=0.6)]
+    )[0]
+    assert not uncertain.citation_error
+
+
 @pytest.mark.parametrize(
     "fact",
     [

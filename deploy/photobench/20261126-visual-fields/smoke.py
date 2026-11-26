@@ -185,6 +185,17 @@ def run_case(case, media_root, base_url, output_file):
             ):
                 break
             if round_number == 0:
+                if (
+                    review.fields
+                    and all(
+                        item.citation_error
+                        for item in review.fields
+                        if item.verdict is not ClaimVerdict.SUPPORTED
+                    )
+                    and not review.blocks
+                ):
+                    result["citation_repair"] = True
+                    continue
                 question = (
                     "核实原问题要求的缺失或冲突字段："
                     + "；".join(

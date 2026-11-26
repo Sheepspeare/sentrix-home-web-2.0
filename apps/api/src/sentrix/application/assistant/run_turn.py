@@ -2257,7 +2257,12 @@ class RunTurn:
         state = session.state
         facts = facts_from_state(state)
         key = hashlib.sha256(repr((answer, facts)).encode()).hexdigest()
-        if session.field_review_attempts >= 2 or key == session.field_review_key or not state.can_step():
+        repair_citations = any(item.citation_error for item in session.field_reviews)
+        if (
+            session.field_review_attempts >= 2
+            or (key == session.field_review_key and not repair_citations)
+            or not state.can_step()
+        ):
             return False
         if not any(record.status == "ok" and record.tool != FINAL_ANSWER_TOOL for record in state.records):
             return False
@@ -2289,6 +2294,7 @@ class RunTurn:
                 "verdict": item.verdict.value,
                 "reason": item.reason,
                 "value": item.value,
+                "citation_error": item.citation_error,
                 "citations": [{"call_id": call_id, "quote": quote} for call_id, quote in item.citations],
             }
             for item in session.field_reviews
@@ -2355,6 +2361,13 @@ class RunTurn:
             if len(candidates) == 6:
                 break
         state.phase = FINALIZING
+        if gaps and all(item.citation_error for item in gaps) and not review.blocks:
+            session.pending_reminder = (
+                f"字段核验引用格式需要修正：{missing}。"
+                "复用已提供的OCR和观察原文，保持有依据的回答，下一次核验使用连续原文引用。"
+                "引文改写或省略不构成缺少图片字段，不要因此追加看图。"
+            )
+            return True
         session.pending_reminder = (
             f"字段核验：{missing or review.reason}。"
             "先复用已确认字段、原文和来源。仅对缺失或冲突字段选择相关图片，"

@@ -34,6 +34,7 @@ class FieldReview:
     reason: str = ""
     value: str = ""
     citations: tuple[tuple[str, str], ...] = ()
+    citation_error: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +236,7 @@ def build_field_messages(
         "fields逐需求报告证据是否取得，verdict单独报告回答是否正确使用证据；"
         "回答如实说明缺口时整体可supported，但缺失字段仍unsupported或ambiguous。\n"
         "supported字段必须给出value和citations，引用输入facts的provenance及逐字原文quote；"
+        "quote只复制连续原文片段，跨句分多条引用，不能用省略号拼接或改写。"
         "可以引用多图作比较或计算，但不得给错误图片的字段换归属。reason指出缺失或冲突的具体字段。\n"
         "只输出JSON："
         '{"verdict":"supported|unsupported|contradicted|ambiguous","reason":"回答使用证据的情况",'
@@ -294,31 +296,45 @@ def parse_field_reviews(
             verdict = ClaimVerdict.AMBIGUOUS
         citations: list[tuple[str, str]] = []
         image_citation = False
+        citation_error = False
         raw_citations = row.get("citations", ())
-        if isinstance(raw_citations, list):
+        if not isinstance(raw_citations, list):
+            raw_citations = []
+        if raw_citations:
             for citation in raw_citations:
                 if not isinstance(citation, Mapping):
                     continue
                 call_id, quote = str(citation.get("call_id") or ""), str(citation.get("quote") or "").strip()
-                cited_facts = [
-                    fact
+                pattern = re.compile(r"\s+".join(re.escape(part) for part in quote.split()))
+                cited = [
+                    (fact, match)
                     for fact in facts
                     if quote
                     and fact.provenance == call_id
-                    and quote in str(fact.value)[:2000]
                     and fact.confidence >= 1.0
                     and not fact.filters_not_applied
+                    and (match := pattern.search(str(fact.value)[:2000]))
                 ]
-                if cited_facts:
-                    citations.append((call_id, quote))
-                    image_citation |= any(fact.fact_type != "source_text" for fact in cited_facts)
+                if cited:
+                    # OCR换行可作为空白；保存实际匹配的原文，保留可追溯字节。
+                    citations.append((call_id, cited[0][1].group()))
+                    image_citation |= any(fact.fact_type != "source_text" for fact, _ in cited)
+                elif any(
+                    fact.provenance == call_id and fact.confidence >= 1.0 and not fact.filters_not_applied
+                    for fact in facts
+                ):
+                    citation_error = True
         value = str(row.get("value") or "").strip()
         reason = str(row.get("reason") or "")
         if verdict is ClaimVerdict.SUPPORTED and (
             not image_citation or not value or len(citations) != len(raw_citations)
         ):
             verdict, reason = ClaimVerdict.AMBIGUOUS, "支持裁决缺少可追溯的确定原文或字段值"
-        reviews.append(FieldReview(requirement.id, verdict, reason, value, tuple(citations)))
+            if citation_error:
+                reason = "核验引文未对应已提供的连续原文，请修正引用；这不表示需要重新读取图片"
+        else:
+            citation_error = False
+        reviews.append(FieldReview(requirement.id, verdict, reason, value, tuple(citations), citation_error))
     return tuple(reviews)
 
 

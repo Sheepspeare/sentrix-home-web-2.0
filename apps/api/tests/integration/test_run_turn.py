@@ -2450,6 +2450,39 @@ def test_sufficient_saved_ocr_does_not_force_visual_inspection(env, monkeypatch)
     assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "satisfied"
 
 
+def test_citation_repair_rechecks_unchanged_answer_without_reading_image(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("read_photo_text", "c2", result_set_id="rs_1", asset_handle="photo_1"),
+            final("座位12A。"),
+            final("座位12A。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=PlannerScript(
+            [_visual_field_reply(citation="c2", quote="座位...12A"), _visual_field_reply(citation="c2")]
+        ),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "read_photo_text": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"full_text": "座位12A"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.answer == "座位12A。"
+    assert len(model.claim_calls) == 2
+    assert all(name != "inspect_photo" for name, _ in toolbox.calls)
+    assert reminder_count(model, "字段核验引用格式需要修正") == 1
+    assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "satisfied"
+
+
 def test_uncertain_visual_field_stays_open_and_reminder_stops_after_one(env, monkeypatch):
     monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
     _conversations, _turns, conversation, _db = env
