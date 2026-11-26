@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原limited771全部评分验收完成
+
+固定771题快照现771/771有效分齐，QS43.61929467%，0缺分/0待复核；按qa_id/evaluation_turn合旧83＋共同新增213＋额外475，互斥且精确覆盖771，无重复计分。QS含列表小数分，不转换整数答对数。最后76新增有效：64真实Judge HTTP唯一raw全200/关思考/54935Token，另12程序分；原399完整成功结果、原输出SHA及428历史文件SHA保持，旧209/137/71成功原包未重核。额外475累计410真实HTTP、382187Token（含此前2无效尝试），67程序分；生产公式/提示词不改、失败history保留。callback-e7fb0797已reconciled，不能重放。
+
+这771份Agent状态complete193/partial548/failed27/blocked3，执行记录均已终结；评分覆盖与Agent成功分开。最终RESULTS/acceptance/merge-integrity/score-summary/scored-answers-771.json/scores-771.csv见候选audit/flash-judge-20261126/limited-snapshot-771；最后原包见recovery-2/judge-http-exact-verification。Judge为同家族Flash关思考/温0/2048/native_v2/noGT/每任务2并发，未作人工质量验收。共同296公平比较仍limited42.5338%、large49.4369%，51改善31退化214持平；不同771/296范围不直接比较，Planner都开且双上限同时改变不能归因Planner。
+
+只读核原全量最新limited799/1013、large313/1013，均30c67e74/4答题并发/worker alive/fatal=null；原a38f0e0a/7a6f8cfa有效wake不重挂，不重答QA/部署/改并发。新答卷不混入固定771，可待原全量终态继续按缺分补评。v12仍16pause、无新全量候选launch，002005未结项、v6成熟诊断证据保留与11/27北京15固定数据17汇报保持。保护119high、原服务与相册/raw/答卷，0embedding，不复制库缓存或重做旧归档转存快照。
+
 ## 2026-11-26｜有限771已695有效，仅续最后76缺分
 
 limited-snapshot-771/recovery-1本轮处理157，其中156有效、1Judge自相矛盾拒收、75未请求。475集合累计399有效；771累计695有效/76缺分，有效QS均分43.2093%，未分不记0。失败响应accuracy=true而core_match=false并列missing店名，生产冻结公式严格拒收，未改评分解析/提示词或擅自推分。137新Judge HTTP已逐response ID及完整请求/响应SHA、usage/时间唯一raw匹配，全200/实际关思考，共130343Token，另20程序评分；原209及共同补评71原包直接复用。
