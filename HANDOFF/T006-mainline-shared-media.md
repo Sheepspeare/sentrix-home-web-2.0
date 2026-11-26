@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v6十一题已核，同run继续83题诊断
+
+3ccfa64a/120cba同11题固定revision取证，119真实共享HTTP均200，0本地预检；原8对照large：HTTP244→68、工具262→66、含去重视觉Token7369073→568587。紫裙29→1视觉，型号/£59有原OCR与一次原图读取支持；NeurIPS真实OCR含Hall E/15:05–15:25并用于答案，蚂蚁CMB/pubMedQA及披萨asset_5c08513d3cfe保持。鸡翅14轮检索和按月统计真实守2023-02-09上界，明确鸡腿不是所求鸡翅。质量待原协议Judge；本轮无同asset重复inspect、未触发新增同图提醒，不能把单次降幅归因于该提示。Porto仍未解决，March结构化下旬/省略年份区间解析被忽略的新问题保留诊断，模型侧64组分页/total/group_count/next_offset实际保持。
+
+11份成功答卷已逐题核SHA保留，完成验收后仅原子将large-v6/dispatch-control.json的pause_after_completed从11改83，并发2/预算100模型600工具/各reserve2/模型/源相册/原83集合保持；未POST/部署/重启。先注册独立wake eb57d4cd-d9da-4b89-baa0-90fbc726672c，再恢复同run，当前11题运行/未暂停。83后暂停供进一步诊断，不作质量或正式发布接受。原有限v2的83题保持暂停，原双全量和fb1b011f/a375e19f监控继续；40942f40首11已本轮处理，迟到按reconciled读取不重挂。原两AGENTS/T006及audit已更新。证据候选audit/v6-large-rerun/review、priority-83-registration.json、continue-to-83.json。Judge周额度11/30前不重试，11/27 15统计17汇报。
+
 ## 2026-11-26｜有限候选v2的83题已验，整体降本未通过
 
 f9367d/11deb1c6全部83优先UUID终态并按2并发/83后暂停，首8答SHA保持；完整固定revision取证及1212真实HTTP原包一一匹配均200。原limited→v2：HTTP1206→1212、工具1292→1452、含去重视觉Token17026623→23643330（+38.9%），5条本地分组上下文失败；自然/带缺口回答26/51不代表质量合格，Judge周额度至11/30、主分待补。v2不扩大/不热更。37题真实普通模型额度收尾，48原包均保留问题和工具历史/仅final_answer、每题最多2次且总20/30内；44返回final，4返回无效工具名保留证据。15题omission_conflict，已确认IP端口/另一航段座位/重复正文/现行政策汇总四类局部缺口误拦，规则尚未改；5分组失败纳后续current候选对照。证据候选audit/v2-limited-rerun/priority-83-review/RESULTS.md，callback-ee8e06d1已处理不重挂。
