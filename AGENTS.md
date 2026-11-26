@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/27原limited ea4413全1013已结束并Flash评分全齐：QS43.659568%，0缺分；265完整/714缺口/31失败/3阻断。旧771保持，新242分204HTTP唯一raw全200关思考；仅固定轨迹/成本续审wake0fe9888f，不重答重评，原large及其他全量继续。见T006及双基线audit/limited-full-final-review。
+
+
 - 11/27全量Flash Judge大组无答卷404已修：两条执行超时单列不补0，39成功复用至独立恢复2大组；有限原进程继续。01:29处理/评分有限50/50、大43/41（另2无答卷）；各16QA/2Judge直连保持。有效QA9f6a3f64、有限Judgee2e1b9e6、大Judgeaa97806e；旧03a14470已reconciled，勿重放。目标11/28中午，002/005未结项，见T006及full-1013/judge/recovery-2-large。
 
 - 11/27 Flash自身相册同16双预算已全验：有限QS31.25%（5/16）、大组50%（8/16），比Doubao相册净增1/2题；Token分别+9.67%/-10.97%。697Agent及30Judge HTTP唯一raw全200/关思考直连，32有效分0缺分。大组2本地超长/7约1小时timeout，当时16pause；后续全量见上条。见T006及候选audit/doubao-code-flash-memory-direct/review/RESULTS.md。

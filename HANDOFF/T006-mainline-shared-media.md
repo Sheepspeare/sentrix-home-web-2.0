@@ -1,5 +1,16 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜原有限预算全1013结束且Flash评分全齐
+
+北京时间01:55观察原run ea4413终态completed_with_errors；业务30c67e74、20模型/30工具、4QA保持，1013唯一UUID已逐11页GET核齐。执行状态265 complete/714 partial/31 failed/3 blocked，终止原因370 step_budget_exhausted、31 model_error、265 answered、344 answered_with_gap、3 guard_blocked。处理完不等于全部答题成功。
+
+持续Flash评分已追平1013/1013，0缺分，QS43.659568%（总分442.2714285714/1013，含列表部分分）。旧771完整结果与三源state SHA保持，新242份输入固定revision/answer_fingerprint/diagnostic全核；204真实JudgeHTTP按responseID及完整canonical请求响应SHA/usage/time唯一匹配共享raw，全200/关思考/温0max2048/native_v2原prompt/noGT，187259Token；另38程序分。0重答、0重评成功、0审计模型请求，原run评分字段未写回。callback-a38f0e0a-reconciled已存，迟到只读。
+
+全1013 Agent预算/HTTP/Token/时延尚待审计，列表投影12882模型/13035工具不能当真实HTTP成本。已新登记GET固定qa_id/revision全content+trace采集wake0fe9888f-79b5-4c24-8bd3-1a0cd9313bbb，复用同revision已完整83及逐文件SHA收据，只采缺失；单题新GET预检通过，4只读取证并发，禁止重放QA/评分/prepare/复制库缓存。后续看trace-collection-terminal及逐receipt，只续缺阶段，完成再汇总预算并唯一核新HTTP、视觉Token去重。
+
+证据：产品audit/20261126-flash-dual-baseline-launch/limited-full-final-review/{RESULTS.md,acceptance,score-summary,run-status-summary,scored-answers-1013,local-integrity,judge-http-exact-verification,trace-collection-intent,trace-launch-registration}.json（RESULTS为md）及callback-a38f0e0a-reconciled.json。原large 7a6f8cfa、持续Judge344c03b8仍活跃，有限线程自然完成不重启整个评分器；其他旧代码双全/条件融合/119high保持。约51GiB空闲，无本轮迁移删除。002/005未结项。
+
+
 ## 2026-11-27｜全量Judge大组无答卷404已修，按组独立接续
 
 01:22恢复1大组采集两题失败：qa95891f4f/f05d1f2b的execution_status=timeout，3660秒未取得答卷，详情无answer/runtime_turns；旧采集器仍GET answer内容得到404。原39有效评分未变，失败批次Judge0；有限原线程与两组QA继续。修复2ecfb13f在固定revision读取qa_id、确认执行失败且无答卷后记录unscorable，跳过Judge和均分分母，继续其他答卷；不把Agent failed/无答卷补0，不重答QA。完整正文存在但执行失败仍留人工检查，未放宽评分协议。
