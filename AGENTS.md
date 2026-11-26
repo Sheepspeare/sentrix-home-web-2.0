@@ -1,5 +1,14 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26 Flash Judge已返回9题，8题有效；第9结构化依据被旧字符串解析拒绝，已无损兼容并154回归通过。恢复2离线复用原响应、保留成功后续评，不重发已返回请求；v9运行源码保持，见T006及Flash Judge audit。
+
+- 11/26用户授权待评分Judge改Qwen3.8 Flash并默认关思考；沿用native_v2提示词，独立保存新分且保留豆包历史。已备六组364份冻结答卷，v9完成后接同协议；以候选audit/judge-policy.json为准，详见T006。
+
+- 11/26 v9字段／引文完整Agent同16复测已实际启动：独立8300/8880、5c45b791、2并发，最近保存快照7/16、无fatal；16后暂停验收。紫裙单例回调已核、不重测，见T006及候选audit/v9-large-rerun。
+
+- 11/26 v6完整83取证及1829HTTP原包验收：同83请求2781→1829／Token1.055亿→6548万（-37.91%）；质量待补，459本地预检及条件语义仍未解决，保持暂停。002新版v9独立同16任务已登记，见T006与候选audit。
+
+
 - 11/26需求002紫裙单例实测：型号／£59逐字引文、2HTTP／2935Token／0新增视觉，8保护服务保持；接现有独立8300/8880同16题完整Agent验证，正式质量待验。见T006、requirement-002-fields/citation-repair-1及v9-large-rerun。
 
 
@@ -126,4 +135,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | v8同16复测，磁盘恢复已验，四路只读监控接续 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | v6完整83证据验收／质量待补；002字段v9独立同16验证 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

@@ -47,6 +47,27 @@ def compact_verdict(result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def normalize_atm_checks(checks: Any) -> dict[str, Any]:
+    """Keep structured evidence as JSON text without changing the verdict rule."""
+    if not isinstance(checks, dict) or type(checks.get("core_match")) is not bool:
+        raise ValueError("Invalid Judge checks")
+    normalized = dict(checks)
+    for key in ("missing", "contradictions", "unverified_additions"):
+        entries = checks.get(key)
+        if not isinstance(entries, list):
+            raise ValueError("Invalid Judge checks")
+        values = []
+        for entry in entries:
+            if isinstance(entry, str):
+                values.append(entry)
+            elif isinstance(entry, dict) and entry:
+                values.append(json.dumps(entry, ensure_ascii=False, sort_keys=True))
+            else:
+                raise ValueError("Invalid Judge checks")
+        normalized[key] = values
+    return normalized
+
+
 def prepare_batches(
     state: dict[str, Any],
     configs: Mapping[str, Any],
@@ -537,17 +558,7 @@ class ProfileScoring:
                     and config.get("atm_input_version") == "native_v2"
                     and "checks" in parsed
                 ):
-                    checks = parsed["checks"]
-                    if (
-                        not isinstance(checks, dict)
-                        or type(checks.get("core_match")) is not bool
-                        or any(
-                            not isinstance(checks.get(k), list)
-                            or any(not isinstance(v, str) for v in checks[k])
-                            for k in ("missing", "contradictions", "unverified_additions")
-                        )
-                    ):
-                        raise ValueError("Invalid Judge checks")
+                    checks = normalize_atm_checks(parsed["checks"])
                     consistent_score = int(
                         checks["core_match"] and not checks["missing"] and not checks["contradictions"]
                     )

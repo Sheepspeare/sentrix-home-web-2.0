@@ -322,6 +322,43 @@ def test_structured_score_and_reason_must_agree_in_both_directions(accuracy, mis
     assert "contradicts" in r["reason"]
 
 
+def test_native_checks_preserve_structured_evidence_and_original_response():
+    s = state("atm_open", source_qtype="open_end")
+    evidence = {"item": "Place/Hall", "reference_value": "Hall F", "model_value": "Hall E"}
+    reply = {
+        "accuracy": False,
+        "checks": {
+            "core_match": False,
+            "missing": [],
+            "contradictions": [evidence],
+            "unverified_additions": [],
+        },
+    }
+    service, batches, http, _ = setup(s, [ATM], [reply])
+    r = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert r["status"] == "completed" and r["score"] == 0
+    assert json.loads(r["checks"]["contradictions"][0]) == evidence
+    raw = r["requests"][0]["raw_response"]["choices"][0]["message"]["content"]
+    assert json.loads(raw) == reply and len(http.calls) == 1
+
+
+@pytest.mark.parametrize("entry", [None, 1, False, {}, []])
+def test_native_checks_reject_invalid_evidence_entries(entry):
+    s = state("atm_open", source_qtype="open_end")
+    reply = {
+        "accuracy": False,
+        "checks": {
+            "core_match": False,
+            "missing": [],
+            "contradictions": [entry],
+            "unverified_additions": [],
+        },
+    }
+    service, batches, _, _ = setup(s, [ATM], [reply])
+    r = service.score(batches[0], scoring_targets(s, batches[0], "all")[0])
+    assert r["status"] == "failed" and r["reason"] == "Invalid Judge checks"
+
+
 @pytest.mark.parametrize(
     "prediction,expected",
     [([], 0), (["a"], 0.5), (["a", "b"], 1), (["a", "b", "c"], 2 / 3), (["a", "a", "b"], 1)],

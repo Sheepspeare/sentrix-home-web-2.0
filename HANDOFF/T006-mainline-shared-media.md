@@ -1,5 +1,36 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜Flash Judge结构化依据解析修复，保留已评分项
+
+恢复1实际9次HTTP全部返回，前8题评分成功，第9题以对象返回Hall E／Hall F矛盾依据，被旧仅字符串校验拒绝；不是供应商或连接失败。新增无损格式转换，把非空依据对象存成完整JSON文本，原响应保留；核心匹配／遗漏／矛盾的评分一致性公式保持。154评分相关回归、Ruff／格式／compile／该模块mypy通过。恢复2先用原第9响应离线经过生产评分逻辑解析，保留前8有效项与原失败历史，再续其余缺失，不重发9个已返回HTTP。
+
+独立补评在本机读取新提交源码，100活动实例不部署。已复核v9 driver的Git检查和push均在QA启动前完成，后续只运行watch；因此解除本机HEAD等待限制，可提交本轮解析修复，v9运行源码仍固定5c45b791。候选audit/flash-judge-20261126/recovery-2保存新恢复证据，旧失败目录保持。
+
+## 2026-11-26｜用户授权Flash Judge关思考，替代等待豆包
+
+补评首个wait275ff213在SSH共享转发的进程归属检查处退出，尚无Judge请求／有效分。共享master保持，只取消本任务18158转发；恢复改用独立SSH并实测models入口／进程存活通过。新输出flash-judge-20261126/recovery-1复用原输入／协议SHA，原失败包保留，不能重放原driver。
+
+当前待评分统一改qwen3.8-flash，enable_thinking=false、温度0、输出2048，保留atm_qs_v1/native_v2原提示词和无GT图片／元数据规则。此明确指令取代此前“11/30恢复前不换Judge”的等待要求；豆包失败记录与历史有效分保持，新结果独立标明模型，不与旧Judge分混合。政策入口候选audit/judge-policy.json。
+
+冻结答卷补评分准备六组364份：v8同16、原large83、v6完整83、原limited83、limitedv2同83、v7同16。生产score_saved/ProfileScoring的78项测试通过，现有代码默认向Qwen关闭思考。使用本机独立driver经SSH回环连100既有18148网关，单组顺序执行，逐请求和逐题落盘；首个评分错误停止并保留成功项，不发Agent请求、不改原答卷。证据flash-judge-20261126/{protocol,inputs,README}及后续launch-registration。v9尚在同16测试，完成后固定revision导出并按同一协议评分；两原全量终态后补其余既有答卷。
+
+## 2026-11-26｜v9完整Agent同16已启动，紫裙迟到回调已核
+
+本次f8501032迟到回调与既有acceptance／push-receipt一致，紫裙字段与连续引文机制已验，2HTTP／2935Token／0新增视觉；整段正式质量仍待验，不重测。
+
+v9局部部署terminal及push-receipt已完成，first-sixteen/launch确认原run aa3735于北京时间15:00启动。最近保存快照7/16、running、2并发、fatal_error=null，源码5c45b791；完整16尚未结束。新证据v9-large-rerun/launch-observed.json。有效wait82f6430f-f865-4f06-84d9-1b2a509c1614继续等待16检查点，不重复POST或登记；保持HEAD至driver终态，文档待其回调提交。到16固定revision核完整轨迹、字段来源和整段答案，质量与成本分别判断。v6全83取证已完成，以最新RESULTS及acceptance为准；旧b4等待记录已被完成结果取代。
+
+## 2026-11-26｜v6完整83题证据验收，成本降低但质量待补
+
+v6 120cba已83题暂停，22complete／60partial／1model_error，业务3ccfa64a与2并发保持。b4ddfcf3失败因旧34题行号在新快照重排；已按UUID与原revision核原包，保留已完整6题并仅补43题，完整83份content／trace分页read_revision及原11答案SHA通过。原始失败保留，恢复证据priority-83-review/recovery-1，旧34链接仍依赖原目录。
+
+同83原large→v6：真实HTTP2781→1829（-34.23%）、工具3086→2322（-24.76%）、含去重视觉Token105456493→65476129（-37.91%）。本轮只核新增49题1267HTTP，旧562成功receipt保留；全1829唯一原包／200／Flash关思考温0／输出≤4096且跨组无raw复用。三个OutputTruncatedError的HTTP已计入预算但缺usage，从完整问题、时间、缓存Token、422／565上限及length响应唯一补224473Token，原轨迹不改。其实际输入73116／73116／76832却估算130394／130394／130251，输出预算估算和累计历史仍需后续处理。
+
+本地预检1015→459，不能作HTTP；5道旧分组model_error本轮均未同样失败，但Inverness仍7预检、泰餐45，日期地点语义及Porto第三天未解决。两份原包证明单页64组／9187字符／真实1660组，累计历史仍可膨胀。16次复用guard只是记录，旧ACL送达后仍重复读图；3局部否认guard保留具体证据。接受只读取证与成本统计，正式质量／综合降本未接受，Judge待11/30北京00冻结协议补分，待分不记0；不扩大v6。
+
+主线002的v9同16独立任务wake82f6430f-f865-4f06-84d9-1b2a509c1614保持，HEAD须固定5c45b791直到driver完成push校验；本条本机文档暂存待其回调提交，不能因v6历史回调切换主目标。原全量3960ff5e／6c93e821保持，不重挂／POST／部署／取消。证据候选audit/v6-large-rerun/priority-83-review/{RESULTS,acceptance,summary,mechanism-verification}，保护相册／raw／旧分／119high。
+
+
 ## 2026-11-26｜002紫裙引文修复实测通过，接完整Agent同16题
 
 eda9b0d9在119单例已结束并push核SHA，型号Side-Pleat HR Tennis Skirt与£59均引用连续原文；一轮回答一轮核验、2真实HTTP唯一匹配全200、2935Token、0新增视觉，8既有服务PIDticks保持。接受字段和引用机制；答案对£78原价的解释仍为推测，未接受整段正式质量。107业务回归已过，本轮部署助手27测试通过；旧四图和旧4b回调保持，不重复调用。
