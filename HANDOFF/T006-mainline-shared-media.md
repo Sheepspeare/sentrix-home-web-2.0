@@ -1,5 +1,10 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜用户授权Flash自身相册同16新对照
+
+唯一变化为使用Flash关思考冻结相册atm-flash-no-thinking-final-20261126-v1；历史334产品源码、Planner/16K2048、双预算20/30与100/600、各16并发、云端直连保持。新隔离端口8305/8885、8306/8886，DB/cache在独立/dev/shm，媒体只读共享快照，已有向量建缓存0新embedding，旧Doubao相册实验及其全部答案/评分保持。本机prepare_flash_memory.py仅调整新实例scope与路径映射、18表规范化核对，7项回归及Ruff通过；先commit→同步SHA/compile/实际验收→push核HEAD再单次QA，实际状态见候选audit/doubao-code-flash-memory-direct。新16后暂停，收全轨迹/原包并同Flash协议直连Judge各2并发，不自动扩大1013。原baseline与持续Judge344c03b8保持。
+
+
 ## 2026-11-26｜旧Doubao代码Flash双预算同16与同裁判对照验收
 
 两组16均结束并暂停，完整48份新/历史答卷按UUID/revision读取全content/trace全部分页核read_revision。新有限0complete13partial3failed，大组1complete6partial9failed；早期仅5次失败的描述现更新为最终12次：5本地PromptTooLong终止＋大组7整题3600秒wall_time_limit。有限9模型额度触发，大组无模型/工具额度触发。原产品334源码/相册/6742邮件/Planner/16K2048及关思考保持；并发16与历史不同，时延不能单归模型。
