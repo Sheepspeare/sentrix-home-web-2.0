@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26 Flash Judge七组380份已齐并核349唯一HTTP全200/关思考；v6同83得分38.55%→61.45%、Token-37.91%。v9同16为62.50%，与v6持平但Token+37.88%；002/005未结项。字段条件与引文已在本机分开，121回归和8原响应重放过、未部署。详见T006及候选audit/flash-judge-20261126/parallel-3/RESULTS.md。
+
 - 11/26 原双全量观察器同次home低2GiB告警，worker均running／4并发：limited已核598题、large216题。活动数据保持，额外存储路径待回复；各自新终态观察见双基线audit/*-full-monitor-after-disk-alert-registration.json及T006。
 
 - 11/26 实验共享网关已24槽／按请求覆盖thinking，默认关思考；119high保持。Judge七组380份按任务各2并发，复用182成功分仅补198；启动与结果见候选audit/flash-judge-20261126/parallel-3及T006。

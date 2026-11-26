@@ -2295,6 +2295,7 @@ class RunTurn:
                 "reason": item.reason,
                 "value": item.value,
                 "citation_error": item.citation_error,
+                "conditions_not_applied": list(item.conditions_not_applied),
                 "citations": [{"call_id": call_id, "quote": quote} for call_id, quote in item.citations],
             }
             for item in session.field_reviews
@@ -2361,6 +2362,20 @@ class RunTurn:
             if len(candidates) == 6:
                 break
         state.phase = FINALIZING
+        if (
+            gaps
+            and all(
+                item.conditions_not_applied and item.citations and not item.citation_error for item in gaps
+            )
+            and not review.blocks
+        ):
+            session.pending_reminder = (
+                f"字段原文和引用已取得，必要查询条件仍需确认：{missing}。"
+                "复用已读原文及图片引用，检查conditions_not_applied中的具体条件和已有证据。"
+                "可补全的条件使用condition_updates与condition_evidence；"
+                "不能落实的身份、事件或地点条件须保留缺口。不要仅因条件未落实而重复读取相同字段。"
+            )
+            return True
         if gaps and all(item.citation_error for item in gaps) and not review.blocks:
             session.pending_reminder = (
                 f"字段核验引用格式需要修正：{missing}。"

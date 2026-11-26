@@ -35,6 +35,7 @@ class FieldReview:
     value: str = ""
     citations: tuple[tuple[str, str], ...] = ()
     citation_error: bool = False
+    conditions_not_applied: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +148,7 @@ def _fact_payload(fact: Fact, *, value_limit: int = 20) -> Mapping[str, Any]:
         "confidence": fact.confidence,
         "coverage": fact.coverage,
         "source": dict(fact.source),
+        "filters_not_applied": list(fact.filters_not_applied),
     }
 
 
@@ -233,6 +235,8 @@ def build_field_messages(
         "看过图片、看到票据、发现任意数字都不等于读到目标字段；品牌不能推成门店，"
         "拍摄地不能自动推成活动举办地。检查图片对应关系、时间地点与必要条件。\n"
         "原有OCR和预览明确包含答案时可复用，无需强制重新看图。uncertain观察不能作为确认值。\n"
+        "facts的filters_not_applied表示尚未落实的必要查询条件；原文可引用，"
+        "但条件未确认时字段仍应ambiguous，并明确说明条件缺口，不能把它当作图片没看清。\n"
         "fields逐需求报告证据是否取得，verdict单独报告回答是否正确使用证据；"
         "回答如实说明缺口时整体可supported，但缺失字段仍unsupported或ambiguous。\n"
         "supported字段必须给出value和citations，引用输入facts的provenance及逐字原文quote；"
@@ -297,6 +301,7 @@ def parse_field_reviews(
         citations: list[tuple[str, str]] = []
         image_citation = False
         citation_error = False
+        conditions_not_applied: list[str] = []
         raw_citations = row.get("citations", ())
         if not isinstance(raw_citations, list):
             raw_citations = []
@@ -312,17 +317,17 @@ def parse_field_reviews(
                     if quote
                     and fact.provenance == call_id
                     and fact.confidence >= 1.0
-                    and not fact.filters_not_applied
                     and (match := pattern.search(str(fact.value)[:2000]))
                 ]
                 if cited:
+                    eligible = [entry for entry in cited if not entry[0].filters_not_applied]
+                    cited = eligible or cited
                     # OCR换行可作为空白；保存实际匹配的原文，保留可追溯字节。
                     citations.append((call_id, cited[0][1].group()))
                     image_citation |= any(fact.fact_type != "source_text" for fact, _ in cited)
-                elif any(
-                    fact.provenance == call_id and fact.confidence >= 1.0 and not fact.filters_not_applied
-                    for fact in facts
-                ):
+                    if not eligible:
+                        conditions_not_applied.extend(cited[0][0].filters_not_applied)
+                elif any(fact.provenance == call_id and fact.confidence >= 1.0 for fact in facts):
                     citation_error = True
         value = str(row.get("value") or "").strip()
         reason = str(row.get("reason") or "")
@@ -332,9 +337,24 @@ def parse_field_reviews(
             verdict, reason = ClaimVerdict.AMBIGUOUS, "支持裁决缺少可追溯的确定原文或字段值"
             if citation_error:
                 reason = "核验引文未对应已提供的连续原文，请修正引用；这不表示需要重新读取图片"
+        elif verdict is ClaimVerdict.SUPPORTED and conditions_not_applied:
+            verdict = ClaimVerdict.AMBIGUOUS
+            reason = "字段原文已取得，但必要查询条件尚未落实：" + "、".join(
+                dict.fromkeys(conditions_not_applied)
+            )
         else:
             citation_error = False
-        reviews.append(FieldReview(requirement.id, verdict, reason, value, tuple(citations), citation_error))
+        reviews.append(
+            FieldReview(
+                requirement.id,
+                verdict,
+                reason,
+                value,
+                tuple(citations),
+                citation_error,
+                tuple(dict.fromkeys(conditions_not_applied)),
+            )
+        )
     return tuple(reviews)
 
 

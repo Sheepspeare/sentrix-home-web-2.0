@@ -194,3 +194,35 @@ def test_reading_a_pending_candidate_preserves_unapplied_conditions():
         parse_field_reviews(response(supported()), requirements=[REQ], facts=[fact])[0].verdict
         is ClaimVerdict.AMBIGUOUS
     )
+
+
+def test_pending_scope_keeps_real_citations_and_reports_condition_gap():
+    fact = replace(OCR, filters_not_applied=("query_conditions",))
+    payload = json.loads(
+        build_field_messages(query="q", answer="12A", facts=[fact], requirements=[REQ])[1]["content"]
+    )
+    assert payload["facts"][0]["filters_not_applied"] == ["query_conditions"]
+    result = parse_field_reviews(response(supported()), requirements=[REQ], facts=[fact])[0]
+    assert result.verdict is ClaimVerdict.AMBIGUOUS
+    assert result.citations == (("ocr", "座位 12A"),)
+    assert result.conditions_not_applied == ("query_conditions",)
+    assert "必要查询条件" in result.reason
+    assert not result.citation_error
+
+
+def test_confirmed_scope_for_same_source_can_resolve_previously_pending_citation():
+    pending = replace(OCR, filters_not_applied=("person",))
+    result = parse_field_reviews(response(supported()), requirements=[REQ], facts=[pending, OCR])[0]
+    assert result.verdict is ClaimVerdict.SUPPORTED
+    assert not result.conditions_not_applied
+
+
+def test_pending_scope_does_not_hide_an_invalid_quote():
+    result = parse_field_reviews(
+        response(supported(quote="座位...12A")),
+        requirements=[REQ],
+        facts=[replace(OCR, filters_not_applied=("query_conditions",))],
+    )[0]
+    assert result.verdict is ClaimVerdict.AMBIGUOUS
+    assert result.citation_error
+    assert not result.citations

@@ -2561,3 +2561,37 @@ def test_confirmed_field_with_wrong_answer_is_corrected_without_more_inspection(
     assert len(model.claim_calls) == 2
     assert all(name != "inspect_photo" for name, _ in toolbox.calls)
     assert not _turns.get(result.turn_id).trace.get("possibly_fabricated")
+
+
+def test_pending_query_scope_requests_condition_evidence_without_reinspection(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("read_photo_text", "c2", result_set_id="rs_1", asset_handle="photo_1"),
+            final("座位12A。"),
+            final("候选票据写着座位12A，仍无法确认是否为目标行程。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=PlannerScript([_visual_field_reply(citation="c2"), _visual_field_reply(citation="c2")]),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": ToolOutcome(
+                observation={**SEARCH_OK.observation, "returned_asset_ids": ["asset_1", "asset_2"]},
+                model_visible={**SEARCH_OK.model_visible, "answer_eligible": False},
+            ),
+            "read_photo_text": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"full_text": "座位12A"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.status is TurnStatus.PARTIAL
+    assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "open"
+    assert reminder_count(model, "字段原文和引用已取得") >= 1
+    assert reminder_count(model, "仅对缺失或冲突字段选择相关图片") == 0
+    assert all(name != "inspect_photo" for name, _ in toolbox.calls)

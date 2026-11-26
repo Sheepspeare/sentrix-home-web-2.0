@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜七组380评分验收，v9未优于v6，字段条件缺口分离
+
+Flash Judge parallel-3 wait ef347831已完成并核原日志：380/380目标分数，复用182成功项逐内容保持，仅补198；349次真实Judge HTTP以response ID、完整payload/response SHA、usage和时间唯一对应原包，全200、实际关思考，459426Token；31份列表由程序计算。每任务各2评分并发，实测四组同时/峰值8Judge；网关24槽，Agent并发及答卷保持。生产summary的1013分母不当成目标缺分，未评不记0。评分证据接受，002/005未结项。
+
+同83原large→v6 QS38.55%→61.45%（21改善/2退化）、Token105456493→65476129（-37.91%）；原limited→v2 QS37.35%→62.85%（28改善/6退化），Token17026623→23643330（+38.86%），有限版未达降本。同16原large/v6/v7/v8/v9分数为43.75%/62.50%/43.75%/56.25%/62.50%；Token17377243/4041482/3851311/9049374/5572245。v9对原large少67.93%、对v8少38.42%，但对v6多37.88%且分相同，不能称最新版更优。16/83均诊断子集、同模型Judge，不外推1013或人工质量。v9对v6改善Porto、退化Ryanair；对v8还改善Honey、退化三月下旬。Porto虽答案得分，事件起点推导仍未解决。
+
+v9完整292HTTP已精确唯一核原包，全200，Token5572245；helper仅新增field verifier JSON query精确匹配，6回归过，原usage/时间/cache/工具ID歧义检查保持。Judge专用只读helper3测试通过，独立远端ops目录核SHA/compile，无审计模型请求，无活动业务部署。原成功取证及评分未重算。
+
+四题8核验/10字段原始debug已按固定revision读取，所有引文实际匹配；源搜索answer_eligible=false让read facts带query_conditions，旧提示词未送这个状态、解析又抹掉引用，随后要求重复读图。另有事件state=resolved仍编译evidence_anchor_required，而更新只接受pending，导致状态无法销账。本机修复保留真实引文、显式传未落实条件、字段继续ambiguous，提醒转向条件证据，不因该缺口重复读同字段；121回归、Ruff/compile/domain mypy及8原响应离线重放过。必要人物/事件条件保留；当前修改未部署，仍需按候选与requirement落实证据确认，再处理Ryanair和三月退化后同16实测，不扩大83。
+
+产物：候选audit/flash-judge-20261126/parallel-3/{RESULTS,acceptance,score-summary,paired-scores,paired-costs,local-integrity,judge-http-exact-verification}；v9-large-rerun/review/{summary,v9-http-exact-verification,condition-gap-review,condition-gap-replay,validation-followup}。原两全量有效只读wait a38f0e0a/7a6f8cfa保持，不重复挂；home最近1.74GiB，额外存储路径仍待用户回复，未迁数据或删除raw。119high与原保护服务、Oracle及主树修改保持。
+
 ## 2026-11-26｜原large同次磁盘告警已核，216题继续
 
 6c93e821与3960ff5e为同一秒home低2GiB告警，原large观察器于214题退出，未停止worker。现真实GET核f6ebb1已216／1013、30c67e74／4并发／running／fatal_error=null，active-work.worker_alive=true；数据和答卷保持。复用已验证只读终态观察器，以large独立新output接续，不重复limited观察器、不POST／重启／重答。新wait见双基线audit/large-full-monitor-after-disk-alert-registration.json；原2GiB警告保留，进一步低1GiB或终态再通知。存储问题与limited共用，仍等待用户额外持久存储路径，不重复询问或迁移旧数据。
