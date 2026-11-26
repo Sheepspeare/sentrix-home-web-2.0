@@ -70,3 +70,9 @@ def test_hydration_uses_all_pages_and_fixed_revision(monkeypatch):
     monkeypatch.setattr(module, "get", lambda *_args: {"read_revision": 8})
     with pytest.raises(AssertionError):
         module.hydrate(8885, "run", "q", lookup)
+
+
+def test_saved_result_list_projection_has_no_execution_status():
+    listing = {"items": [{"qa_id": "q", "index": 3, "agent_status": "failed"}]}
+    assert set(module.listed_answers(listing)) == {"q"}
+    assert module.missing_ids(["q"], module.listed_answers(listing), {}) == ["q"]

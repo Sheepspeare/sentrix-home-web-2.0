@@ -56,6 +56,11 @@ def missing_ids(order, available, scores):
     return [qa for qa in order if qa in available and qa not in done]
 
 
+def listed_answers(listing):
+    """The list endpoint projects saved results; execution_status exists on detail only."""
+    return {item["qa_id"]: item for item in listing["items"]}
+
+
 def get(port, path):
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/{path}", timeout=60) as response:
         return json.load(response)
@@ -221,13 +226,7 @@ class Follow:
                 available, page = {}, 1
                 while True:
                     listing = get(port, f"runs/{run}/items?page={page}&page_size=100")
-                    available.update(
-                        {
-                            item["qa_id"]: item
-                            for item in listing["items"]
-                            if item["execution_status"] == "completed"
-                        }
-                    )
+                    available.update(listed_answers(listing))
                     if not listing.get("has_next"):
                         break
                     page += 1
