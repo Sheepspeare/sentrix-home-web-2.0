@@ -12,6 +12,7 @@ import pytest
         ("parallel-v9", "0e7e57", "c4bd7f72", "release-c4bd7f72"),
         ("parallel-v10", "aa3735", "5c45b791", "release-5c45b791"),
         ("parallel-v11", "d11fd6", "f1dd6070", "release-f1dd6070"),
+        ("parallel-v12", "5c2604", "9dbf3ffc", "release-9dbf3ffc"),
     ],
 )
 def test_revision_targets_only_the_paused_parallel_run(
@@ -29,6 +30,8 @@ def test_revision_targets_only_the_paused_parallel_run(
     assert stage["previous_release"] == previous_release
     assert stage["answer_count"] == 16
     assert stage.get("protection_file", "intent.json") == (
-        "large-v10-protected.json" if stage_name in {"parallel-v10", "parallel-v11"} else "intent.json"
+        "large-v10-protected.json"
+        if stage_name in {"parallel-v10", "parallel-v11", "parallel-v12"}
+        else "intent.json"
     )
     assert op.BASE.name == "flash-query-v7-parallel-20261126"

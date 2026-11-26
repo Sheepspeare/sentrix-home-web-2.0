@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v11评分齐，准备证据引用修复v12同16
+
+v11固定16份评分齐，QS62.50%（10/16），对v10改善1题、无退化；对v9/v6同16均持平但各2改善2退化。15次Judge HTTP唯一原包核验全200、实际关思考/温0/2048，共23958Token；另1列表程序评分。旧396分保持、审计和评分均无新Agent请求，回调ae075b9c已reconciled。v11已知Agent Token7758570较v10至少多42.48%，1超时usage未知，综合降本未通过，002/005未结项。
+
+引用回显及同对象纠错691f6c7a已push，业务271回归保持；新增parallel-v12 stage只允许已暂停的v11 run5c2604，保留16答案和18表，复用large-v10-protected.json的12PID记录。部署监控30项及Ruff/compile通过。准备独立8300/8880同16复测，不扩大83，原基线/119high保持。执行阶段以候选audit/v12-large-rerun实际回执为准；当前尚未部署或新QA。
+
+评分证据：候选audit/flash-judge-20261126/v11/{RESULTS,acceptance,score-summary,paired-scores,local-integrity,judge-http-exact-verification}。复测重点核真实引用进入条件语义核验、对象范围、必要条件保留和实际成本；不能依据supported标签接受质量。
+
+
 ## 2026-11-26｜v11同16取证完成，证据调用编号阻塞补证
 
 run 5c2604／9dbf3ffc已16题检查点暂停，4complete／12partial／fatal=null，真实GET核产品health、run与active-work；逐题qa_id／固定revision、全content及trace分页read_revision通过。旧v10十六答SHA、18表及12PID在部署验收保持；本轮只读取证，无新QA或部署。回调8831cd14已reconciled。
