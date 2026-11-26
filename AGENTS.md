@@ -1,6 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 23:41 Flash自身相册有限组同16评分齐：QS31.25%（5/16），比Doubao相册25%净增1题（2改善1退化）；15Judge原包全200/关思考，另1程序分。大组23:39为9/16继续，QA观察e6cb354d保持，有限caf16348已验收不重评。见T006及候选audit/doubao-code-flash-memory-direct/judge-early-limited/RESULTS.md。
+- 11/27 Flash自身相册同16双预算已全验：有限QS31.25%（5/16）、大组50%（8/16），比Doubao相册净增1/2题；Token分别+9.67%/-10.97%。697Agent及30Judge HTTP唯一raw全200/关思考直连，32有效分0缺分。大组2本地超长/7约1小时timeout，保持16pause不扩大；见T006及候选audit/doubao-code-flash-memory-direct/review/RESULTS.md。
+
 
 - 11/26原Doubao代码Flash直连同16已验：有限QS25%、大组37.5%；同Flash裁判共同15题为26.67%/40%/历史豆包46.67%。719Agent与44Judge HTTP唯一原包全200/关思考；大组7题达1小时上限，保持16暂停不扩大。见T006及doubao-code-direct/recovery-1/judge-same16-1/RESULTS.md。
 
@@ -180,4 +181,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 七组380分及成本已验；002/005条件证据衔接继续，v9未优于v6 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-27 | Flash自身相册同16有限31.25%/大50%已验，原全量增量评分继续；002/005未结项 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

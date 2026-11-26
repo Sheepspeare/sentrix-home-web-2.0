@@ -1,5 +1,20 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜Flash自身相册同16双预算评分及成本验收完成
+
+32/32有效分全齐、0缺分：有限QS31.25%=5/16、大组50%=8/16。与历史同代码、同预算、同16并发且用Doubao相册相比，有限2改善1退化13持平（净增1题），大组2改善0退化14持平（净增2题）。历史Doubao同Flash裁判15有效7分=46.67%，新Flash大组共同15得8分=53.33%、3改善2退化10持平；历史另1无分保持，旧全量74.4097%不同范围/裁判不混比。
+
+新Agent有限246HTTP/1509151Token/18视觉/245工具/均1309.30秒，大组451/3129038/30/451/均1987.20秒；换相册Token分别+9.67%/-10.97%。697实际HTTP逐call唯一raw全匹配、全200/关思考/HTTPS直连，48视觉图片载荷非空含SHA，Token按唯一raw去重；136/339本地PromptTooLong不计HTTP、health单列。固定qa_id/revision全content/trace分页read_revision采齐。有限14partial2failed；大2complete5partial9failed，其中两组各2题本地超长约31.3万Token超16K，大另7题终止码timeout、约3609秒（配置3600），不改写成wall_time_limit、不把failed直接作QS0。有限预算stop_code有9模型/1工具限额，大组均无；停止码与顶层9条step_budget_exhausted分开。
+
+两组Judge各2并发、原生产score_saved/ProfileScoring/native_v2/noGT/Flash关思考温0max2048、云端直连。30真实JudgeHTTP（各15）全200/唯一raw/32334Token，另2程序评分；固定revision/完整答案fingerprint/原prompt/请求响应JSON/usage/time均通过。有限caf16348早验完整复用，大组971c707b已提前验收reconciled，迟到只读，不重放pipeline/QA/成功评分。e6cb354d已reconciled。修正大组分析脚本同预算scope_note为direct-large及pending=false，纯离线分析未重评。
+
+只读保护复核：20旧PID中18个start ticks保持、13588/11836不存在；现有condition-fusion-large api/eval分别新PID202264/200089于11/26 23:38:02/23:36:57 active。未独立确认缺失旧PID归属，本次无服务变更，不将20PID全部保持写成通过。源18表复用准备阶段规范化核验，未重扫/重建库缓存或embedding，不清内存盘/raw。产品AGENTS另有磁盘回收任务记录，保留该任务结果，本轮未执行回收。
+
+证据：候选audit/doubao-code-flash-memory-direct/review/{RESULTS,acceptance,agent-metrics,agent-raw-summary,agent-http-exact-verification,visual-payload-verification,paired-scores,protection-after}.json（RESULTS.md）及judge-large/{RESULTS,acceptance,score-summary,paired-scores,judge-http-exact-verification,callback-971c707b-reconciled}。697旧/新原包及答卷均保持，0审计模型请求。
+
+当前两组16pause、未扩大1013；新相册局部改进未消除上下文及长尾，002/005未结项。原ea4413/f6ebb1各4QA与持续Judge344c03b8每组2继续，原wake不重挂；v6/limitedv2 83pause、v12 16pause、119high、Oracle及相册raw保持。下一步原已答增量补评按既有任务推进，11/27北京15固定报告数据/17交付。
+
+
 ## 2026-11-26｜用户授权Flash自身相册同16新对照
 
 23:41有限先行评分已完成验收：16/16有效QS31.25%=5/16，0缺分；同预算上一轮Doubao相册25%=4/16，2改善1退化13持平，净增1题，整体质量仍低不接受扩大。14partial/2failed为Agent状态，独立于有效评分。15真实JudgeHTTP全200/关思考/16195Token，另1程序分；固定revision全content/trace、输入fingerprint、完整请求/响应JSON、usage/时间窗及直连raw唯一核对全部通过，0审计模型请求。judge-early-limited/{RESULTS,score-summary,paired-scores,judge-http-exact-verification,acceptance}已存，caf16348已提前验收reconciled，迟到只读；父QA回调e6cb354d仅新增大组取证/评分，有限16完整复用。旧全部分数和原运行保持。
