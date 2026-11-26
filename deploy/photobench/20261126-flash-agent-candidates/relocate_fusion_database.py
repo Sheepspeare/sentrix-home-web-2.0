@@ -111,8 +111,15 @@ def run(run_id, helpers):
     shutil.copy2(database, ram_db)
     assert digest(ram_db) == checksum
     archive = output / "before-relocation.db.gz"
-    receipt = archive_exact(database, archive)
+    ram_archive = DESTINATION / "before-relocation.db.gz"
+    receipt = archive_exact(database, ram_archive)
+    assert shutil.disk_usage(output).free > ram_archive.stat().st_size + 512 * 1024**2
+    archive_part = archive.with_suffix(archive.suffix + ".part")
+    shutil.copy2(ram_archive, archive_part)
+    assert digest(archive_part) == receipt["gzip_sha256"]
+    archive_part.replace(archive)
     h.save(output / "archive-verification.json", receipt)
+    ram_archive.unlink()
     temporary = database.with_suffix(".relocating")
     temporary.symlink_to(ram_db)
     temporary.replace(database)
