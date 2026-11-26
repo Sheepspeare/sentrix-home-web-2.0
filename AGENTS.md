@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 002目标为恢复必要原图核验并正确使用，005目标为验证决策/工具限额对质量与时延的影响；重复读取减少和查询条件降耗为实施子项。用户原始全文已核，见候选audit/original-requirements.md及original-requirements-review.md、T006。
+
 - 11/26 v11同16评分62.50%已齐，15Judge原包全200/关思考；已知Token较v10增42.48%，综合未通过。引用修复271回归、v12部署监控30项通过，准备独立同16复测，002/005未结项。见T006及候选audit/v12-large-rerun。
 
 - 11/26 v11同16已暂停并固定revision取证，314HTTP含1超时、已知Token7758570较v10增42.48%；38条件更新全拒、0语义条件核验。新证据引用回显及纠错反馈271回归通过，未部署；接Flash同协议新16补评，002/005未结项。见T006及候选audit/v11-large-rerun/review。
