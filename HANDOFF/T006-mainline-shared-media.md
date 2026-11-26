@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜有限Judge恢复2与128K切换已启动排空
+
+有限Judge原恢复1在69有效分后，atm-e388993e-fac9-44a2-a83d-d6ee44be5ee8为execution_status=timeout且无answer，旧采集器误GET answer导致404。固定revision c99b92444bd345f48117d995669bb770真实GET确认；不是Flash评分请求失败。复用已验证2ecfb13f follow/helper，旧69完整成功对象/全部state文件SHA合并保持，仅启动recovery2-limited用户单元，不动large。初验73已处理、72有效QS40.2778%、1无答卷超时、可评分缺分0，评分继续各2并发/关思考/温0max2048/native_v2/noGT/HTTPS直连。新增3分原包审计待后续增量验收；旧成功不重评。新观察wait a5e1a2b5-02c6-4c2e-889a-095b6d846c9b；e2e1b9e6已reconciled。
+
+最新128K授权已开始实施：本机新增switch_context.py，4回归/Ruff/compile通过后提交0858a3e9，远端SHA/compile及334产品源文件保持核验通过。新单元sentrix-flash-own-memory-context128k-switch-1并行处理两组：control先pause_after_completed=1停止新派题，16QA配置不改；等评测executed=completed且DB pending/running=0连续两次，再仅重启对应api，将两context参数改131072并核diagnostics，保持eval PID及所有其余运行配置，最后恢复1013派发。当前处于排空阶段，不能声称128K已生效；不取消在飞、不动Judge/原run/相册DB/cache。约313K异常已按用户要求排除重跑、直接记上下文错误，保留旧分。
+
+128K切换观察wait 4eaa4d8a-6362-4103-b409-20955cf8f30a，终态先核各group/effective/terminal，失败仅接实际缺阶段，禁止重放脚本。原QA观察9f6a3f64及large评分aa97806e保持。最终16K超限失败的其他题重跑仍待逐题确认及调度，需保留旧版本、新答案独立Flash评分；重测API要求原任务空闲，不能绕过活跃任务限制或覆盖旧分。证据候选audit/doubao-code-flash-memory-direct/full-1013/{context-128k,judge/recovery-2-limited}及远端context128k-switch-1；002/005未结项，原baseline/conditionfusion/119high/raw/Oracle保持。
+
+
 ## 2026-11-27｜128K重跑范围更新：超大上下文异常直接记错
 
 用户最新明确要求：已确认约31.3万Token、仍超过128K的异常题不再重跑，记录上下文超限错误。首16取证对应两组各2题：atm-230bf920-cc9f-46c9-a77a-f0ce976e5bb7（2022年3月访问地点）、atm-8f1df1d0-aae9-447d-a18d-b12ad401d7d5（Porto第三天午餐）。保留原答案/轨迹/评分，错误分类独立记录，不覆盖历史裁判分。后续同类超128K异常沿用此规则；其余最终因16K超限失败的题才进入128K重跑和新答案评分，曾超限但最终成功不重复派题。
