@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27 01:45｜同代码有限预算83题已独立启动
+
+用户要求保留大预算全量接续，另测当前业务bc736153的20模型/30工具版，采用主对话原83题及原有限基线顺序。本机新增准备helper e491a6a6，经5项参数验证、Ruff/format/compile后提交；远端SHA/compile、18记忆表、388业务源码、保护进程及保存向量索引验收后push。新增8304/8884独立实例，媒体复用、0新embedding，未改大预算或其他实例。
+
+北京时间01:43:14单次POST创建run20261127-014314-2026.11.17-atm-sources-addresses-big_model-35dfdb；01:45真实API核worker alive、fatal=null、已结束1题、qa_concurrency8、dispatch-control为8/83，两个新服务active。每题20模型/30工具各reserve2、100步3600秒，系统推理/Planner开，Flash关思考128K/4096/temp0/retry3。页面1013是完整定义，本轮仅83后暂停。启动证据在融合audit/limited-83-bc/started-verification.json。
+
+driver run-experiment.py已运行，wake0e841faa-985b-461e-883a-c163c90eeef1已登记本侧聊；不重启或重发POST。83后固定qa_id/read_revision采全内容与分页trace，Flash native_v2关思考独立评分2并发、只补缺分，不写原run。主对照原30c有限83：QS37.34939759%、1206HTTP/1292工具/17026623含视觉记录Token，model额度40题、tool额度2题。完成后核同题质量/请求/工具/Token/限额，HTTP原包逐调用唯一核验另补，不能将已保存usage视为原包验收。baseline-reference保存每题值及来源SHA。
+
+原大预算835e7b同16核验及全量接续wrapper/wakec50e9852保持，不改100/600。新有限组同代码对照用于实测预算约束效果，不能从大预算平均调用量代替有限预算成绩。未向主对话自动发消息、未用子Agent。初始只读显示脚本因qa_eval尚未初始化报KeyError，实际driver与run正常，已用真实API纠正，不作QA失败。
+
 ## 2026-11-27 01:31｜用户确认最终版全量，已接好阶段接续
 
 用户明确授权本分支Flash全1013，复用既有Flash非思考构建相册。当前bc736153原run835e7b同16完成13、3在飞、fatal=null，8答题并发；18表一致，home约54GiB。全量此时尚未启动，不能把新wrapper启动当全量启动。
