@@ -2,6 +2,8 @@
 
 ## 2026-11-26｜用户授权Flash自身相册同16新对照
 
+23:41有限先行评分已完成验收：16/16有效QS31.25%=5/16，0缺分；同预算上一轮Doubao相册25%=4/16，2改善1退化13持平，净增1题，整体质量仍低不接受扩大。14partial/2failed为Agent状态，独立于有效评分。15真实JudgeHTTP全200/关思考/16195Token，另1程序分；固定revision全content/trace、输入fingerprint、完整请求/响应JSON、usage/时间窗及直连raw唯一核对全部通过，0审计模型请求。judge-early-limited/{RESULTS,score-summary,paired-scores,judge-http-exact-verification,acceptance}已存，caf16348已提前验收reconciled，迟到只读；父QA回调e6cb354d仅新增大组取证/评分，有限16完整复用。旧全部分数和原运行保持。
+
 23:39用户询问进度：GET核有限16/16已pause，大组9/16（其余7在飞），两组无fatal但尚无Judge分；有限已结束约9分钟，此前双组QA观察器等两组同时结束，评分尚未启动。现有限先行固定revision取全content/trace，再原协议每任务2并发直连Flash评分，新有效wakecaf16348-b601-4f4a-b453-60e68d36a062，目录judge-early-limited。大组原QA及wakee6cb354d保持，到终态仅补大组采集评分；须先查limited-early-judge-handoff及该评分状态，禁止重复有限任何成功采集/评分。原run/revision/答卷与全部旧分保持，0Agent新请求，有限9step_budget_exhausted/5answered_with_gap/2model_error为执行状态，不当QS。评分0覆盖时QS为空不记0。
 
 首55个实际QA HTTP全200/enable_thinking=false/HTTPS直连，实际完成请求时间窗每组峰值16、跨组合32；两组原payload仅scope/独立URL/控制路径三字段变化，同16顺序及其余配置完全一致，见started-verification及configuration-comparison。

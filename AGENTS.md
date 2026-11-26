@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 23:39 Flash自身相册同16：有限16/16已pause、大组9/16仍运行，尚无新评分。有限改先行固定revision采集+直连Flash Judge各2并发（wakecaf16348），大组原QA观察e6cb354d保持；不得重复有限采集评分。见T006及候选audit/doubao-code-flash-memory-direct/limited-early-judge-handoff.json。
+- 11/26 23:41 Flash自身相册有限组同16评分齐：QS31.25%（5/16），比Doubao相册25%净增1题（2改善1退化）；15Judge原包全200/关思考，另1程序分。大组23:39为9/16继续，QA观察e6cb354d保持，有限caf16348已验收不重评。见T006及候选audit/doubao-code-flash-memory-direct/judge-early-limited/RESULTS.md。
 
 - 11/26原Doubao代码Flash直连同16已验：有限QS25%、大组37.5%；同Flash裁判共同15题为26.67%/40%/历史豆包46.67%。719Agent与44Judge HTTP唯一原包全200/关思考；大组7题达1小时上限，保持16暂停不扩大。见T006及doubao-code-direct/recovery-1/judge-same16-1/RESULTS.md。
 
