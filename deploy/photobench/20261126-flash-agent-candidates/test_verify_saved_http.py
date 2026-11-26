@@ -196,3 +196,15 @@ def test_verifier_requires_full_question_in_its_recorded_prompt_format(call_type
         {"messages": [{"role": "user", "content": "用户问题：Full original question?\nother context"}]},
         questions,
     )
+
+
+def test_field_verifier_matches_exact_json_query_not_nested_fact_text():
+    verifier = module()
+    expected = {"start": 0, "end": 2, "internal": False, "call_type": "claim_verifier", "qa_id": "q"}
+    record = {"started_at": 1}
+    payload = {"query": "question", "answer": "answer", "requirements": [], "facts": []}
+    request = {"messages": [{"role": "user", "content": json.dumps(payload)}]}
+    assert verifier.matches(expected, record, request, {"q": "question"})
+    payload.update(query="other question", facts=[{"value": "question"}])
+    request["messages"][0]["content"] = json.dumps(payload)
+    assert not verifier.matches(expected, record, request, {"q": "question"})

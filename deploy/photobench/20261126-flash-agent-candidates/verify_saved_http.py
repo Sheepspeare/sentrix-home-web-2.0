@@ -28,6 +28,23 @@ def matches(expected, record, request, questions, response=None):
         }
         section = verifier_sections.get(expected.get("call_type"))
         if section:
+            if expected.get("call_type") == "claim_verifier":
+                for message in messages:
+                    text = message.get("content")
+                    if message.get("role") != "user" or not isinstance(text, str):
+                        continue
+                    try:
+                        payload = json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+                    if (
+                        isinstance(payload, dict)
+                        and payload.get("query") == questions[expected["qa_id"]]
+                        and isinstance(payload.get("requirements"), list)
+                        and isinstance(payload.get("facts"), list)
+                        and isinstance(payload.get("answer"), str)
+                    ):
+                        return True
             prefix = f"用户问题：{questions[expected['qa_id']]}{section}"
             return any(
                 m.get("role") == "user"
