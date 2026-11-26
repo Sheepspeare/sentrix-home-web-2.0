@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 原limited观察器再报home低2GiB，worker仍running／598题／4并发；活动数据保持，已询问额外存储。接续只读终态观察见双基线audit/limited-full-monitor-after-disk-alert-registration.json与T006。
+- 11/26 原双全量观察器同次home低2GiB告警，worker均running／4并发：limited已核598题、large216题。活动数据保持，额外存储路径待回复；各自新终态观察见双基线audit/*-full-monitor-after-disk-alert-registration.json及T006。
 
 - 11/26 实验共享网关已24槽／按请求覆盖thinking，默认关思考；119high保持。Judge七组380份按任务各2并发，复用182成功分仅补198；启动与结果见候选audit/flash-judge-20261126/parallel-3及T006。
 

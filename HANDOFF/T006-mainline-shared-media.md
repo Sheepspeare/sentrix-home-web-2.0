@@ -1,5 +1,10 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原large同次磁盘告警已核，216题继续
+
+6c93e821与3960ff5e为同一秒home低2GiB告警，原large观察器于214题退出，未停止worker。现真实GET核f6ebb1已216／1013、30c67e74／4并发／running／fatal_error=null，active-work.worker_alive=true；数据和答卷保持。复用已验证只读终态观察器，以large独立新output接续，不重复limited观察器、不POST／重启／重答。新wait见双基线audit/large-full-monitor-after-disk-alert-registration.json；原2GiB警告保留，进一步低1GiB或终态再通知。存储问题与limited共用，仍等待用户额外持久存储路径，不重复询问或迁移旧数据。
+
+
 ## 2026-11-26｜原limited观察器再次低盘告警，worker继续
 
 3960ff5e精确日志为disk_below_2GiB：593答时home余2142400512字节，仅观察器退出。重新GET核原run ea4413仍30c67e74／4并发／running／fatal_error=null，598／1013，active-work.worker_alive=true。large的worker也存活。主要空间为活动产品数据库与split-results SQLite：原limited约3.08GB＋0.70GB，large约3.84GB＋0.43GB；无>100MB WAL可直接释放。home约2GiB、root约1.7GiB，可清理包缓存仅数十MB，不足以解决后续增长。
