@@ -4,7 +4,7 @@
 
 wait6980f975已completed，run d11fd6同16逐UUID齐并dispatch_paused，3complete／13partial／0failed、fatal=null。f1dd6070局部部署验18表／旧16答SHA／12PID并push通过，原实验未切。固定revision全content／trace分页取证通过，266HTTP（239主＋27去重视觉）唯一raw全200／关思考／配置一致，Token5445454，工具296，14本地预检不作HTTP；原包核验无模型请求。对v9 Token5572245仅降2.28%，对v6同16的4041482仍高34.74%，不能据成本称完成。
 
-四道字段题全部8字段保留真实引文、条件缺口仍ambiguous；13真实HTTP请求证新提醒送达4题，第一次字段核验后补看次数v9的5→v10的0。但全16视觉调用25→27，事件条件补证失败后继续搜索，仍有全局无效消耗。event resolved／evidence_anchor_required／只接受pending闭环待修，不能放宽必要人物和事件条件。Flash Judge同协议16份输入与旧1013定义SHA已固定，每任务2并发，准备只新评v10，旧380成功分保持；002／005未结项。见候选audit/v10-large-rerun/review/{RESULTS,summary,collection-receipt,v10-http-exact-verification,mechanism-followup,reminder-raw-delivery}与flash-judge-20261126/v10。旧回调已reconciled，不重挂QA。
+四道字段题全部8字段保留真实引文、条件缺口仍ambiguous；13真实HTTP请求证新提醒送达4题，第一次字段核验后补看次数v9的5→v10的0。但全16视觉调用25→27，事件条件补证失败后继续搜索，仍有全局无效消耗。event resolved／evidence_anchor_required／只接受pending闭环待修，不能放宽必要人物和事件条件。Flash Judge同协议16份输入与旧1013定义SHA已固定，每任务2并发，已登记wake7892d405-33bb-4147-913e-647d50473a07只新评v10，旧380成功分保持；002／005未结项。见候选audit/v10-large-rerun/review/{RESULTS,summary,collection-receipt,v10-http-exact-verification,mechanism-followup,reminder-raw-delivery}与flash-judge-20261126/v10。旧回调已reconciled，不重挂QA。
 
 
 ## 2026-11-26｜v10复测任务已登记
