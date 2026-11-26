@@ -38,3 +38,19 @@ def test_parallel_payload_changes_only_transport_and_control():
         k: v for k, v in original.items() if k not in {"sentrix_url", "qa_concurrency_control_path"}
     }
     assert original["sentrix_url"] == "http://127.0.0.1:8299"
+
+
+def test_parallel_release_uses_verified_product_and_existing_evaluation_without_editing_either(tmp_path):
+    op = module()
+    product = tmp_path / "product"
+    (product / "apps/api").mkdir(parents=True)
+    (product / "build-info.json").write_text('{"revision":"product"}')
+    evaluation = tmp_path / "baseline/apps/photobench"
+    evaluation.mkdir(parents=True)
+    target = tmp_path / "parallel/release"
+    target.parent.mkdir()
+    op.compose_release(product, evaluation, target)
+    assert (target / "apps/api").resolve() == product / "apps/api"
+    assert (target / "apps/photobench").resolve() == evaluation
+    assert (target / "build-info.json").read_bytes() == (product / "build-info.json").read_bytes()
+    assert not (product / "apps/photobench").exists()

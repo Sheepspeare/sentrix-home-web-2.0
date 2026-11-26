@@ -34,6 +34,18 @@ def payload_for_parallel(payload):
     return result
 
 
+def compose_release(release, evaluation_source, target):
+    """Use the verified product with the unchanged baseline evaluation service."""
+    assert evaluation_source.is_dir()
+    target.mkdir()
+    for child in release.iterdir():
+        if child.name != "apps":
+            (target / child.name).symlink_to(child, target_is_directory=child.is_dir())
+    (target / "apps").mkdir()
+    (target / "apps/api").symlink_to(release / "apps/api", target_is_directory=True)
+    (target / "apps/photobench").symlink_to(evaluation_source, target_is_directory=True)
+
+
 def prepare(release, payload_path):
     p = candidate_module(release)
     h = p.helper
@@ -64,7 +76,8 @@ def prepare(release, payload_path):
     assert payload["reasoning"] is True and len(set(payload["qa_priority_ids"])) == 83
     BASE.mkdir()
     h.save(BASE / "intent.json", {"revision": revision, "protected": protected, "at": time.time()})
-    (BASE / "release").symlink_to(release, target_is_directory=True)
+    evaluation_source = p.BASELINE / "release/apps/photobench"
+    compose_release(release, evaluation_source, BASE / "release")
     shutil.copy2(p.BASELINE / "model-profile.json", BASE / "model-profile.json")
     source = json.loads((h.SNAPSHOT / "memory-fingerprints.json").read_text())
     _target, data = p.clone_album("large", source)
@@ -103,6 +116,8 @@ def prepare(release, payload_path):
         BASE / "prepared.json",
         {
             "revision": revision,
+            "product_source": str(release),
+            "evaluation_source": str(evaluation_source),
             "ports": PORTS[:2],
             "memory_18_tables_unchanged": True,
             "protected_processes_unchanged": protected,
