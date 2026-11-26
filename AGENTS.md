@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26人物条件方案补充：保留PhotoBench身份路径，区分拍摄者／出镜者／叙述者，结合昵称与“我”关系锚点解析；按真实数据能力停止无效重复。原large83＋v6当时34题固定版本取证完成，原包精确核验继续，质量待Judge，当前仅方案未部署。见查询条件计划、双基线audit/large-priority-83-review和T006。
+
 - 11/26原large83检查点已到，原run89/1013答、4并发继续；全量终态监控已接续，83固定版本轨迹正在采集，未完成质量/成本验收。查询条件改造仍仅方案，详见双基线audit/large-priority-83-review和T006。
 
 - 11/26查询条件整体改造方案已形成：核原基线83/v2 83/当前v6 27份轨迹，优先复用Planner调用输出共同条件，覆盖地点角色/人物/媒体/来源及事件依赖；后端统一执行反馈，分页次要。当前仅方案/只读取证，业务未改，见docs/refactor/2026-11-26-query-condition-plan.md、候选audit/query-condition-review及T006。
