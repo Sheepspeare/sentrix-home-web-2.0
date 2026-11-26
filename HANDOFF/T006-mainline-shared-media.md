@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜原limited1013质量与完整成本证据验收
+
+1013固定版本轨迹/文件SHA和12950唯一HTTP原包及完整payload已验：12949×200、1视觉400后重试；12237主+713视觉HTTP，712成功视觉观测，713图像载荷非空并存SHA。全请求关思考/温0/max4096以内、成功响应无reasoning且usage与元数据一致，已知Token162458019（视觉613368，成功usage不重复计）；400无usage单列，不能报全200或总成本绝对齐。平均324.798秒、中位214.410秒；限额模型370题/36.5252%，工具14题/1.3820%，645本地超长不计HTTP；工具12934准入101拒绝共13035trace。逐题budget.model_attempts=实际HTTP成立。
+
+最初c02c1b53核验只剩2调用不匹配：用已执行工具反推模型完整response IDs遗漏各1个未执行调用。固定评分revision GET两条debug response取齐完整IDs后分12948+2核验全部通过，原失败清单/日志保留；不放宽匹配、不改Agent/评分。完整payload只读helper845a376d本机3回归/Ruff/compile通过、先commit后隔离同步SHA/远端compile/真实12950验收。callback-c02c1b53-reconciled已存，迟到只读。
+
+原QS43.659568%/1013有效零缺分、旧771保持、新242补评不变，265complete/714partial/31failed/3blocked；0QA重答、0成功分重评、0审计模型请求，原有限自然终态不重启，其他服务/原large与全量保持。证据双基线audit/limited-full-final-review/{RESULTS.md,acceptance,agent-metrics-summary,agent-http-merged-verification,agent-payload-verification,http-recovery-1/failure-diagnosis}。本组验收是基线证据，002/005仍未结项；不将不同覆盖均分或两个预算同时变化归因Planner/单因素。
+
+
 ## 2026-11-27｜原有限1013轨迹完整，预算与时延统计已齐
 
 恢复1 c6f5a278已采齐1013唯一qa_id，全部评分revision一致、逐receipt文件SHA通过，83旧证据复用；callback-c6f5a278-reconciled已存。预算stop_code：model_call_limit370题/36.5252%，tool_call_limit14题/1.3820%，629无；平均324.798秒、中位214.410秒。模型HTTP12950=12237主调用+713视觉HTTP，645本地超长不计HTTP；工具准入12934/拒绝101共13035轨迹。712视觉观测中有一次400后200重试，两次HTTP分别计，逐题budget.model_attempts与实际HTTP总数完全相符。记录Token162458019，原包成本核验尚待完成。
