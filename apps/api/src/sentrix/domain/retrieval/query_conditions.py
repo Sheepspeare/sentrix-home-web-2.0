@@ -69,7 +69,10 @@ def parse_conditions(raw: Any) -> tuple[QueryCondition, ...]:
             raise ValueError("invalid_condition")
         dimension, role = row.get("dimension"), row.get("role")
         if dimension not in ROLES or role not in ROLES[dimension]:
-            raise ValueError("invalid_condition_role")
+            raise ValueError(
+                f"invalid_condition_role: dimension={dimension!r}, role={role!r}; "
+                f"allowed_roles={ROLES.get(dimension, ()) if isinstance(dimension, str) else ()}"
+            )
         if not isinstance(row.get("value"), str) or not row["value"].strip():
             raise ValueError("condition_value_required")
         if type(row.get("required", True)) is not bool or row.get("state", "resolved") not in {

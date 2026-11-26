@@ -1,5 +1,14 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v10评分验收及条件证据闭环修复
+
+v10目标16/16评分齐，QS56.25%（9/16），对v9 62.50%下降6.25个百分点。改善猫视频，退化Porto第三天和蜂蜜总量；对v6同16也少6.25个百分点。15次Judge HTTP按完整请求/响应SHA、response ID、usage及时间唯一核raw，全200/关思考/23386Token，另1列表程序评分。旧380分保持、新Agent0，候选audit/flash-judge-20261126/v10/{RESULTS,acceptance,paired-scores,local-integrity,judge-http-exact-verification}完整，回调7892已reconciled。v10 Token5445454对v9仅降2.28%，综合效果不接受，002/005未结项。
+
+本机修执行未落实条件的补证入口：不再仅认Planner pending；条件更新必须对应原dimension/role/anchor/relation，必要性保留。condition_evidence显式给本回合已读同对象的call_id和连续quote，读取不确定/跨范围/错对象/改写原文拒绝；一次核对整批条件语义，模型HTTP计共享预算并存完整debug/usage，缺证据或故障保留条件。商品价格不自动证明用户购买，最早照片不证明旅行第一天。事件/内容地点的确认仅绑定证据素材并筛选候选，原必要条件保留供精确统计；明确拍摄日期可在核验后形成全查询筛选。错误角色和anchor返回具体待补条件，更新原子提交。
+
+256相关回归通过（245业务含新增证据/范围/预算测试，11部署与监控）；Ruff和compile通过，5模块mypy仅run_turn两项既有Message/ChatMessage错保持。新增v11独立部署stage只允许暂停v10 d11fd6，使用现12进程保护清单，保留旧16答/SHA及18表。v11只同16暂停、不扩大83；用户已授权继续修复复测。预检已核v10暂停、16固定revision与答案SHA保持，home14.65GB，当前尚未发v11 QA。下一步本机提交后同步SHA/compile，验独立部署再同16实测；新增核验成本必须计入比较。
+
+
 ## 2026-11-26｜v10同16题真实复测与原包验收，接Flash补评
 
 wait6980f975已completed，run d11fd6同16逐UUID齐并dispatch_paused，3complete／13partial／0failed、fatal=null。f1dd6070局部部署验18表／旧16答SHA／12PID并push通过，原实验未切。固定revision全content／trace分页取证通过，266HTTP（239主＋27去重视觉）唯一raw全200／关思考／配置一致，Token5445454，工具296，14本地预检不作HTTP；原包核验无模型请求。对v9 Token5572245仅降2.28%，对v6同16的4041482仍高34.74%，不能据成本称完成。

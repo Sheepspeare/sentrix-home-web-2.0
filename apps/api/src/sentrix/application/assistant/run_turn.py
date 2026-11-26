@@ -133,6 +133,7 @@ from sentrix.domain.assistant.tools import (
 from sentrix.domain.errors import DomainError
 from sentrix.domain.media.ports import ObservationRepository, OperationControl
 from sentrix.domain.media.progress import OperationCancelled
+from sentrix.domain.retrieval.query_conditions import QueryCondition
 
 log = logging.getLogger("sentrix.assistant.run_turn")
 
@@ -2250,6 +2251,54 @@ class RunTurn:
         )
         return state.can_step()
 
+    def _review_query_conditions(
+        self,
+        session: _Session,
+        updates: Sequence[tuple[QueryCondition, QueryCondition]],
+        facts: Sequence[Fact],
+    ) -> ClaimReview:
+        state = session.state
+        if not state.can_step():
+            return ClaimReview(reason="当前共享预算不足以核验条件，必要条件仍未落实。")
+        self._check_cancel(state.turn_id)
+        state.model_steps += 1
+        step_id = _step_id(state)
+        review = self._claim_verifier.review(
+            query=state.question,
+            claim=Claim("核对整批条件补证", RequirementValueType.DESCRIPTION),
+            facts=facts,
+            requirement=None,
+            condition_updates=updates,
+            include_debug=session.include_debug,
+            step_id=step_id,
+        )
+        if review.model_call is not None:
+            session.model_calls.append({**review.model_call, "verification_kind": "query_conditions"})
+        if session.include_debug and review.debug_call is not None:
+            session.add_debug_call({**review.debug_call, "verification_kind": "query_conditions"})
+        row = {
+            "call_id": step_id,
+            "value_type": "query_conditions",
+            "verdict": review.verdict.value,
+            "reason": review.reason,
+            "conditions": [
+                {"original": original.payload(), "update": update.payload()} for original, update in updates
+            ],
+            "evidence_calls": [fact.provenance for fact in facts],
+        }
+        session.claim_reviews.append(row)
+        self._publish(
+            session,
+            state.emit(
+                ProgressStage.ACTION,
+                ProgressStatus.OK,
+                "已核对查询条件与来源证据。",
+                kind="judge",
+                payload={"code": "query_condition_review", **row},
+            ),
+        )
+        return review
+
     def _review_fields(
         self, session: _Session, answer: str, requirements: Sequence[EvidenceRequirement]
     ) -> bool:
@@ -2629,6 +2678,16 @@ class RunTurn:
         )
         started_at = time.perf_counter()
         self._check_cancel(state.turn_id)
+        condition_context: dict[str, Any] = (
+            {
+                "records": state.records,
+                "condition_reviewer": lambda updates, facts: self._review_query_conditions(
+                    session, updates, facts
+                ),
+            }
+            if decision.arguments.get("condition_updates")
+            else {}
+        )
         outcome = self._toolbox.execute(
             call.name,
             decision.arguments,
@@ -2641,6 +2700,7 @@ class RunTurn:
             graph_enabled=session.graph_enabled,
             requirements=session.ledger.requirements,
             query_state=session.query_state,
+            **condition_context,
         )
         duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
         if call.name == "inspect_photo" and outcome.ok:

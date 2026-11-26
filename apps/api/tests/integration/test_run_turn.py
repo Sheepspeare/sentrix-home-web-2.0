@@ -2595,3 +2595,43 @@ def test_pending_query_scope_requests_condition_evidence_without_reinspection(en
     assert reminder_count(model, "字段原文和引用已取得") >= 1
     assert reminder_count(model, "仅对缺失或冲突字段选择相关图片") == 0
     assert all(name != "inspect_photo" for name, _ in toolbox.calls)
+
+
+@pytest.mark.parametrize("remaining", [0, 1])
+def test_condition_review_uses_remaining_model_steps_and_records_its_request(env, remaining):
+    from sentrix.application.assistant.run_turn import _Session
+    from sentrix.domain.assistant.claim_verifier import ClaimVerdict
+    from sentrix.domain.assistant.evidence_binding import Fact
+    from sentrix.domain.assistant.evidence_ledger import EvidenceLedger, RequirementValueType
+    from sentrix.domain.assistant.task_state import TaskState
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [final("尚未确认")],
+        claim=ModelReply(content='{"verdict":"supported","reason":"原文支持该素材的事件"}'),
+    )
+    runner = build(env, model, StubToolbox())
+    turn_id = start(runner, conversation)
+    state = TaskState(turn_id, conversation.id, "album1", QUESTION, replace(DEFAULT_PROFILE, max_steps=1))
+    state.model_steps = 1 - remaining
+    session = _Session(state, EvidenceLedger("album1"), include_debug=True)
+    condition = QueryCondition("event", "海边旅行", "anchor")
+    result = runner._review_query_conditions(
+        session,
+        [(condition, condition)],
+        [Fact("condition_evidence", RequirementValueType.DESCRIPTION, "海边旅行", provenance="read-1")],
+    )
+    assert len(model.claim_calls) == remaining
+    assert state.model_steps == 1
+    if remaining:
+        assert result.verdict is ClaimVerdict.SUPPORTED
+        assert (
+            len(session.model_calls) == 1
+            and session.model_calls[0]["verification_kind"] == "query_conditions"
+        )
+        assert session.claim_reviews[0]["evidence_calls"] == ["read-1"]
+        assert any(p.payload.get("code") == "query_condition_review" for p in state.progress)
+    else:
+        assert result.verdict is ClaimVerdict.AMBIGUOUS
+        assert session.model_calls == [] and session.claim_reviews == []

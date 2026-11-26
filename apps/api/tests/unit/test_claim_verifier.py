@@ -4,6 +4,7 @@ from collections.abc import Sequence
 
 from sentrix.application.assistant.claim_verifier import ClaimVerifier
 from sentrix.domain.assistant.claim_verifier import (
+    Claim,
     ClaimVerdict,
     build_claim_messages,
     claim_numbers,
@@ -13,6 +14,7 @@ from sentrix.domain.assistant.claim_verifier import (
 from sentrix.domain.assistant.evidence_binding import Fact
 from sentrix.domain.assistant.evidence_ledger import RequirementValueType
 from sentrix.domain.assistant.models import ChatMessage, ModelReply
+from sentrix.domain.retrieval.query_conditions import QueryCondition
 
 
 def test_high_risk_claims_extract_amount_time_count_and_place():
@@ -81,6 +83,38 @@ def test_claim_verifier_parses_a_contradiction():
 
     assert review.verdict is ClaimVerdict.CONTRADICTED
     assert review.blocks
+
+
+def test_condition_review_sends_original_roles_and_object_evidence_in_one_call():
+    import json
+
+    model = _ScriptedModel('{"verdict":"ambiguous","reason":"商品价格不能证明用户购买"}')
+    event = QueryCondition("event", "购买紫色裙子", "anchor")
+    venue = QueryCondition("place", "Porto", "venue")
+    facts = [
+        Fact(
+            "condition_evidence",
+            RequirementValueType.DESCRIPTION,
+            {"quote": "Purple skirt £59", "context": "Purple skirt £59"},
+            provenance="read-2",
+            source={"asset_id": "asset-1"},
+        )
+    ]
+    review = ClaimVerifier(model).review(
+        query="我买的裙子多少钱",
+        claim=Claim("补证", RequirementValueType.DESCRIPTION),
+        facts=facts,
+        requirement=None,
+        condition_updates=[(event, event), (venue, venue)],
+        include_debug=True,
+    )
+    assert len(model.calls) == 1
+    payload = json.loads(model.calls[0][1].content)
+    assert payload["condition_updates"][0]["original"] == event.payload()
+    assert payload["condition_updates"][1]["update"] == venue.payload()
+    assert payload["facts"][0]["source"]["asset_id"] == "asset-1"
+    assert review.verdict is ClaimVerdict.AMBIGUOUS
+    assert review.model_call["status"] == "complete" and review.debug_call["response"]
 
 
 def test_claim_verifier_fails_open_on_model_error():

@@ -18,6 +18,7 @@ from sentrix.domain.assistant.claim_verifier import (
     ClaimReview,
     ClaimVerdict,
     build_claim_messages,
+    build_condition_messages,
     build_field_messages,
     field_review_facts,
     parse_claim_review,
@@ -28,6 +29,7 @@ from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement
 from sentrix.domain.assistant.intent import json_output_fact
 from sentrix.domain.assistant.models import ChatMessage, ChatRole
 from sentrix.domain.assistant.ports import ChatModel
+from sentrix.domain.retrieval.query_conditions import QueryCondition
 
 log = logging.getLogger("sentrix.assistant.claim_verifier")
 
@@ -48,10 +50,13 @@ class ClaimVerifier:
         include_debug: bool = False,
         step_id: str = "claim_verifier",
         requirements: Sequence[EvidenceRequirement] = (),
+        condition_updates: Sequence[tuple[QueryCondition, QueryCondition]] = (),
     ) -> ClaimReview:
         review_facts = field_review_facts(facts, limit=self._max_facts) if requirements else facts
         raw_messages = (
-            build_field_messages(
+            build_condition_messages(query=query, updates=condition_updates, facts=facts)
+            if condition_updates
+            else build_field_messages(
                 query=query,
                 answer=claim.text,
                 facts=review_facts,

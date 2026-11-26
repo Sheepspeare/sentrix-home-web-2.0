@@ -25,9 +25,11 @@ from sentrix.application.retrieval.retrieve_lexical import RetrieveLexical
 from sentrix.application.retrieval.retrieve_metadata import RetrieveMetadata
 from sentrix.application.retrieval.retrieve_text_ann import RetrieveTextAnn
 from sentrix.application.retrieval.retrieve_visual import RetrieveVisual
+from sentrix.domain.assistant.claim_verifier import ClaimReview, ClaimVerdict
 from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement, EvidenceType
 from sentrix.domain.assistant.models import PersonProfile, PersonRelationship
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet
+from sentrix.domain.assistant.task_state import ToolCallRecord
 from sentrix.domain.identity.models import ENTITY_STATUS_CONFIRMED, FACE_VALIDITY_VERIFIED
 from sentrix.domain.media.models import Asset, AssetStatus, GpsPoint, MediaType, Observation
 from sentrix.domain.places.aliases import EMPTY_ALIASES
@@ -40,6 +42,7 @@ from sentrix.domain.places.models import (
 )
 from sentrix.domain.retrieval import scheme
 from sentrix.domain.retrieval.ports import VectorRecord
+from sentrix.domain.retrieval.query_conditions import QueryCondition
 from sentrix.infrastructure.persistence.repositories.asset_places import SqliteAssetPlaceRepository
 from sentrix.infrastructure.persistence.repositories.assets import (
     SqliteAssetRepository,
@@ -1482,8 +1485,17 @@ def test_event_range_update_requires_evidence_and_is_reused_for_the_turn(toolbox
         "result_set_id": exploration.observation["result_set_id"],
         "asset_handle": "photo_1",
     }
+    evidence, records = _read_condition_evidence(build, exploration)
+    args["condition_evidence"] = evidence
     answered = build.execute(
-        "query_memory_facts", args, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
+        "query_memory_facts",
+        args,
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+        records=records,
+        condition_reviewer=lambda *args: ClaimReview(ClaimVerdict.SUPPORTED),
     )
     assert answered.ok and answered.observation["total"] == 1
     assert answered.model_visible["conditions_applied"][0]["required"] is True
@@ -1497,6 +1509,177 @@ def test_event_range_update_requires_evidence_and_is_reused_for_the_turn(toolbox
     )
     assert reused.ok and reused.observation["total"] == 1
     assert reused.model_visible["resolved_anchors"] == answered.model_visible["resolved_anchors"]
+
+
+def _read_condition_evidence(build, result, text="行程从2019-07-30开始，第三天2019-08-01去海边。"):
+    set_id = result.observation["result_set_id"]
+    asset_id = result.observation["asset_ids"][0]
+    build._observations.add(
+        Observation(
+            id="condition-ocr",
+            scope_id=SCOPE,
+            asset_id=asset_id,
+            source_type="import",
+            captured_at=None,
+            confidence=1.0,
+            ocr_text=text,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+    reading = build.execute(
+        "read_photo_text",
+        {"result_set_id": set_id, "asset_handle": "photo_1"},
+        scope_id=SCOPE,
+        now=NOW,
+    )
+    assert reading.ok
+    evidence = {"result_set_id": set_id, "asset_handle": "photo_1", "call_id": "read-1", "quote": text}
+    record = ToolCallRecord(
+        "read-1",
+        "read_photo_text",
+        "sig-read",
+        "ok",
+        observation=reading.observation,
+        model_visible=reading.model_visible,
+    )
+    return evidence, (record,)
+
+
+@pytest.mark.parametrize("planner_state", ["resolved", "pending"])
+def test_event_confirmation_is_bound_to_the_read_asset_and_never_widens_statistics(toolbox, planner_state):
+    build, _ = toolbox
+    condition = QueryCondition("event", "海边旅行", "anchor", state=planner_state)
+    req = EvidenceRequirement("trip", EvidenceType.PHOTO_SET, "海边旅行照片", conditions=(condition,))
+    state = {}
+    args = {"query": "海边", "requirement_id": "trip"}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    initial = build.execute("search_memories", args, **common)
+    assert initial.ok and not initial.model_visible["answer_eligible"]
+    evidence, records = _read_condition_evidence(build, initial, "海边旅行的纪念照片。")
+    checked = []
+
+    def review(updates, facts):
+        checked.append((updates, facts))
+        return ClaimReview(ClaimVerdict.SUPPORTED, "原文明确对应这张海边旅行照片。")
+
+    updated = build.execute(
+        "search_memories",
+        {
+            **args,
+            "condition_updates": [
+                QueryCondition("event", condition.value, "anchor", required=False).payload()
+            ],
+            "condition_evidence": evidence,
+        },
+        records=records,
+        condition_reviewer=review,
+        **common,
+    )
+    assert updated.ok and updated.model_visible["answer_eligible"]
+    assert updated.observation["asset_ids"] == [records[0].observation["asset_id"]]
+    assert checked[0][0][0][0] == condition
+    assert checked[0][0][0][1].required is True
+    assert state["trip"]["conditions"] == (condition,)
+    reused = build.execute("search_memories", args, **common)
+    assert reused.observation["asset_ids"] == updated.observation["asset_ids"]
+    assert reused.model_visible["answer_eligible"]
+    count = build.execute(
+        "query_memory_facts", {"operation": "count", "subject": "asset", "requirement_id": "trip"}, **common
+    )
+    assert count.failure_reason == "unresolved_conditions"
+    assert not count.model_visible["answer_eligible"]
+
+
+@pytest.mark.parametrize(
+    "defect",
+    ["unread", "wrong_asset", "quote", "uncertain", "wrong_scope", "role", "anchor", "unrelated", "fault"],
+)
+def test_condition_evidence_errors_keep_original_conditions_and_return_specific_feedback(toolbox, defect):
+    import dataclasses
+
+    build, _ = toolbox
+    condition = QueryCondition("event", "购买海边明信片", "anchor")
+    req = EvidenceRequirement("buy", EvidenceType.VISIBLE_TEXT, "购买明信片", conditions=(condition,))
+    state = {}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    args = {"query": "海边", "requirement_id": "buy"}
+    initial = build.execute("search_memories", args, **common)
+    evidence, records = _read_condition_evidence(build, initial, "海边明信片售价£5。")
+    update = condition.payload()
+    expected = "condition_evidence_not_read"
+    if defect == "unread":
+        records = ()
+    elif defect == "wrong_asset":
+        evidence["asset_handle"] = "photo_2"
+    elif defect == "quote":
+        evidence["quote"] = "用户已购买£5明信片"
+    elif defect == "uncertain":
+        records = (
+            dataclasses.replace(
+                records[0], model_visible={**records[0].model_visible, "certainty": "uncertain"}
+            ),
+        )
+    elif defect == "wrong_scope":
+        result_set = build._result_sets.get(evidence["result_set_id"])
+        build._result_sets.add(dataclasses.replace(result_set, scope_id="another"))
+        expected = "invalid_condition_evidence"
+    elif defect == "role":
+        update["role"] = "venue"
+        expected = "invalid_conditions"
+    elif defect == "anchor":
+        update["anchor"] = evidence["result_set_id"] + "/photo_1"
+        expected = "invalid_condition_update"
+    else:
+        expected = "condition_evidence_unconfirmed"
+    calls = []
+
+    def review(*values):
+        calls.append(values)
+        return ClaimReview(
+            ClaimVerdict.AMBIGUOUS,
+            "只有售价，无购买者或交易依据。" if defect == "unrelated" else "核验服务不可用。",
+        )
+
+    result = build.execute(
+        "search_memories",
+        {**args, "condition_updates": [update], "condition_evidence": evidence},
+        records=records,
+        condition_reviewer=review,
+        **common,
+    )
+    assert result.ok and not result.model_visible["answer_eligible"]
+    error = result.model_visible["condition_update_error"]
+    assert error["error"] == expected
+    assert "buy" not in state
+    if defect == "role":
+        assert "anchor" in error["message"] and "venue" in error["message"]
+    if defect == "anchor":
+        assert "待补条件" in error["message"] and "anchor" in error["message"]
+    assert len(calls) == (1 if defect in {"unrelated", "fault"} else 0)
+
+
+def test_condition_batch_is_atomic_before_semantic_review(toolbox):
+    build, _ = toolbox
+    condition = QueryCondition("event", "海边旅行", "anchor")
+    req = EvidenceRequirement("trip", EvidenceType.PHOTO_SET, "旅行", conditions=(condition,))
+    state = {}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    initial = build.execute("search_memories", {"query": "海边", "requirement_id": "trip"}, **common)
+    evidence, records = _read_condition_evidence(build, initial)
+    result = build.execute(
+        "search_memories",
+        {
+            "query": "海边",
+            "requirement_id": "trip",
+            "condition_evidence": evidence,
+            "condition_updates": [condition.payload(), QueryCondition("place", "Porto", "capture").payload()],
+        },
+        records=records,
+        condition_reviewer=lambda *args: pytest.fail("invalid batch reached model"),
+        **common,
+    )
+    assert not result.model_visible["answer_eligible"] and "trip" not in state
 
 
 def test_hotel_mentioned_location_is_not_applied_to_capture_gps(toolbox):

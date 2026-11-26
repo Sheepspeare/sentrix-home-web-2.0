@@ -29,7 +29,7 @@ import dataclasses
 import logging
 import re
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +38,8 @@ from typing import Any
 from sentrix.application.assistant.query_memory_facts import QueryMemoryFacts
 from sentrix.application.retrieval.retrieve_evidence import EvidenceRequest, RetrieveEvidence
 from sentrix.application.retrieval.retrieve_graph import graph_direction, graph_intent
-from sentrix.domain.assistant.evidence_binding import fact_value_type
+from sentrix.domain.assistant.claim_verifier import ClaimReview, ClaimVerdict
+from sentrix.domain.assistant.evidence_binding import Fact, fact_value_type
 from sentrix.domain.assistant.evidence_ledger import (
     EvidenceRequirement,
     EvidenceType,
@@ -50,6 +51,7 @@ from sentrix.domain.assistant.models import AmbiguousPersonName, Attachment, Per
 from sentrix.domain.assistant.ports import IdentityResolver, PersonDirectory, ResultSetRepository
 from sentrix.domain.assistant.reference_time import cap_at_reference_day, retrospective_reference_day
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetEntry
+from sentrix.domain.assistant.task_state import ToolCallRecord
 from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS, SOURCE_TEXT_PAGE_CHARS
 from sentrix.domain.identity.ports import FaceRepository, PersonCropRenderer
 from sentrix.domain.media.inspection import CERTAINTY_SUPPORTED
@@ -80,6 +82,8 @@ DEFAULT_INSPECT_QUESTION = "请描述这张照片"
 
 DEFAULT_SEARCH_LIMIT = 6
 MAX_SEARCH_LIMIT = 6
+
+ConditionReviewer = Callable[[Sequence[tuple[QueryCondition, QueryCondition]], Sequence[Fact]], ClaimReview]
 
 _WHO_SUFFIX = re.compile(r"(?:请问\s*)?([^，。？！?！]{1,80}?)\s*是谁(?:呀|啊|呢)?")
 _WHO_PREFIX = re.compile(r"(?:请问\s*)?谁是\s*([^，。？！?！]{1,80})")
@@ -295,6 +299,8 @@ class AssistantToolbox:
         graph_enabled: bool = True,
         requirements: Sequence[EvidenceRequirement] = (),
         query_state: dict[str, Any] | None = None,
+        records: Sequence[ToolCallRecord] = (),
+        condition_reviewer: ConditionReviewer | None = None,
     ) -> ToolOutcome:
         condition_report: dict[str, Any] = {}
         if name in {"search_memories", "query_memory_facts"}:
@@ -306,6 +312,8 @@ class AssistantToolbox:
                 exact=name == "query_memory_facts",
                 question=question,
                 query_state=query_state,
+                records=records,
+                condition_reviewer=condition_reviewer,
             )
             if isinstance(bound, ToolOutcome):
                 return bound
@@ -395,6 +403,8 @@ class AssistantToolbox:
         exact: bool,
         question: str,
         query_state: dict[str, Any] | None,
+        records: Sequence[ToolCallRecord],
+        condition_reviewer: ConditionReviewer | None,
     ) -> tuple[dict[str, Any], Sequence[EvidenceRequirement], dict[str, Any]] | ToolOutcome:
         selected = list(requirements)
         requirement_id = str(arguments.get("requirement_id") or "")
@@ -437,6 +447,9 @@ class AssistantToolbox:
                 evidence,
                 requirement_id=requirement_id,
                 scope_id=scope_id,
+                now=now,
+                records=records,
+                condition_reviewer=condition_reviewer,
             )
             if isinstance(updated, ToolOutcome):
                 if exact:
@@ -457,7 +470,25 @@ class AssistantToolbox:
                 role = "depicted" if key == "person" else "asset" if key == "media" else "capture"
                 conditions.append(QueryCondition(key, value.strip(), role))
         reference = retrospective_reference_day(question)
-        compiled = executable_conditions(tuple(dict.fromkeys(conditions)), now=reference or now, exact=exact)
+        # 内容证据的有效范围是已核验素材；保留原条件以供精确统计和后续补证。
+        active_conditions = tuple(dict.fromkeys(conditions))
+        scoped_ids: set[str] | None = None
+        confirmed_conditions = []
+        if not exact:
+            for condition in active_conditions:
+                witnesses = {
+                    row["asset_id"]
+                    for row in resolved_anchors
+                    if row.get("scope") == "asset" and row.get("original_condition") == condition.payload()
+                }
+                if witnesses:
+                    confirmed_conditions.append(condition)
+                    scoped_ids = witnesses if scoped_ids is None else scoped_ids & witnesses
+        compiled = executable_conditions(
+            [item for item in active_conditions if item not in confirmed_conditions],
+            now=reference or now,
+            exact=exact,
+        )
         report = compiled.report(executed=False)
         report["requirement_id"] = requirement_id
         if resolved_anchors:
@@ -485,6 +516,10 @@ class AssistantToolbox:
         bound["filters"] = {
             key: value for key, value in compiled.filters.items() if key in {"time", "place", "media"}
         }
+        if scoped_ids is not None:
+            bound["_condition_asset_ids"] = scoped_ids
+            report["condition_evidence_scope"] = "verified_assets_only"
+            report["conditions_resolved"].extend(item.payload() for item in confirmed_conditions)
         people = [item for item in compiled.applied if item.dimension == "person"]
         names = []
         profiles = []
@@ -578,6 +613,9 @@ class AssistantToolbox:
         *,
         requirement_id: str,
         scope_id: str,
+        now: datetime,
+        records: Sequence[ToolCallRecord],
+        condition_reviewer: ConditionReviewer | None,
     ) -> tuple[list[QueryCondition], list[dict[str, Any]]] | ToolOutcome:
         if not requirement_id:
             return _failure("requirement_required", "补全条件须指定requirement_id以复用解析结果。")
@@ -593,28 +631,96 @@ class AssistantToolbox:
         asset_id = result_set.resolve(str(evidence.get("asset_handle") or "")) if result_set else None
         if result_set is None or result_set.scope_id != scope_id or not asset_id:
             return _failure("invalid_condition_evidence", "条件依据必须是当前范围内有效的结果集图片。")
-        conditions = list(conditions)
-        resolved_anchors = list(resolved_anchors)
+        asset = self._assets.get(asset_id)
+        if asset is None or asset.scope_id != scope_id:
+            return _failure("invalid_condition_evidence", "条件依据对象不属于当前范围。")
+        quote = str(evidence.get("quote") or "").strip()
+        call_id = str(evidence.get("call_id") or "").strip()
+        facts = []
+        for record in records:
+            visible = record.model_visible
+            if (
+                record.status != "ok"
+                or record.tool not in {"read_photo_text", "read_source_text", "inspect_photo"}
+                or record.call_id != call_id
+                or record.observation.get("asset_id") != asset_id
+                or visible.get("result_set_id") != result_set.id
+                or visible.get("asset_handle") != evidence.get("asset_handle")
+                or visible.get("certainty", CERTAINTY_SUPPORTED) != CERTAINTY_SUPPORTED
+            ):
+                continue
+            text = str(visible.get("full_text") or visible.get("text") or visible.get("observation") or "")
+            pattern = re.compile(r"\s+".join(re.escape(part) for part in quote.split()))
+            match = pattern.search(text) if quote else None
+            if match:
+                facts.append(
+                    Fact(
+                        "condition_evidence",
+                        RequirementValueType.DESCRIPTION,
+                        {"quote": match.group(), "context": text, "capture_time": asset.capture_time.raw},
+                        provenance=record.call_id,
+                        source={"asset_id": asset_id, "result_set_id": result_set.id},
+                    )
+                )
+        if not facts:
+            return _failure(
+                "condition_evidence_not_read",
+                "condition_evidence须给出本回合已读该对象的call_id和连续原文quote；uncertain观察不能确认。",
+            )
+        unresolved = dict(executable_conditions(conditions, now=now, exact=False).pending)
+        proposed: list[tuple[QueryCondition, QueryCondition]] = []
         for update in updates:
             matching = [
                 item
                 for item in conditions
-                if item.dimension == update.dimension
+                if item in unresolved
+                and item.dimension == update.dimension
                 and item.role == update.role
-                and item.state == "pending"
                 and item.anchor == update.anchor
+                and item.relation == update.relation
             ]
-            if not matching or update.state != "resolved":
+            if len(matching) != 1 or update.state != "resolved":
+                expected = [item.payload() for item in conditions if item in unresolved]
                 return _failure(
                     "invalid_condition_update",
-                    "只补全已有pending条件；保留角色、anchor及必要性，已确定条件不覆盖。",
+                    f"补全执行层尚未落实的唯一条件，保留dimension/role/anchor/relation；"
+                    f"anchor是原语义依赖，图片引用填写condition_evidence。待补条件：{expected}",
                 )
-            conditions = [item for item in conditions if item not in matching]
-            update = dataclasses.replace(update, required=any(item.required for item in matching))
-            if update.dimension != "event":
+            original = matching[0]
+            if original in [item for item, _ in proposed]:
+                return _failure("invalid_condition_update", "同一条件在一批补证中只能更新一次。")
+            scoped = original.dimension == "event" or (
+                original.dimension in {"time", "place"} and original.role != "capture"
+            )
+            if scoped and (original.value != update.value):
+                return _failure("invalid_condition_update", "内容条件须保留原value，不能以新事件或地点替换。")
+            if not scoped and (
+                original.dimension != "time" or executable_conditions([update], now=now, exact=False).pending
+            ):
+                return _failure("invalid_condition_update", "该条件不能用图片补证转成可执行筛选。")
+            proposed.append((original, dataclasses.replace(update, required=original.required)))
+        review = condition_reviewer(proposed, facts) if condition_reviewer is not None else None
+        if review is None or review.verdict is not ClaimVerdict.SUPPORTED:
+            return _failure(
+                "condition_evidence_unconfirmed",
+                review.reason if review is not None else "条件证据尚未核验，保留原必要条件。",
+            )
+        conditions = list(conditions)
+        resolved_anchors = list(resolved_anchors)
+        for original, update in proposed:
+            query_scope = original.dimension == "time" and original.role == "capture"
+            if query_scope:
+                conditions.remove(original)
                 conditions.append(update)
             resolved_anchors.append(
-                {"condition": update.payload(), "evidence": dict(evidence), "asset_id": asset_id}
+                {
+                    "original_condition": original.payload(),
+                    "condition": update.payload(),
+                    "evidence": dict(evidence),
+                    "asset_id": asset_id,
+                    "scope": "query" if query_scope else "asset",
+                    "reason": review.reason,
+                }
             )
         return conditions, resolved_anchors
 
@@ -785,7 +891,12 @@ class AssistantToolbox:
             id=f"rs_{uuid.uuid4().hex[:12]}",
             scope_id=scope_id,
             query=query,
-            asset_ids=tuple(hit.asset_id for hit in result.hits),
+            asset_ids=tuple(
+                hit.asset_id
+                for hit in result.hits
+                if "_condition_asset_ids" not in arguments
+                or hit.asset_id in arguments["_condition_asset_ids"]
+            ),
             created_at=now,
             evidence_classes={hit.asset_id: hit.evidence_class for hit in result.hits},
         )

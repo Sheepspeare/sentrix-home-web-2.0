@@ -99,14 +99,21 @@ QUERY_CONTROLS = {
     },
     "condition_updates": {
         **condition_schema(),
-        "description": "仅在已读取当前回合证据后补全pending条件；首次搜索省略此字段，不能猜造证据引用。",
+        "description": (
+            "补全conditions_not_applied中的条件，Planner标resolved但执行未落实的也可补证。"
+            "保留原dimension/role/anchor/relation/required；anchor是语义依赖，不是图片引用。"
+            "event及内容地点保留原value；时间依赖补有证据的明确日期。整批证据将核验。"
+            "首次搜索省略此字段。"
+        ),
     },
     "condition_evidence": _object_schema(
         {
             "result_set_id": {"type": "string"},
             "asset_handle": {"type": "string"},
+            "call_id": {"type": "string", "description": "本回合实际读取该素材的工具调用ID。"},
+            "quote": {"type": "string", "description": "该次读取结果中的连续原文，勿改写或拼接。"},
         },
-        ["result_set_id", "asset_handle"],
+        ["result_set_id", "asset_handle", "call_id", "quote"],
     ),
 }
 
@@ -627,10 +634,12 @@ def planner_query_capabilities() -> str:
         "统计只支持原始资产数量/拍摄时间/行政拍摄地/媒体及已确认出镜人；"
         "商品数量、金额、旅程次数和事件日期要取正文或图像证据，不能换成照片数。"
         "source是用户明确要求的email/document/all，模型选择某搜索渠道不新增来源限制。"
-        "Agent查询引用requirement_id；新证据解析pending条件时给condition_updates与condition_evidence照片引用。"
+        "Agent查询引用requirement_id；执行未落实条件可用condition_updates补证，保留原角色和语义anchor。"
+        "condition_evidence给已读素材引用、工具call_id及连续原文quote；证据核验计共享预算。"
+        "事件及内容地点确认仅绑定到该素材，不能推广到全相册统计。"
         "普通事件名称和内容特征用于检索取证；只有第三天、最近一次等需先定位另一事件的条件才设pending。"
         "search_memories自动发现候选，无需探索开关；未核验条件保留到证据确认，不阻断首次搜索。"
-        "首次搜索省略condition_updates与condition_evidence；只有读取有效结果后才用它们补全pending条件。"
+        "首次搜索省略condition_updates与condition_evidence；读取有效结果后可补全conditions_not_applied中的条件。"
         "精确统计不能忽略必要条件；检索候选不等于满足所有条件。"
         "分组明细一次返回完整结果；过多返回query_too_broad，不分页，不任意改变用户必要范围。"
     )
