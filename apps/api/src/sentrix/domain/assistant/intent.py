@@ -576,6 +576,8 @@ def parse_declaration(
             conditions = parse_conditions(item.get("conditions", []))
         except (ValueError, TypeError):
             return None, "invalid_requirement"
+        if any(condition.source_text and condition.source_text not in question for condition in conditions):
+            return None, "condition_source_not_in_question"
         if conditions:
             scope = list(scope_projection(conditions))
 

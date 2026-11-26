@@ -304,8 +304,13 @@ def test_the_spec_carries_nothing_the_tool_did_not_ask_for():
     assert not hasattr(spec, "answer_type")
 
 
-@pytest.mark.parametrize("offset", [-1, 0, 64, True, None])
-def test_group_pagination_is_no_longer_a_query_parameter(offset):
+@pytest.mark.parametrize("offset", [-1, True, None])
+def test_invalid_group_page_offsets_are_rejected(offset):
     assert parse(operation="group", subject="asset", group_by="place", offset=offset) == FactRejection(
-        "unsupported_filter", "unsupported_argument"
+        "unsupported_filter", "invalid_offset"
     )
+
+
+@pytest.mark.parametrize("offset", [0, 64])
+def test_group_pages_preserve_requested_offset(offset):
+    assert parse(operation="group", subject="asset", group_by="place", offset=offset).offset == offset

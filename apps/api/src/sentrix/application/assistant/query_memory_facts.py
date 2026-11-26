@@ -70,6 +70,7 @@ class FactAnswer:
     samples: tuple[Mapping[str, Any], ...] = ()
     filters_applied: Mapping[str, Any] = field(default_factory=dict)
     person_names: tuple[str, ...] = ()
+    offset: int = 0
 
     @property
     def coverage(self) -> Mapping[str, Any]:
@@ -110,21 +111,20 @@ class FactAnswer:
         }
         if self.unit == "original_asset_breakdown":
             del visible["rows"]
-            visible["group_count"] = len(self.rows)
-            if (
-                len(self.rows) > MAX_MODEL_GROUPS
-                or len(json.dumps(self.value, ensure_ascii=False)) > MAX_MODEL_GROUP_CHARS
-            ):
-                del visible["value"]
-                visible.update(
-                    status="query_too_broad",
-                    coverage={**self.coverage, "complete": False},
-                    next_action=(
-                        "分组明细过多；先落实原问题的时间、地点等条件。保留用户全部必要范围，"
-                        "不能任意缩小范围后当作完整答案。若范围确实如此大，如实说明明细未返回；"
-                        "只需总数时用count，total为数据库计算的全部匹配资产数。"
-                    ),
-                )
+            page: list[dict[str, Any]] = []
+            for row in self.rows[self.offset : self.offset + MAX_MODEL_GROUPS]:
+                candidate = [*page, dict(row)]
+                if page and len(json.dumps(candidate, ensure_ascii=False)) > MAX_MODEL_GROUP_CHARS:
+                    break
+                page = candidate
+            end = self.offset + len(page)
+            visible.update(
+                value=page,
+                group_count=len(self.rows),
+                offset=self.offset,
+                next_offset=end if end < len(self.rows) else None,
+                page_complete=end == len(self.rows),
+            )
         return visible
 
 
@@ -259,6 +259,7 @@ class QueryMemoryFacts:
             rows=rows,
             samples=samples,
             person_names=person_names,
+            offset=request.offset,
             filters_applied={
                 **structured_filter.applied,
                 "scope_id": structured_filter.scope_id,

@@ -170,3 +170,32 @@ def test_nonstreaming_records_end_to_end_rate_without_inventing_ttft():
     assert model_timing_facts({}, 2000, 40) == {}
     assert model_timing_facts({"streamed": True}, 2000, 40) == {"streamed": True}
     assert "tokens_per_second" not in model_timing_facts({"streamed": False}, 0, 40)
+
+
+def test_condition_verifier_returns_independent_results_and_rejects_unknown_ids():
+    import json
+
+    from sentrix.domain.assistant.claim_verifier import parse_condition_reviews
+
+    event = QueryCondition("event", "旅行", "anchor")
+    place = QueryCondition("place", "Porto", "mentioned")
+    rows = [
+        {"condition_id": event.condition_id, "verdict": "supported", "reason": "事件"},
+        {"condition_id": place.condition_id, "verdict": "ambiguous", "reason": "地点未知"},
+    ]
+    response = json.dumps({"conditions": rows})
+    model = _ScriptedModel(response)
+    review = ClaimVerifier(model).review(
+        query="旅行地点",
+        claim=Claim("条件", RequirementValueType.DESCRIPTION),
+        facts=[],
+        requirement=None,
+        condition_updates=[(event, event), (place, place)],
+    )
+    assert len(model.calls) == 1
+    assert review.condition_reviews == (
+        (event.condition_id, ClaimVerdict.SUPPORTED, "事件"),
+        (place.condition_id, ClaimVerdict.AMBIGUOUS, "地点未知"),
+    )
+    rows[1]["condition_id"] = "invented"
+    assert not parse_condition_reviews(json.dumps({"conditions": rows}), [(event, event), (place, place)])

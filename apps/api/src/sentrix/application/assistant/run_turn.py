@@ -75,7 +75,6 @@ from sentrix.domain.assistant.evidence_binding import (
     binding_payload,
     facts_from_state,
 )
-from sentrix.domain.assistant.evidence_history import deduplicate_evidence, referenced_tool_calls
 from sentrix.domain.assistant.evidence_ledger import (
     EvidenceLedger,
     EvidenceRequirement,
@@ -578,10 +577,7 @@ def _drop_oldest_tool_round_trip(
             names = {call.name for call in messages[start].tool_calls}
             if names & _PROTECTED_PREVIEW_TOOLS:
                 protected_start = start
-    referenced = referenced_tool_calls(messages)
     for start, end in spans:
-        if any(messages[index].tool_call_id in referenced for index in range(start + 1, end)):
-            continue
         if protect_latest_preview and start == protected_start:
             continue
         return list(messages[:start]) + list(messages[end:])
@@ -1431,7 +1427,6 @@ class RunTurn:
                     for spec in frozen_specs
                     if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
                 )
-            messages = deduplicate_evidence(messages)
             try:
                 if session.finalization_code:
                     session.finalization_calls += 1
@@ -2281,6 +2276,10 @@ class RunTurn:
             "value_type": "query_conditions",
             "verdict": review.verdict.value,
             "reason": review.reason,
+            "condition_reviews": [
+                {"condition_id": key, "verdict": verdict.value, "reason": reason}
+                for key, verdict, reason in review.condition_reviews
+            ],
             "conditions": [
                 {"original": original.payload(), "update": update.payload()} for original, update in updates
             ],

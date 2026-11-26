@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import logging
 import re
 import uuid
@@ -68,6 +69,7 @@ from sentrix.domain.retrieval.conditions import Condition, Strictness
 from sentrix.domain.retrieval.fact_query import FactRejection
 from sentrix.domain.retrieval.query_conditions import (
     QueryCondition,
+    anchored_day,
     executable_conditions,
     legacy_conditions,
     parse_conditions,
@@ -327,6 +329,7 @@ class AssistantToolbox:
                 question=question,
                 requirements=requirements,
             )
+            outcome, condition_report = self._candidate_conditions(outcome, condition_report)
             if query_state is not None and outcome.ok:
                 set_id = outcome.observation.get("result_set_id")
                 query_state.setdefault("result_conditions", {})[set_id] = condition_report
@@ -345,6 +348,7 @@ class AssistantToolbox:
                 .get("result_conditions", {})
                 .get(outcome.observation.get("result_set_id"), {})
             )
+            outcome, report = self._candidate_conditions(outcome, report)
             return dataclasses.replace(
                 outcome,
                 observation={**outcome.observation, **self._condition_result(report, outcome.ok)},
@@ -379,6 +383,42 @@ class AssistantToolbox:
                 },
             )
         return _failure("unknown_tool", f"没有名为 {name} 的工具。")
+
+    def _candidate_conditions(
+        self, outcome: ToolOutcome, report: dict[str, Any]
+    ) -> tuple[ToolOutcome, dict[str, Any]]:
+        """条件确认只属于相应素材；搜索仍可发现未读候选。"""
+        if not outcome.ok or not (report.get("conditions_not_applied") or report.get("resolved_anchors")):
+            return outcome, report
+        required = {
+            row["condition_id"] for row in report.get("conditions_not_applied", ()) if row.get("required")
+        }
+        ids = outcome.observation.get("returned_asset_ids", outcome.observation.get("asset_ids", ()))
+        confirmed: dict[str, set[str]] = {}
+        for row in report.get("resolved_anchors", ()):
+            if row.get("scope") == "asset":
+                original = parse_conditions([row["original_condition"]])[0]
+                confirmed.setdefault(row["asset_id"], set()).add(original.condition_id)
+        eligibility = {asset: not (required - confirmed.get(asset, set())) for asset in ids}
+        result_set = self._result_sets.get(str(outcome.observation.get("result_set_id", "")))
+        previews = []
+        for row in outcome.model_visible.get("preview", ()):
+            asset = result_set.resolve(row["handle"]) if result_set and row.get("handle") else None
+            if asset is None and result_set:
+                asset = result_set.resolve(str(row.get("asset_handle", "")))
+            previews.append(
+                {
+                    **row,
+                    "answer_eligible": eligibility.get(asset, not required),
+                    "unresolved_condition_ids": sorted(required - confirmed.get(asset or "", set())),
+                }
+            )
+        report = {**report, "answer_eligible": any(eligibility.values()) if eligibility else not required}
+        return dataclasses.replace(
+            outcome,
+            observation={**outcome.observation, "condition_eligibility": eligibility, "preview": previews},
+            model_visible={**outcome.model_visible, "preview": previews},
+        ), report
 
     @staticmethod
     def _condition_result(report: dict[str, Any], ok: bool) -> dict[str, Any]:
@@ -450,47 +490,43 @@ class AssistantToolbox:
                 now=now,
                 records=records,
                 condition_reviewer=condition_reviewer,
+                review_cache=query_state.setdefault("condition_reviews", {})
+                if query_state is not None
+                else {},
             )
             if isinstance(updated, ToolOutcome):
                 if exact:
                     return updated
                 update_error = dict(updated.model_visible)
             else:
-                conditions, resolved_anchors = updated
+                conditions, resolved_anchors, update_errors = updated
                 updates_applied = True
+                if update_errors:
+                    update_error = {"error": "condition_updates_partial", "items": update_errors}
         raw_filters = arguments.get("filters", {})
         if not isinstance(raw_filters, Mapping):
             return _failure("invalid_filters", "filters必须是对象。")
+        ignored_filters = {}
         for key, value in raw_filters.items():
             if key not in {"time", "place", "media", "person"}:
                 return _failure("unsupported_filter", f"不支持筛选字段：{key}")
             if not isinstance(value, str):
                 return _failure("invalid_filter", "筛选值必须是字符串。")
+            if value.strip() and conditions:
+                ignored_filters[key] = value
+                continue
             if value.strip():
                 role = "depicted" if key == "person" else "asset" if key == "media" else "capture"
                 conditions.append(QueryCondition(key, value.strip(), role))
         reference = retrospective_reference_day(question)
-        # 内容证据的有效范围是已核验素材；保留原条件以供精确统计和后续补证。
+        # 保留内容条件并逐素材标记，不限制后续检索发现新候选。
         active_conditions = tuple(dict.fromkeys(conditions))
-        scoped_ids: set[str] | None = None
-        confirmed_conditions = []
-        if not exact:
-            for condition in active_conditions:
-                witnesses = {
-                    row["asset_id"]
-                    for row in resolved_anchors
-                    if row.get("scope") == "asset" and row.get("original_condition") == condition.payload()
-                }
-                if witnesses:
-                    confirmed_conditions.append(condition)
-                    scoped_ids = witnesses if scoped_ids is None else scoped_ids & witnesses
-        compiled = executable_conditions(
-            [item for item in active_conditions if item not in confirmed_conditions],
-            now=reference or now,
-            exact=exact,
-        )
+        compiled = executable_conditions(active_conditions, now=reference or now, exact=exact)
         report = compiled.report(executed=False)
         report["requirement_id"] = requirement_id
+        if ignored_filters:
+            report["ignored_tool_filters"] = ignored_filters
+            report["filter_note"] = "已按Planner条件执行；工具临时filters不能改变原条件角色或绕过待补条件。"
         if resolved_anchors:
             report["resolved_anchors"] = resolved_anchors
         if update_error:
@@ -516,10 +552,6 @@ class AssistantToolbox:
         bound["filters"] = {
             key: value for key, value in compiled.filters.items() if key in {"time", "place", "media"}
         }
-        if scoped_ids is not None:
-            bound["_condition_asset_ids"] = scoped_ids
-            report["condition_evidence_scope"] = "verified_assets_only"
-            report["conditions_resolved"].extend(item.payload() for item in confirmed_conditions)
         people = [item for item in compiled.applied if item.dimension == "person"]
         names = []
         profiles = []
@@ -558,7 +590,9 @@ class AssistantToolbox:
                             for condition in report["conditions_resolved"]
                             if condition != item.payload()
                         ]
-                        report["conditions_not_applied"].append({**item.payload(), "reason": reason})
+                        report["conditions_not_applied"].append(
+                            {**item.payload(), "condition_id": item.condition_id, "reason": reason}
+                        )
                         report["answer_eligible"] = False
                         report["identity_capabilities"] = capabilities
                         continue
@@ -616,13 +650,44 @@ class AssistantToolbox:
         now: datetime,
         records: Sequence[ToolCallRecord],
         condition_reviewer: ConditionReviewer | None,
-    ) -> tuple[list[QueryCondition], list[dict[str, Any]]] | ToolOutcome:
+        review_cache: dict[str, Any],
+    ) -> tuple[list[QueryCondition], list[dict[str, Any]], list[dict[str, str]]] | ToolOutcome:
         if not requirement_id:
             return _failure("requirement_required", "补全条件须指定requirement_id以复用解析结果。")
-        try:
-            updates = parse_conditions(updates)
-        except (TypeError, ValueError) as error:
-            return _failure("invalid_conditions", str(error))
+        if not isinstance(updates, list):
+            return _failure("invalid_conditions", "condition_updates必须是数组。")
+        proposals = []
+        derivations = {}
+        errors = []
+        for row in updates:
+            try:
+                if not isinstance(row, Mapping):
+                    raise ValueError("每个补证项须是对象。")
+                if "condition_id" in row:
+                    if set(row) - {"condition_id", "value", "anchor_date"}:
+                        raise ValueError("补证只接受condition_id和日期value。")
+                    matches = [item for item in conditions if item.condition_id == row["condition_id"]]
+                    if len(matches) != 1:
+                        raise ValueError("condition_id不属于当前需求。")
+                    original = matches[0]
+                    value = row.get("value", original.value)
+                    if "anchor_date" in row:
+                        if original.dimension != "time" or "value" in row:
+                            raise ValueError("anchor_date仅用于时间依赖，不同时传value。")
+                        value = anchored_day(original, row["anchor_date"])
+                        derivations[original.condition_id] = {"start": row["anchor_date"], "result": value}
+                    update = dataclasses.replace(original, value=value, state="resolved")
+                else:
+                    update = parse_conditions([row])[0]
+                proposals.append(update)
+            except (ValueError, TypeError, KeyError) as error:
+                errors.append(
+                    {
+                        "condition_id": str(row.get("condition_id", "")) if isinstance(row, Mapping) else "",
+                        "reason": str(error),
+                    }
+                )
+        updates = proposals
         if not isinstance(evidence, Mapping):
             return _failure(
                 "condition_evidence_required", "补全条件需要condition_evidence的已有结果集与图片引用。"
@@ -654,15 +719,12 @@ class AssistantToolbox:
                     "asset_handle": visible.get("asset_handle"),
                 }
             )
-            if (
-                record.call_id != call_id
-                or visible.get("result_set_id") != result_set.id
-                or visible.get("asset_handle") != evidence.get("asset_handle")
-            ):
+            if call_id and record.call_id != call_id:
                 continue
             text = str(visible.get("full_text") or visible.get("text") or visible.get("observation") or "")
-            pattern = re.compile(r"\s+".join(re.escape(part) for part in quote.split()))
-            match = pattern.search(text) if quote else None
+            actual_quote = quote or text
+            pattern = re.compile(r"\s+".join(re.escape(part) for part in actual_quote.split()))
+            match = pattern.search(text) if actual_quote else None
             if match:
                 facts.append(
                     Fact(
@@ -676,7 +738,7 @@ class AssistantToolbox:
         if not facts:
             failure = _failure(
                 "condition_evidence_not_read",
-                "复制available_evidence_refs或读取结果evidence_ref，补该次读取的连续原文quote；"
+                "先读取该结果集图片，再用result_set_id与asset_handle绑定已读证据；"
                 "仅搜索预览及uncertain观察不能确认条件。",
             )
             return dataclasses.replace(
@@ -696,49 +758,88 @@ class AssistantToolbox:
                 and item.relation == update.relation
             ]
             if len(matching) != 1 or update.state != "resolved":
-                expected = [item.payload() for item in conditions if item in unresolved]
-                return _failure(
-                    "invalid_condition_update",
-                    f"补全执行层尚未落实的唯一条件，保留dimension/role/anchor/relation；"
-                    f"anchor是原语义依赖，图片引用填写condition_evidence。待补条件：{expected}",
+                errors.append(
+                    {
+                        "condition_id": update.condition_id,
+                        "reason": "待补条件须保持原角色及语义依赖，使用返回的condition_id。",
+                    }
                 )
+                continue
             original = matching[0]
-            if original in [item for item, _ in proposed]:
-                return _failure("invalid_condition_update", "同一条件在一批补证中只能更新一次。")
             scoped = original.dimension == "event" or (
                 original.dimension in {"time", "place"} and original.role != "capture"
             )
-            if scoped and (original.value != update.value):
-                return _failure("invalid_condition_update", "内容条件须保留原value，不能以新事件或地点替换。")
-            if not scoped and (
-                original.dimension != "time" or executable_conditions([update], now=now, exact=False).pending
+            if (scoped and original.dimension != "time" and original.value != update.value) or (
+                not scoped
+                and (
+                    original.dimension != "time"
+                    or executable_conditions([update], now=now, exact=False).pending
+                )
             ):
-                return _failure("invalid_condition_update", "该条件不能用图片补证转成可执行筛选。")
-            proposed.append((original, dataclasses.replace(update, required=original.required)))
-        review = condition_reviewer(proposed, facts) if condition_reviewer is not None else None
-        if review is None or review.verdict is not ClaimVerdict.SUPPORTED:
-            return _failure(
-                "condition_evidence_unconfirmed",
-                review.reason if review is not None else "条件证据尚未核验，保留原必要条件。",
+                errors.append(
+                    {
+                        "condition_id": original.condition_id,
+                        "reason": "补证不能改变原事件或地点；必要身份不能用无身份依据的图片解除。",
+                    }
+                )
+                continue
+            if original not in [item for item, _ in proposed]:
+                proposed.append((original, dataclasses.replace(update, required=original.required)))
+        keys = {
+            original.condition_id: hashlib.sha256(
+                repr((original.payload(), update.payload(), asset_id, facts)).encode()
+            ).hexdigest()
+            for original, update in proposed
+        }
+        missing = [
+            (original, update)
+            for original, update in proposed
+            if keys[original.condition_id] not in review_cache
+        ]
+        if missing:
+            review = condition_reviewer(missing, facts) if condition_reviewer is not None else None
+            per_condition = (
+                {key: (verdict, reason) for key, verdict, reason in review.condition_reviews}
+                if review
+                else {}
             )
+            for original, _ in missing:
+                result = per_condition.get(
+                    original.condition_id,
+                    (review.verdict, review.reason)
+                    if review
+                    else (ClaimVerdict.AMBIGUOUS, "条件核验不可用。"),
+                )
+                review_cache[keys[original.condition_id]] = result
         conditions = list(conditions)
         resolved_anchors = list(resolved_anchors)
         for original, update in proposed:
+            verdict, reason = review_cache[keys[original.condition_id]]
+            if verdict is not ClaimVerdict.SUPPORTED:
+                errors.append(
+                    {"condition_id": original.condition_id, "reason": reason, "verdict": verdict.value}
+                )
+                continue
             query_scope = original.dimension == "time" and original.role == "capture"
             if query_scope:
                 conditions.remove(original)
                 conditions.append(update)
-            resolved_anchors.append(
-                {
-                    "original_condition": original.payload(),
-                    "condition": update.payload(),
-                    "evidence": dict(evidence),
-                    "asset_id": asset_id,
-                    "scope": "query" if query_scope else "asset",
-                    "reason": review.reason,
-                }
-            )
-        return conditions, resolved_anchors
+            anchor = {
+                "original_condition": original.payload(),
+                "condition": update.payload(),
+                "evidence": {
+                    "result_set_id": result_set.id,
+                    "asset_handle": evidence.get("asset_handle"),
+                    "read_call_ids": [fact.provenance for fact in facts],
+                },
+                "asset_id": asset_id,
+                "scope": "query" if query_scope else "asset",
+                "reason": reason,
+                "date_derivation": derivations.get(original.condition_id),
+            }
+            if anchor not in resolved_anchors:
+                resolved_anchors.append(anchor)
+        return conditions, resolved_anchors, errors
 
     # ---- query_memory_facts -------------------------------------------------
 
@@ -772,13 +873,6 @@ class AssistantToolbox:
                 failure_reason=answer.reason,
             )
         raw_filters = arguments.get("filters")
-        visible = answer.visible()
-        if visible["status"] == "query_too_broad":
-            return ToolOutcome(
-                observation={**visible, "complete_group_rows": list(answer.rows)},
-                model_visible=visible,
-                failure_reason="group_result_requires_refinement",
-            )
         requested = (
             {
                 str(key): str(value)

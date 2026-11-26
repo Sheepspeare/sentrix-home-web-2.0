@@ -22,6 +22,7 @@ from sentrix.domain.assistant.claim_verifier import (
     build_field_messages,
     field_review_facts,
     parse_claim_review,
+    parse_condition_reviews,
     parse_field_reviews,
 )
 from sentrix.domain.assistant.evidence_binding import Fact
@@ -124,12 +125,17 @@ class ClaimVerifier:
                 response=model_reply_payload(reply),
             )
         verdict, reason = parse_claim_review(reply.content or "")
+        if condition_updates:
+            verdict, reason = ClaimVerdict.AMBIGUOUS, "逐条件核验，按条件ID应用结果。"
         return ClaimReview(
             verdict=verdict,
             reason=reason,
             claim=claim,
             debug_call=debug_call,
             model_call=model_call,
+            condition_reviews=parse_condition_reviews(reply.content or "", condition_updates)
+            if condition_updates
+            else (),
             fields=parse_field_reviews(reply.content or "", requirements=requirements, facts=review_facts),
         )
 

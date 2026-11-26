@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sentrix.domain.retrieval.query_contracts import resolve_time_expression
@@ -31,9 +34,18 @@ class QueryCondition:
     anchor: str = ""
     relation: str = "is"
     state: str = "resolved"
+    source_text: str = ""
+
+    @property
+    def condition_id(self) -> str:
+        semantic = [self.dimension, self.value, self.role, self.required, self.anchor, self.relation]
+        return "cond_" + hashlib.sha256(json.dumps(semantic, ensure_ascii=False).encode()).hexdigest()[:16]
 
     def payload(self) -> dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        if not self.source_text:
+            result.pop("source_text")
+        return result
 
 
 def condition_schema() -> dict[str, Any]:
@@ -51,9 +63,12 @@ def condition_schema() -> dict[str, Any]:
                 "required": {"type": "boolean"},
                 "anchor": {"type": "string"},
                 "relation": {"type": "string"},
-                "state": {"type": "string", "enum": ["resolved", "pending"]},
+                "source_text": {
+                    "type": "string",
+                    "description": "用户问题中对应的连续原文，保留动作、角色和否定。",
+                },
             },
-            "required": ["dimension", "value", "role", "required", "anchor", "relation", "state"],
+            "required": ["dimension", "value", "role", "required", "anchor", "relation", "source_text"],
             "additionalProperties": False,
         },
     }
@@ -63,7 +78,7 @@ def parse_conditions(raw: Any) -> tuple[QueryCondition, ...]:
     if not isinstance(raw, list):
         raise ValueError("conditions_must_be_array")
     conditions = []
-    keys = set(condition_schema()["items"]["properties"])
+    keys = set(condition_schema()["items"]["properties"]) | {"state"}
     for row in raw:
         if not isinstance(row, Mapping) or set(row) - keys:
             raise ValueError("invalid_condition")
@@ -80,7 +95,7 @@ def parse_conditions(raw: Any) -> tuple[QueryCondition, ...]:
             "pending",
         }:
             raise ValueError("invalid_condition_state")
-        if any(not isinstance(row.get(key, ""), str) for key in ("anchor", "relation")):
+        if any(not isinstance(row.get(key, ""), str) for key in ("anchor", "relation", "source_text")):
             raise ValueError("invalid_condition_reference")
         conditions.append(
             QueryCondition(
@@ -91,6 +106,7 @@ def parse_conditions(raw: Any) -> tuple[QueryCondition, ...]:
                 anchor=row.get("anchor", "").strip(),
                 relation=row.get("relation", "is").strip(),
                 state=row.get("state", "resolved"),
+                source_text=row.get("source_text", "").strip(),
             )
         )
     return tuple(dict.fromkeys(conditions))
@@ -132,7 +148,10 @@ class AppliedConditions:
         return {
             "conditions_applied": [item.payload() for item in self.applied] if executed else [],
             "conditions_resolved": [item.payload() for item in self.applied],
-            "conditions_not_applied": [{**item.payload(), "reason": reason} for item, reason in self.pending],
+            "conditions_not_applied": [
+                {**item.payload(), "condition_id": item.condition_id, "reason": reason}
+                for item, reason in self.pending
+            ],
             "answer_eligible": not any(item.required for item, _ in self.pending),
         }
 
@@ -204,3 +223,43 @@ def executable_conditions(
             filters[item.dimension] = value
             applied.append(item)
     return AppliedConditions(filters, tuple(applied), tuple(pending))
+
+
+def anchored_day(condition: QueryCondition, start: str) -> str:
+    """从原始日序和有证据的起始日计算日期；不采用模型计算出的偏移。"""
+    text = condition.source_text or condition.value
+    numbers = {
+        "first": 1,
+        "second": 2,
+        "third": 3,
+        "fourth": 4,
+        "fifth": 5,
+        "一": 1,
+        "二": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+        "十": 10,
+    }
+    matches = re.findall(
+        r"第\s*(\d+|[一二三四五六七八九十])\s*天|\b(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th))\s+day\b",
+        text,
+        re.I,
+    )
+    days = {
+        int(re.sub(r"(?:st|nd|rd|th)$", "", a or b))
+        if re.match(r"^\d", a or b)
+        else numbers[(a or b).lower()]
+        for a, b in matches
+    }
+    if len(days) != 1 or not condition.anchor:
+        raise ValueError("日序或依赖事件不明确，不能换算日期。")
+    day = days.pop()
+    if day < 1 or day > 366:
+        raise ValueError("日序超出支持范围。")
+    base = datetime.strptime(start, "%Y-%m-%d")
+    return (base + timedelta(days=day - 1)).date().isoformat()

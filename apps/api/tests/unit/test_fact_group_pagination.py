@@ -1,4 +1,4 @@
-"""分组一次完整返回；过宽请求保留原聚合值，要求细化，不向模型分页。"""
+"""完整聚合值按页返回，保留统计总量和后续页位置。"""
 
 import json
 from datetime import datetime
@@ -27,26 +27,28 @@ def query(places):
     )
 
 
-def test_wide_group_output_is_not_a_partial_answer_or_a_pagination_loop():
+def test_all_group_pages_recover_complete_aggregation_without_duplicating_rows():
+    from dataclasses import replace
+
     answer = query(Places(1660))
-    visible = answer.visible()
-    assert visible["status"] == "query_too_broad"
-    assert visible["total"] == sum(range(1, 1661))
-    assert visible["group_count"] == 1660
-    assert not visible["coverage"]["complete"]
-    assert not {"rows", "value", "next_offset", "offset"} & visible.keys()
-    assert len(json.dumps(visible, ensure_ascii=False)) < 1500
-    assert len(answer.value) == 1660
+    rows = []
+    offset = 0
+    while True:
+        visible = replace(answer, offset=offset).visible()
+        assert visible["status"] == "ok" and visible["coverage"]["complete"]
+        assert visible["total"] == sum(range(1, 1661)) and visible["group_count"] == 1660
+        assert "rows" not in visible and len(visible["value"]) <= 64
+        rows.extend(visible["value"])
+        if visible["next_offset"] is None:
+            break
+        assert visible["next_offset"] > offset
+        offset = visible["next_offset"]
+    assert rows == list(answer.rows)
 
 
-def test_narrow_group_output_is_complete_and_not_duplicated():
-    answer = query(Places(4))
-    visible = answer.visible()
-    assert visible["status"] == "ok" and visible["coverage"]["complete"]
-    assert visible["value"] == answer.value
-    assert visible["total"] == 10 and visible["group_count"] == 4
-    assert not {"rows", "next_offset", "offset"} & visible.keys()
-
-
-def test_large_group_labels_also_require_refinement_instead_of_overflow():
-    assert query(Places(64, label_chars=1000)).visible()["status"] == "query_too_broad"
+def test_long_group_labels_reduce_page_size_without_changing_the_query():
+    visible = query(Places(64, label_chars=1000)).visible()
+    assert 0 < len(visible["value"]) < 64
+    assert len(json.dumps(visible["value"], ensure_ascii=False)) < 16000
+    assert visible["next_offset"] == len(visible["value"])
+    assert visible["group_count"] == 64

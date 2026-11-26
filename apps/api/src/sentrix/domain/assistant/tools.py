@@ -24,7 +24,6 @@ from enum import StrEnum
 from typing import Any
 
 from sentrix.domain.assistant.evidence_ledger import EvidenceType
-from sentrix.domain.retrieval.query_conditions import condition_schema
 
 # 检索宽度：推理模式也不放开 top-k，固定生产值。
 _SEARCH_LIMIT = 6
@@ -98,25 +97,32 @@ QUERY_CONTROLS = {
         "description": "本次查询对应的Planner需求ID；不同需求分别查询，避免混合范围。",
     },
     "condition_updates": {
-        **condition_schema(),
-        "description": (
-            "补全conditions_not_applied中的条件，Planner标resolved但执行未落实的也可补证。"
-            "保留原dimension/role/anchor/relation/required；anchor是语义依赖，不是图片引用。"
-            "event及内容地点保留原value；时间依赖补有证据的明确日期。整批证据将核验。"
-            "首次搜索省略此字段。"
+        "type": "array",
+        "items": _object_schema(
+            {
+                "condition_id": {
+                    "type": "string",
+                    "description": "复制conditions_not_applied中的condition_id。",
+                },
+                "value": {"type": "string", "description": "仅日期补全时填写；事件、地点含义由程序保留。"},
+                "anchor_date": {
+                    "type": "string",
+                    "description": (
+                        "第三天等日序：只给有证据的旅行起始日YYYY-MM-DD；"
+                        "程序计算目标日期，不与value同时填写。"
+                    ),
+                },
+            },
+            ["condition_id"],
         ),
+        "description": "逐项补证；程序保留原角色和依赖，成功项独立保存。首次搜索省略。",
     },
     "condition_evidence": _object_schema(
         {
             "result_set_id": {"type": "string"},
             "asset_handle": {"type": "string"},
-            "call_id": {
-                "type": "string",
-                "description": "复制读取结果evidence_ref.call_id，勿自行编写编号。",
-            },
-            "quote": {"type": "string", "description": "该次读取结果中的连续原文，勿改写或拼接。"},
         },
-        ["result_set_id", "asset_handle", "call_id", "quote"],
+        ["result_set_id", "asset_handle"],
     ),
 }
 
@@ -355,6 +361,11 @@ QUERY_MEMORY_FACTS = ToolSpec(
                     "统计什么：asset 原始照片/视频；"
                     "person_appearance 某位已确认人物出现过的照片；processing 导入处理状态。"
                 ),
+            },
+            "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "分组明细下一页使用next_offset，原筛选不变。",
             },
             "group_by": {
                 "type": "string",
@@ -624,12 +635,12 @@ def planner_query_capabilities() -> str:
     names = ", ".join(spec.name for spec in query_tools)
     return (
         f"查询入口：{names}。每条需求输出conditions数组；scope仅作展示，由conditions投影。"
-        "每条件写dimension/value/role/required/anchor/relation/state；没有条件用[]。"
+        "每条件写dimension/value/role/required/anchor/relation/source_text；source_text复制用户原文，执行状态由程序维护；没有条件用[]。"
         "dimension与role：time=capture/event/document；place=capture/mentioned/venue/origin/destination；"
         "person=depicted/photographer/author/narrator/animal；media/source/quantity=asset；"
         "quantity也可item/money/event；event=anchor。relation通常is，附近写near，人物关系写母亲/姐姐等路径。"
         "value保留原条件；明确日期可用YYYY-MM-DD或左闭右开YYYY-MM-DD/YYYY-MM-DD。"
-        "没有年份不要补当前年；第三天/最近旅行等先state=pending并写anchor依赖的事件或需求ID。"
+        "没有年份不要补当前年；第三天写anchor依赖的事件或需求ID，先确认起始日再换算。最近一次是在符合事件的记录中按时间比较，不要求单张图证明最近。"
         "地点角色必须区分：截图中的酒店地不等于截图拍摄地，航线出发地不等于目的地。"
         "人物昵称保留原名；我妈妈写value=妈妈、anchor=我、relation=母亲；"
         "我拍的写photographer，我出镜写depicted；活动叙述可写narrator且required=false。"
@@ -637,12 +648,12 @@ def planner_query_capabilities() -> str:
         "统计只支持原始资产数量/拍摄时间/行政拍摄地/媒体及已确认出镜人；"
         "商品数量、金额、旅程次数和事件日期要取正文或图像证据，不能换成照片数。"
         "source是用户明确要求的email/document/all，模型选择某搜索渠道不新增来源限制。"
-        "Agent查询引用requirement_id；执行未落实条件可用condition_updates补证，保留原角色和语义anchor。"
-        "condition_evidence给已读素材引用、工具call_id及连续原文quote；证据核验计共享预算。"
+        "Agent查询引用requirement_id；补证只填condition_id，不重写原角色、动作和依赖。"
+        "condition_evidence复制已读素材的result_set_id和asset_handle，程序自动绑定真实读取和原文；只核验该条件，逐项保存，核验计共享预算。"
         "事件及内容地点确认仅绑定到该素材，不能推广到全相册统计。"
-        "普通事件名称和内容特征用于检索取证；只有第三天、最近一次等需先定位另一事件的条件才设pending。"
+        "普通事件名称和内容特征用于检索取证；拍下标签准备买不能改写成已购买。不得添加用户未要求的购买、出席或身份前提。"
         "search_memories自动发现候选，无需探索开关；未核验条件保留到证据确认，不阻断首次搜索。"
         "首次搜索省略condition_updates与condition_evidence；读取有效结果后可补全conditions_not_applied中的条件。"
         "精确统计不能忽略必要条件；检索候选不等于满足所有条件。"
-        "分组明细一次返回完整结果；过多返回query_too_broad，不分页，不任意改变用户必要范围。"
+        "分组每页最多64组，total是全范围数量，group_count是分组数，next_offset表示后续页；需要完整明细时用原条件加offset翻页，不任意缩小用户范围。"
     )

@@ -115,3 +115,19 @@ def test_time_intersection_keeps_timezone_and_rejects_incompatible_calendars():
     result = executable_conditions(conditions, now=NOW, exact=True)
     assert result.pending[0][1] == "incompatible_timezones"
     assert not result.report()["answer_eligible"]
+
+
+def test_anchor_day_calculation_uses_original_ordinal_and_calendar():
+    from sentrix.domain.retrieval.query_conditions import anchored_day
+
+    condition = QueryCondition("time", "third day", "capture", anchor="trip", source_text="third day")
+    assert anchored_day(condition, "2024-02-28") == "2024-03-01"
+    with pytest.raises(ValueError):
+        anchored_day(QueryCondition("time", "third day", "capture"), "2024-02-28")
+
+
+def test_planner_semantics_do_not_expose_runtime_resolution_state():
+    from sentrix.domain.retrieval.query_conditions import condition_schema
+
+    schema = condition_schema()["items"]["properties"]
+    assert "state" not in schema and "source_text" in schema

@@ -2633,16 +2633,28 @@ def test_condition_review_uses_remaining_model_steps_and_records_its_request(env
     from sentrix.domain.retrieval.query_conditions import QueryCondition
 
     _conversations, _turns, conversation, _db = env
+    condition = QueryCondition("event", "海边旅行", "anchor")
     model = ScriptedModel(
         [final("尚未确认")],
-        claim=ModelReply(content='{"verdict":"supported","reason":"原文支持该素材的事件"}'),
+        claim=ModelReply(
+            content=json.dumps(
+                {
+                    "conditions": [
+                        {
+                            "condition_id": condition.condition_id,
+                            "verdict": "supported",
+                            "reason": "原文支持该素材的事件",
+                        }
+                    ]
+                }
+            )
+        ),
     )
     runner = build(env, model, StubToolbox())
     turn_id = start(runner, conversation)
     state = TaskState(turn_id, conversation.id, "album1", QUESTION, replace(DEFAULT_PROFILE, max_steps=1))
     state.model_steps = 1 - remaining
     session = _Session(state, EvidenceLedger("album1"), include_debug=True)
-    condition = QueryCondition("event", "海边旅行", "anchor")
     result = runner._review_query_conditions(
         session,
         [(condition, condition)],
@@ -2651,12 +2663,15 @@ def test_condition_review_uses_remaining_model_steps_and_records_its_request(env
     assert len(model.claim_calls) == remaining
     assert state.model_steps == 1
     if remaining:
-        assert result.verdict is ClaimVerdict.SUPPORTED
+        assert result.verdict is ClaimVerdict.AMBIGUOUS
         assert (
             len(session.model_calls) == 1
             and session.model_calls[0]["verification_kind"] == "query_conditions"
         )
         assert session.claim_reviews[0]["evidence_calls"] == ["read-1"]
+        assert session.claim_reviews[0]["condition_reviews"] == [
+            {"condition_id": condition.condition_id, "verdict": "supported", "reason": "原文支持该素材的事件"}
+        ]
         assert any(p.payload.get("code") == "query_condition_review" for p in state.progress)
     else:
         assert result.verdict is ClaimVerdict.AMBIGUOUS

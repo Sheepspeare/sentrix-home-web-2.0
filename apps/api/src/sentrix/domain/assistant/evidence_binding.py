@@ -461,7 +461,10 @@ def facts_from_state(state: TaskState) -> tuple[Fact, ...]:
             ids = record.observation.get("returned_asset_ids", record.observation.get("asset_ids", ()))
             if isinstance(ids, (list, tuple)):
                 for asset_id in ids:
-                    eligibility[str(asset_id)] = record.model_visible.get("answer_eligible") is not False
+                    per_asset = record.observation.get("condition_eligibility", {})
+                    eligibility[str(asset_id)] = per_asset.get(
+                        str(asset_id), record.model_visible.get("answer_eligible") is not False
+                    )
     facts = [
         replace(fact, filters_not_applied=(*fact.filters_not_applied, "query_conditions"))
         if eligibility.get(fact.source.get("asset_id", "")) is False

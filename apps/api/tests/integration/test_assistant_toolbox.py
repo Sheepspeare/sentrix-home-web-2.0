@@ -1577,7 +1577,8 @@ def test_event_confirmation_is_bound_to_the_read_asset_and_never_widens_statisti
         **common,
     )
     assert updated.ok and updated.model_visible["answer_eligible"]
-    assert updated.observation["asset_ids"] == [records[0].observation["asset_id"]]
+    assert updated.observation["condition_eligibility"][records[0].observation["asset_id"]]
+    assert updated.observation["asset_ids"] == initial.observation["asset_ids"]
     assert checked[0][0][0][0] == condition
     assert checked[0][0][0][1].required is True
     assert state["trip"]["conditions"] == (condition,)
@@ -1663,7 +1664,9 @@ def test_condition_evidence_errors_keep_original_conditions_and_return_specific_
     )
     assert result.ok and not result.model_visible["answer_eligible"]
     error = result.model_visible["condition_update_error"]
-    assert error["error"] == expected
+    assert error["error"] == (
+        "condition_updates_partial" if defect in {"role", "anchor", "unrelated", "fault"} else expected
+    )
     if defect in {"wrong_call", "quote"}:
         assert error["available_evidence_refs"] == [
             {"call_id": "read-1", "result_set_id": evidence["result_set_id"], "asset_handle": "photo_1"}
@@ -1671,15 +1674,15 @@ def test_condition_evidence_errors_keep_original_conditions_and_return_specific_
         assert calls == []
     elif defect in {"unread", "wrong_asset", "uncertain"}:
         assert error["available_evidence_refs"] == []
-    assert "buy" not in state
+    assert "buy" not in state or state["buy"]["conditions"] == (condition,)
     if defect == "role":
-        assert "anchor" in error["message"] and "venue" in error["message"]
+        assert "anchor" in error["items"][0]["reason"] and "venue" in error["items"][0]["reason"]
     if defect == "anchor":
-        assert "待补条件" in error["message"] and "anchor" in error["message"]
+        assert "待补条件" in error["items"][0]["reason"]
     assert len(calls) == (1 if defect in {"unrelated", "fault"} else 0)
 
 
-def test_condition_batch_is_atomic_before_semantic_review(toolbox):
+def test_valid_condition_in_a_malformed_batch_is_saved_independently(toolbox):
     build, _ = toolbox
     condition = QueryCondition("event", "海边旅行", "anchor")
     req = EvidenceRequirement("trip", EvidenceType.PHOTO_SET, "旅行", conditions=(condition,))
@@ -1696,10 +1699,12 @@ def test_condition_batch_is_atomic_before_semantic_review(toolbox):
             "condition_updates": [condition.payload(), QueryCondition("place", "Porto", "capture").payload()],
         },
         records=records,
-        condition_reviewer=lambda *args: pytest.fail("invalid batch reached model"),
+        condition_reviewer=lambda *args: ClaimReview(ClaimVerdict.SUPPORTED),
         **common,
     )
-    assert not result.model_visible["answer_eligible"] and "trip" not in state
+    assert result.model_visible["answer_eligible"]
+    assert len(state["trip"]["anchors"]) == 1
+    assert result.model_visible["condition_update_error"]["items"]
 
 
 def test_hotel_mentioned_location_is_not_applied_to_capture_gps(toolbox):
@@ -1816,7 +1821,7 @@ def test_exploratory_result_pages_keep_the_unresolved_conditions(toolbox, migrat
     assert page.model_visible["conditions_not_applied"] == result.model_visible["conditions_not_applied"]
 
 
-def test_oversized_group_results_do_not_expose_pages_or_satisfy_the_answer(toolbox, monkeypatch):
+def test_group_results_preserve_total_and_bounded_page(toolbox, monkeypatch):
     from sentrix.domain.retrieval.structured_query import GroupCount
 
     build, _ = toolbox
@@ -1831,11 +1836,13 @@ def test_oversized_group_results_do_not_expose_pages_or_satisfy_the_answer(toolb
         scope_id=SCOPE,
         now=NOW,
     )
-    assert not outcome.ok and not outcome.model_visible["answer_eligible"]
-    assert outcome.model_visible["status"] == "query_too_broad"
+    assert outcome.ok and outcome.model_visible["answer_eligible"]
+    assert outcome.model_visible["status"] == "ok"
     assert outcome.model_visible["total"] == 1660
-    assert not {"value", "rows", "next_offset", "offset"} & outcome.model_visible.keys()
-    assert len(outcome.observation["complete_group_rows"]) == 1660
+    assert "rows" not in outcome.model_visible
+    assert len(outcome.model_visible["value"]) == 64
+    assert outcome.model_visible["next_offset"] == 64
+    assert len(outcome.observation["value"]) == 1660
 
 
 @pytest.mark.parametrize("state", ["pending", "resolved"])
@@ -1915,7 +1922,8 @@ def test_unfounded_update_leaves_conditions_intact_and_still_returns_search_cand
     assert result.ok and result.observation["returned_asset_ids"]
     assert result.model_visible["condition_update_error"]["error"] == "condition_evidence_required"
     assert result.model_visible["conditions_not_applied"][0]["value"] == "第三天"
-    assert not result.model_visible["answer_eligible"] and "trip" not in state
+    assert not result.model_visible["answer_eligible"]
+    assert "trip" not in state
     count = build.execute(
         "query_memory_facts",
         {"operation": "count", "subject": "asset", **args},
@@ -1925,3 +1933,115 @@ def test_unfounded_update_leaves_conditions_intact_and_still_returns_search_cand
         query_state=state,
     )
     assert not count.ok and count.failure_reason == "condition_evidence_required"
+
+
+def test_condition_ids_auto_bind_reads_and_cache_unchanged_semantic_failures(toolbox):
+    build, _ = toolbox
+    condition = QueryCondition("event", "购买明信片", "anchor", source_text="我买的明信片")
+    req = EvidenceRequirement("buy", EvidenceType.VISIBLE_TEXT, "明信片", conditions=(condition,))
+    state = {}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    initial = build.execute("search_memories", {"query": "海边", "requirement_id": "buy"}, **common)
+    evidence, records = _read_condition_evidence(build, initial, "明信片售价£5。")
+    calls = []
+
+    def review(updates, facts):
+        calls.append((updates, facts))
+        return ClaimReview(
+            condition_reviews=((condition.condition_id, ClaimVerdict.AMBIGUOUS, "价格不证明购买"),)
+        )
+
+    args = {
+        "query": "海边",
+        "requirement_id": "buy",
+        "condition_updates": [{"condition_id": condition.condition_id}],
+        "condition_evidence": {k: evidence[k] for k in ("result_set_id", "asset_handle")},
+    }
+    for _ in range(2):
+        result = build.execute("search_memories", args, records=records, condition_reviewer=review, **common)
+        assert result.ok and not result.model_visible["answer_eligible"]
+        assert result.model_visible["condition_update_error"]["items"][0]["reason"] == "价格不证明购买"
+    assert len(calls) == 1 and calls[0][1][0].provenance == "read-1"
+    assert state["buy"]["anchors"] == []
+
+
+def test_batch_semantic_success_is_retained_when_another_condition_is_ambiguous(toolbox):
+    build, _ = toolbox
+    event = QueryCondition("event", "海边旅行", "anchor")
+    place = QueryCondition("place", "Porto", "mentioned")
+    req = EvidenceRequirement("trip", EvidenceType.PHOTO_SET, "旅行", conditions=(event, place))
+    state = {}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    initial = build.execute("search_memories", {"query": "海边", "requirement_id": "trip"}, **common)
+    evidence, records = _read_condition_evidence(build, initial, "海边旅行照片，地点尚不清楚。")
+
+    def review(updates, facts):
+        return ClaimReview(
+            condition_reviews=(
+                (event.condition_id, ClaimVerdict.SUPPORTED, "旅行"),
+                (place.condition_id, ClaimVerdict.AMBIGUOUS, "地点未知"),
+            )
+        )
+
+    result = build.execute(
+        "search_memories",
+        {
+            "query": "海边",
+            "requirement_id": "trip",
+            "condition_updates": [{"condition_id": event.condition_id}, {"condition_id": place.condition_id}],
+            "condition_evidence": {k: evidence[k] for k in ("result_set_id", "asset_handle")},
+        },
+        records=records,
+        condition_reviewer=review,
+        **common,
+    )
+    assert not result.model_visible["answer_eligible"]
+    assert len(state["trip"]["anchors"]) == 1
+    reused = build.execute("search_memories", {"query": "海边", "requirement_id": "trip"}, **common)
+    assert {c["dimension"] for c in reused.model_visible["conditions_not_applied"]} == {"place", "event"}
+    assert reused.observation["asset_ids"] == initial.observation["asset_ids"]
+    assert not all(reused.observation["condition_eligibility"].values())
+
+
+def test_tool_filter_cannot_turn_hotel_content_location_into_capture_gps(toolbox):
+    build, _ = toolbox
+    condition = QueryCondition("place", "Marseille", "mentioned")
+    req = EvidenceRequirement("hotel", EvidenceType.VISIBLE_TEXT, "马赛酒店截图", conditions=(condition,))
+    args = {"query": "海边", "requirement_id": "hotel", "filters": {"place": "Marseille"}}
+    result = build.execute("search_memories", args, scope_id=SCOPE, now=NOW, requirements=(req,))
+    assert result.ok and result.observation["asset_ids"]
+    assert result.model_visible["ignored_tool_filters"] == {"place": "Marseille"}
+    assert not result.model_visible["answer_eligible"]
+
+
+def test_anchor_date_is_calculated_by_program_before_semantic_confirmation(toolbox):
+    build, _ = toolbox
+    condition = QueryCondition("time", "第三天", "capture", anchor="trip")
+    req = EvidenceRequirement("day", EvidenceType.PHOTO_SET, "旅行第三天", conditions=(condition,))
+    state = {}
+    common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
+    initial = build.execute("search_memories", {"query": "海边", "requirement_id": "day"}, **common)
+    evidence, records = _read_condition_evidence(build, initial, "旅行起始日为2019-07-30。")
+    seen = []
+
+    def review(updates, facts):
+        seen.extend(updates)
+        return ClaimReview(
+            condition_reviews=((condition.condition_id, ClaimVerdict.SUPPORTED, "起始日明确"),)
+        )
+
+    result = build.execute(
+        "search_memories",
+        {
+            "query": "海边",
+            "requirement_id": "day",
+            "condition_updates": [{"condition_id": condition.condition_id, "anchor_date": "2019-07-30"}],
+            "condition_evidence": {k: evidence[k] for k in ("result_set_id", "asset_handle")},
+        },
+        records=records,
+        condition_reviewer=review,
+        **common,
+    )
+    assert seen[0][1].value == "2019-08-01"
+    assert result.model_visible["answer_eligible"]
+    assert state["day"]["anchors"][0]["date_derivation"]["result"] == "2019-08-01"
