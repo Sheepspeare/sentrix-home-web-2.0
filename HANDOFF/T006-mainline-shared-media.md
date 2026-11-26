@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原包核验并发冲突已定位，仅恢复只读核验
+
+HTTP核验wait1d0ab285在baseline-large阶段遇到extra archive matches退出，尚无整组成功receipt，候选核验未开始；原失败stdout/stderr及joblog保持。两原基线几乎同时发相同问题的Planner，输入SHA／1057输入132输出Token及时间窗一致，但large缓存Token0、limited1024，原helper少了这条可核对约束。只读helper0515ca76增加已记录cached_tokens匹配，保留歧义和唯一raw检查；2本机测试/Ruff/format/compile通过，独立ops目录SHA69ae2f2e及远端compile通过。真实冲突原包验收仅匹配large 4b5301e0、排除limited 9e91f86b，0模型请求；未修改活动release／调度。
+
+新核验目录large-priority-83-review/http-recovery-1，全部2781＋562调用补已有cache观测，新wake c0acf2ca-4a1f-40ce-bba8-0070fa900610继续失败／未开始阶段；原采集、答案、预算统计保持。全量原包审核仍待回调，未宣布质量／整体收益通过。原三路实验监控3d304eca／22da8147／286c0dcb保持，Judge周额度前不重试。证据http-failure-review.json、matcher-collision-review/collision.json和http-recovery-1/{helper-deployment,collision-acceptance,launch-registration}.json。查询条件与PhotoBench身份方案仍未实现部署。
+
 ## 2026-11-26｜人物条件方案补充，原large83固定版本取证完成
 
 用户明确保留PhotoBench身份／人脸能力：ATM本轮缺身份题不能决定产品关闭路径。已补查询条件方案：Planner同调用理解人物角色、身份必要性和关系路径，后端按姓名／昵称／有效自我锚点与关系定位实体，Agent补证；明确拍摄者、出镜者、作者与叙述者不同。系统已有已确认姓名／别名及家庭关系数据，但助手先查姓名再富化关系，尚缺关系锚点解析；当前“我拍的”被叙述正则涵盖，须保留明确拍摄者条件。captured_by数据与覆盖待核，不能用出镜关联替代。
