@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜有限771已695有效，仅续最后76缺分
+
+limited-snapshot-771/recovery-1本轮处理157，其中156有效、1Judge自相矛盾拒收、75未请求。475集合累计399有效；771累计695有效/76缺分，有效QS均分43.2093%，未分不记0。失败响应accuracy=true而core_match=false并列missing店名，生产冻结公式严格拒收，未改评分解析/提示词或擅自推分。137新Judge HTTP已逐response ID及完整请求/响应SHA、usage/时间唯一raw匹配，全200/实际关思考，共130343Token，另20程序评分；原209及共同补评71原包直接复用。
+
+原243完整成功结果、原目录状态SHA及旧428评分文件SHA保持。recovery-2已复制399成功及完整失败历史、输入协议，仅续76（1真实失败＋75未发），有限评分2并发，独立18159只本任务使用；启动以launch-registration/stage-started为准。最终771合旧83＋baseline-common-1/recovery-2的213＋limited-snapshot-771/recovery-2的475，两个旧475目录不重复叠加。callback-0e4422f4已reconciled，迟到只读。共同296 limited42.5338%/large49.4369%保持，异范围均分不直接比较。
+
+证据见候选audit/flash-judge-20261126/limited-snapshot-771/recovery-1/{RESULTS,score-summary-partial,limited771-partial-summary,acceptance-partial,local-integrity-partial,judge-http-exact-verification,failure-diagnosis,callback-0e4422f4-reconciled}及recovery-2。原双全量wake/业务/各4并发、119high及相册/raw/答卷保护保持，0Agent请求/生产代码修改；无新全量launch，候选冻结、002005未结项及11/27截止安排不变。
+
 ## 2026-11-26｜共同296评分齐，有限771保留539分续缺232
 
 原limited-snapshot-771任务a022a30f已核：处理244题中243有效、1失败（Luxor酒店响应为普通文本、缺少boolean accuracy）、231未请求，剩232。243有效均分43.6851%；35程序评分，209真实Judge HTTP全200/关思考/196909Token，逐response ID及完整请求/响应SHA唯一raw匹配。保存全部原响应、失败及243完整成功结果；scored_this_invocation是处理数，不能写成成功244题。旧428评分文件SHA、475固定revision全部答案及原意图118成功结果保持。
