@@ -10,9 +10,11 @@
 
 用户要求新建两个实例，以当时Doubao Lite代码/相册，仅替换Qwen3.8 Flash，有限20/30与大100/600预算各16答题并发，直连供应商，无本地网关。先沿用16代表题检查点，再据真实错误调整并发。本次授权取代原“冻结不启动新实验”要求，仅限新实例；原ea4413/f6ebb1、v6/v12与119high保持。
 
-历史334产品源文件已对齐：331为ffec2be、3会话删除文件为9363d4b。将精确重建该部署，保16K/默认2048/Planner；相册为原Doubao记忆及6742邮件，不拿Flash相册冒充仅换模型。评测调度器30c67e74用于同UUID/16题自动暂停。新增进程内传输适配只做云端鉴权、原生关思考及原包保存，不引入监听/槽位/重试或改Agent逻辑。4项窄范围回归、Ruff及compile通过。
+历史334产品源文件已对齐：331为ffec2be、3会话删除文件为9363d4b。已精确重建该部署，保16K/默认2048/Planner；相册为原Doubao记忆及6742邮件，不拿Flash相册冒充仅换模型。评测调度器30c67e74用于同UUID/16题自动暂停。新增进程内传输适配只做云端鉴权、原生关思考及原包保存，不引入监听/槽位/重试或改Agent逻辑。4项窄范围回归、Ruff及compile通过。
 
-实例计划8301/8881、8302/8882；磁盘不足两份6.8GiB库，独立DB/cache放专属/dev/shm，答案/完整轨迹/HTTP原包落/home并回传本机。18记忆表与历史源库指纹逐一保护，0embedding。产物候选audit/doubao-code-direct、源码deploy/photobench/20261126-doubao-code-direct；当前只准备，QA是否启动以新launch回执为准。原豆包74.4097%与新Flash Judge不同裁判，需分开说明。
+实例8301/8881、8302/8882；磁盘不足两份6.8GiB库，独立DB/cache放专属/dev/shm，答案/完整轨迹/HTTP原包落/home并回传本机。18记忆表与历史源库指纹逐一保护，0embedding。产物候选audit/doubao-code-direct、源码deploy/photobench/20261126-doubao-code-direct；两组已实际启动，QA回执见recovery-1/launch.json。原豆包74.4097%与新Flash Judge不同裁判，需分开说明。
+
+实测两份独立DB各16个running turn；首64实际QA HTTP全200/关思考，基于原包started_at/finished_at，每组峰值16、跨组峰值32，全部云端HTTPS。证据recovery-1/{started-verification,actual-concurrency,limited-started,large-started}.json。16完成后自动暂停，再取固定revision完整轨迹与直连Flash Judge；不自动扩大1013。初始502文件manifest保留，prepare运维helper后续修复SHA另见runtime-repair-upload-manifest，334产品源文件与评测源码仍按初始manifest核对。
 
 ## 2026-11-26｜原limited771全部评分验收完成
 
