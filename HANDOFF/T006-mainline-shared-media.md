@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜原有限1013轨迹完整，预算与时延统计已齐
+
+恢复1 c6f5a278已采齐1013唯一qa_id，全部评分revision一致、逐receipt文件SHA通过，83旧证据复用；callback-c6f5a278-reconciled已存。预算stop_code：model_call_limit370题/36.5252%，tool_call_limit14题/1.3820%，629无；平均324.798秒、中位214.410秒。模型HTTP12950=12237主调用+713视觉HTTP，645本地超长不计HTTP；工具准入12934/拒绝101共13035轨迹。712视觉观测中有一次400后200重试，两次HTTP分别计，逐题budget.model_attempts与实际HTTP总数完全相符。记录Token162458019，原包成本核验尚待完成。
+
+已用已验helper SHA20951395准备全12950原包唯一匹配，读共享历史raw无新模型请求；wakec02c1b53-a1d7-4550-a392-9a9d3ea3059a。完整问题/调用类型/usage-cache/响应toolID/视觉问题/时间窗核对，需核400无usage与712成功视觉非空图片，不能预报全200。证据双基线audit/limited-full-final-review/{trace-integrity,agent-metrics-summary,agent-metrics-items,agent-http-exact-config,agent-http-launch-registration}。原评分1013齐QS43.659568%保持，其他任务不动，002005未结项。
+
+
 ## 2026-11-27｜原limited1013轨迹采集按评分旧版本恢复
 
 0fe9888f只读采集在有序进度83时遇版本保护：终态当前详情revision 33d5274f与当时评分导出d3dc7357不同，原脚本误直接比较；不是答卷丢失。84完整receipt逐文件SHA保留，初始失败终态/旧item.json均保留。两个失败题用评分保存的trace_storage.item_index和旧revision真实GET qa_id及全content/trace通过。新collect-pinned-recovery1只读采用评分原始索引/版本，另存pinned-item.json，不覆盖旧取证；新预检2题完整通过，成功receipt复用，缺阶段续采。
