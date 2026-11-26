@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原大预算83检查点已到，接续全量监控与固定版本取证
+
+原large f6ebb1已到83优先UUID检查点，回调时87答，后续只读监控快照89/1013答、4并发、running且无fatal_error；产品8297/PID1955696、测评8877/PID1941357仍监听，业务30c67e74保持。原run继续全1013，新增全量终态/异常wake 22da8147-5805-4ebc-a6b3-7428b81d60e4，已核intent/latest，无POST、暂停、部署或重答。旧83 wait4672ab5c已处理，不重挂。
+
+83取证单独登记wake 0c3798db-b71c-4ef3-b22d-b612d97c5676：原large83及v6当时已完成优先子集，逐题固定qa_id/trace_storage.revision并校验所有content/trace分页。采集完成后再核原8/v6原11答案SHA、共享HTTP/内部视觉Token、预算分因及同题配对，并精确匹配共享网关原包；当前尚未完成该审核，不报告83总体收益或质量通过。limited全量wake3d304eca、v6到83暂停wake286c0dcb保持；Judge周额度至2026-11-30 00:00东八区，正式分待补。查询条件改造仍仅方案，复用Planner理解、Agent补证据、后端统一执行，业务未实现/部署。
+
+证据：双基线audit/large-full-monitor-registration.json、large-priority-83-review/collection-launch-registration.json、callback-4672ab5c-reconciled.json。原相册/所有raw和成功答卷保持；北京时间11/27 15点统计、17点汇报。
+
 ## 2026-11-26｜查询条件全链路诊断与改造计划
 
 用户明确要求优先解决自然语言到查询条件，范围含地点、人物、媒体和来源，也包含“最近一次旅行／第三天”等事件依赖。核原limited83、候选v2 limited83，以及当前v6即时27题，合计193份回合（题目有重叠），未按参考答案设计策略。v6逐题固定revision、核qa_id及content分页read_revision，只读GET，Agent/Judge请求0，原run继续2并发至83暂停。

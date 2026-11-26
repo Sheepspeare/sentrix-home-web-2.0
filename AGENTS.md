@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26原large83检查点已到，原run89/1013答、4并发继续；全量终态监控已接续，83固定版本轨迹正在采集，未完成质量/成本验收。查询条件改造仍仅方案，详见双基线audit/large-priority-83-review和T006。
+
 - 11/26查询条件整体改造方案已形成：核原基线83/v2 83/当前v6 27份轨迹，优先复用Planner调用输出共同条件，覆盖地点角色/人物/媒体/来源及事件依赖；后端统一执行反馈，分页次要。当前仅方案/只读取证，业务未改，见docs/refactor/2026-11-26-query-condition-plan.md、候选audit/query-condition-review及T006。
 
 - 11/26磁盘恢复已验：四份旧备份无损归档释放6.31GiB，home8.26GiB；原limited全量/large83/v6候选83三路只读监控均已接续，答题未重启。有效wait见候选audit/storage-recovery-20261126/monitor-recovery-registration.json与T006。
