@@ -76,3 +76,46 @@ def test_saved_result_list_projection_has_no_execution_status():
     listing = {"items": [{"qa_id": "q", "index": 3, "agent_status": "failed"}]}
     assert set(module.listed_answers(listing)) == {"q"}
     assert module.missing_ids(["q"], module.listed_answers(listing), {}) == ["q"]
+
+
+def test_execution_timeout_without_answer_is_not_sent_to_judge(monkeypatch):
+    item = {
+        "qa_id": "q",
+        "index": 16,
+        "trace_storage": {"revision": "fixed"},
+        "execution_status": "timeout",
+        "error": "turn did not complete within 3660s",
+    }
+    calls = []
+
+    def get(port, path):
+        calls.append(path)
+        return {"read_revision": "fixed", "text": '"q"'}
+
+    monkeypatch.setattr(module, "get", get)
+    lookup = SimpleNamespace(detail_by_qa=lambda *args: (item, []))
+    hydrated, receipt = module.hydrate(8886, "run", "q", lookup)
+    assert hydrated == item and "answer" not in hydrated
+    assert receipt["scorable"] is False and receipt["execution_status"] == "timeout"
+    assert len(calls) == 1 and "path=qa_id" in calls[0] and "revision=fixed" in calls[0]
+    assert module.missing_ids(["q", "next"], {"q", "next"} - {"q"}, {}) == ["next"]
+
+
+def test_unscorable_execution_requires_pinned_identity_and_no_saved_content(monkeypatch):
+    item = {
+        "qa_id": "q",
+        "index": 16,
+        "trace_storage": {"revision": "fixed"},
+        "execution_status": "timeout",
+    }
+    lookup = SimpleNamespace(detail_by_qa=lambda *args: (item, []))
+    monkeypatch.setattr(module, "get", lambda *_: {"read_revision": "new", "text": '"q"'})
+    with pytest.raises(AssertionError):
+        module.hydrate(8886, "run", "q", lookup)
+    monkeypatch.setattr(module, "get", lambda *_: {"read_revision": "fixed", "text": '"other"'})
+    with pytest.raises(AssertionError):
+        module.hydrate(8886, "run", "q", lookup)
+    monkeypatch.setattr(module, "get", lambda *_: {"read_revision": "fixed", "text": '"q"'})
+    item["answer"] = "saved content requires review"
+    with pytest.raises(AssertionError):
+        module.hydrate(8886, "run", "q", lookup)

@@ -20,14 +20,15 @@ def watch(root):
     assert not (root / "observer-started.json").exists(), "Read prior observer before attaching"
     save(root / "observer-started.json", {"at": time.time(), "remote": plan["remote"], "read_only": True})
     errors = []
+    groups = plan.get("groups", ["limited", "large"])
     names = [
         "started",
         "progress",
         "concurrency",
         "terminal",
         "failure",
-        "limited-attention",
-        "large-attention",
+        "groups-terminal",
+        *[group + "-attention" for group in groups],
     ]
     while True:
         values = {}
@@ -45,11 +46,16 @@ def watch(root):
                 save(root / "observer-read-errors.json", errors)
                 if len(errors) >= 6:
                     raise
-        if any(name in values for name in ["failure", "limited-attention", "large-attention"]):
+        if any(name in values for name in ["failure", *[group + "-attention" for group in groups]]):
             save(
                 root / "observer-terminal.json",
                 {"at": time.time(), "status": "needs_review", "values": values},
             )
+            return
+        terminals = values.get("groups-terminal", {})
+        if all(group in terminals for group in groups):
+            selected = {group: terminals[group] for group in groups}
+            save(root / "observer-terminal.json", {"at": time.time(), "groups": selected, "values": values})
             return
         if "terminal" in values:
             save(root / "observer-terminal.json", {"at": time.time(), **values["terminal"]})

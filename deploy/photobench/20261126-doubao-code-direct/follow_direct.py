@@ -70,6 +70,20 @@ def hydrate(port, run, qa, lookup):
     item, movements = lookup.detail_by_qa(get, port, run, qa)
     result = copy.deepcopy(item)
     revision, index = item["trace_storage"]["revision"], item["index"]
+    if item["execution_status"] != "completed":
+        query = urllib.parse.urlencode({"path": "qa_id", "revision": revision})
+        identity = get(port, f"runs/{run}/items/{index}/content?{query}")
+        assert identity["read_revision"] == revision and json.loads(identity["text"]) == qa
+        assert "answer" not in item and not item.get("runtime_turns"), "Inspect failed execution with content"
+        return result, {
+            "qa_id": qa,
+            "revision": revision,
+            "index": index,
+            "scorable": False,
+            "execution_status": item["execution_status"],
+            "reason": "execution_failed_without_answer",
+            "index_movements": movements,
+        }
     paths = {"qa_id", "answer"} | {f["path"] for f in item.get("content_fields", [])}
     paths.update(
         f"runtime_turns.{n}.answer" for n, t in enumerate(item.get("runtime_turns") or []) if "answer" in t
@@ -201,7 +215,7 @@ class Follow:
         old = json.loads(previous.read_text())
         assert old["run_id"] == run
         merge_scores(scores, old)
-        assert len(scores) == 16
+        assert len(scores) == group["prior_scored"]
         snapshot = old["qa_snapshot"]
         order = [row["qa_id"] for row in snapshot["rows"]]
         assert len(order) == len(set(order)) == 1013
@@ -214,6 +228,8 @@ class Follow:
             evaluation_options=self.protocol["evaluation_options"],
         )
         save(folder / "scores.json", list(scores.values()))
+        unscorable = {}
+        save(folder / "unscorable.json", unscorable)
         batch_number = 0
         try:
             while True:
@@ -230,7 +246,7 @@ class Follow:
                     if not listing.get("has_next"):
                         break
                     page += 1
-                pending = missing_ids(order, available, scores)
+                pending = missing_ids(order, available.keys() - unscorable.keys(), scores)
                 answered = live["phases"]["qa_eval"]["progress"]["agent_completed"]
                 self.update(
                     name,
@@ -239,15 +255,26 @@ class Follow:
                     scored=len(scores),
                     valid_mean=sum(r["normalized_score"] for r in scores.values()) / len(scores),
                     observed_missing=len(pending),
+                    unscorable=len(unscorable),
                     run_status=live["status"],
                 )
                 if not pending:
                     if live["status"] in TERMINAL:
-                        assert len(available) == answered == len(scores)
-                        result = {"status": "completed", "scored": len(scores), "answered": answered}
+                        assert len(available) == answered == len(scores) + len(unscorable)
+                        result = {
+                            "status": "completed",
+                            "scored": len(scores),
+                            "answered": answered,
+                            "unscorable": len(unscorable),
+                        }
                         break
                     if time.time() >= self.plan["report_at"]:
-                        result = {"status": "report_checkpoint", "scored": len(scores), "answered": answered}
+                        result = {
+                            "status": "report_checkpoint",
+                            "scored": len(scores),
+                            "answered": answered,
+                            "unscorable": len(unscorable),
+                        }
                         break
                     time.sleep(30)
                     continue
@@ -278,6 +305,14 @@ class Follow:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                     items = dict(pool.map(fetch, selected))
+                for qa, item in items.items():
+                    if item["execution_status"] != "completed":
+                        unscorable[qa] = json.loads((collection / (qa + ".receipt.json")).read_text())
+                save(folder / "unscorable.json", unscorable)
+                selected = [qa for qa in selected if qa not in unscorable]
+                if not selected:
+                    save(batch / "terminal.json", {"status": "no_scorable_answers", "judge_requests": 0})
+                    continue
                 source = {"run_id": run, "qa_snapshot": snapshot, "items": [items[q] for q in selected]}
                 save(batch / "input.json", source)
                 save(
