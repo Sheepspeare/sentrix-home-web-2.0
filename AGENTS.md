@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26查询条件修复与83题消融执行计划已列，待用户确认：复用Planner理解、后端统一执行并保留身份能力；条件链路／历史整理独立四组，先16再83。原large83已终态，v6最近51／83；尚未实施或发新QA。见执行计划及T006。
+
 - 11/26原large83与v6当时34题共3343HTTP原包已唯一匹配验收，全部200/配置一致，Token与预算逐组相符；同图提醒已送达但后续仍重复读图，质量待Judge。条件/身份改造仍为方案；原两全量/v6续83保持。详见双基线audit/large-priority-83-review/RESULTS.md及T006。
 
 - 11/26原包核验第二类并发碰撞已定位：c8ff439b用保存的完整工具调用ID精确对应响应，本机3测试及真实冲突验收通过、独立helper已push；原large2781/v6当时34题562次整组核验在http-recovery-2继续。业务和答卷保持，详见双基线audit及T006。
@@ -104,4 +106,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 原large83原包验收；查询条件/身份方案待实现，v6继续83诊断 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 原large83已验；条件链路与历史整理消融计划待确认，v6续83 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
