@@ -1555,7 +1555,7 @@ def test_event_confirmation_is_bound_to_the_read_asset_and_never_widens_statisti
     args = {"query": "海边", "requirement_id": "trip"}
     common = dict(scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state)
     initial = build.execute("search_memories", args, **common)
-    assert initial.ok and not initial.model_visible["answer_eligible"]
+    assert initial.ok and initial.model_visible["answer_eligible"]
     evidence, records = _read_condition_evidence(build, initial, "海边旅行的纪念照片。")
     checked = []
 
@@ -1821,7 +1821,7 @@ def test_exploratory_result_pages_keep_the_unresolved_conditions(toolbox, migrat
     assert page.model_visible["conditions_not_applied"] == result.model_visible["conditions_not_applied"]
 
 
-def test_group_results_preserve_total_and_bounded_page(toolbox, monkeypatch):
+def test_group_overflow_preserves_totals_without_returning_a_partial_page(toolbox, monkeypatch):
     from sentrix.domain.retrieval.structured_query import GroupCount
 
     build, _ = toolbox
@@ -1836,13 +1836,11 @@ def test_group_results_preserve_total_and_bounded_page(toolbox, monkeypatch):
         scope_id=SCOPE,
         now=NOW,
     )
-    assert outcome.ok and outcome.model_visible["answer_eligible"]
-    assert outcome.model_visible["status"] == "ok"
-    assert outcome.model_visible["total"] == 1660
-    assert "rows" not in outcome.model_visible
-    assert len(outcome.model_visible["value"]) == 64
-    assert outcome.model_visible["next_offset"] == 64
-    assert len(outcome.observation["value"]) == 1660
+    assert not outcome.ok and not outcome.model_visible["answer_eligible"]
+    assert outcome.model_visible["status"] == "result_too_large"
+    assert outcome.model_visible["total"] == outcome.model_visible["group_count"] == 1660
+    assert outcome.model_visible["value"] is None
+    assert not {"rows", "offset", "next_offset"} & set(outcome.model_visible)
 
 
 @pytest.mark.parametrize("state", ["pending", "resolved"])
@@ -1867,7 +1865,7 @@ def test_content_candidate_search_runs_before_event_or_nearby_place_is_verified(
         requirements=(req,),
     )
     assert result.ok and result.observation["returned_asset_ids"]
-    assert not result.model_visible["answer_eligible"]
+    assert result.model_visible["answer_eligible"]
     assert len(result.model_visible["conditions_not_applied"]) == 2
     assert "place" not in result.observation["filters_applied"]
     count = build.execute(
@@ -2011,7 +2009,7 @@ def test_tool_filter_cannot_turn_hotel_content_location_into_capture_gps(toolbox
     result = build.execute("search_memories", args, scope_id=SCOPE, now=NOW, requirements=(req,))
     assert result.ok and result.observation["asset_ids"]
     assert result.model_visible["ignored_tool_filters"] == {"place": "Marseille"}
-    assert not result.model_visible["answer_eligible"]
+    assert result.model_visible["answer_eligible"]
 
 
 def test_anchor_date_is_calculated_by_program_before_semantic_confirmation(toolbox):
@@ -2045,3 +2043,59 @@ def test_anchor_date_is_calculated_by_program_before_semantic_confirmation(toolb
     assert seen[0][1].value == "2019-08-01"
     assert result.model_visible["answer_eligible"]
     assert state["day"]["anchors"][0]["date_derivation"]["result"] == "2019-08-01"
+
+
+def test_planner_capture_time_intersects_later_tool_filter(toolbox):
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "day",
+        EvidenceType.PHOTO_SET,
+        "八月照片",
+        conditions=(QueryCondition("time", "2019年8月", "capture"),),
+    )
+    result = build.execute(
+        "query_memory_facts",
+        {
+            "operation": "count",
+            "subject": "asset",
+            "requirement_id": "day",
+            "filters": {"time": "2019年8月1日"},
+        },
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert result.ok and result.model_visible["value"] == 1
+    outside = build.execute(
+        "query_memory_facts",
+        {
+            "operation": "count",
+            "subject": "asset",
+            "requirement_id": "day",
+            "filters": {"time": "2019年9月1日"},
+        },
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert not outside.ok
+
+
+def test_content_place_does_not_discard_an_independent_media_filter(toolbox):
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "hotel",
+        EvidenceType.VISIBLE_TEXT,
+        "马赛酒店截图",
+        conditions=(QueryCondition("place", "Marseille", "mentioned"),),
+    )
+    result = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "hotel", "filters": {"media": "image"}},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert result.ok and result.model_visible["answer_eligible"]
+    assert result.observation["filters_applied"]["media"] == "image"
+    assert "place" not in result.observation["filters_applied"]

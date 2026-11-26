@@ -553,3 +553,15 @@ def test_group_by_place_is_deterministic_with_several_observations(structured, a
     )
 
     assert [item.group for item in structured.group_counts(derive_filter(spec_of()), "place")] == ["观景台"]
+
+
+def test_city_groups_use_administrative_city_and_keep_unknown_separate(structured, assets, places):
+    for asset_id in ("city_1", "city_2", "city_unknown"):
+        add_asset(assets, asset_id)
+    add_place(places, "city_1", admin=("浙江省", "杭州市", "萧山区"), nearest=("", "公园", None))
+    add_place(places, "city_2", admin=("浙江省", "杭州市", "西湖区"), nearest=("", "另一公园", None))
+    add_place(places, "city_unknown", nearest=("", "杭州附近", None))
+    assert set(structured.group_counts(derive_filter(spec_of()), "city")) == {
+        GroupCount("杭州市", 2),
+        GroupCount("未知城市", 1),
+    }

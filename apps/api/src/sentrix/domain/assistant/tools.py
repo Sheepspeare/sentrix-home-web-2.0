@@ -115,7 +115,9 @@ QUERY_CONTROLS = {
             },
             ["condition_id"],
         ),
-        "description": "逐项补证；程序保留原角色和依赖，成功项独立保存。首次搜索省略。",
+        "description": (
+            "仅补全需要确定事件起点的日期依赖；普通内容条件按原问题检索，在最终回答时核验。首次搜索省略。"
+        ),
     },
     "condition_evidence": _object_schema(
         {
@@ -133,7 +135,8 @@ SEARCH_MEMORIES = ToolSpec(
     description=(
         "按内容词检索照片、视频、邮件或文档（人/物/场景/地点/语音/正文内容）。"
         "这是候选发现入口：未解析的事件、地点关系或身份不阻止按内容词检索；"
-        "程序执行已确定的筛选，conditions_not_applied列出待核验条件，候选须经证据确认。"
+        "程序执行已确定筛选。普通内容条件由现有最终回答核验检查，不要求逐项补证。"
+        "拍摄日期依赖和必要身份仍须落实，精确统计不能忽略必要条件。"
         "第一次搜索只给query、requirement_id及已知filters；没有已读证据时不填condition_updates/condition_evidence。"
         "source_type 可限定 email 或 document；混合图文用 all。文本预览包含标题、摘要和来源ID。"
         "返回 result_set_id 和候选 preview；photo_N 只在该结果集内有效，回看或交付时一并引用 result_set_id。"
@@ -362,15 +365,13 @@ QUERY_MEMORY_FACTS = ToolSpec(
                     "person_appearance 某位已确认人物出现过的照片；processing 导入处理状态。"
                 ),
             },
-            "offset": {
-                "type": "integer",
-                "minimum": 0,
-                "description": "分组明细下一页使用next_offset，原筛选不变。",
-            },
             "group_by": {
                 "type": "string",
-                "enum": ["month", "place", "media", "status"],
-                "description": "只在 operation=group 时需要。status 只能配 subject=processing。",
+                "enum": ["month", "place", "city", "media", "status"],
+                "description": (
+                    "只在operation=group时需要。city仅按已记录行政城市，未知单列；"
+                    "place保留原地点粒度。status只能配processing。"
+                ),
             },
             "filters": _object_schema(
                 {
@@ -649,11 +650,11 @@ def planner_query_capabilities() -> str:
         "商品数量、金额、旅程次数和事件日期要取正文或图像证据，不能换成照片数。"
         "source是用户明确要求的email/document/all，模型选择某搜索渠道不新增来源限制。"
         "Agent查询引用requirement_id；补证只填condition_id，不重写原角色、动作和依赖。"
-        "condition_evidence复制已读素材的result_set_id和asset_handle，程序自动绑定真实读取和原文；只核验该条件，逐项保存，核验计共享预算。"
+        "日期依赖补全引用已读素材的result_set_id和asset_handle；程序计算日序。普通事件/正文地点/购买语义不逐条件补证，直接读取相关证据并回答，由现有回答核验统一检查。"
         "事件及内容地点确认仅绑定到该素材，不能推广到全相册统计。"
         "普通事件名称和内容特征用于检索取证；拍下标签准备买不能改写成已购买。不得添加用户未要求的购买、出席或身份前提。"
         "search_memories自动发现候选，无需探索开关；未核验条件保留到证据确认，不阻断首次搜索。"
-        "首次搜索省略condition_updates与condition_evidence；读取有效结果后可补全conditions_not_applied中的条件。"
+        "首次搜索省略condition_updates与condition_evidence；只有缺少事件起点等日期依赖时才补全；普通内容条件不用反复确认。"
         "精确统计不能忽略必要条件；检索候选不等于满足所有条件。"
-        "分组每页最多64组，total是全范围数量，group_count是分组数，next_offset表示后续页；需要完整明细时用原条件加offset翻页，不任意缩小用户范围。"
+        "分组一次返回完整结果，total是素材总量，group_count是分组数；问城市用city，问原地点用place。结果过大时先核筛选，不任意缩小用户范围。"
     )

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import logging
 import re
 import uuid
@@ -391,7 +392,14 @@ class AssistantToolbox:
         if not outcome.ok or not (report.get("conditions_not_applied") or report.get("resolved_anchors")):
             return outcome, report
         required = {
-            row["condition_id"] for row in report.get("conditions_not_applied", ()) if row.get("required")
+            row["condition_id"]
+            for row in report.get("conditions_not_applied", ())
+            if row.get("required")
+            and (
+                row["condition_id"] not in report.get("content_condition_ids", ())
+                or report.get("condition_update_error")
+                or report.get("resolved_anchors")
+            )
         }
         ids = outcome.observation.get("returned_asset_ids", outcome.observation.get("asset_ids", ()))
         confirmed: dict[str, set[str]] = {}
@@ -513,8 +521,20 @@ class AssistantToolbox:
             if not isinstance(value, str):
                 return _failure("invalid_filter", "筛选值必须是字符串。")
             if value.strip() and conditions:
-                ignored_filters[key] = value
-                continue
+                original = [item for item in conditions if item.dimension == key and item.required]
+                if any(item.role not in {"capture", "asset", "depicted"} for item in original):
+                    ignored_filters[key] = value
+                    continue
+                # 日期可取交集；地点/身份不能把两个不同值悄悄改成并集或替换。
+                if (
+                    key != "time"
+                    and original
+                    and any(item.value.casefold() != value.strip().casefold() for item in original)
+                ):
+                    return _failure("conflicting_filter", f"{key}与Planner必要条件冲突，请保持原角色和范围。")
+                if key == "time" and any(item.state == "pending" or item.anchor for item in original):
+                    ignored_filters[key] = value
+                    continue
             if value.strip():
                 role = "depicted" if key == "person" else "asset" if key == "media" else "capture"
                 conditions.append(QueryCondition(key, value.strip(), role))
@@ -524,9 +544,28 @@ class AssistantToolbox:
         compiled = executable_conditions(active_conditions, now=reference or now, exact=exact)
         report = compiled.report(executed=False)
         report["requirement_id"] = requirement_id
+        if not exact:
+            content_ids = [
+                item.condition_id
+                for item, reason in compiled.pending
+                if reason
+                in {"event_or_document_time_requires_evidence", "place_role_requires_content_evidence"}
+                or item.dimension == "event"
+            ]
+            report["content_condition_ids"] = content_ids
+            report["answer_eligible"] = not any(
+                item.required and item.condition_id not in content_ids for item, _ in compiled.pending
+            )
+            if content_ids:
+                report["content_evidence_note"] = (
+                    "内容条件由相关原文/图片共同支撑，最终回答统一核验；无需逐项condition_updates。"
+                    "必要身份及未确定的拍摄日期仍须落实；精确统计不能忽略任何必要条件。"
+                )
         if ignored_filters:
             report["ignored_tool_filters"] = ignored_filters
-            report["filter_note"] = "已按Planner条件执行；工具临时filters不能改变原条件角色或绕过待补条件。"
+            report["filter_note"] = (
+                "该字段与Planner的内容角色或日期依赖不一致，未当拍摄元数据筛选；其他有效filters已取交集。"
+            )
         if resolved_anchors:
             report["resolved_anchors"] = resolved_anchors
         if update_error:
@@ -552,6 +591,17 @@ class AssistantToolbox:
         bound["filters"] = {
             key: value for key, value in compiled.filters.items() if key in {"time", "place", "media"}
         }
+        if not exact and "query" in bound:
+            query = str(bound["query"] or "").strip()
+            terms = list(
+                dict.fromkeys(
+                    item.value
+                    for item, _ in compiled.pending
+                    if (item.dimension == "place" or item.dimension == "event")
+                    and item.value.casefold() not in query.casefold()
+                )
+            )
+            bound["query"] = " ".join([query, *terms]).strip()
         people = [item for item in compiled.applied if item.dimension == "person"]
         names = []
         profiles = []
@@ -752,6 +802,10 @@ class AssistantToolbox:
                 item
                 for item in conditions
                 if item in unresolved
+                and (
+                    item.condition_id == dataclasses.replace(update, required=item.required).condition_id
+                    or item.dimension == "time"
+                )
                 and item.dimension == update.dimension
                 and item.role == update.role
                 and item.anchor == update.anchor
@@ -787,7 +841,18 @@ class AssistantToolbox:
                 proposed.append((original, dataclasses.replace(update, required=original.required)))
         keys = {
             original.condition_id: hashlib.sha256(
-                repr((original.payload(), update.payload(), asset_id, facts)).encode()
+                json.dumps(
+                    [
+                        original.payload(),
+                        update.payload(),
+                        asset_id,
+                        sorted(
+                            {json.dumps(fact.value, sort_keys=True, ensure_ascii=False) for fact in facts}
+                        ),
+                    ],
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode()
             ).hexdigest()
             for original, update in proposed
         }
@@ -871,6 +936,13 @@ class AssistantToolbox:
                 },
                 model_visible={"status": answer.status, "reason": answer.reason},
                 failure_reason=answer.reason,
+            )
+        visible = answer.visible()
+        if visible["status"] != "ok":
+            return ToolOutcome(
+                observation={**visible, "full_group_count": len(answer.rows)},
+                model_visible=visible,
+                failure_reason=str(visible["reason"]),
             )
         raw_filters = arguments.get("filters")
         requested = (

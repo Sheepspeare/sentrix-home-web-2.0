@@ -152,6 +152,7 @@ _GROUP_EXPR = {
     # ``NULLIF`` 把空串折成 NULL 再 ``COALESCE`` 到 'unknown'——空串与「没有状态」
     # 在报表里是同一个意思，而空串单独成一组会让报表多出一行看起来像状态的东西。
     "status": "COALESCE(NULLIF(a.status, ''), 'unknown')",
+    "city": "COALESCE(NULLIF(ap.admin_city, ''), '未知城市')",
     "place": (
         "CASE"
         " WHEN ap.admin_city <> '' THEN ap.admin_city"

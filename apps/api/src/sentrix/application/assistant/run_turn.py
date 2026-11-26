@@ -75,6 +75,7 @@ from sentrix.domain.assistant.evidence_binding import (
     binding_payload,
     facts_from_state,
 )
+from sentrix.domain.assistant.evidence_history import deduplicate_evidence
 from sentrix.domain.assistant.evidence_ledger import (
     EvidenceLedger,
     EvidenceRequirement,
@@ -1337,8 +1338,9 @@ class RunTurn:
             + "\n查询需求："
             + json.dumps(contract, ensure_ascii=False)
             + (
-                "\n查询按requirement_id引用条件；待解析条件先探索取证，"
-                "再用condition_updates及condition_evidence补全。"
+                "\n查询按requirement_id引用条件；普通事件、正文地点和内容时间由最终回答统一核验，"
+                "无需逐条件补证。拍摄日期依赖尚未确定时先取证，再用condition_updates及condition_evidence落实；"
+                "必要身份保持约束，精确统计须先落实全部必要条件。"
             ),
         )
         # planner 已声明本回合需求；工具表冻结，之后不再随结果集/需求销账增删。
@@ -1393,6 +1395,7 @@ class RunTurn:
                 state.finish(reason)
                 return self._stop(session, reason, retry_final=not session.finalization_code)
 
+            messages = deduplicate_evidence(messages)
             state.model_steps += 1
             state.phase = ACTING
             self._publish(

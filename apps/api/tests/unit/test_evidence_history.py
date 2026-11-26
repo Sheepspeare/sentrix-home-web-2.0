@@ -32,11 +32,11 @@ def test_identical_evidence_keeps_one_full_copy_and_all_call_ids():
     ]
     compact = deduplicate_evidence(original)
     assert len(compact) == len(original)
-    assert compact[3] == original[3]
-    ref = json.loads(compact[5].content)
-    assert ref["evidence_reused_from"] == "a" and ref["asset_handle"] == "photo_2"
-    assert compact[5].tool_call_id == "b"
-    assert len(compact[5].content) < len(original[5].content)
+    assert compact[5] == original[5]
+    ref = json.loads(compact[3].content)
+    assert ref["same_as_tool_call_id"] == "b"
+    assert compact[3].tool_call_id == "a"
+    assert len(compact[3].content) < len(original[3].content)
     assert "text" in json.loads(original[5].content)
     assert deduplicate_evidence(compact) == compact
 
@@ -59,7 +59,9 @@ def test_context_compaction_preserves_the_full_copy_referenced_by_later_messages
     compact = deduplicate_evidence(original)
     dropped = _drop_oldest_tool_round_trip(compact)
     assert dropped is not None
-    assert any(message.tool_call_id == "a" for message in dropped)
+    assert not any(message.tool_call_id == "a" for message in dropped)
+    retained = next(message for message in dropped if message.tool_call_id == "b")
+    assert json.loads(retained.content)["text"] == "重要证据" * 500
 
 
 def test_missing_evidence_key_does_not_guess_identity_from_the_handle():

@@ -40,7 +40,7 @@ from sentrix.domain.retrieval.time_expression import parse_time_expression
 
 # 1.0 ``structured_memory.py:_GROUP_EXPR`` 认得的分组键。``year`` / ``date`` 是 2.0 也有的
 # （1.0 那张表里就在），``place`` / ``media`` 同。
-GROUP_BY_KEYS = ("month", "year", "date", "media", "place", "status")
+GROUP_BY_KEYS = ("month", "year", "date", "media", "place", "city", "status")
 DEFAULT_GROUP_BY = "month"
 # 按时间分组时要求 ``captured_at`` 非空——否则会多出一个「空字符串」分组。
 #

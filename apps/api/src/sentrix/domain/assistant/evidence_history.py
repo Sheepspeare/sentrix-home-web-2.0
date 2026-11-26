@@ -9,55 +9,35 @@ from dataclasses import replace
 from sentrix.domain.assistant.models import ChatMessage, ChatRole
 
 
-def referenced_tool_calls(messages: Sequence[ChatMessage]) -> frozenset[str]:
-    references = set()
-    for message in messages:
-        if message.role is not ChatRole.TOOL:
-            continue
-        try:
-            payload = json.loads(message.content)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(payload, dict) and isinstance(payload.get("evidence_reused_from"), str):
-            references.add(payload["evidence_reused_from"])
-    return frozenset(references)
-
-
 def deduplicate_evidence(messages: Sequence[ChatMessage]) -> list[ChatMessage]:
-    originals: dict[str, str] = {}
-    result = []
-    for message in messages:
+    """同一证据在当前上下文只保留最后一份正文，工具调用配对保持。"""
+    result = list(messages)
+    latest: dict[str, str] = {}
+    for index in range(len(result) - 1, -1, -1):
+        message = result[index]
         if message.role is not ChatRole.TOOL:
-            result.append(message)
             continue
         try:
             payload = json.loads(message.content)
-        except (ValueError, TypeError):
-            result.append(message)
+        except (TypeError, ValueError):
             continue
-        if not isinstance(payload, dict):
-            result.append(message)
+        if not isinstance(payload, dict) or not payload.get("evidence_key"):
             continue
-        key = payload.get("evidence_key")
-        if isinstance(key, str) and key and key in originals:
-            content = {
-                field: payload[field]
-                for field in ("result_set_id", "asset_handle", "reuse_hint", "evidence_key")
-                if field in payload
-            }
-            content["evidence_reused_from"] = originals[key]
-            content["note"] = "同一素材的相同证据，完整内容见前述工具结果；没有新增事实。"
-            encoded = json.dumps(content, ensure_ascii=False)
-            result.append(
-                replace(message, content=encoded) if len(encoded) < len(message.content) else message
-            )
-        else:
-            if (
-                isinstance(key, str)
-                and key
-                and message.tool_call_id
-                and "evidence_reused_from" not in payload
-            ):
-                originals[key] = message.tool_call_id
-            result.append(message)
+        key = str(payload["evidence_key"])
+        if payload.get("evidence_reused"):
+            continue
+        if key not in latest:
+            latest[key] = message.tool_call_id or ""
+            continue
+        result[index] = replace(
+            message,
+            content=json.dumps(
+                {
+                    "evidence_reused": True,
+                    "same_as_tool_call_id": latest[key],
+                    "note": "相同证据正文见后续该工具结果，原完整记录保存在轨迹中。",
+                },
+                ensure_ascii=False,
+            ),
+        )
     return result

@@ -53,8 +53,7 @@ from sentrix.domain.retrieval.time_expression import parse_time_expression
 
 # 附几条代表观察。1.0 ``_fact_samples`` 里的 ``limit=3``。
 SAMPLE_LIMIT = 3
-MAX_MODEL_GROUPS = 64
-MAX_MODEL_GROUP_CHARS = 16000
+MAX_MODEL_RESULT_CHARS = 16000
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +69,6 @@ class FactAnswer:
     samples: tuple[Mapping[str, Any], ...] = ()
     filters_applied: Mapping[str, Any] = field(default_factory=dict)
     person_names: tuple[str, ...] = ()
-    offset: int = 0
 
     @property
     def coverage(self) -> Mapping[str, Any]:
@@ -111,20 +109,18 @@ class FactAnswer:
         }
         if self.unit == "original_asset_breakdown":
             del visible["rows"]
-            page: list[dict[str, Any]] = []
-            for row in self.rows[self.offset : self.offset + MAX_MODEL_GROUPS]:
-                candidate = [*page, dict(row)]
-                if page and len(json.dumps(candidate, ensure_ascii=False)) > MAX_MODEL_GROUP_CHARS:
-                    break
-                page = candidate
-            end = self.offset + len(page)
-            visible.update(
-                value=page,
-                group_count=len(self.rows),
-                offset=self.offset,
-                next_offset=end if end < len(self.rows) else None,
-                page_complete=end == len(self.rows),
-            )
+            visible["group_count"] = len(self.rows)
+            if len(json.dumps(self.value, ensure_ascii=False)) > MAX_MODEL_RESULT_CHARS:
+                visible.update(
+                    status="result_too_large",
+                    value=None,
+                    coverage={**self.coverage, "complete": False},
+                    reason="group_result_exceeds_context_budget",
+                    next_action=(
+                        "分组明细超出单次返回范围；按用户问题落实时间/地点条件或选择所需分组粒度。"
+                        "不能把部分分组当作完整结果，不能擅自改变用户范围。"
+                    ),
+                )
         return visible
 
 
@@ -259,7 +255,6 @@ class QueryMemoryFacts:
             rows=rows,
             samples=samples,
             person_names=person_names,
-            offset=request.offset,
             filters_applied={
                 **structured_filter.applied,
                 "scope_id": structured_filter.scope_id,

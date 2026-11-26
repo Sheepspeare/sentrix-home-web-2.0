@@ -171,6 +171,7 @@ def build_claim_messages(
         "supported：facts 明确支持 claim；contradicted：facts 与 claim 明确冲突；"
         "unsupported：facts 没有该信息或没有能支撑它的值；ambiguous：信息不足以判断。\n"
         "数字/日期表达等价不算冲突（三个人 = 3 人，2024-03-02 = 2024年3月2日）。"
+        "requirement.conditions保留用户时间、地点角色、事件及身份要求；结合全部证据核验，不能把酒店正文地点当拍摄地、商品展示当购买、邮件发送日当入住日。"
     )
     passages = [
         fact for fact in facts if fact.fact_type in {"source_text", "visible_text", "visual_observation"}
@@ -189,6 +190,7 @@ def build_claim_messages(
             "id": requirement.id,
             "value_type": requirement.value_type.value if requirement.value_type else "",
             "scope": dict(requirement.scope),
+            "conditions": [item.payload() for item in requirement.conditions],
             "description": requirement.description,
         }
         if requirement is not None

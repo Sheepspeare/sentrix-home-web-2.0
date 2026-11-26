@@ -171,7 +171,7 @@ def verify_archived_answers(output, *, group="limited", stage="v2"):
     )
 
 
-def run(revision, *, group="limited", stage="v2", continue_archived=False):
+def run(revision, *, group="limited", stage="v2", continue_archived=False, workers=2):
     product, evaluation, models, tools = candidate.GROUPS[group]
     if continue_archived:
         output = BASE / f"{group}-{stage}"
@@ -218,6 +218,13 @@ def run(revision, *, group="limited", stage="v2", continue_archived=False):
     assert config["sentrix_url"] == f"http://127.0.0.1:{product}"
     assert config["product_build_revision"] == STAGES[stage]["previous_revision"]
     config["product_build_revision"] = revision
+    config["product_settings"]["agent_turn_workers"] = workers
+    api_env_path = BASE / f"{group}-api.env"
+    (output / "before-api.env").write_bytes(api_env_path.read_bytes())
+    (output / "before-api.env").chmod(0o600)
+    api_values = h.load_env(api_env_path)
+    api_values["SENTRIX_AGENT_TURN_MAX_WORKERS"] = workers
+    h.env(api_env_path, api_values)
     h.save(config_path, config)
     h.save(output / "configured.json", {"revision": revision, "at": time.time()})
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
@@ -247,7 +254,7 @@ def run(revision, *, group="limited", stage="v2", continue_archived=False):
         "reasoning_max_tool_calls": tools,
         "reasoning_max_search_calls": 100,
         "reasoning_max_other_tool_calls": 500,
-        "agent_turn_workers": 2,
+        "agent_turn_workers": workers,
         "reasoning_max_steps": 100,
         "vlm_context_tokens": 131072,
         "vlm_model": "qwen3.8-flash",

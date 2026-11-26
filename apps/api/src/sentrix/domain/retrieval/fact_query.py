@@ -42,7 +42,7 @@ from sentrix.domain.retrieval.query_contracts import (
 )
 
 # 工具接受的顶层参数。多一个都拒——1.0 用它拦住模型自己发明的 ``scope_id``。
-ARGUMENT_KEYS = frozenset({"operation", "subject", "group_by", "filters", "offset"})
+ARGUMENT_KEYS = frozenset({"operation", "subject", "group_by", "filters"})
 FILTER_KEYS = frozenset({"time", "media", "place", "person"})
 MEDIA_VALUES = frozenset({"image", "video"})
 
@@ -69,7 +69,7 @@ _SUBJECT_VALUES = frozenset(item.value for item in FactSubject)
 
 # 分组键白名单。``status`` 只对 ``processing`` 开放——按处理状态分组问的是导入流水线，
 # 与「这个相册里有什么」不是同一个问题，两边的键因此不共用一张表。
-ASSET_GROUPS = frozenset({"month", "place", "media"})
+ASSET_GROUPS = frozenset({"month", "place", "city", "media"})
 PROCESSING_GROUPS = frozenset({"status"})
 
 
@@ -96,7 +96,6 @@ class FactRequest:
     place: str = ""
     person: str = ""
     group_by: str = ""
-    offset: int = 0
 
     @property
     def groups(self) -> frozenset[str]:
@@ -131,9 +130,6 @@ def parse_fact_arguments(arguments: Mapping[str, Any]) -> FactRequest | FactReje
     if media and media not in MEDIA_VALUES:
         return FactRejection("unsupported_filter", "unsupported_media")
 
-    offset = raw.get("offset", 0)
-    if type(offset) is not int or offset < 0 or offset and operation != FactOperation.GROUP:
-        return FactRejection("unsupported_filter", "invalid_offset")
     person = _text(filters.get("person"))
     if operation == FactOperation.GROUP:
         allowed = PROCESSING_GROUPS if subject == FactSubject.PROCESSING else ASSET_GROUPS
@@ -156,7 +152,6 @@ def parse_fact_arguments(arguments: Mapping[str, Any]) -> FactRequest | FactReje
         place=_text(filters.get("place")),
         person=person,
         group_by=group_by,
-        offset=offset,
     )
 
 
