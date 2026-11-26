@@ -40,9 +40,14 @@ def matches(expected, record, request, questions, response=None):
                     if (
                         isinstance(payload, dict)
                         and payload.get("query") == questions[expected["qa_id"]]
-                        and isinstance(payload.get("requirements"), list)
                         and isinstance(payload.get("facts"), list)
-                        and isinstance(payload.get("answer"), str)
+                        and (
+                            (
+                                isinstance(payload.get("requirements"), list)
+                                and isinstance(payload.get("answer"), str)
+                            )
+                            or isinstance(payload.get("condition_updates"), list)
+                        )
                     ):
                         return True
             prefix = f"用户问题：{questions[expected['qa_id']]}{section}"

@@ -208,3 +208,21 @@ def test_field_verifier_matches_exact_json_query_not_nested_fact_text():
     payload.update(query="other question", facts=[{"value": "question"}])
     request["messages"][0]["content"] = json.dumps(payload)
     assert not verifier.matches(expected, record, request, {"q": "question"})
+
+
+def test_condition_verifier_requires_exact_query_and_structured_updates_and_facts():
+    verifier = module()
+    expected = {"start": 0, "end": 2, "internal": False, "call_type": "claim_verifier", "qa_id": "q"}
+    record = {"started_at": 1}
+    payload = {"query": "question", "condition_updates": [{"original": {}, "update": {}}], "facts": []}
+
+    def matches(value, role="user"):
+        return verifier.matches(
+            expected, record, {"messages": [{"role": role, "content": json.dumps(value)}]}, {"q": "question"}
+        )
+
+    assert matches(payload)
+    assert not matches(payload, "tool")
+    assert not matches({**payload, "query": "other", "facts": [{"value": "question"}]})
+    assert not matches({**payload, "condition_updates": {}})
+    assert not matches({**payload, "facts": "question"})
