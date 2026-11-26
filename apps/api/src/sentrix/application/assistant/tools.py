@@ -860,10 +860,7 @@ class AssistantToolbox:
             "query": result_set.query,
             "page": page.page,
             "page_size": page.page_size,
-            # ``total`` 从 2026-10-27 起进 model_visible：模型需要知道“一共几张、
-            # 还有没有第二页”。1.0 隐藏它是怕模型把候选池数量直接当成答案里的统计
-            # 数字；工具描述里已明确写「这是本次检索的候选数，不是相册里的真实数量」，
-            # ``has_more`` 的布尔语义也保留。
+            # 续页返回候选总数与页状态；第一页在下方省略这些控制字段。
             "total": page.total,
             "has_more": page.has_more,
             # 1.0 ``_RETRIEVAL_TOP_KEEP`` 里的一个字段：这一页**有没有东西可以精读**。
@@ -877,8 +874,8 @@ class AssistantToolbox:
             "group_photo_rows": group_rows,
             "preview": preview,
         }
-        # 第一页只保留模型真正需要读的候选与合影汇总；内部 observation 仍保存全部
-        # 控制字段，JIT / 证据绑定 / 翻页判定继续从 observation 读。
+        # 第一页只给候选与合影汇总；检索词、总数及页状态留在内部 observation，
+        # 用于 JIT、证据绑定与翻页判定。
         if page_no == 1:
             for key in ("query", "page", "page_size", "total", "has_more", "can_inspect"):
                 model_visible.pop(key, None)
@@ -892,9 +889,7 @@ class AssistantToolbox:
                 f"第 {page.page} 页没有内容：这个结果集一共 {page.total} 张、共 {pages} 页，"
                 "已经到底了。请基于已经看到的内容作答。"
             )
-        # ``total`` 刻意**不进** model_visible：1.0 实测过模型会把候选池的数量直接当成
-        # 答案里的统计数字（``runtime.py:116``）。模型要判断「还有没有更多」看 has_more
-        # 就够了，那是个布尔，不会被当成计数。
+        # 内部记录保留候选总数；它不能用来回答全相册的数量问题。
         observation: dict[str, Any] = {
             "result_set_id": result_set.id,
             "query": result_set.query,

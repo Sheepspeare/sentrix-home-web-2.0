@@ -365,19 +365,22 @@ def test_search_returns_a_result_set_with_a_preview(toolbox):
     assert preview[0]["file_name"] == "海边.jpg"
 
 
-def test_the_model_sees_the_candidate_total_but_never_asset_ids(toolbox):
-    """``total`` 从 2026-10-27 起进 model_visible：模型据此判断还有没有第二页。
-
-    代价是 1.0 实测过模型会把候选池数量直接当成答案里的统计数字（``runtime.py:116``）；
-    工具描述里因此明写「total 是本次检索的候选数，不是相册里的真实数量，不要拿来回答
-    数量题」。``asset_id`` 仍然只在内部投影里——模型只需要 handle。
-    """
+def test_the_first_page_keeps_candidate_controls_internal(toolbox):
+    """首批候选只给模型预览；候选总数与资产 ID 留给内部控制和取证。"""
     outcome = run(toolbox, "search_memories", query="海边")
 
-    assert outcome.model_visible["total"] == outcome.observation["total"]
-    assert "asset_ids" in outcome.observation
+    assert outcome.ok
+    assert outcome.observation["query"] == "海边"
+    assert outcome.observation["page"] == 1
+    assert outcome.observation["total"] == len(outcome.observation["asset_ids"]) == 2
+    assert outcome.observation["has_more"] is False
+    assert outcome.model_visible["result_set_id"] == outcome.observation["result_set_id"]
+    assert outcome.model_visible["preview"] == outcome.observation["preview"]
+    for key in ("query", "page", "page_size", "total", "has_more", "can_inspect"):
+        assert key not in outcome.model_visible
     assert "asset_ids" not in outcome.model_visible
-    assert "photo_1" not in str(outcome.observation.get("asset_ids"))
+    for asset_id in outcome.observation["asset_ids"]:
+        assert asset_id not in json.dumps(outcome.model_visible)
 
 
 def test_search_records_the_retrieval_backend_for_the_internal_projection(toolbox):
@@ -475,7 +478,8 @@ def test_a_page_past_the_end_is_empty_not_an_error(toolbox, migrations_ready_db,
     assert outcome.model_visible["preview"] == []
 
 
-def test_the_preview_carries_where_who_and_what(toolbox, migrations_ready_db):
+@pytest.mark.parametrize("caption", ["海边两个人合影", "海边两个人合影" + "很长的画面描述" * 80])
+def test_the_preview_carries_where_who_and_what(toolbox, migrations_ready_db, caption):
     """每条 preview 必须带上**地点、人物、画面描述**——回答「这张照片是什么」的全靠它们。
 
     1.0 的 ``_preview_entry`` 给了模型 14 个字段，其中这三个是核心；它的
@@ -501,7 +505,7 @@ def test_the_preview_carries_where_who_and_what(toolbox, migrations_ready_db):
             confidence=0.9,
             created_at=NOW,
             updated_at=NOW,
-            caption="海边两个人合影",
+            caption=caption,
             # **``observations.place`` 是 VLM 写的语义场景**（提示词原文：「place 是
             # 语义地点，例如家中客厅、餐厅、公园」），不是行政地名。
             place="婚礼或庆典活动的室内背景区",
@@ -526,8 +530,14 @@ def test_the_preview_carries_where_who_and_what(toolbox, migrations_ready_db):
 
     entry = outcome.model_visible["preview"][0]
     assert entry["place"] == "浙江省杭州市萧山区"
-    # 场景描述仍然给模型，但换个键——它对「室内还是室外」有用，只是不冒充地点。
-    assert entry["scene_hint"] == "婚礼或庆典活动的室内背景区"
+    # 摘要已含场景时不重复发送；摘要截断了场景时，独立字段必须保留。
+    scene = "婚礼或庆典活动的室内背景区"
+    summary = entry["evidence_summary"]
+    if scene in summary:
+        assert "scene_hint" not in entry
+    else:
+        assert entry["scene_hint"] == scene
+    assert (summary + entry.get("scene_hint", "")).count(scene) == 1
     assert entry["people"] == ["妈妈"]
     assert "海边两个人合影" in entry["evidence_summary"]
 
@@ -855,9 +865,12 @@ def test_the_group_photo_rollup_is_not_keyword_gated(toolbox, migrations_ready_d
     add_person(migrations_ready_db, asset_id="asset_0", name="妈妈", people=3)
     add_person(migrations_ready_db, asset_id="asset_1", name="爸爸", people=1)
 
-    body = run(toolbox, "search_memories", query="海边").model_visible
+    outcome = run(toolbox, "search_memories", query="海边")
+    body = outcome.model_visible
 
-    assert "合影" not in body["query"]
+    assert outcome.ok
+    assert outcome.observation["query"] == "海边"
+    assert "query" not in body
     assert body["group_photo_count"] == 1
     assert body["group_photo_sizes"] == [3]
     assert body["group_photo_rows"] == [{"handle": "photo_1", "group_size": 3}]
@@ -898,18 +911,22 @@ def test_a_page_without_multi_person_photos_rolls_up_empty(toolbox, migrations_r
     assert body["preview"][0]["people_count"] == 1
 
 
-def test_the_page_says_whether_it_can_be_inspected(toolbox):
-    """``can_inspect`` 与 ``has_more`` 是两件事，不能合并。
-
-    前者问「这一页有没有东西可以继续取证」，后者问「后面还有没有更多候选」。
-    翻到最后一页时前者为真、后者为假——合成一个字段就必然有一个说错。
-    """
+@pytest.mark.parametrize("scope_id, expected_count", [(SCOPE, 2), ("空相册", 0)])
+def test_the_first_preview_distinguishes_inspectable_candidates_from_empty_results(
+    toolbox, scope_id, expected_count
+):
+    """首批预览直接表明有无可读候选，内部保留后续页判定。"""
     build, _result_sets = toolbox
 
-    outcome = build.execute("search_memories", {"query": "海边"}, scope_id=SCOPE, now=NOW)
+    outcome = build.execute("search_memories", {"query": "海边"}, scope_id=scope_id, now=NOW)
 
-    assert outcome.model_visible["can_inspect"] is True
-    assert outcome.model_visible["has_more"] is False
+    assert outcome.ok
+    assert len(outcome.model_visible["preview"]) == expected_count
+    assert is_empty_result(outcome) is (expected_count == 0)
+    assert outcome.observation["total"] == expected_count
+    assert outcome.observation["has_more"] is False
+    assert "can_inspect" not in outcome.model_visible
+    assert "has_more" not in outcome.model_visible
 
 
 # ---- 交付：终止动作上的一个字段，不是一次工具调用 ---------------------------
