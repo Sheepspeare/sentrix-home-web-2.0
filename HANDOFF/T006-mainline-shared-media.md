@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜原limited观察器再次低盘告警，worker继续
+
+3960ff5e精确日志为disk_below_2GiB：593答时home余2142400512字节，仅观察器退出。重新GET核原run ea4413仍30c67e74／4并发／running／fatal_error=null，598／1013，active-work.worker_alive=true。large的worker也存活。主要空间为活动产品数据库与split-results SQLite：原limited约3.08GB＋0.70GB，large约3.84GB＋0.43GB；无>100MB WAL可直接释放。home约2GiB、root约1.7GiB，可清理包缓存仅数十MB，不足以解决后续增长。
+
+四旧gzip早已本机转存，不重复处理；活动库／raw／答卷／相册保持，只读诊断无远端数据修改。已询问额外持久存储路径，等待资源信息。新只读终态观察器记录已报告的2GiB警告，原run终态或磁盘进一步低于1GiB再通知；该阈值仅控制通知，不改变worker或答题调度。新wait／output以limited-full-monitor-after-disk-alert-registration.json为准，不能重放旧watch或发QA。Judge按新Flash政策保持，原83分复用，整1013终态后补其余缺失，待分不记0。
+
+
 ## 2026-11-26｜24槽与按请求思考参数已上线，Judge并行补评交接
 
 100共享18148已在inflight0边界于15:55:03优雅重启，实际24槽／默认enable_thinking=false／thinking_request_override=true；gateway.py SHA328461c1，源码与远端编译通过，提交cc8e2c14已push。只有网关及其配置／优雅退出dropin变更，活动Agent业务和答题并发保持。119的18138仍true／high／8槽，未修改。证据flash-judge-20261126/gateway-capacity-24/{acceptance,terminal,idle-boundary,source-verification}.json。
