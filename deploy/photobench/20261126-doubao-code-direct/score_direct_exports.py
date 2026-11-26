@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -148,7 +149,28 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     parser.add_argument("--secret-env", type=Path, required=True)
+    parser.add_argument("--detach", action="store_true")
     args = parser.parse_args()
+    if args.detach:
+        registration = args.root / "remote-launch.json"
+        assert not registration.exists() and not (args.root / "started.json").exists()
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                str(args.root),
+                "--secret-env",
+                str(args.secret_env),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=(args.root / "scoring.stdout").open("x"),
+            stderr=(args.root / "scoring.stderr").open("x"),
+            start_new_session=True,
+        )
+        launched = {"pid": process.pid, "at": time.time(), "direct_cloud": True}
+        registration.write_text(json.dumps(launched) + "\n")
+        print(json.dumps(launched))
+        raise SystemExit(0)
     try:
         raise SystemExit(main(args.root, args.secret_env))
     except Exception as error:
