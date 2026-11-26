@@ -8,7 +8,7 @@ Flash Judge parallel-3 wait ef347831已完成并核原日志：380/380目标分�
 
 v9完整292HTTP已精确唯一核原包，全200，Token5572245；helper仅新增field verifier JSON query精确匹配，6回归过，原usage/时间/cache/工具ID歧义检查保持。Judge专用只读helper3测试通过，独立远端ops目录核SHA/compile，无审计模型请求，无活动业务部署。原成功取证及评分未重算。
 
-四题8核验/10字段原始debug已按固定revision读取，所有引文实际匹配；源搜索answer_eligible=false让read facts带query_conditions，旧提示词未送这个状态、解析又抹掉引用，随后要求重复读图。另有事件state=resolved仍编译evidence_anchor_required，而更新只接受pending，导致状态无法销账。本机修复保留真实引文、显式传未落实条件、字段继续ambiguous，提醒转向条件证据，不因该缺口重复读同字段；121回归、Ruff/compile/domain mypy及8原响应离线重放过。必要人物/事件条件保留；当前修改未部署，仍需按候选与requirement落实证据确认，再处理Ryanair和三月退化后同16实测，不扩大83。
+四题8核验/10字段原始debug已按固定revision读取，所有引文实际匹配；源搜索answer_eligible=false让read facts带query_conditions，旧提示词未送这个状态、解析又抹掉引用，随后要求重复读图。另有事件state=resolved仍编译evidence_anchor_required，而更新只接受pending，导致状态无法销账。本机修复379a22b5已提交push，保留真实引文、显式传未落实条件、字段继续ambiguous，提醒转向条件证据，不因该缺口重复读同字段；121回归、Ruff/compile/domain mypy及8原响应离线重放过。必要人物/事件条件保留；当前修改未部署，仍需按候选与requirement落实证据确认，再处理Ryanair和三月退化后同16实测，不扩大83。
 
 产物：候选audit/flash-judge-20261126/parallel-3/{RESULTS,acceptance,score-summary,paired-scores,paired-costs,local-integrity,judge-http-exact-verification}；v9-large-rerun/review/{summary,v9-http-exact-verification,condition-gap-review,condition-gap-replay,validation-followup}。原两全量有效只读wait a38f0e0a/7a6f8cfa保持，不重复挂；home最近1.74GiB，额外存储路径仍待用户回复，未迁数据或删除raw。119high与原保护服务、Oracle及主树修改保持。
 
