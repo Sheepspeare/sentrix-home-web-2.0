@@ -70,3 +70,40 @@ def test_same_response_id_different_payload_is_rejected(tmp_path):
     config["expected"][0]["request_sha256"] = verifier.digest({"other": "payload"})
     with pytest.raises(AssertionError, match="payload differs"):
         verifier.verify(config)
+
+
+def invalid_json_fixture(tmp_path):
+    verifier, config, record = fixture(tmp_path)
+    archive = Path(record["archive"])
+    with gzip.open(archive, "rt") as stream:
+        raw = json.load(stream)
+    response = json.loads(raw["response_body"])
+    response["choices"][0]["message"]["content"] = "```json\n[]\n```"
+    raw["response_body"] = json.dumps(response)
+    with gzip.open(archive, "wt") as stream:
+        json.dump(raw, stream)
+    config["expected"][0]["response_sha256"] = verifier.digest(response)
+    return verifier, config
+
+
+def test_invalid_content_is_rejected_for_successful_score(tmp_path):
+    verifier, config = invalid_json_fixture(tmp_path)
+    with pytest.raises(AssertionError, match="JSON validity differs"):
+        verifier.verify(config)
+
+
+def test_explicit_invalid_content_evidence_still_requires_exact_raw(tmp_path):
+    verifier, config = invalid_json_fixture(tmp_path)
+    config["expected"][0]["content_json_valid"] = False
+    result = verifier.verify(config)
+    assert result["requests"][0]["content_json_valid"] is False
+    config["expected"][0]["response_sha256"] = "modified"
+    with pytest.raises(AssertionError, match="response differs"):
+        verifier.verify(config)
+
+
+def test_valid_content_cannot_be_reported_as_invalid(tmp_path):
+    verifier, config, _ = fixture(tmp_path)
+    config["expected"][0]["content_json_valid"] = False
+    with pytest.raises(AssertionError, match="JSON validity differs"):
+        verifier.verify(config)

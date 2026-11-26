@@ -42,7 +42,12 @@ def verify(config):
         message = response["choices"][0]["message"]
         assert not message.get("reasoning_content")
         assert not (response["usage"].get("completion_tokens_details") or {}).get("reasoning_tokens")
-        json.loads(message["content"])
+        content_json_valid = True
+        try:
+            json.loads(message["content"])
+        except json.JSONDecodeError:
+            content_json_valid = False
+        assert content_json_valid == entry.get("content_json_valid", True), "Content JSON validity differs"
         raw_ids.add(record["id"])
         found[response_id] = {
             "group": entry["group"],
@@ -54,6 +59,7 @@ def verify(config):
             "usage": record["usage"],
             "http_status": record["http_status"],
             "stage": entry["stage"],
+            "content_json_valid": content_json_valid,
         }
     assert set(found) == set(expected), sorted(set(expected) - set(found))
     rows = list(found.values())
