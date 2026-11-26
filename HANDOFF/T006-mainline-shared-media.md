@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜四路观察器低盘告警，旧gzip备份转存本机保留全部内容
+
+22da8147与3d304eca／286c0dcb／c414a9d9均同次home低2GiB终止观察，未停止worker。最新只读核原limited466／large147题、v677／83、新v8 7／16，四组running／worker_alive／fatal_error=null。v8 c4bd7f72已完成独立8300／8880验收及push，实际run尾0e7e57，旧v7十六答SHA与18表／10保护PID保持；不能因观察器告警重发QA。
+
+空间增长主要来自活动实验数据库及轨迹；原gzip已归档不重压缩、最终快照不重搬。四份旧建库gzip共2718656033字节转存本机产品项目archives/20261126-flash-recovery-backups，每份压缩SHA及解压完整SHA／size验证后，远端独立helper才释放冗余副本，保留原.archive.json和新增.offload.json恢复路径。第一份已完成本机全验证，后3份和远端释放异步接续。活动DB／raw／答卷均不处理。
+
+运维ded3bdcd本机3测试／Ruff／compile通过，远端ops-offload-ded3bdcd两helper逐SHA／compile通过；真实验收后push。当前回调及四旧wait已在storage-offload-20261126标reconciled。转存完成应核terminal／acceptance／保护PID及余量，再按真实状态恢复两原全量／v6到83／v8到16的只读attach新目录监控；若已到检查点直接固定revision取证，不重复监控或POST。
+
 ## 2026-11-26｜v8候选发现修复源码已同步，接独立同16复测
 
 v7全部16题已完成并固定revision取证，质量不接受；较少请求包含首次搜索被阻断后的提前放弃。业务修复c4bd7f72让普通搜索执行已定条件并显式保留待核条件，精确统计继续校验；首次无效补证不覆盖旧条件，候选可继续发现。251业务／26部署监控回归、Ruff／compile及3模块mypy通过。
