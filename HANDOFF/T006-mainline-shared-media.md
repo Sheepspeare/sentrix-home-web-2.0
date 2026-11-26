@@ -2,6 +2,10 @@
 
 ## 2026-11-26｜用户授权Flash自身相册同16新对照
 
+首55个实际QA HTTP全200/enable_thinking=false/HTTPS直连，实际完成请求时间窗每组峰值16、跨组合32；两组原payload仅scope/独立URL/控制路径三字段变化，同16顺序及其余配置完全一致，见started-verification及configuration-comparison。
+
+北京时间22:56:52新两run单次启动：limited20261126-225652-2026.11.17-atm-sources-addresses-current-801a7b、large20261126-225652-2026.11.17-atm-sources-addresses-current-2db84c，各16QA并发，目标同16后pause。503文件包SHAe38e1086/compile及真实配置/18表/20保护PIDticks通过，89a29157已push核SHA。首driver6be21024只在回执收集路径写错后退出（缓存实际写RAM根，prepare成功QA0）；保全部准备及失败证据，不重建库/缓存，恢复只取现有回执并首次发题，新有效wakee6cb354d-7e47-472b-af90-40d8cbf55c7a。6be回调已reconciled迟到只读。运行结果以checkpoint/started-verification为准，结束逐UUID/revision取全轨迹及原包后只新两组各2直连Flash评分。原相册32份Flash及历史15份有效分不重评。
+
 唯一变化为使用Flash关思考冻结相册atm-flash-no-thinking-final-20261126-v1；历史334产品源码、Planner/16K2048、双预算20/30与100/600、各16并发、云端直连保持。新隔离端口8305/8885、8306/8886，DB/cache在独立/dev/shm，媒体只读共享快照，已有向量建缓存0新embedding，旧Doubao相册实验及其全部答案/评分保持。本机prepare_flash_memory.py仅调整新实例scope与路径映射、18表规范化核对，7项回归及Ruff通过；先commit→同步SHA/compile/实际验收→push核HEAD再单次QA，实际状态见候选audit/doubao-code-flash-memory-direct。新16后暂停，收全轨迹/原包并同Flash协议直连Judge各2并发，不自动扩大1013。原baseline与持续Judge344c03b8保持。
 
 

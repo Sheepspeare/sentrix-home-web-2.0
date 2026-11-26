@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26用户新授权历史Doubao代码改用Flash自身冻结相册重测同16：独立8305/8885与8306/8886、双预算各16并发/云端直连，旧结果保持，准备中。见T006及候选audit/doubao-code-flash-memory-direct。
+- 11/26 22:56:52历史Doubao代码改Flash自身相册同16已启动：limited801a7b/8305/8885与large2db84c/8306/8886，双预算各16并发/关思考/云端直连；18表规范化核对及20保护PID保持。旧相册结果保留，新有效wakee6cb354d，见T006及候选audit/doubao-code-flash-memory-direct。
 
 - 11/26原Doubao代码Flash直连同16已验：有限QS25%、大组37.5%；同Flash裁判共同15题为26.67%/40%/历史豆包46.67%。719Agent与44Judge HTTP唯一原包全200/关思考；大组7题达1小时上限，保持16暂停不扩大。见T006及doubao-code-direct/recovery-1/judge-same16-1/RESULTS.md。
 
