@@ -56,6 +56,7 @@ class Fact:
     confidence: float = 1.0
     coverage: float = 1.0
     person_names: tuple[str, ...] = ()
+    source: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,8 +115,9 @@ def _retrieval_facts(record: ToolCallRecord) -> list[Fact]:
     for index, row in enumerate(preview):
         if not isinstance(row, Mapping):
             continue
+        first_fact = len(facts)
         handle = _text(row.get("handle"))
-        asset_id = returned_ids[index] if index < len(returned_ids) else ""
+        asset_id = returned_ids[index] if index < len(returned_ids) else row.get("asset_id", "")
         confirmed_names = tuple(people_by_asset.get(asset_id, ()))
         scope: dict[str, str] = {}
         for key in ("place", "time", "person"):
@@ -196,6 +198,13 @@ def _retrieval_facts(record: ToolCallRecord) -> list[Fact]:
                         provenance=f"{record.call_id}:{handle}",
                     )
                 )
+        source = {
+            "asset_id": str(asset_id),
+            "result_set_id": _text(observation.get("result_set_id") or visible.get("result_set_id")),
+            "asset_handle": handle,
+            "origin": "memory_preview",
+        }
+        facts[first_fact:] = [replace(fact, source=source) for fact in facts[first_fact:]]
     return facts
 
 
@@ -262,6 +271,16 @@ def _structured_fact(record: ToolCallRecord) -> list[Fact]:
     return facts
 
 
+def _reading_source(record: ToolCallRecord) -> dict[str, str]:
+    return {
+        "asset_id": _text(record.observation.get("asset_id")),
+        "result_set_id": _text(record.observation.get("result_set_id")),
+        "asset_handle": _text(record.observation.get("asset_handle")),
+        "origin": record.tool,
+        "question": _text(record.model_visible.get("question")),
+    }
+
+
 def _inspection_facts(record: ToolCallRecord) -> list[Fact]:
     visible = record.model_visible
     facts: list[Fact] = []
@@ -274,6 +293,7 @@ def _inspection_facts(record: ToolCallRecord) -> list[Fact]:
                 value=description,
                 provenance=record.call_id,
                 confidence=1.0 if _text(visible.get("certainty")) == "supported" else 0.6,
+                source=_reading_source(record),
             )
         )
     people = visible.get("photo_identities")
@@ -305,6 +325,10 @@ def _text_facts(record: ToolCallRecord) -> list[Fact]:
                 value_type=RequirementValueType.DESCRIPTION,
                 value=full_text,
                 provenance=record.call_id,
+                source={
+                    **_reading_source(record),
+                    "origin": "source_text" if source_document else "ingestion_ocr",
+                },
             )
         ]
         if full_text
@@ -430,6 +454,20 @@ def facts_from_state(state: TaskState) -> tuple[Fact, ...]:
                         coverage=1.0,
                     )
                 )
+    # 读取候选图不等于解决了检索时尚未落实的必要条件。
+    eligibility: dict[str, bool] = {}
+    for record in state.records:
+        if record.status == "ok" and record.tool in {"search_memories", "get_result_page"}:
+            ids = record.observation.get("returned_asset_ids", record.observation.get("asset_ids", ()))
+            if isinstance(ids, (list, tuple)):
+                for asset_id in ids:
+                    eligibility[str(asset_id)] = record.model_visible.get("answer_eligible") is not False
+    facts = [
+        replace(fact, filters_not_applied=(*fact.filters_not_applied, "query_conditions"))
+        if eligibility.get(fact.source.get("asset_id", "")) is False
+        else fact
+        for fact in facts
+    ]
     return tuple(facts)
 
 
@@ -469,6 +507,19 @@ def bind_requirement(requirement: EvidenceRequirement, facts: Sequence[Fact]) ->
             BindingVerdict.UNKNOWN,
             "正文已读取，具体答案需结合原文核验" if source_calls else "尚未读取正文",
             source_calls,
+            requirement.value_type.value,
+        )
+    if requirement.evidence_type in {EvidenceType.VISIBLE_TEXT, EvidenceType.VISUAL_OBSERVATION}:
+        observed = tuple(
+            fact.provenance
+            for fact in facts
+            if fact.fact_type in {"visual_observation", "visible_text", "preview_description"}
+        )
+        return RequirementBinding(
+            requirement.id,
+            BindingVerdict.UNKNOWN,
+            "具体字段需结合原文与回答核验" if observed else "尚未取得字段证据",
+            observed,
             requirement.value_type.value,
         )
     typed = [

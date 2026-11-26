@@ -111,11 +111,14 @@ person 只填要求出镜或确认身份的人，保留原姓名或别名；同�
 {source_rule}
 - 问已确认人物是谁、家庭角色、人物档案，或问人与人的关系时声明 person_profile——照片本身没有关系信息。
 - 只有全相册级统计（共几张、多少次、哪些媒体类型）才声明 structured_fact；单张的时间、地点在 preview 里。
-- 只有 preview 摘要不足、且问画面可见属性（颜色、服饰、动作、物体、建筑）时才声明 visual_observation。
+- 问画面可见属性（颜色、服饰、动作、物体、建筑）时声明 visual_observation；取到候选后再判断摘要是否已足够。
 - 只有问图内文字、数字、价格、招牌时声明 visible_text；地点、颜色、服饰、场景不算。
 - 问视频或录音里的人说了什么、提到什么内容时声明 spoken_content；不要把语音转写归为图内 OCR。
 - 只有问照片里的人是谁、身份归属时声明 photo_identity。
 - 一条 requirement 只对应一种 evidence_type；「先找照片」与「看清细节」要分成两条。
+- visible_text / visual_observation 的 predicate 写用户真正要查的字段；
+  同一图片的多个字段可列在同一需求中，核验时逐项检查。
+  看见票据不等于读到座位号；读到品牌不等于确认门店。已有文字或摘要足够时可直接复用，缺失或冲突再定向看原图。
 - photo_set + delivered_photo 之外最多再声明 2 条证据需求；同一 evidence_type 可按
   value_type 拆多条，但不得两条完全相同。
 - 每条 requirement 都必须能由注册表中的工具直接获得。

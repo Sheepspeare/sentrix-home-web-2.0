@@ -2350,3 +2350,181 @@ def test_new_visual_evidence_remains_callable_after_one_reuse_reminder(env, same
     hints = [m for m in model.calls[-1] if m.role == ChatRole.TOOL and VISUAL_REUSE_NUDGE in m.content]
     assert len(hints) == int(same_asset)
     assert len([name for name, _ in toolbox.calls if name == "inspect_photo"]) == 5
+
+
+def _visual_field_reply(verdict="supported", *, citation="c3", quote="座位12A"):
+    return json.dumps(
+        {
+            "verdict": verdict,
+            "reason": "座位字段核验",
+            "fields": [
+                {
+                    "requirement_id": "req_2",
+                    "verdict": verdict,
+                    "reason": "座位号已读取" if verdict == "supported" else "只读到白色车票，缺座位号",
+                    "value": "12A" if verdict == "supported" else "",
+                    "citations": [{"call_id": citation, "quote": quote}] if verdict == "supported" else [],
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+def test_missing_field_prompts_targeted_inspection_then_verifies_new_evidence(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("read_photo_text", "c2", result_set_id="rs_1", asset_handle="photo_1"),
+            final("座位12A。"),
+            tool_call(
+                "inspect_photo",
+                "c3",
+                result_set_id="rs_1",
+                asset_handle="photo_1",
+                question="读取座位号，无法看清请说明",
+            ),
+            final("座位12A。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=PlannerScript([_visual_field_reply("unsupported"), _visual_field_reply()]),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "read_photo_text": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"full_text": "白色车票"},
+            ),
+            "inspect_photo": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"observation": "座位12A", "certainty": "supported"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    field = next(item for item in result.requirements if item["id"] == "req_2")
+    assert field["status"] == "satisfied"
+    assert field["satisfied_by"] == ["c3"] or field["satisfied_by"] == ("c3",)
+    assert len(model.claim_calls) == 2
+    assert len([name for name, _ in toolbox.calls if name == "inspect_photo"]) == 1
+    assert reminder_count(model, "字段核验：") == 1
+    assert any(
+        "rs_1" in m.content and "photo_1" in m.content
+        for call in model.calls
+        for m in call
+        if "字段核验：" in m.content
+    )
+    metrics = turns.get(result.turn_id).trace["model_calls"]
+    assert len([call for call in metrics if call["call_type"] == "claim_verifier"]) == 2
+
+
+def test_sufficient_saved_ocr_does_not_force_visual_inspection(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("read_photo_text", "c2", result_set_id="rs_1", asset_handle="photo_1"),
+            final("座位12A。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=PlannerScript([_visual_field_reply(citation="c2")]),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "read_photo_text": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"full_text": "座位12A"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert len(model.claim_calls) == 1
+    assert all(name != "inspect_photo" for name, _ in toolbox.calls)
+    assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "satisfied"
+
+
+def test_uncertain_visual_field_stays_open_and_reminder_stops_after_one(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("inspect_photo", "c3", result_set_id="rs_1", asset_handle="photo_1", question="座位号"),
+            final("座位可能12A，无法确认。"),
+        ],
+        planner=planner_reply("photo_set", "visual_observation", value_type="value"),
+        claim=PlannerScript([_visual_field_reply()]),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "inspect_photo": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"observation": "座位12A", "certainty": "uncertain"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "open"
+    assert result.status is TurnStatus.PARTIAL
+    assert len(model.claim_calls) == 1
+    assert reminder_count(model, "字段核验：") == 1
+
+
+def test_visual_verification_failure_preserves_gap_without_triggering_more_tools(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            final("座位号无法确认。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=RuntimeError("endpoint down"),
+    )
+    toolbox = StubToolbox({"search_memories": SEARCH_OK})
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert next(item for item in result.requirements if item["id"] == "req_2")["status"] == "open"
+    assert len(model.claim_calls) == 1
+    assert reminder_count(model, "字段核验：") == 0
+
+
+def test_confirmed_field_with_wrong_answer_is_corrected_without_more_inspection(env, monkeypatch):
+    monkeypatch.setenv("SENTRIX_CLAIM_VERIFIER", "1")
+    _conversations, _turns, conversation, _db = env
+    first = json.loads(_visual_field_reply(citation="c2"))
+    first.update(verdict="contradicted", reason="原文座位12A，回答写了13A")
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "c1", query="车票"),
+            tool_call("read_photo_text", "c2", result_set_id="rs_1", asset_handle="photo_1"),
+            final("座位13A。"),
+            final("座位12A。"),
+        ],
+        planner=planner_reply("photo_set", "visible_text", value_type="value"),
+        claim=PlannerScript([json.dumps(first, ensure_ascii=False), _visual_field_reply(citation="c2")]),
+    )
+    toolbox = StubToolbox(
+        {
+            "search_memories": SEARCH_OK,
+            "read_photo_text": ToolOutcome(
+                observation={"asset_id": "asset_1", "result_set_id": "rs_1", "asset_handle": "photo_1"},
+                model_visible={"full_text": "座位12A"},
+            ),
+        }
+    )
+    run_turn = build(env, model, toolbox)
+    result = run_turn.run(start(run_turn, conversation))
+    assert result.answer == "座位12A。"
+    assert len(model.claim_calls) == 2
+    assert all(name != "inspect_photo" for name, _ in toolbox.calls)
+    assert not _turns.get(result.turn_id).trace.get("possibly_fabricated")

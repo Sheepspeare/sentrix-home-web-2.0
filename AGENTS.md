@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26需求002字段取证与回答核验已实现，290相关回归通过；119实时46GiB可用内存，准备独立四素材机制小测，正式质量待验，详见T006及候选audit/requirement-002-fields。
+
 - 11/26 四旧建库gzip已完整转存本机并验收，home恢复约4.4GiB，18表/raw/答卷/10保护PID保持。原limited471／large151继续1013，v677／83、v8 9／16；四路以新目录只读attach接续，不重发QA。见候选audit/storage-offload-20261126及T006。
 
 - 11/26 v7首16实测未接受质量；候选发现阻断已修，251业务／26部署监控回归通过。v8源码c4bd7f72逐563文件远端SHA／compile通过，待独立8300／8880局部验收后同16复测；不扩大83。见候选audit/v8-large-rerun及T006。

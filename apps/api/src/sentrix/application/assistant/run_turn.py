@@ -61,6 +61,8 @@ from sentrix.domain.assistant import emergency
 from sentrix.domain.assistant.claim_verifier import (
     Claim,
     ClaimReview,
+    ClaimVerdict,
+    FieldReview,
     claim_numbers,
     claim_requirement,
     high_risk_claims,
@@ -78,6 +80,7 @@ from sentrix.domain.assistant.evidence_ledger import (
     EvidenceLedger,
     EvidenceRequirement,
     EvidenceType,
+    RequirementStatus,
     RequirementValueType,
 )
 from sentrix.domain.assistant.final_guard import FinalGuard, GuardFacts, answered_with_gap
@@ -833,6 +836,9 @@ class _Session:
     #: L3 每回合最多一次；这张表进轨迹，用来对比旧 L2 的触发率与命中的 claim。
     claim_reviews: list[dict[str, Any]] = field(default_factory=list)
     l3_judged: bool = False
+    field_reviews: tuple[FieldReview, ...] = ()
+    field_review_attempts: int = 0
+    field_review_key: str = ""
 
     def add_debug_call(self, call: Mapping[str, Any]) -> None:
         """按发生顺序编号后追加一次模型调用。``seq`` 只在回合内唯一。"""
@@ -1804,6 +1810,20 @@ class RunTurn:
         带缺口回答。绑定事件进轨迹，8772 能看到每条需求为什么没被满足。
         """
         session.bindings = bind_requirements(session.ledger.requirements, facts_from_state(session.state))
+        reviewed = {item.requirement_id: item for item in session.field_reviews}
+        session.bindings = tuple(
+            replace(
+                binding,
+                verdict=BindingVerdict.SATISFIES
+                if reviewed[binding.requirement_id].verdict is ClaimVerdict.SUPPORTED
+                else BindingVerdict.PARTIAL,
+                reason=reviewed[binding.requirement_id].reason,
+                fact_ids=tuple(call_id for call_id, _ in reviewed[binding.requirement_id].citations),
+            )
+            if binding.requirement_id in reviewed
+            else binding
+            for binding in session.bindings
+        )
         if not session.bindings:
             return
         self._publish(
@@ -2150,6 +2170,15 @@ class RunTurn:
         self, session: _Session, messages: Sequence[ChatMessage], answer: str
     ) -> bool:
         """L3 优先；没有高风险未绑定 claim 时直接放行（不再每回合调 L2）。"""
+        field_requirements = tuple(
+            item
+            for item in session.ledger.requirements
+            if item.required
+            and item.value_type not in {None, RequirementValueType.MEDIA_SET}
+            and item.evidence_type in {EvidenceType.VISIBLE_TEXT, EvidenceType.VISUAL_OBSERVATION}
+        )
+        if self._use_claim_verifier and field_requirements:
+            return self._review_fields(session, answer, field_requirements)
         if not self._use_claim_verifier:
             return self._review_with_l2(session, messages, answer)
 
@@ -2220,6 +2249,120 @@ class RunTurn:
             "请核对工具观察后重新给出回答；如果确实无法确认，请如实说明。"
         )
         return state.can_step()
+
+    def _review_fields(
+        self, session: _Session, answer: str, requirements: Sequence[EvidenceRequirement]
+    ) -> bool:
+        """复用回答前核验，一次返回所有图像字段；补证后允许再核一次。"""
+        state = session.state
+        facts = facts_from_state(state)
+        key = hashlib.sha256(repr((answer, facts)).encode()).hexdigest()
+        if session.field_review_attempts >= 2 or key == session.field_review_key or not state.can_step():
+            return False
+        if not any(record.status == "ok" and record.tool != FINAL_ANSWER_TOOL for record in state.records):
+            return False
+        session.field_review_key = key
+        session.field_review_attempts += 1
+        session.l3_judged = True
+        state.model_steps += 1
+        self._check_cancel(state.turn_id)
+        step_id = _step_id(state)
+        review = self._claim_verifier.review(
+            query=state.question,
+            claim=Claim(answer, RequirementValueType.DESCRIPTION),
+            facts=facts,
+            requirement=None,
+            requirements=requirements,
+            include_debug=session.include_debug,
+            step_id=step_id,
+        )
+        session.field_reviews = review.fields or tuple(
+            FieldReview(item.id, ClaimVerdict.AMBIGUOUS, "字段核验未完成") for item in requirements
+        )
+        if review.model_call is not None:
+            session.model_calls.append(dict(review.model_call))
+        if session.include_debug and review.debug_call is not None:
+            session.add_debug_call(review.debug_call)
+        rows = [
+            {
+                "requirement_id": item.requirement_id,
+                "verdict": item.verdict.value,
+                "reason": item.reason,
+                "value": item.value,
+                "citations": [{"call_id": call_id, "quote": quote} for call_id, quote in item.citations],
+            }
+            for item in session.field_reviews
+        ]
+        session.claim_reviews.append(
+            {
+                "claim": answer,
+                "value_type": "fields",
+                "verdict": review.verdict.value,
+                "reason": review.reason,
+                "call_id": step_id,
+                "fields": rows,
+            }
+        )
+        for item in session.field_reviews:
+            requirement = session.ledger.requirement(item.requirement_id)
+            if requirement is None:
+                continue
+            supported = item.verdict is ClaimVerdict.SUPPORTED
+            requirement.status = RequirementStatus.SATISFIED if supported else RequirementStatus.OPEN
+            requirement.satisfied_by = (
+                tuple(dict.fromkeys(call_id for call_id, _ in item.citations)) if supported else ()
+            )
+            requirement.unmet_reason = "" if supported else (item.reason or "field_unconfirmed")
+        self._refresh_bindings(session)
+        self._publish(
+            session,
+            state.emit(
+                ProgressStage.FINALIZING,
+                ProgressStatus.OK,
+                "已核对图片字段与回答。",
+                kind="judge",
+                payload={
+                    "code": "visual_field_review",
+                    "call_id": step_id,
+                    "fields": rows,
+                    "answer_verdict": review.verdict.value,
+                },
+            ),
+        )
+        gaps = [item for item in session.field_reviews if item.verdict is not ClaimVerdict.SUPPORTED]
+        session.l2_unverified = review.blocks
+        session.l2_unverified_reason = review.reason if review.blocks else ""
+        # 调用故障保留缺口；服务故障不触发额外看图或重复核验。
+        if review.model_call is not None and review.model_call.get("status") == "error":
+            return False
+        if not gaps and not review.blocks:
+            return False
+        if not state.can_step() or not state.block_guard_code("visual_field_evidence_missing"):
+            return False
+        fields = {item.id: item for item in requirements}
+        missing = "；".join(
+            f"{fields[item.requirement_id].predicate or fields[item.requirement_id].description}："
+            f"{item.reason}"
+            for item in gaps
+        )
+        candidates: list[dict[str, str]] = []
+        for fact in reversed(facts):
+            source = {
+                key: str(fact.source.get(key) or "") for key in ("asset_id", "result_set_id", "asset_handle")
+            }
+            if source["result_set_id"] and source["asset_handle"] and source not in candidates:
+                candidates.append(source)
+            if len(candidates) == 6:
+                break
+        state.phase = FINALIZING
+        session.pending_reminder = (
+            f"字段核验：{missing or review.reason}。"
+            "先复用已确认字段、原文和来源。仅对缺失或冲突字段选择相关图片，"
+            "用inspect_photo的question明确询问该字段；read_photo_text仅返回导入OCR，不能当作本次原图复核。"
+            "保持图片、字段和所属对象对应；无关图片不要补看。若没有相关图片或仍看不清，请明确保留缺口。"
+            f"已取证图片引用：{json.dumps(candidates, ensure_ascii=False)}"
+        )
+        return True
 
     def _review_with_l2(self, session: _Session, messages: Sequence[ChatMessage], answer: str) -> bool:
         """L2 语义评审。返回 ``True`` 表示「继续循环，重新作答」。
@@ -2538,6 +2681,13 @@ class RunTurn:
                         if evidence_type is not EvidenceType.PHOTO_SET
                     )
             for evidence_type in satisfied_types:
+                if evidence_type in {EvidenceType.VISIBLE_TEXT, EvidenceType.VISUAL_OBSERVATION} and any(
+                    item.evidence_type is evidence_type
+                    and item.value_type not in {None, RequirementValueType.MEDIA_SET}
+                    for item in session.ledger.requirements
+                ):
+                    # 工具成功只说明取得观察，具体字段由回答前核验销账。
+                    continue
                 session.ledger.satisfy(evidence_type, call_id=call.call_id)
             self._tool_event(
                 session,
@@ -2591,6 +2741,15 @@ class RunTurn:
         ):
             visible["evidence_key"] = hashlib.sha256(evidence_signature.encode()).hexdigest()[:24]
         new_evidence = evidence_signature not in session.evidence_signatures
+        if outcome.ok and new_evidence and session.field_reviews and call.name != FINAL_ANSWER_TOOL:
+            # 补入新证据后重新保留字段缺口；旧裁决不能覆盖后来出现的冲突。
+            for reviewed in session.field_reviews:
+                requirement = session.ledger.requirement(reviewed.requirement_id)
+                if requirement is not None:
+                    requirement.status = RequirementStatus.OPEN
+                    requirement.satisfied_by = ()
+                    requirement.unmet_reason = "new_evidence_pending_review"
+            session.field_reviews = ()
         if outcome.ok:
             session.evidence_signatures.add(evidence_signature)
         if call.name in {"search_memories", "get_result_page"} and outcome.ok:

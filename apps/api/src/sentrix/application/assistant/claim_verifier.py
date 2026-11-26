@@ -18,7 +18,10 @@ from sentrix.domain.assistant.claim_verifier import (
     ClaimReview,
     ClaimVerdict,
     build_claim_messages,
+    build_field_messages,
+    field_review_facts,
     parse_claim_review,
+    parse_field_reviews,
 )
 from sentrix.domain.assistant.evidence_binding import Fact
 from sentrix.domain.assistant.evidence_ledger import EvidenceRequirement
@@ -44,14 +47,25 @@ class ClaimVerifier:
         requirement: EvidenceRequirement | None,
         include_debug: bool = False,
         step_id: str = "claim_verifier",
+        requirements: Sequence[EvidenceRequirement] = (),
     ) -> ClaimReview:
-        raw_messages = build_claim_messages(
-            query=query,
-            claim=claim,
-            facts=facts,
-            requirement=requirement,
-            max_facts=self._max_facts,
-            value_limit=self._value_limit,
+        review_facts = field_review_facts(facts, limit=self._max_facts) if requirements else facts
+        raw_messages = (
+            build_field_messages(
+                query=query,
+                answer=claim.text,
+                facts=review_facts,
+                requirements=requirements,
+            )
+            if requirements
+            else build_claim_messages(
+                query=query,
+                claim=claim,
+                facts=facts,
+                requirement=requirement,
+                max_facts=self._max_facts,
+                value_limit=self._value_limit,
+            )
         )
         messages = [ChatMessage(ChatRole(str(item["role"])), str(item["content"])) for item in raw_messages]
         started = time.perf_counter()
@@ -106,7 +120,12 @@ class ClaimVerifier:
             )
         verdict, reason = parse_claim_review(reply.content or "")
         return ClaimReview(
-            verdict=verdict, reason=reason, claim=claim, debug_call=debug_call, model_call=model_call
+            verdict=verdict,
+            reason=reason,
+            claim=claim,
+            debug_call=debug_call,
+            model_call=model_call,
+            fields=parse_field_reviews(reply.content or "", requirements=requirements, facts=review_facts),
         )
 
 
