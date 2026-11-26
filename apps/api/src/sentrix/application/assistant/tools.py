@@ -637,16 +637,27 @@ class AssistantToolbox:
         quote = str(evidence.get("quote") or "").strip()
         call_id = str(evidence.get("call_id") or "").strip()
         facts = []
+        available_refs = []
         for record in records:
             visible = record.model_visible
             if (
                 record.status != "ok"
                 or record.tool not in {"read_photo_text", "read_source_text", "inspect_photo"}
-                or record.call_id != call_id
                 or record.observation.get("asset_id") != asset_id
+                or visible.get("certainty", CERTAINTY_SUPPORTED) != CERTAINTY_SUPPORTED
+            ):
+                continue
+            available_refs.append(
+                {
+                    "call_id": record.call_id,
+                    "result_set_id": visible.get("result_set_id"),
+                    "asset_handle": visible.get("asset_handle"),
+                }
+            )
+            if (
+                record.call_id != call_id
                 or visible.get("result_set_id") != result_set.id
                 or visible.get("asset_handle") != evidence.get("asset_handle")
-                or visible.get("certainty", CERTAINTY_SUPPORTED) != CERTAINTY_SUPPORTED
             ):
                 continue
             text = str(visible.get("full_text") or visible.get("text") or visible.get("observation") or "")
@@ -663,9 +674,14 @@ class AssistantToolbox:
                     )
                 )
         if not facts:
-            return _failure(
+            failure = _failure(
                 "condition_evidence_not_read",
-                "condition_evidence须给出本回合已读该对象的call_id和连续原文quote；uncertain观察不能确认。",
+                "复制available_evidence_refs或读取结果evidence_ref，补该次读取的连续原文quote；"
+                "仅搜索预览及uncertain观察不能确认条件。",
+            )
+            return dataclasses.replace(
+                failure,
+                model_visible={**failure.model_visible, "available_evidence_refs": available_refs},
             )
         unresolved = dict(executable_conditions(conditions, now=now, exact=False).pending)
         proposed: list[tuple[QueryCondition, QueryCondition]] = []

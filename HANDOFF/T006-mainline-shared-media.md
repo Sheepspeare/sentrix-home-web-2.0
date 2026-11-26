@@ -1,5 +1,18 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v11同16取证完成，证据调用编号阻塞补证
+
+run 5c2604／9dbf3ffc已16题检查点暂停，4complete／12partial／fatal=null，真实GET核产品health、run与active-work；逐题qa_id／固定revision、全content及trace分页read_revision通过。旧v10十六答SHA、18表及12PID在部署验收保持；本轮只读取证，无新QA或部署。回调8831cd14已reconciled。
+
+314真实HTTP全部唯一raw匹配（293主含1超时重试＋21视觉）：313为200，1 ReadTimeout无状态／usage，不能报全200。已知Token7758570含截断原包补75626，超时无usage单列，较v10至少增加42.48%；工具363／本地预检31不算HTTP。模型预算逐题与含重试实际请求一致。helper支持条件核验JSON和无状态超时，8回归、独立ops-http-conditions-67ae0cde的SHA／compile与真实314包验收通过，不重核旧266成功包。
+
+38次条件更新全部失败：26未匹配已读证据、7缺引用、4条件格式错误、1更新对象错误；新增query_conditions语义核验0，不能称闭环实际生效。模型多次自造read_photo_text_1等调用编号，读取结果正文未给可复制引用，失败反馈也仅统一报错。字段核验8／时间核验10仍实际执行。修复在RunTurn给三个读取工具的成功结果和保存轨迹回显evidence_ref（真实call_id／result_set_id／asset_handle），工具说明要求复制；引用错误时返回同对象当前回合确定读取的available_evidence_refs，仍必须连续原文及语义核验。引用元数据不计新证据，防止新编号重置停滞；未读／uncertain／跨对象仍拒绝。271回归过，Ruff／compile通过，尚未部署，保留v11现场。
+
+Flash Judge新16输入已核固定revision／答案SHA、同1013定义fingerprint与原native_v2协议；只补v11，旧396成功分保持，每任务2评分并发、关思考温0输出2048。评分启动及有效wait以flash-judge-20261126/v11/launch-registration.json为准，当前质量待评。评分与Agent完成状态分开。002／005未结项；16不扩大83，按新分和实际引用衔接继续独立复测。原双全量wake a38f0e0a／7a6f8cfa及119high保持，不重复挂；原网关24槽、源相册／raw／Oracle与主树修改保持。
+
+产物：候选audit/v11-large-rerun/review/{RESULTS,acceptance,summary,paired-metrics,collection-receipt,live-site-verification,v11-http-exact-verification,condition-update-diagnosis,helper-upload-verification}；flash-judge-20261126/v11/{inputs,input-validation,protocol,run-scoring}。下一步评分回调核实际请求与同16配对，再用已验证引用衔接代码适当复测；不得重放v11driver／POST／复制SQLite缓存。
+
+
 ## 2026-11-26｜v10评分验收及条件证据闭环修复
 
 v10目标16/16评分齐，QS56.25%（9/16），对v9 62.50%下降6.25个百分点。改善猫视频，退化Porto第三天和蜂蜜总量；对v6同16也少6.25个百分点。15次Judge HTTP按完整请求/响应SHA、response ID、usage及时间唯一核raw，全200/关思考/23386Token，另1列表程序评分。旧380分保持、新Agent0，候选audit/flash-judge-20261126/v10/{RESULTS,acceptance,paired-scores,local-integrity,judge-http-exact-verification}完整，回调7892已reconciled。v10 Token5445454对v9仅降2.28%，综合效果不接受，002/005未结项。

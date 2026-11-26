@@ -1593,7 +1593,18 @@ def test_event_confirmation_is_bound_to_the_read_asset_and_never_widens_statisti
 
 @pytest.mark.parametrize(
     "defect",
-    ["unread", "wrong_asset", "quote", "uncertain", "wrong_scope", "role", "anchor", "unrelated", "fault"],
+    [
+        "unread",
+        "wrong_call",
+        "wrong_asset",
+        "quote",
+        "uncertain",
+        "wrong_scope",
+        "role",
+        "anchor",
+        "unrelated",
+        "fault",
+    ],
 )
 def test_condition_evidence_errors_keep_original_conditions_and_return_specific_feedback(toolbox, defect):
     import dataclasses
@@ -1610,6 +1621,8 @@ def test_condition_evidence_errors_keep_original_conditions_and_return_specific_
     expected = "condition_evidence_not_read"
     if defect == "unread":
         records = ()
+    elif defect == "wrong_call":
+        evidence["call_id"] = "invented-read-id"
     elif defect == "wrong_asset":
         evidence["asset_handle"] = "photo_2"
     elif defect == "quote":
@@ -1651,6 +1664,13 @@ def test_condition_evidence_errors_keep_original_conditions_and_return_specific_
     assert result.ok and not result.model_visible["answer_eligible"]
     error = result.model_visible["condition_update_error"]
     assert error["error"] == expected
+    if defect in {"wrong_call", "quote"}:
+        assert error["available_evidence_refs"] == [
+            {"call_id": "read-1", "result_set_id": evidence["result_set_id"], "asset_handle": "photo_1"}
+        ]
+        assert calls == []
+    elif defect in {"unread", "wrong_asset", "uncertain"}:
+        assert error["available_evidence_refs"] == []
     assert "buy" not in state
     if defect == "role":
         assert "anchor" in error["message"] and "venue" in error["message"]

@@ -2279,6 +2279,32 @@ class InspectionEvidenceToolbox(StubToolbox):
 
 
 @pytest.mark.parametrize("tool", ["inspect_photo", "read_photo_text", "read_source_text"])
+def test_reading_exposes_actual_reference_in_body_and_saved_trace(env, tool):
+    _conversations, turns, conversation, _db = env
+    model = ScriptedModel(
+        [
+            tool_call("search_memories", "search-real", query="海边"),
+            tool_call(
+                tool, "read-real-42", result_set_id="rs_1", asset_handle="photo_1", question="招牌写什么"
+            ),
+            final_call("海边餐厅。", "photo_1"),
+        ]
+    )
+    runner = build(env, model, InspectionEvidenceToolbox([("asset_same", "海边餐厅")]))
+    result = runner.run(start(runner, conversation))
+    expected = {"call_id": "read-real-42", "result_set_id": "rs_1", "asset_handle": "photo_1"}
+    message = next(m for m in model.calls[-1] if m.role is ChatRole.TOOL and m.tool_call_id == "read-real-42")
+    assert json.loads(message.content)["evidence_ref"] == expected
+    events = [event for _, _, event in turns.events_after(result.turn_id, 0)]
+    saved = next(
+        e.payload["result"]
+        for e in events
+        if e.payload.get("tool_call_id") == "read-real-42" and "result" in e.payload
+    )
+    assert saved["evidence_ref"] == expected
+
+
+@pytest.mark.parametrize("tool", ["inspect_photo", "read_photo_text", "read_source_text"])
 def test_rephrasing_or_renumbering_the_same_evidence_does_not_reset_stall(env, tool):
     from sentrix.domain.assistant.profile import REASONING_PROFILE
 

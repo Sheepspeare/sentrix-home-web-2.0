@@ -2723,6 +2723,22 @@ class RunTurn:
                         ),
                     )
                 session.inspected_asset_ids.add(asset_id)
+        if (
+            outcome.ok
+            and call.name in {"inspect_photo", "read_photo_text", "read_source_text"}
+            and outcome.observation.get("asset_id")
+        ):
+            evidence_ref = {
+                "call_id": call.call_id,
+                "result_set_id": outcome.model_visible.get("result_set_id"),
+                "asset_handle": outcome.model_visible.get("asset_handle"),
+            }
+            if all(evidence_ref.values()):
+                outcome = replace(
+                    outcome,
+                    observation={**outcome.observation, "evidence_ref": evidence_ref},
+                    model_visible={**outcome.model_visible, "evidence_ref": evidence_ref},
+                )
         state.record(
             ToolCallRecord(
                 call_id=call.call_id,
@@ -2810,7 +2826,9 @@ class RunTurn:
             )
 
         visible = dict(outcome.model_visible)
-        evidence = {key: value for key, value in visible.items() if key != "result_set_id"}
+        evidence = {
+            key: value for key, value in visible.items() if key not in {"result_set_id", "evidence_ref"}
+        }
         if call.name in {"inspect_photo", "read_photo_text", "read_source_text"}:
             evidence_asset_id = outcome.observation.get("asset_id")
             if evidence_asset_id:

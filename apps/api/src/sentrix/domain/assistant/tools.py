@@ -110,7 +110,10 @@ QUERY_CONTROLS = {
         {
             "result_set_id": {"type": "string"},
             "asset_handle": {"type": "string"},
-            "call_id": {"type": "string", "description": "本回合实际读取该素材的工具调用ID。"},
+            "call_id": {
+                "type": "string",
+                "description": "复制读取结果evidence_ref.call_id，勿自行编写编号。",
+            },
             "quote": {"type": "string", "description": "该次读取结果中的连续原文，勿改写或拼接。"},
         },
         ["result_set_id", "asset_handle", "call_id", "quote"],
