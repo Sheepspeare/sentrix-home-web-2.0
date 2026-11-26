@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜全量Judge大组无答卷404已修，按组独立接续
+
+01:22恢复1大组采集两题失败：qa95891f4f/f05d1f2b的execution_status=timeout，3660秒未取得答卷，详情无answer/runtime_turns；旧采集器仍GET answer内容得到404。原39有效评分未变，失败批次Judge0；有限原线程与两组QA继续。修复2ecfb13f在固定revision读取qa_id、确认执行失败且无答卷后记录unscorable，跳过Judge和均分分母，继续其他答卷；不把Agent failed/无答卷补0，不重答QA。完整正文存在但执行失败仍留人工检查，未放宽评分协议。
+
+本机7回归/Ruff/compile→commit→隔离同步follow/helper双SHA、远端compile与172源码manifest/真实2超时+1完整答卷GET验收→push。recover_follow_group合并旧16及14批状态完整成功对象，核原scores及全部文件SHA一致；只新启大组BASE/full-1013-judge-recovery-2-large，单元sentrix-flash-own-memory-full-judge-20261127-recovery2-large.service/PID415332。原有限恢复1单元/PID285298继续，未动Agent产品334源码/两组16QA/20-30及100-600预算/原run/库cache。
+
+01:29核有限处理50、有效评分50、QS38%；大处理43、有效41、QS53.6585%，2执行超时无答卷、可评分缺分0。新增2JudgeHTTP完整request/responseJSON/responseID/usage/time唯一raw匹配全200、关思考、904Token；初验不代替后续全量增量审计，0审计模型请求。各组2Judge跨组并行、native_v2生产原prompt/noGT/温0max2048/HTTPS直连保持。
+
+活动观察：QA9f6a3f64不重挂；有限新单组观察e2e1b9e6-0076-4b06-bceb-eecd51f5ec6c（原恢复1worker）；大新单组观察aa97806e-e587-4e1d-8957-20525ff47116（恢复2large）。watch_judging按groups过滤attention，只读自己的组；原03a14470已reconciled，不重放原worker/旧目录或成功评分。后续先看实际batch/input/protocolSHA与在飞，保持活跃另一组，只补缺分。11月28北京12点按已处理/有答卷/有效分/无答卷失败/真实缺分报告，异覆盖均分不直接比较。
+
+证据：候选audit/doubao-code-flash-memory-direct/full-1013/status-after-recovery2.json、judge/recovery-1/{failure-diagnosis,callback-03a14470-reconciled}.json、judge/recovery-2-large/{README,recovery-preservation,real-get-preflight,upload-verification,initial-http-verification,runtime-status,acceptance-partial,launch-registration}.json（README.md）、judge/recovery-1/limited-observer。原baseline/conditionfusion/119high/相册raw/Oracle/主树用户改动保持，0embedding，不清内存盘。002/005尚未结项；002正式10项含VIEW与图片/文字工具四项尚未完整交表，005七项有同83组合预算统计但独立预算/多模型/场景一键控制尚未验收，具体通过阈值未确认。
+
 ## 2026-11-27｜用户授权Flash自身相册旧代码全1013并同步Flash评分
 
 用户明确要求旧Doubao代码、Flash自身相册，有限/大预算双任务各16并发全量，并补充“Flash模型打分，不要只答题不打分”。此新授权取代此前这两组16后暂停/不扩大的限制；原baseline/其他候选/condition-fusion/119high范围保持。目标北京时间2026-11-28中午前看到结果，12:00为本次取数点；原002/005及11/27报告安排未由此自动结项。大组沿原100模型/600工具，仍有上限，不称真正无限。

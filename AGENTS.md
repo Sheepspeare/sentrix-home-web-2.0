@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/27用户新授权Flash自身相册沿原旧Doubao代码全1013：有限20/30与大100/600，各16QA、各2Flash Judge并发，均关思考云端直连；复用原16答/分只续997。00:23已答/评18和19题，目标11/28北京中午。QA wait9f6a3f64、Judge恢复1 wait03a14470；原评分初启Judge0字段错已修，不重放。见T006及候选audit/doubao-code-flash-memory-direct/full-1013。
+- 11/27全量Flash Judge大组无答卷404已修：两条执行超时单列不补0，39成功复用至独立恢复2大组；有限原进程继续。01:29处理/评分有限50/50、大43/41（另2无答卷）；各16QA/2Judge直连保持。有效QA9f6a3f64、有限Judgee2e1b9e6、大Judgeaa97806e；旧03a14470已reconciled，勿重放。目标11/28中午，002/005未结项，见T006及full-1013/judge/recovery-2-large。
 
 - 11/27 Flash自身相册同16双预算已全验：有限QS31.25%（5/16）、大组50%（8/16），比Doubao相册净增1/2题；Token分别+9.67%/-10.97%。697Agent及30Judge HTTP唯一raw全200/关思考直连，32有效分0缺分。大组2本地超长/7约1小时timeout，当时16pause；后续全量见上条。见T006及候选audit/doubao-code-flash-memory-direct/review/RESULTS.md。
 
