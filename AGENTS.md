@@ -1,6 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/27 Flash自身相册同16双预算已全验：有限QS31.25%（5/16）、大组50%（8/16），比Doubao相册净增1/2题；Token分别+9.67%/-10.97%。697Agent及30Judge HTTP唯一raw全200/关思考直连，32有效分0缺分。大组2本地超长/7约1小时timeout，保持16pause不扩大；见T006及候选audit/doubao-code-flash-memory-direct/review/RESULTS.md。
+- 11/27用户新授权Flash自身相册沿原旧Doubao代码全1013：有限20/30与大100/600，各16QA、各2Flash Judge并发，均关思考云端直连；复用原16答/分只续997。00:23已答/评18和19题，目标11/28北京中午。QA wait9f6a3f64、Judge恢复1 wait03a14470；原评分初启Judge0字段错已修，不重放。见T006及候选audit/doubao-code-flash-memory-direct/full-1013。
+
+- 11/27 Flash自身相册同16双预算已全验：有限QS31.25%（5/16）、大组50%（8/16），比Doubao相册净增1/2题；Token分别+9.67%/-10.97%。697Agent及30Judge HTTP唯一raw全200/关思考直连，32有效分0缺分。大组2本地超长/7约1小时timeout，当时16pause；后续全量见上条。见T006及候选audit/doubao-code-flash-memory-direct/review/RESULTS.md。
 
 
 - 11/26原Doubao代码Flash直连同16已验：有限QS25%、大组37.5%；同Flash裁判共同15题为26.67%/40%/历史豆包46.67%。719Agent与44Judge HTTP唯一原包全200/关思考；大组7题达1小时上限，保持16暂停不扩大。见T006及doubao-code-direct/recovery-1/judge-same16-1/RESULTS.md。
@@ -181,4 +183,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-27 | Flash自身相册同16有限31.25%/大50%已验，原全量增量评分继续；002/005未结项 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-27 | 用户授权Flash自身相册旧代码双全1013，各16QA/2Judge直连继续，目标11/28中午；002/005未结项 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

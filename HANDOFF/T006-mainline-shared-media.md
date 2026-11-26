@@ -1,5 +1,22 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜用户授权Flash自身相册旧代码全1013并同步Flash评分
+
+用户明确要求旧Doubao代码、Flash自身相册，有限/大预算双任务各16并发全量，并补充“Flash模型打分，不要只答题不打分”。此新授权取代此前这两组16后暂停/不扩大的限制；原baseline/其他候选/condition-fusion/119high范围保持。目标北京时间2026-11-28中午前看到结果，12:00为本次取数点；原002/005及11/27报告安排未由此自动结项。大组沿原100模型/600工具，仍有上限，不称真正无限。
+
+已沿现有801a7b（8305/8885，20模型30工具）和2db84c（8306/8886，100/600）run恢复派题，仅dispatch-control的pause_after_completed16→1013、concurrency16保持；32旧答卷/评分完整复用、不新POST/launch/prepare/复制库缓存。334历史产品源码远端SHA全部匹配，业务ffec2be+9363d4b/Planner/legacy/16K2048/模型关思考保持。首批新增实际HTTP有限67/大77全200/直连/关思考，两组实际请求时间窗各峰值16。QA只读观察wake9f6a3f64-6901-4408-8f6b-6b24304c359f有效，不重复挂。
+
+持续评分新增follow_direct.py独立进程：两组各2Judge并发跨组同时、每30秒取新增已保存答案，UUID定位再固定qa_id/revision全content逐页read_revision，沿冻结score_saved/ProfileScoring/native_v2原prompt/noGT、Flash关思考温0max2048、HTTPS直连云端，Judge也不走18148。旧每组16成功按原stateSHA复制复用不重评；每批最多3次仅missing真实重试，失败history保留。一组失败另一组继续，不停止QA。源评分包172文件SHA/compile已验，不热改Agent。
+
+初始评分wait8c071565-e263-42e7-b32b-34c2f660ec6f在GET列表投影缺execution_status触KeyError，0新JudgeHTTP/32成功保持。已用e8d4eb11修复：列表只定位已保存答卷、固定revision详情严格核execution_status；5回归/Ruff/compile通过，本机commit→独立恢复包SHA/远端compile→启动→push核源码。原阶段已reconciled，迟到只读不重放。活动Judge恢复1目录BASE/full-1013-judge-recovery-1、独立用户单元sentrix-flash-own-memory-full-judge-20261127-recovery1.service/PID285298，wait03a14470-0ecc-4b6b-ac10-8edd61f550be有效；另一失败初始目录不得复启。
+
+00:23实测QA有限18/1013、大19/1013，均16并发/dispatch_paused=false/fatal=null；Judge已追平18和19，分别有效QS38.8889%和52.6316%（覆盖变化中，异范围不作公平对比），0当时已答缺分。初5新Judge真实HTTP已唯一匹配直连raw/requestSHA/完整响应JSON/usage/time，全200/关思考；剩余新增原包待终态增量验收，审计0模型请求。新代码6a9083e3→563cb534→b12f2aab→e8d4eb11已push；本轮无Agent业务源码改动/服务重启。
+
+证据：候选audit/doubao-code-flash-memory-direct/full-1013/{README,intent,dispatch-before,dispatch-after,started-verification,runtime-verification,status-at-handoff,launch-registration,progress}.json（README.md）及judge/{failure-diagnosis,callback-8c071565-reconciled}.json、judge/recovery-1/{intent,package,remote-plan,upload-verification,remote-launch,launch-registration,started-verification,initial-http-evidence}。原源相册/18表/新旧/dev/shmDB与cache/答卷/raw/Oracle87.018756不删不重建，0新embedding。两AGENTS/T006已维护。
+
+接手：既有活跃run/评分只attach；先读实际group/batch输入/协议SHA、scoring-state和HTTP原包，失败只续missing并保其他组及在飞成功。不要重放driver/旧output/QA或重评成功。QA终态与Judge终态分别回调，最后按共同UUID配对并报告全覆盖/有效QS/缺分、状态、预算/Token/时延。28日中午未齐按实际进度汇报，不取消在飞QA。002/005未整体结项。
+
+
 ## 2026-11-27｜Flash自身相册同16双预算评分及成本验收完成
 
 32/32有效分全齐、0缺分：有限QS31.25%=5/16、大组50%=8/16。与历史同代码、同预算、同16并发且用Doubao相册相比，有限2改善1退化13持平（净增1题），大组2改善0退化14持平（净增2题）。历史Doubao同Flash裁判15有效7分=46.67%，新Flash大组共同15得8分=53.33%、3改善2退化10持平；历史另1无分保持，旧全量74.4097%不同范围/裁判不混比。
