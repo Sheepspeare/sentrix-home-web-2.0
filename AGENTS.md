@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26侧聊新授权：独立分支codex/query-condition-fusion融合v6历史方式、逐条件补证与64组分页；仅新8303/8883同16题对照，先本机提交/远端验收，不切现有服务。518项扩展回归、109项收尾/部署回归通过，实验未启动，见T006及docs/refactor/2026-11-26-query-condition-fusion.md。
+- 11/26侧聊新授权：独立分支codex/query-condition-fusion融合v6历史方式、逐条件补证与64组分页；仅新8303/8883同16题对照，先本机提交/远端验收，不切现有服务。518项扩展回归、109项收尾/部署回归通过；42031dfa已远端SHA/18表/18进程验收并push，8303/8883新7dc9ca单次QA运行，16后暂停，见T006及docs/refactor/2026-11-26-query-condition-fusion.md。
 
 - 11/26原Doubao代码/记忆Flash直连双实例已启动fe7191/6e07d2，各16并发20/30与100/600，先16后暂停；334源码/18表/14保护PID已验。首启预检误带新配置已修、QA0，实际启动见doubao-code-direct/recovery-1及T006，原全量保持。
 

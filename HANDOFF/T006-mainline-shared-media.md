@@ -6,7 +6,7 @@
 
 代码保留结果集图片绑定、上界日期/身份目录/原图字段核验；恢复v6历史处理和64组分页。Planner只表达用户语义及连续原文，不决定条件是否执行；按稳定condition_id独立补证、自动绑定真实成功读取、逐条语义核验并复用同证据裁决。确认只属于对应素材，搜索可继续发现新候选，未确认候选不能当已确认答案。事件/地点/动作角色保持，不用购买标签代替已购买。
 
-扩展518项回归通过；新增逐项日志/运维隔离后109项收尾回归通过，Ruff/format/compile通过，9个修改模块类型检查无新增错误，run_turn保留2项既有Message/ChatMessage类型错误。尚无本轮提交/远端部署/QA/新分，不能声称质量改善。详细范围与验收标准见docs/refactor/2026-11-26-query-condition-fusion.md；独立audit使用产品项目audit/20261126-flash-condition-fusion，避免写主聊共享状态。测试完成后按同16v6配对；未自动授权扩大83。
+扩展518项回归通过；新增逐项日志/运维隔离后109项收尾回归通过，Ruff/format/compile通过，9个修改模块类型检查无新增错误，run_turn保留2项既有Message/ChatMessage类型错误。42031dfa已提交并push，386源码远端SHA/compile通过，18表/6989向量/18既有PIDticks保持。8303/8883新run20261126-215538-2026.11.17-atm-sources-addresses-big_model-7dc9ca已单次POST运行，16后暂停；watch session75381、独立取证评分pipeline session84176。临时侧聊未注册自动聊天回调，独立pipeline落盘后需读终态；尚无新分，不能声称质量改善。详细范围与验收标准见docs/refactor/2026-11-26-query-condition-fusion.md；独立audit使用产品项目audit/20261126-flash-condition-fusion，避免写主聊共享状态。测试完成后按同16v6配对；未自动授权扩大83。
 
 
 ## 2026-11-26｜新授权原Doubao代码Flash直连双实例
