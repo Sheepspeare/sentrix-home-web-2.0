@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import copy
 import hashlib
 import json
@@ -26,7 +27,7 @@ def save(path, value):
     temporary.replace(path)
 
 
-def score_saved(source, protocol, output, runner):
+def score_saved(source, protocol, output, runner, *, concurrency=1):
     """Checkpoint each production request; completed results survive an explicit resume."""
     original = copy.deepcopy(source)
     snapshot = source["qa_snapshot"]
@@ -54,23 +55,46 @@ def score_saved(source, protocol, output, runner):
     assert all(batch["config"] == protocol["scoring_configs"][batch["profile_id"]] for batch in batches)
     service = ProfileScoring(runner, state, lock, checkpoint, {})
     checkpoint()
+    assert concurrency >= 1
     completed = 0
     for batch in batches:
-        for target in scoring_targets(state, batch, "missing"):
-            if target["key"] not in batch["targets"]:
-                batch["targets"].append(target["key"])
-            result = service.score(batch, target)
-            completed += 1
-            diagnostic = state.get("diagnostic_results", {}).get(result.get("diagnostic_key"), {})
-            checkpoint()
-            if result["status"] != "completed" or diagnostic.get("status") != "completed":
-                assert source == original
-                return {
-                    "status": "needs_review",
-                    "reason": "judge_request_or_validation_failed",
-                    "scored_this_invocation": completed,
-                    "qa_id": target["qa_id"],
-                }
+        targets = iter(scoring_targets(state, batch, "missing"))
+        failure = None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
+            pending = {}
+
+            def dispatch(targets=targets, batch=batch, pending=pending):
+                target = next(targets, None)
+                if target is None:
+                    return
+                with lock:
+                    if target["key"] not in batch["targets"]:
+                        batch["targets"].append(target["key"])
+                pending[pool.submit(service.score, batch, target)] = target
+
+            for _ in range(concurrency):
+                dispatch()
+            while pending:
+                done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+                for future in done:
+                    target = pending.pop(future)
+                    result = future.result()
+                    completed += 1
+                    diagnostic = state.get("diagnostic_results", {}).get(result.get("diagnostic_key"), {})
+                    checkpoint()
+                    if result["status"] != "completed" or diagnostic.get("status") != "completed":
+                        failure = failure or target["qa_id"]
+                if failure is None:
+                    for _ in done:
+                        dispatch()
+        if failure is not None:
+            assert source == original
+            return {
+                "status": "needs_review",
+                "reason": "judge_request_or_validation_failed",
+                "scored_this_invocation": completed,
+                "qa_id": failure,
+            }
     state["scoring_summaries"] = summarize_batches(state)
     checkpoint()
     assert source == original
@@ -115,7 +139,7 @@ def main(args):
         http=HttpxJsonClient(), judge_url=url, judge_model=model, judge_api_key=key, cancel=threading.Event()
     )
     try:
-        terminal = score_saved(source, protocol, args.output, runner)
+        terminal = score_saved(source, protocol, args.output, runner, concurrency=args.concurrency)
     except Exception as exc:
         save(
             args.output / "terminal.json",
@@ -135,4 +159,5 @@ if __name__ == "__main__":
     parser.add_argument("--config-root", type=Path, required=True)
     parser.add_argument("--secret-env", type=Path, required=True)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--concurrency", type=int, default=1)
     raise SystemExit(main(parser.parse_args()))
