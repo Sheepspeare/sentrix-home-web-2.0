@@ -92,19 +92,24 @@ place / time / duration / amount / count / person / media_set / description / bo
 - 做了什么 / 什么活动 / 描述 / 画面 / 场景 / 穿着 / 布置 / 动作 -> description
 - 住院号 / 号码 / 客户 / 产品 / 结果 / 数值 / CRP -> value
 - 哪几类 / 哪几种 / 哪些类别 / 哪些种类 / 什么类型 / 哪次活动 / 哪场活动 -> description
-  即使句子里有地点，地点只放 scope，value_type 仍必须是 description。
-问句里同时出现时间/地点和真正诉求时，value_type 由诉求决定，时间和地点只进 scope。
+  即使句子里有地点，地点只放 conditions，value_type 仍必须是 description。
+问句里同时出现时间/地点和真正诉求时，value_type 由诉求决定，时间和地点只进 conditions。
 例如“2017年那场婚礼一共花了多少钱”的 value_type 是 amount，不是 time。
-scope 的键只能是 event / time / place / person；能从问题确定的事件、地点、人物、时间必须写上，
-不确定就输出空对象 {{}}；time 只放时间表达式（年份/日期/季节），地名不能塞进 time。
+查询条件只写 conditions；先按用户原问题确定每项条件的语义角色，再选择承载证据的照片或正文。
+旅行、住宿、活动发生时间是 time/event；邮件发送或文档生成时间是 time/document；
+用户明确问拍摄或录制日期时才是 time/capture。选择 photo_set 不会把事件时间改成拍摄时间。
+用户询问访问过的城市时，访问发生日期保持 event，即使最终从照片或截图取证。
+地名按实际含义选择拍摄地、文中地点、会场、出发地或目的地，不从证据媒体类型推定角色。
+没有条件写 []。不输出 scope，程序从带角色的条件生成兼容展示字段。
 题设“今天是 / Today is / as of”给出日期时，以题设日期为参考。回顾“最近一次 / most recently”
-的 time 写“截至YYYY-MM-DD”，包含该日及以前；只问该日才填该日，比较历史时期时保留各自区间。
-person 只填要求出镜或确认身份的人，保留原姓名或别名；同张合照的多人用顿号连接。
-正文、幻灯片、招牌里的主体或作者放 event，不用人脸姓名筛选；要求某人的照片时另声明照片需求。
+的 time 条件写“截至YYYY-MM-DD”，包含该日及以前；只问该日才填该日，比较历史时期时保留各自区间。
+person 条件按出镜者、拍摄者、作者或叙述者区分，保留原姓名或别名；同张合照的多人用顿号连接。
+正文、幻灯片、招牌里的机构主体放 event，人物作者用 person/author，不用人脸姓名筛选；
+要求某人的照片时另声明照片需求。
 不同人物的独立问题用各自的需求；不把排除的人或尚待识别的人写成出镜筛选；拍摄者写在conditions中，role=photographer。
 “我的相册”“我做过什么 / I cooked”等叙述表示当前相册的活动记录，不要求人脸身份，person 留空；
 “我出镜 / photos showing me”“我和某人的合照”才需要保留人物筛选，姓名和真实身份条件不得删除。
-任何字段都禁止输出 <...> 占位符；scope 里禁止写“未知”“unknown”“n/a”。
+任何字段都禁止输出 <...> 占位符；conditions 里禁止写“未知”“unknown”“n/a”。
 
 只声明回答问题所必需的最小证据集合，不要把检索步骤本身当成答案证据。规则：
 - goal 用简体中文并保留完整语义（英文 goal 会让检索与中文描述失配）。
@@ -253,16 +258,6 @@ def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
     “does not match the expected peg-native format”。
     """
     string = {"type": "string"}
-    scope = {
-        "type": "object",
-        "properties": {
-            "event": string,
-            "time": string,
-            "place": string,
-            "person": string,
-        },
-        "additionalProperties": False,
-    }
     requirement = {
         "type": "object",
         "properties": {
@@ -274,7 +269,6 @@ def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
             "description": string,
             "predicate": string,
             "value_type": {"type": "string", "enum": [item.value for item in RequirementValueType]},
-            "scope": scope,
             "conditions": condition_schema(),
             "required": {"type": "boolean"},
         },
@@ -284,7 +278,6 @@ def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
             "description",
             "predicate",
             "value_type",
-            "scope",
             "conditions",
             "required",
         ],
@@ -350,11 +343,11 @@ def correction_hint(reason: str) -> str:
             "即使你认为可以直接回答，也要声明取到哪些证据才算数。"
         ),
         "invalid_requirement": (
-            "每条 requirement 必须带 predicate、value_type、scope、required。"
+            "每条 requirement 必须带 predicate、value_type、conditions、required。"
             "value_type 只能取 place/time/duration/amount/count/person/media_set/"
             "description/boolean/value；required 必须是 true 或 false；"
-            "scope 必须是对象且只能有 event/time/place/person 四个键，"
-            "不确定就写空对象 {}；任何字段都不能保留 <...> 占位符或写“未知”。"
+            "conditions 必须是数组，逐项保留条件含义与角色；无条件写 []。"
+            "任何字段都不能保留 <...> 占位符或写“未知”。"
         ),
     }
     return (

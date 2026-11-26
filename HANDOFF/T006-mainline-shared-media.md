@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27 00:24｜统一Planner条件表达，保留实际失败证据
+
+a05b9286已验388源码/18表/原16答/保护PID后push，00:12:54仅8303/8883单次启动2f8763同16题/8并发；当前运行不热改。前一轮f6d1ac5f已16答固定revision取证且Flash Judge齐：QS62.5%，260HTTP/281工具/6187373含视觉Token，较融合首版10532237低，仍高于v6同16的4041482，质量未接受。原答/raw保持。
+
+a05真实March轨迹仍把旅行时间写capture，说明仅追加规则不足。发现Planner原提示与schema还要求scope，和conditions重复表达。下一修正删除模型生成scope，程序继续从conditions投影展示；先判用户时间/地点角色再选择证据载体。183既有条件/规划回归及新增单一表达测试通过中。独立Planner两例用正式schema实际返回event和capture且解析通过，0 QA/Judge（只2诊断Planner请求，另保留最初未带schema而格式非法的2请求，不混16题成本）。无每工具新模型调用、不按GT/题号修复。等待a05同16结束后新独立stage测试；02:00前全量授权保持。源audit/20261126-flash-condition-fusion/planner-contract-preflight/schema-1。
+
 ## 2026-11-27 00:00｜时间角色修正与全量前准备
 
 f6d1ac5f同16题现11答/8并发，仍运行且无fatal。发现March旅行时间误作capture，已补Planner event/document/capture角色规则，pending事件/文档日期进入内容检索词，精确统计不放宽；133项相关回归通过，部署helper支持独立下一stage并保留原16答。原408回归基础保持。当前未切第二版。磁盘实时/home57GB、根盘16GB，容量足够，未执行已准备的RAM数据库迁移。下一步等16暂停→固定revision取证/Flash评分→新stage局部部署验18表/16答/保护PID→同16后02:00前同run全1013，答题8/Judge2，不重发已launch QA。

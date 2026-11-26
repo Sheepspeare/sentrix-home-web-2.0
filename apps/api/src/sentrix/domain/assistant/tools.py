@@ -635,7 +635,7 @@ def planner_query_capabilities() -> str:
     query_tools = [spec for spec in TOOL_SPECS if spec.name in {"search_memories", "query_memory_facts"}]
     names = ", ".join(spec.name for spec in query_tools)
     return (
-        f"查询入口：{names}。每条需求输出conditions数组；scope仅作展示，由conditions投影。"
+        f"查询入口：{names}。每条需求只输出conditions数组，不输出scope；展示范围由程序投影。"
         "每条件写dimension/value/role/required/anchor/relation/source_text；source_text复制用户原文，执行状态由程序维护；没有条件用[]。"
         "dimension与role：time=capture/event/document；place=capture/mentioned/venue/origin/destination；"
         "person=depicted/photographer/author/narrator/animal；media/source/quantity=asset；"

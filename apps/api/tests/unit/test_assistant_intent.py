@@ -455,6 +455,32 @@ def test_planner_uses_structured_completion_when_available():
     assert call["chat_template_kwargs"] == {"enable_thinking": False}
 
 
+def test_role_conditions_parse_without_a_second_scope_expression():
+    question = "Where did I visit in late March 2022?"
+    payload = json.loads(declaration("photo_set", value_type="place"))
+    row = payload["declaration"]["requirements"][0]
+    row.pop("scope")
+    row["conditions"] = [
+        {
+            "dimension": "time",
+            "value": "2022-03-21/2022-04-01",
+            "role": "event",
+            "required": True,
+            "anchor": "",
+            "relation": "is",
+            "source_text": "late March 2022",
+        }
+    ]
+    model = StructuredPlannerModel(json.dumps(payload))
+    result = GoalPlanner(model).declare(question, scope_id=SCOPE)
+    assert result.ok and len(model.calls) == 1
+    assert result.requirements[0].conditions[0].role == "event"
+    assert "time" not in dict(result.requirements[0].scope)
+    schema = model.calls[0]["response_format"]["json_schema"]["schema"]
+    generated = schema["properties"]["declaration"]["properties"]["requirements"]["items"]
+    assert "scope" not in generated["properties"] and "scope" not in generated["required"]
+
+
 def test_a_clean_declaration_costs_exactly_one_call():
     model = ScriptedPlannerModel([declaration("photo_set")])
 
