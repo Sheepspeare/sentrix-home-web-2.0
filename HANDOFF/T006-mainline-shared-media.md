@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜共同296题采集恢复，成功答卷保持
+
+wait e488adff失败在GET采集阶段，Judge0请求：原运行中列表index变动，qa_id核验拦截错位。两组新增213题其实全部采齐，原494回执及426新答卷文件完整保持；仅按UUID重新定位并固定revision补核limited24/large74份旧答案，旧83的答案fingerprint和全部428评分文件SHA保持。恢复helper d80408e7仅本机采集工具，3回归/Ruff/compile与真实98项补核通过，无远端业务改动。原失败记录保留、callback-e488adff-reconciled已存。
+
+恢复1输入为各213新题，沿冻结关思考Flash/native_v2，每组2并发/跨组同时；旧166基线分不重评。评分登记与启动以baseline-common-1/recovery-1/{launch-registration,stage-started,started}为准，完成后动态核实际HTTP数/程序评分和唯一raw，再合并旧83形成共同296题比较。原全量wake及4并发、候选冻结/11月27日15时数据快照17时汇报保持；不重放QA/旧pipeline、不扩大83。详见候选audit/flash-judge-20261126/baseline-common-1/{failure-diagnosis,callback-e488adff-reconciled}及recovery-1/{README,input-validation,collection-terminal,original-collection-preservation}。
+
 ## 2026-11-26｜v12评分验收，转共同296题增量补评
 
 v12同16 Flash Judge已齐9/16=56.25%，0缺分；15次真实Judge HTTP按response ID与完整请求/响应SHA唯一匹配共享raw，全200、实际关思考/温0/max2048、22626Token，另1列表程序评分。旧412份评分文件逐SHA保持，累计428份有效分。回调a3d36490已reconciled；评分证据见候选audit/flash-judge-20261126/v12/{RESULTS,acceptance,score-summary,paired-scores,local-integrity,judge-http-exact-verification,callback-a3d36490-reconciled}。对v11无改善/1退化（2022三月下旬漏Great Yarmouth），对v9/v6同16各1改善/2退化；Agent Token7590763较v11仅低2.16%，综合效果未通过，继续保留v6同83成熟候选，不新增v13/v14或扩大83。002必要送图、观察及答案使用分别核验，005限额触发/完成/质量/时延分别报告，均未结项。
