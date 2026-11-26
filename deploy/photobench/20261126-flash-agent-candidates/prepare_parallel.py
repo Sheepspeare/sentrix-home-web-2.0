@@ -16,8 +16,8 @@ PREFIX = "sentrix-flash-query-v7"
 PORTS = (8300, 8880, 100, 600)
 
 
-def candidate_module(release):
-    path = release / "deploy/photobench/20261126-flash-agent-candidates/prepare.py"
+def candidate_module():
+    path = Path(__file__).with_name("prepare.py")
     spec = importlib.util.spec_from_file_location("parallel_candidate_helpers", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -47,7 +47,7 @@ def compose_release(release, evaluation_source, target):
 
 
 def prepare(release, payload_path):
-    p = candidate_module(release)
+    p = candidate_module()
     h = p.helper
     revision = json.loads((release / "build-info.json").read_text())["revision"]
     manifest = json.loads((release / "source-sha256.json").read_text())
@@ -81,6 +81,51 @@ def prepare(release, payload_path):
     shutil.copy2(p.BASELINE / "model-profile.json", BASE / "model-profile.json")
     source = json.loads((h.SNAPSHOT / "memory-fingerprints.json").read_text())
     _target, data = p.clone_album("large", source)
+    finish_preparation(p, release, revision, data, payload, source, protected)
+
+
+def resume_after_clone(release, payload_path):
+    """Continue the verified SQLite clone stopped before cache creation."""
+    p = candidate_module()
+    h = p.helper
+    intent = json.loads((BASE / "intent.json").read_text())
+    revision = json.loads((release / "build-info.json").read_text())["revision"]
+    assert revision == intent["revision"]
+    assert not (BASE / "prepared.json").exists()
+    p.check_ports()
+    for role in ("api", "eval"):
+        assert not (Path.home() / ".config/systemd/user" / p.unit_name("large-" + role)).exists()
+    data = BASE / "large/data"
+    assert not (data / "qdrant").exists() and not (data / "qdrant").is_symlink()
+    assert not p.cache_path("large").exists()
+    assert not (BASE / "large/config").exists()
+    clone = json.loads((BASE / "large/clone-verification.json").read_text())
+    source = json.loads((h.SNAPSHOT / "memory-fingerprints.json").read_text())
+    assert clone["memory_fingerprints"] == source
+    assert clone["snapshot_db_sha256"] == h.sha(h.SNAPSHOT / "sentrix.db")
+    manifest = json.loads((release / "source-sha256.json").read_text())
+    assert manifest and all(h.sha(release / name) == digest for name, digest in manifest.items())
+    protected = intent["protected"]
+    assert all(Path(f"/proc/{pid}/stat").read_text().split()[21] == tick for pid, tick in protected.items())
+    with sqlite3.connect(f"file:{data}/sentrix.db?mode=ro", uri=True) as db:
+        assert db.execute("pragma quick_check").fetchone()[0] == "ok"
+        assert h.memory_fingerprints(db, source, data) == source
+        paths = [row[0] for row in db.execute("select path from assets")]
+        assert len(paths) == 13356 and all(Path(path).is_file() for path in paths)
+    payload = json.loads(payload_path.read_text())
+    assert payload["qa_concurrency"] == 2 and payload["defer_scoring"] is True
+    assert payload["reasoning"] is True and len(set(payload["qa_priority_ids"])) == 83
+    h.save(
+        BASE / "resume-after-clone-intent.json",
+        {"revision": revision, "cache": str(p.cache_path("large")), "at": time.time()},
+    )
+    p.build_album_cache("large", data)
+    finish_preparation(p, release, revision, data, payload, source, protected)
+
+
+def finish_preparation(p, release, revision, data, payload, source, protected):
+    h = p.helper
+    evaluation_source = p.BASELINE / "release/apps/photobench"
     p.configure_group("large", PORTS, revision, data)
     h.save(BASE / "large/dispatch-control.json", {"concurrency": 2, "pause_after_completed": 16})
     h.save(BASE / "large/run-payload.json", payload_for_parallel(payload))
@@ -133,12 +178,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--release", type=Path, required=True)
     parser.add_argument("--payload", type=Path, required=True)
+    parser.add_argument("--resume-after-clone", action="store_true")
     args = parser.parse_args()
     try:
-        prepare(args.release, args.payload)
+        if args.resume_after_clone:
+            resume_after_clone(args.release, args.payload)
+        else:
+            prepare(args.release, args.payload)
     except BaseException as error:
         if BASE.exists():
-            (BASE / "prepare-error.json").write_text(
+            error_name = "resume-after-clone-error.json" if args.resume_after_clone else "prepare-error.json"
+            (BASE / error_name).write_text(
                 json.dumps({"type": type(error).__name__, "error": str(error), "at": time.time()})
             )
         raise

@@ -13,14 +13,32 @@ def module():
 
 def test_parallel_configuration_uses_distinct_units_ports_and_directory():
     op = module()
-    release = Path(__file__).parents[3]
-    p = op.candidate_module(release)
+    p = op.candidate_module()
     assert p.GROUPS == {"large": (8300, 8880, 100, 600)}
     assert p.unit_name("large-api") == "sentrix-flash-query-v7-large-api.service"
     assert p.BASE != p.BASELINE
     assert (
         Path("/home/realmagic/xy/benchmarks/atm-bench/experiments/flash-agent-candidates-20261126") != p.BASE
     )
+
+
+def test_parallel_cache_is_isolated_and_preserves_existing_candidate(tmp_path, monkeypatch):
+    op = module()
+    p = op.candidate_module()
+    assert p.cache_path("large") == Path("/dev/shm/sentrix-flash-query-v7-parallel-20261126-large")
+    old = tmp_path / "sentrix-flash-candidates-20261126-large"
+    old.mkdir()
+    (old / "sentinel").write_text("active-v6")
+    cache = tmp_path / p.cache_path("large").name
+    data = tmp_path / "parallel/data"
+    data.mkdir(parents=True)
+    monkeypatch.setattr(p, "cache_path", lambda group: cache)
+    calls = []
+    monkeypatch.setattr(p.helper, "build_cache", lambda target: calls.append(target))
+    p.build_album_cache("large", data)
+    assert (data / "qdrant").resolve() == cache
+    assert (old / "sentinel").read_text() == "active-v6"
+    assert calls == [data]
 
 
 def test_parallel_payload_changes_only_transport_and_control():

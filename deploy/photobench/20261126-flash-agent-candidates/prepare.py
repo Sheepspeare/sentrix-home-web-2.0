@@ -102,12 +102,20 @@ def clone_album(group, source_fingerprints):
             "media": "read-only snapshot shared by symlink",
         },
     )
-    cache = Path("/dev/shm") / f"sentrix-flash-candidates-20261126-{group}"
+    build_album_cache(group, data)
+    return target, data
+
+
+def cache_path(group):
+    return Path("/dev/shm") / f"sentrix-{BASE.name}-{group}"
+
+
+def build_album_cache(group, data):
+    cache = cache_path(group)
     cache.mkdir(mode=0o700)
     (data / "qdrant").symlink_to(cache, target_is_directory=True)
     helper.BASE = BASE
     helper.build_cache(data)
-    return target, data
 
 
 def configure_group(group, ports, revision, data):
