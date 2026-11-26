@@ -148,7 +148,7 @@ def verify(config):
     requests = list(found.values())
     return {
         "matched_calls": len(requests),
-        "http_status_counts": dict(collections.Counter(str(r["http_status"]) for r in requests)),
+        "http_status_counts": dict(collections.Counter(str(r.get("http_status")) for r in requests)),
         "requests": requests,
         "budget_finalization": finalization,
         "match": (

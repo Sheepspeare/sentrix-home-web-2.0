@@ -226,3 +226,53 @@ def test_condition_verifier_requires_exact_query_and_structured_updates_and_fact
     assert not matches({**payload, "query": "other", "facts": [{"value": "question"}]})
     assert not matches({**payload, "condition_updates": {}})
     assert not matches({**payload, "facts": "question"})
+
+
+def test_timeout_request_is_preserved_without_claiming_success(tmp_path):
+    archive = tmp_path / "timeout.gz"
+    with gzip.open(archive, "wt") as stream:
+        json.dump(
+            {
+                "request": {
+                    "model": "qwen3.8-flash",
+                    "enable_thinking": False,
+                    "temperature": 0,
+                    "max_tokens": 4096,
+                    "messages": [{"role": "user", "content": "question"}],
+                }
+            },
+            stream,
+        )
+    log = tmp_path / "requests.jsonl"
+    log.write_text(
+        json.dumps(
+            {
+                "id": "timeout",
+                "started_at": 1,
+                "has_image": False,
+                "error_type": "ReadTimeout",
+                "archive": str(archive),
+            }
+        )
+    )
+    result = module().verify(
+        {
+            "log": str(log),
+            "start": 0,
+            "end": 2,
+            "questions": {"q": "question"},
+            "expected": [
+                {
+                    "id": "attempt1",
+                    "qa_id": "q",
+                    "signature": [None, None, None, False],
+                    "internal": False,
+                    "start": 0,
+                    "end": 2,
+                }
+            ],
+        }
+    )
+    assert result["matched_calls"] == 1
+    assert result["http_status_counts"] == {"None": 1}
+    assert result["requests"][0]["error_type"] == "ReadTimeout"
