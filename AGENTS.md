@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26需求002紫裙单例实测：型号／£59逐字引文、2HTTP／2935Token／0新增视觉，8保护服务保持；接现有独立8300/8880同16题完整Agent验证，正式质量待验。见T006、requirement-002-fields/citation-repair-1及v9-large-rerun。
+
+
 - 11/26 v8同16题已固定版本核验：307HTTP全200／905万Token，较原445／1737万下降但仍有Porto失败，未接受质量、不扩大；002在119四图11HTTP实测发现引用改写误触补看，已修并107回归通过，接单例复测。见T006及v8/requirement-002-fields audit。
 
 - 11/26 v6原83指定题已逐UUID核齐并暂停（22完整／60带缺口／1失败），业务3ccfa64a保持；复用旧34题固定版本，仅补采新增49题，成本与正式质量尚待全量验收。002的119四图小测独立进行，见T006及v6 audit/priority-83-review。
