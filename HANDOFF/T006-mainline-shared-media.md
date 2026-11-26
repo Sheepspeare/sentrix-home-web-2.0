@@ -1,5 +1,18 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v10同16题真实复测与原包验收，接Flash补评
+
+wait6980f975已completed，run d11fd6同16逐UUID齐并dispatch_paused，3complete／13partial／0failed、fatal=null。f1dd6070局部部署验18表／旧16答SHA／12PID并push通过，原实验未切。固定revision全content／trace分页取证通过，266HTTP（239主＋27去重视觉）唯一raw全200／关思考／配置一致，Token5445454，工具296，14本地预检不作HTTP；原包核验无模型请求。对v9 Token5572245仅降2.28%，对v6同16的4041482仍高34.74%，不能据成本称完成。
+
+四道字段题全部8字段保留真实引文、条件缺口仍ambiguous；13真实HTTP请求证新提醒送达4题，第一次字段核验后补看次数v9的5→v10的0。但全16视觉调用25→27，事件条件补证失败后继续搜索，仍有全局无效消耗。event resolved／evidence_anchor_required／只接受pending闭环待修，不能放宽必要人物和事件条件。Flash Judge同协议16份输入与旧1013定义SHA已固定，每任务2并发，准备只新评v10，旧380成功分保持；002／005未结项。见候选audit/v10-large-rerun/review/{RESULTS,summary,collection-receipt,v10-http-exact-verification,mechanism-followup,reminder-raw-delivery}与flash-judge-20261126/v10。旧回调已reconciled，不重挂QA。
+
+
+## 2026-11-26｜v10复测任务已登记
+
+独立8300／8880的部署与同16复测流程已交wake，wait `6980f975-2d81-4d1b-b91b-1abd7d38ceaf`；源码f1dd6070（含379a22b5字段修复）已本机提交、543文件远端SHA／compile通过。当前以audit/v10-large-rerun实际deployment与first-sixteen回执为准，任务登记不当作QA已完成。部署验18表、旧16答SHA和保护进程后push再单次发QA，16后暂停；失败只续失败阶段，不重放driver。
+
+上传预检曾被旧intent早期PID1941349拦截，未部署／QA0；systemd日志确认limited API于02:53已换1955697且NRestarts0，原30c版本和答题正常。旧intent／失败上传包保留，v10专用protection文件固定当前12进程：保留9个仍在旧进程并补实际limited API／eval和24槽gateway。未修改原实例或移除保护检查。两原run本轮只读核limited637／large230，仍running／fatal=null／4并发。home约16.27GB，保护服务保持。
+
 ## 2026-11-26｜用户授权379字段修复同16题复测
 
 用户要求拿已推送修复代码真实复测并继续002／005。v10只在独立8300／8880复测同16；复用既有SQLite／缓存和冻结关思考相册。v9 run aa3735已GET核16暂停、fatal=null、固定revision完整答案16份SHA保持，归档仅处理997未执行调度。新增parallel-v10部署stage只指向aa3735，28部署监控回归／Ruff通过；业务修复379a22b5原121回归与离线8原响应验证保持。部署前home真实16.45GB可用，独立相册、原baseline／v6／119high与保护服务保持。
