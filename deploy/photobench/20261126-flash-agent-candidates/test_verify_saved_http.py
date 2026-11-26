@@ -100,3 +100,73 @@ def test_vision_prompt_disambiguates_same_usage():
     m = module()
     assert m.matches(e, record, {"messages": [{"content": [{"text": "read label"}]}]}, {})
     assert not m.matches(e, record, {"messages": [{"content": [{"text": "identify food"}]}]}, {})
+
+
+def test_saved_response_tool_ids_disambiguate_identical_concurrent_requests(tmp_path):
+    records = []
+    for index, ids in enumerate([["other_a", "other_b"], ["saved_b", "saved_a"]]):
+        archive = tmp_path / f"{index}.gz"
+        with gzip.open(archive, "wt") as stream:
+            json.dump(
+                {
+                    "request": {
+                        "model": "qwen3.8-flash",
+                        "enable_thinking": False,
+                        "temperature": 0,
+                        "max_tokens": 4096,
+                        "messages": [{"role": "user", "content": "question"}],
+                    },
+                    "response_body": json.dumps(
+                        {"choices": [{"message": {"tool_calls": [{"id": i} for i in ids]}}]}
+                    ),
+                },
+                stream,
+            )
+        records.append(
+            {
+                "id": str(index),
+                "started_at": 1,
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "prompt_tokens_details": {"cached_tokens": 2048},
+                },
+                "finish_reasons": ["tool_calls"],
+                "has_image": False,
+                "http_status": 200,
+                "archive": str(archive),
+            }
+        )
+    log = tmp_path / "log"
+    log.write_text("\n".join(json.dumps(r) for r in records))
+    expected = {
+        "id": "call",
+        "qa_id": "q",
+        "signature": [5, 2, "tool_calls", False],
+        "internal": False,
+        "start": 0,
+        "end": 2,
+        "cached_tokens": 2048,
+        "response_tool_call_ids": ["saved_a", "saved_b"],
+    }
+    config = {
+        "log": str(log),
+        "start": 0,
+        "end": 2,
+        "questions": {"q": "question"},
+        "expected": [expected],
+    }
+    m = module()
+    assert m.verify(config)["requests"][0]["id"] == "1"
+
+    # A partial set cannot identify the saved response.
+    expected["response_tool_call_ids"] = ["saved_a"]
+    with pytest.raises(AssertionError, match="call"):
+        m.verify(config)
+
+    # The same saved IDs in two archives remain ambiguous.
+    expected["response_tool_call_ids"] = ["saved_a", "saved_b"]
+    records.append({**records[1], "id": "duplicate"})
+    log.write_text("\n".join(json.dumps(r) for r in records))
+    with pytest.raises(AssertionError, match="extra archive"):
+        m.verify(config)

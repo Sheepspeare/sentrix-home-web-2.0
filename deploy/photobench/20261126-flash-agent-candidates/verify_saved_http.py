@@ -8,12 +8,16 @@ import json
 from pathlib import Path
 
 
-def matches(expected, record, request, questions):
+def matches(expected, record, request, questions, response=None):
     if not expected["start"] <= record["started_at"] <= expected["end"]:
         return False
     if "cached_tokens" in expected:
         cached = (record.get("usage") or {}).get("prompt_tokens_details") or {}
         if cached.get("cached_tokens") != expected["cached_tokens"]:
+            return False
+    if "response_tool_call_ids" in expected:
+        calls = (response or {}).get("choices", [{}])[0].get("message", {}).get("tool_calls", [])
+        if sorted(c.get("id", "") for c in calls) != sorted(expected["response_tool_call_ids"]):
             return False
     messages = request.get("messages", [])
     texts = [m["content"].strip() for m in messages if isinstance(m.get("content"), str)]
@@ -55,7 +59,12 @@ def verify(config):
         with gzip.open(record["archive"], "rt") as f:
             raw = json.load(f)
         request = raw["request"]
-        candidates = [e for e in candidates if matches(e, record, request, config["questions"])]
+        response = (
+            json.loads(raw["response_body"])
+            if any("response_tool_call_ids" in e for e in candidates)
+            else None
+        )
+        candidates = [e for e in candidates if matches(e, record, request, config["questions"], response)]
         if not candidates:
             continue
         assert len({e["qa_id"] for e in candidates}) == 1, (signature, "ambiguous turns")
@@ -108,7 +117,8 @@ def verify(config):
         "requests": requests,
         "budget_finalization": finalization,
         "match": (
-            "usage/finish/image, cached tokens when recorded, full question or visual prompt, "
+            "usage/finish/image, cached tokens and response tool-call IDs when recorded, "
+            "full question or visual prompt, "
             "per-turn time window; one use per call/raw"
         ),
         "generated_model_requests": 0,
