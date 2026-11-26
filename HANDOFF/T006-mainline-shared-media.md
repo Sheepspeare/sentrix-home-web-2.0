@@ -1,5 +1,15 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜3343次原包核验通过，同图提醒送达已证但未证明收敛
+
+c672d3a8的44项未匹配均为既有运行中事实核查：21个faithfulness_judge、23个claim_verifier把完整问题嵌入固定“用户问题：…”格式，原helper只核独立消息。0d39bdd3按保存call_type核完整问题及对应固定后续段落，继续保留usage／缓存／时间／工具ID与raw唯一性检查。5本机测试／Ruff／格式／compile及独立ops-http-prompts-0d39bdd3的SHA20951395／compile通过；原上轮耗时2.1秒，本轮在独立http-recovery-3前台有界执行成功，无新wake或模型调用。
+
+原large83的2781＋v6当时34题562全部一raw一call精确匹配，跨组0复用；3343次均HTTP200、实际Flash关思考／温0／输出上限≤4096，原包usage与105456493／16741902含去重视觉Token逐组完全一致。117题固定revision及原8／原11答案SHA保持，acceptance仅接受只读取证；21项原large失败及1015本地预检按原因保留，不能据HTTP200判断答对。根summary／acceptance／RESULTS已更新，旧三轮失败和原包保持，c672回调reconciled。
+
+ACL暴雨题38份精确非视觉原包下载核SHA：同一条复用提醒确实随工具消息进入后续13次请求；送达后仍一次inspect既读图，新增海报论文名而无组织者，不能宣称收敛。更正前交接3／3次inspect的说法：两资产各2次inspect，另分别1／2次OCR；旧表混列工具类型。证据visual-reuse-verification/verification.json。5旧group仅March／Porto在此v6子集，0本地预检但语义未解；条件补证为原large15题152人物未解、v6一题4次，以及13／4次非空过滤未落实，已补query-condition-review/large83-v6-raw-verified-followup.json。
+
+最新既有监控快照（UTC02:30）原limited338／原large97／v642题，均running／无fatal_error、4／4／2并发，业务30c／30c／3cc保持。原全量wake3d304eca／22da8147、v6到83暂停286c0dcb保持，不重复POST／采集／监控；v6尚未全83，不扩大。正式质量仍待11/30北京时间00:00豆包周额度恢复，0有效分不重试／换协议，待分不作0。查询条件及PhotoBench身份方案尚未实现部署；11/27北京15统计17汇报。验收与报告见双基线audit/large-priority-83-review/。
+
 ## 2026-11-26｜相同缓存并发响应用轨迹工具ID区分，恢复第二次原包核验
 
 c0acf2ca在原large阶段因第一步Agent的两个并发原包冲突失败，候选核验尚未启动、两组无整组成功receipt。两响应输入／Token／缓存2048一致，保存工具轨迹精确对应large的两个tool_call_id，因此不按耗时猜测或任意选包。helper c8ff439b增加可选完整响应工具ID约束；原large2503／v6的482次工具响应都有完整保存ID，工具名多重集与模型记录一致，配置来源SHA已存。原缓存／问题／时间／usage与一包一次约束保持。
