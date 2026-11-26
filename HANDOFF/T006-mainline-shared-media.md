@@ -1,6 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
 
+## 2026-11-26｜直连Flash五次失败与历史豆包同16核对
+
+五次失败均本地prompt_too_long：limited Glasgow236028Token、三月225613、Porto225685，large后三月/Porto同量级，旧上限16384；界面model_error不能归因云端或16并发。失败item及large三月固定revision trace/错误已保存，尚非全16完整取证，不重答QA。
+
+历史豆包最终84baa3按16UUID核齐，16定义SHA一致；15有效分合计6（QS40%）、1缺分不记0。旧Judge豆包/scoring-v5，6正确9零分含鸡翅真实502；三月无分也有502与历史上下文溢出。新Flash仍待同协议评分，不能混裁判比较。证据doubao-code-direct/recovery-1/failure-and-doubao-same16.md及doubao-same16-historical-scores.json，原分/原服务保持。
+
+
 ## 2026-11-26｜新授权原Doubao代码Flash直连双实例
 
 已实际部署且两组单次启动成功：北京时间21:30:49，limited fe7191（8301/8881、20/30）与large 6e07d2（8302/8882、100/600），各16答题并发，原Doubao scope，16K/2048/Planner原配置。334产品源码SHA与历史一致，502部署文件远端SHA/compile通过；18表逐指纹及14个既有保护PIDticks保持，0新记忆embedding。直连云端健康请求实际200/enable_thinking=false，HTTP压缩原包按组保存。

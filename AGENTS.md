@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26直连Flash五次失败已核本地提示词22.6万–23.6万Token超过旧16K上限；历史豆包同16仅15有效分/6分（40%），1缺分，旧Judge口径单列。见T006及doubao-code-direct/recovery-1/failure-and-doubao-same16.md。
+
+
 - 11/26原Doubao代码/记忆Flash直连双实例已启动fe7191/6e07d2，各16并发20/30与100/600，先16后暂停；334源码/18表/14保护PID已验。首启预检误带新配置已修、QA0，实际启动见doubao-code-direct/recovery-1及T006，原全量保持。
 
 - 11/26原limited771快照Flash评分已全齐：QS43.6193%、0缺分，旧分保持；末76题64HTTP原包全200/关思考。共同296有限42.53%/大组49.44%；原答题最新799/313各4并发继续，见T006及limited-snapshot-771/RESULTS.md。
