@@ -26,6 +26,14 @@ STAGES = {
         "answer_count": 16,
         "answer_word": "sixteen",
     },
+    "parallel-v10": {
+        "runs": {"large": "20261126-150016-2026.11.17-atm-sources-addresses-big_model-aa3735"},
+        "previous_revision": "5c45b791b348a468eba8ec4c5194f86a1145a537",
+        "previous_release": "release-5c45b791",
+        "accepted": "v9",
+        "answer_count": 16,
+        "answer_word": "sixteen",
+    },
 }
 
 

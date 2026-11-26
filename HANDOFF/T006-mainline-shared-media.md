@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜用户授权379字段修复同16题复测
+
+用户要求拿已推送修复代码真实复测并继续002／005。v10只在独立8300／8880复测同16；复用既有SQLite／缓存和冻结关思考相册。v9 run aa3735已GET核16暂停、fatal=null、固定revision完整答案16份SHA保持，归档仅处理997未执行调度。新增parallel-v10部署stage只指向aa3735，28部署监控回归／Ruff通过；业务修复379a22b5原121回归与离线8原响应验证保持。部署前home真实16.45GB可用，独立相册、原baseline／v6／119high与保护服务保持。
+
+本次主验引文保留和条件缺口后是否重复读同字段，仍保留未落实人物／事件条件；event resolved与evidence_anchor_required闭环另待修，不混进本次变量。Agent2并发、100／600、100步3600秒、Flash关思考128K4096温0retry3，首16暂停；完成后锁qa_id／revision全轨迹、原包HTTP和含视觉Token，再用既有Flash Judge关思考温0输出2048／任务各2并发评分。旧380成功分复用，不重算；质量与成本分别比较v9和v6，002／005未结项。详细阶段以候选audit/v10-large-rerun/{preflight,launch-plan,upload-verification,deployment,first-sixteen}为准；当前仅预检，尚未部署或新QA。
+
+
 ## 2026-11-26｜七组380评分验收，v9未优于v6，字段条件缺口分离
 
 Flash Judge parallel-3 wait ef347831已完成并核原日志：380/380目标分数，复用182成功项逐内容保持，仅补198；349次真实Judge HTTP以response ID、完整payload/response SHA、usage和时间唯一对应原包，全200、实际关思考，459426Token；31份列表由程序计算。每任务各2评分并发，实测四组同时/峰值8Judge；网关24槽，Agent并发及答卷保持。生产summary的1013分母不当成目标缺分，未评不记0。评分证据接受，002/005未结项。

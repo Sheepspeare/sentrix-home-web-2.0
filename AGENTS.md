@@ -1,5 +1,8 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26用户要求用字段条件修复复测：v10独立8300/8880同16题准备中，v9十六答固定revision／SHA已核，查询相册和原实验保持；本机部署监控28回归过。见候选audit/v10-large-rerun及T006。
+
+
 - 11/26 Flash Judge七组380份已齐并核349唯一HTTP全200/关思考；v6同83得分38.55%→61.45%、Token-37.91%。v9同16为62.50%，与v6持平但Token+37.88%；002/005未结项。字段条件与引文已在本机分开，121回归和8原响应重放过、未部署。详见T006及候选audit/flash-judge-20261126/parallel-3/RESULTS.md。
 
 - 11/26 原双全量观察器同次home低2GiB告警，worker均running／4并发：limited已核598题、large216题。活动数据保持，额外存储路径待回复；各自新终态观察见双基线audit/*-full-monitor-after-disk-alert-registration.json及T006。

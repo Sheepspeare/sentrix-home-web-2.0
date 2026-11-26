@@ -10,6 +10,7 @@ import pytest
     [
         ("parallel-v8", "fcc132", "4c823eac", "release"),
         ("parallel-v9", "0e7e57", "c4bd7f72", "release-c4bd7f72"),
+        ("parallel-v10", "aa3735", "5c45b791", "release-5c45b791"),
     ],
 )
 def test_revision_targets_only_the_paused_parallel_run(
