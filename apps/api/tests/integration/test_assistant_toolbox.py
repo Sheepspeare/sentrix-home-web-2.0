@@ -2099,3 +2099,27 @@ def test_content_place_does_not_discard_an_independent_media_filter(toolbox):
     assert result.ok and result.model_visible["answer_eligible"]
     assert result.observation["filters_applied"]["media"] == "image"
     assert "place" not in result.observation["filters_applied"]
+
+
+def test_trip_time_is_content_evidence_and_never_a_capture_filter(toolbox):
+    build, _ = toolbox
+    condition = QueryCondition("time", "2022-03-21/2022-04-01", "event", source_text="late March 2022")
+    req = EvidenceRequirement("trip", EvidenceType.VISIBLE_TEXT, "旅行地点", conditions=(condition,))
+    search = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "trip"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert search.ok and search.model_visible["answer_eligible"]
+    assert "time" not in search.observation["filters_applied"]
+    assert "late March 2022" in search.observation["query"]
+    count = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "requirement_id": "trip"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert not count.ok and count.failure_reason == "unresolved_conditions"

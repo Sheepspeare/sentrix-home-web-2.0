@@ -38,7 +38,17 @@ def protected_processes():
     return protected
 
 
-def run(revision, release, *, continue_archived=False):
+def run(
+    revision,
+    release,
+    *,
+    continue_archived=False,
+    stage=STAGE,
+    previous_run="20261126-215538-2026.11.17-atm-sources-addresses-big_model-7dc9ca",
+    previous_revision="42031dfa4326cc1a5943f53d04c22f9230787b94",
+    previous_release="release",
+    accepted="fusion1",
+):
     base = prepare_fusion.BASE
     composed = base / f"release-{revision[:8]}"
     if not composed.exists():
@@ -50,15 +60,15 @@ def run(revision, release, *, continue_archived=False):
     candidate.GROUPS = {"large": prepare_fusion.PORTS}
     candidate.protected_processes = protected_processes
     revise_limited.BASE = base
-    revise_limited.STAGES[STAGE] = {
-        "runs": {"large": "20261126-215538-2026.11.17-atm-sources-addresses-big_model-7dc9ca"},
-        "previous_revision": "42031dfa4326cc1a5943f53d04c22f9230787b94",
-        "previous_release": "release",
-        "accepted": "fusion1",
+    revise_limited.STAGES[stage] = {
+        "runs": {"large": previous_run},
+        "previous_revision": previous_revision,
+        "previous_release": previous_release,
+        "accepted": accepted,
         "answer_count": 16,
         "answer_word": "sixteen",
     }
-    revise_limited.run(revision, group="large", stage=STAGE, continue_archived=continue_archived, workers=8)
+    revise_limited.run(revision, group="large", stage=stage, continue_archived=continue_archived, workers=8)
     payload_path = base / "large/run-payload.json"
     payload = json.loads(payload_path.read_text())
     payload["qa_concurrency"] = 8
@@ -73,5 +83,20 @@ if __name__ == "__main__":
     parser.add_argument("--revision", required=True)
     parser.add_argument("--release", type=Path, required=True)
     parser.add_argument("--continue-archived", action="store_true")
+    parser.add_argument("--stage", default=STAGE)
+    parser.add_argument("--previous-run")
+    parser.add_argument("--previous-revision")
+    parser.add_argument("--previous-release")
+    parser.add_argument("--accepted")
     args = parser.parse_args()
-    run(args.revision, args.release, continue_archived=args.continue_archived)
+    previous = {
+        key: value
+        for key, value in {
+            "previous_run": args.previous_run,
+            "previous_revision": args.previous_revision,
+            "previous_release": args.previous_release,
+            "accepted": args.accepted,
+        }.items()
+        if value is not None
+    }
+    run(args.revision, args.release, stage=args.stage, continue_archived=args.continue_archived, **previous)

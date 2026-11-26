@@ -1,5 +1,9 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27 00:00｜时间角色修正与全量前准备
+
+f6d1ac5f同16题现11答/8并发，仍运行且无fatal。发现March旅行时间误作capture，已补Planner event/document/capture角色规则，pending事件/文档日期进入内容检索词，精确统计不放宽；133项相关回归通过，部署helper支持独立下一stage并保留原16答。原408回归基础保持。当前未切第二版。磁盘实时/home57GB、根盘16GB，容量足够，未执行已准备的RAM数据库迁移。下一步等16暂停→固定revision取证/Flash评分→新stage局部部署验18表/16答/保护PID→同16后02:00前同run全1013，答题8/Judge2，不重发已launch QA。
+
 ## 2026-11-26 23:38｜精简候选8并发16题已启动
 
 f6d1ac5f业务已本机408回归/Ruff/compile/8模块mypy通过，run_turn仍2项既有类型错误。远端388文件SHA/compile、18记忆表、16旧答SHA、36保护进程通过后push。仅8303/8883切版，单次新QA 20261126-233757-2026.11.17-atm-sources-addresses-big_model-8f6fd7已8并发运行，16后暂停；旧7dc9ca只取消未执行调度，原答保持。首观察器因home低2GiB退出，答题未停，checkpoint-monitor只读接续、review-pipeline-recovery-1接后续采集评分，未再POST。home约1.8GiB，已本机准备15596f04只迁本实例暂停产品DB的工具，2测试及远端SHA/compile/只读probe通过；必须16暂停且无活动turn才可迁，完整gzip可还原SHA/size后释放旧副本，媒体/源快照/其他实例不动。当前尚未迁移/未启动全量，2点前全量仍为目标。

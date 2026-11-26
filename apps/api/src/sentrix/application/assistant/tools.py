@@ -595,10 +595,15 @@ class AssistantToolbox:
             query = str(bound["query"] or "").strip()
             terms = list(
                 dict.fromkeys(
-                    item.value
+                    term
                     for item, _ in compiled.pending
-                    if (item.dimension == "place" or item.dimension == "event")
-                    and item.value.casefold() not in query.casefold()
+                    for term in [item.source_text or item.value if item.dimension == "time" else item.value]
+                    if (
+                        item.dimension in {"place", "event"}
+                        or item.dimension == "time"
+                        and item.role in {"event", "document"}
+                    )
+                    and term.casefold() not in query.casefold()
                 )
             )
             bound["query"] = " ".join([query, *terms]).strip()
