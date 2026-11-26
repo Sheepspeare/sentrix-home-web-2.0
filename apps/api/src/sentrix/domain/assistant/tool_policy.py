@@ -93,7 +93,7 @@ class ToolPolicy:
             else:
                 arguments["result_set_id"] = state.current_result_set_id or ""
 
-        if call.name in {"search_memories", "query_memory_facts"} and arguments.get("condition_updates"):
+        if call.name == "query_memory_facts" and arguments.get("condition_updates"):
             evidence = arguments.get("condition_evidence")
             if not isinstance(evidence, Mapping) or evidence.get("result_set_id") not in state.result_set_ids:
                 return ToolDecision(

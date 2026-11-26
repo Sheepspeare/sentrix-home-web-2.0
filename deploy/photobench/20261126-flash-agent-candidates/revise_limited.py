@@ -97,20 +97,23 @@ def start_archive(revision, *, group="limited", stage="v2"):
     assert progress["agent_completed"] == STAGES[stage]["answer_count"] and progress["dispatch_paused"]
     assert snapshot.get("fatal_error") is None
     protected = candidate.protected_processes()
-    for role in ("api", "eval"):
-        pid = subprocess.check_output(
-            [
-                "systemctl",
-                "--user",
-                "show",
-                "-p",
-                "MainPID",
-                "--value",
-                candidate.unit_name(("large" if group == "limited" else "limited") + "-" + role),
-            ],
-            text=True,
-        ).strip()
-        protected[pid] = Path(f"/proc/{pid}/stat").read_text().split()[21]
+    for other_group in candidate.GROUPS:
+        if other_group == group:
+            continue
+        for role in ("api", "eval"):
+            pid = subprocess.check_output(
+                [
+                    "systemctl",
+                    "--user",
+                    "show",
+                    "-p",
+                    "MainPID",
+                    "--value",
+                    candidate.unit_name(other_group + "-" + role),
+                ],
+                text=True,
+            ).strip()
+            protected[pid] = Path(f"/proc/{pid}/stat").read_text().split()[21]
     data = BASE / group / "data"
     with sqlite3.connect(f"file:{data}/sentrix.db?mode=ro", uri=True) as db:
         active = db.execute(

@@ -1,6 +1,18 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v7首16实测未接受质量，修正候选发现的条件阻断
+
+独立fcc132已16答暂停，全部逐qa_id／revision取证；233HTTP原包唯一匹配且全200，Token3851311与预算相符。原同16为445HTTP／17377243Token；可配对v6同14为178→176HTTP／3740651→2035564Token。成本不能据此验收：披萨／NeurIPS／Marseille／猫视频实际被语义条件或首次无效补证／身份数据阻断，尚未正常取证。三月下旬真实筛选已收敛43条；Porto日期算错、蜂蜜33搜／9本地预检仍保留问题，正式Judge仍待周额度恢复。未扩大83。
+
+据实修复：普通搜索先执行已定筛选，未解析内容与必要身份显式保留且不作满足证据；精确统计继续严格校验。补证原子校验，失败不覆盖条件；候选搜索仍可发现材料。首次检索无需exploration开关或补证引用，Planner区分内容与事件依赖。251项业务／26项部署监控回归通过，Ruff及3模块mypy通过。下一轮仅独立8300／8880同16复测，保留v7十六答原包及SHA，旧run只归档997未执行调度，不动v6和原基线。b80回调已reconciled，不重放旧prepare／QA；报告与回执见候选audit/v7-large-rerun/parallel-run/review。
+
+## 2026-11-26｜v7独立部署验收完成，首16题实跑中
+
+缓存恢复通过：独立tmpfs从6989保存向量构建，0新embedding；18表及保护进程验收通过，7993081e已push核SHA。新版业务4c823eac已在8300／8880单次启动run尾fcc132，最新已答7／16，2并发、worker_alive=true、fatal_error=null；16后暂停核完整轨迹和同题成本／事实，当前尚无质量验收结论。原v6为72／83，原limited429／1013、large136／1013继续，版本及调度保持。证据parallel-run/{live-status,first-sixteen/launch}.json和recovery-1/{verification,push-receipt,prepare-terminal}.json，wakeb80a316e保持，不重复POST／监控。
+
 ## 2026-11-26｜独立并行测试停在缓存路径冲突，按阶段续接
+
+恢复已先登记wake b80a316e-3bbc-4ecc-9416-29a2c3163d91，driver已从已验clone阶段启动。新缓存／服务验收后自动push核7993081e，再单次发QA至16暂停；当前登记不等于答题已启动，真实launch见上级first-sixteen。
 
 新实例SQLite副本已完成，18表指纹与13356素材路径通过；旧运维helper仍使用v6固定tmpfs缓存名，因此在cache.mkdir退出，8300／8880尚未启、QA0，旧缓存未改。保留c92d2bc0日志与prepare.stderr，不重放prepare或复制DB。
 

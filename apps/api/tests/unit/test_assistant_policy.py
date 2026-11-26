@@ -720,3 +720,14 @@ def test_read_preserves_the_explicit_batch_across_searches(make_state, tool, ext
     assert foreign.action is ToolAction.DENY
     assert foreign.code == "unknown_result_set"
     assert "result_set_id" in TOOLS_BY_NAME[tool].parameters["properties"]
+
+
+def test_search_can_discover_candidates_when_an_evidence_update_has_no_reference(make_state):
+    state = make_state(profile=REASONING_PROFILE)
+    update = [{"dimension": "time", "value": "2019-08-01", "role": "capture"}]
+    search = ToolPolicy().decide(call("search_memories", query="海边", condition_updates=update), state)
+    assert search.action is ToolAction.EXECUTE
+    count = ToolPolicy().decide(
+        call("query_memory_facts", operation="count", subject="asset", condition_updates=update), state
+    )
+    assert count.action is ToolAction.DENY and count.code == "invalid_condition_evidence"

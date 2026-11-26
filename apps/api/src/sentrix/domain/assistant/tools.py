@@ -97,11 +97,10 @@ QUERY_CONTROLS = {
         "type": "string",
         "description": "本次查询对应的Planner需求ID；不同需求分别查询，避免混合范围。",
     },
-    "exploration": {
-        "type": "boolean",
-        "description": "为解析事件或身份锚点探索候选，未落实条件的候选不能作为最终结论。",
+    "condition_updates": {
+        **condition_schema(),
+        "description": "仅在已读取当前回合证据后补全pending条件；首次搜索省略此字段，不能猜造证据引用。",
     },
-    "condition_updates": condition_schema(),
     "condition_evidence": _object_schema(
         {
             "result_set_id": {"type": "string"},
@@ -117,6 +116,9 @@ SEARCH_MEMORIES = ToolSpec(
     brief="按内容词检索照片、视频、邮件或文档，返回资料预览。",
     description=(
         "按内容词检索照片、视频、邮件或文档（人/物/场景/地点/语音/正文内容）。"
+        "这是候选发现入口：未解析的事件、地点关系或身份不阻止按内容词检索；"
+        "程序执行已确定的筛选，conditions_not_applied列出待核验条件，候选须经证据确认。"
+        "第一次搜索只给query、requirement_id及已知filters；没有已读证据时不填condition_updates/condition_evidence。"
         "source_type 可限定 email 或 document；混合图文用 all。文本预览包含标题、摘要和来源ID。"
         "返回 result_set_id 和候选 preview；photo_N 只在该结果集内有效，回看或交付时一并引用 result_set_id。"
         "每条 preview 自带 captured_at（拍摄时间）/ place（**拍摄地的行政区划**，"
@@ -626,6 +628,9 @@ def planner_query_capabilities() -> str:
         "商品数量、金额、旅程次数和事件日期要取正文或图像证据，不能换成照片数。"
         "source是用户明确要求的email/document/all，模型选择某搜索渠道不新增来源限制。"
         "Agent查询引用requirement_id；新证据解析pending条件时给condition_updates与condition_evidence照片引用。"
-        "精确统计不能忽略条件；探索可暂缺锚点，但候选不等于满足所有条件。"
+        "普通事件名称和内容特征用于检索取证；只有第三天、最近一次等需先定位另一事件的条件才设pending。"
+        "search_memories自动发现候选，无需探索开关；未核验条件保留到证据确认，不阻断首次搜索。"
+        "首次搜索省略condition_updates与condition_evidence；只有读取有效结果后才用它们补全pending条件。"
+        "精确统计不能忽略必要条件；检索候选不等于满足所有条件。"
         "分组明细一次返回完整结果；过多返回query_too_broad，不分页，不任意改变用户必要范围。"
     )

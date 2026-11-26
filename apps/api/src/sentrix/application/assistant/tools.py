@@ -427,42 +427,24 @@ class AssistantToolbox:
         updates = arguments.get("condition_updates", [])
         evidence = arguments.get("condition_evidence")
         resolved_anchors = list(prior["anchors"]) if prior else []
+        update_error = None
+        updates_applied = False
         if updates:
-            if not requirement_id:
-                return _failure("requirement_required", "补全条件须指定requirement_id以复用解析结果。")
-            try:
-                updates = parse_conditions(updates)
-            except (TypeError, ValueError) as error:
-                return _failure("invalid_conditions", str(error))
-            if not isinstance(evidence, Mapping):
-                return _failure(
-                    "condition_evidence_required", "补全条件需要condition_evidence的已有结果集与图片引用。"
-                )
-            result_set = self._result_sets.get(str(evidence.get("result_set_id") or ""))
-            asset_id = result_set.resolve(str(evidence.get("asset_handle") or "")) if result_set else None
-            if result_set is None or result_set.scope_id != scope_id or not asset_id:
-                return _failure("invalid_condition_evidence", "条件依据必须是当前范围内有效的结果集图片。")
-            for update in updates:
-                matching = [
-                    item
-                    for item in conditions
-                    if item.dimension == update.dimension
-                    and item.role == update.role
-                    and item.state == "pending"
-                    and item.anchor == update.anchor
-                ]
-                if not matching or update.state != "resolved":
-                    return _failure(
-                        "invalid_condition_update",
-                        "只补全已有pending条件；保留角色、anchor及必要性，已确定条件不覆盖。",
-                    )
-                conditions = [item for item in conditions if item not in matching]
-                update = dataclasses.replace(update, required=any(item.required for item in matching))
-                if update.dimension != "event":
-                    conditions.append(update)
-                resolved_anchors.append(
-                    {"condition": update.payload(), "evidence": dict(evidence), "asset_id": asset_id}
-                )
+            updated = self._update_query_conditions(
+                conditions,
+                resolved_anchors,
+                updates,
+                evidence,
+                requirement_id=requirement_id,
+                scope_id=scope_id,
+            )
+            if isinstance(updated, ToolOutcome):
+                if exact:
+                    return updated
+                update_error = dict(updated.model_visible)
+            else:
+                conditions, resolved_anchors = updated
+                updates_applied = True
         raw_filters = arguments.get("filters", {})
         if not isinstance(raw_filters, Mapping):
             return _failure("invalid_filters", "filters必须是对象。")
@@ -480,13 +462,18 @@ class AssistantToolbox:
         report["requirement_id"] = requirement_id
         if resolved_anchors:
             report["resolved_anchors"] = resolved_anchors
-        if not report["answer_eligible"] and (exact or arguments.get("exploration") is not True):
+        if update_error:
+            report["condition_update_error"] = update_error
+            report["answer_eligible"] = False
+        if not report["answer_eligible"] and exact:
             return ToolOutcome(
                 observation={"status": "unresolved_conditions", **report},
                 model_visible={
                     "status": "unresolved_conditions",
                     **report,
-                    "next_action": "补充证据解析条件；搜索可用exploration=true探索，精确统计须落实必要条件。",
+                    "next_action": (
+                        "先search_memories检索候选并读取证据，再补全必要条件；精确统计须落实必要条件。"
+                    ),
                 },
                 failure_reason="unresolved_conditions",
             )
@@ -530,6 +517,16 @@ class AssistantToolbox:
                         reason = "no_relationship_data"
                     else:
                         reason = "identity_not_found"
+                    if not exact:
+                        report["conditions_resolved"] = [
+                            condition
+                            for condition in report["conditions_resolved"]
+                            if condition != item.payload()
+                        ]
+                        report["conditions_not_applied"].append({**item.payload(), "reason": reason})
+                        report["answer_eligible"] = False
+                        report["identity_capabilities"] = capabilities
+                        continue
                     return ToolOutcome(
                         observation={
                             "status": "unresolved_person",
@@ -567,10 +564,59 @@ class AssistantToolbox:
             if requested != "all" and requested != compiled.filters["source"]:
                 return _failure("source_conflict", "工具来源与用户必要来源冲突。")
             bound["source_type"] = compiled.filters["source"]
-        if query_state is not None and requirement_id and updates:
+        if query_state is not None and requirement_id and updates_applied:
             query_state[requirement_id] = {"conditions": tuple(conditions), "anchors": resolved_anchors}
         # 下层只消费绑定结果，不再从全部需求拼范围。
         return bound, (), report
+
+    def _update_query_conditions(
+        self,
+        conditions: list[QueryCondition],
+        resolved_anchors: list[dict[str, Any]],
+        updates: Any,
+        evidence: Any,
+        *,
+        requirement_id: str,
+        scope_id: str,
+    ) -> tuple[list[QueryCondition], list[dict[str, Any]]] | ToolOutcome:
+        if not requirement_id:
+            return _failure("requirement_required", "补全条件须指定requirement_id以复用解析结果。")
+        try:
+            updates = parse_conditions(updates)
+        except (TypeError, ValueError) as error:
+            return _failure("invalid_conditions", str(error))
+        if not isinstance(evidence, Mapping):
+            return _failure(
+                "condition_evidence_required", "补全条件需要condition_evidence的已有结果集与图片引用。"
+            )
+        result_set = self._result_sets.get(str(evidence.get("result_set_id") or ""))
+        asset_id = result_set.resolve(str(evidence.get("asset_handle") or "")) if result_set else None
+        if result_set is None or result_set.scope_id != scope_id or not asset_id:
+            return _failure("invalid_condition_evidence", "条件依据必须是当前范围内有效的结果集图片。")
+        conditions = list(conditions)
+        resolved_anchors = list(resolved_anchors)
+        for update in updates:
+            matching = [
+                item
+                for item in conditions
+                if item.dimension == update.dimension
+                and item.role == update.role
+                and item.state == "pending"
+                and item.anchor == update.anchor
+            ]
+            if not matching or update.state != "resolved":
+                return _failure(
+                    "invalid_condition_update",
+                    "只补全已有pending条件；保留角色、anchor及必要性，已确定条件不覆盖。",
+                )
+            conditions = [item for item in conditions if item not in matching]
+            update = dataclasses.replace(update, required=any(item.required for item in matching))
+            if update.dimension != "event":
+                conditions.append(update)
+            resolved_anchors.append(
+                {"condition": update.payload(), "evidence": dict(evidence), "asset_id": asset_id}
+            )
+        return conditions, resolved_anchors
 
     # ---- query_memory_facts -------------------------------------------------
 

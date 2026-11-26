@@ -275,7 +275,7 @@ def test_text_source_search_keeps_subject_out_of_face_filters(toolbox, source_ty
         EvidenceType.SPOKEN_CONTENT,
     ],
 )
-def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text, text_type):
+def test_content_candidates_preserve_unconfirmed_photo_subject(toolbox, with_text, text_type):
     build, _ = toolbox
     requirements = [
         EvidenceRequirement("photo", EvidenceType.PHOTO_SET, "某人的照片", scope=(("person", "未确认人物"),))
@@ -289,7 +289,10 @@ def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text, text_
         now=NOW,
         requirements=requirements,
     )
-    assert outcome.failure_reason == "unresolved_person"
+    assert outcome.ok and not outcome.model_visible["answer_eligible"]
+    assert outcome.model_visible["conditions_not_applied"][0]["value"] == "未确认人物"
+    assert outcome.model_visible["conditions_not_applied"][0]["required"] is True
+    assert "person" not in outcome.observation["filters_applied"]
 
 
 def test_read_source_text_requires_a_text_handle_in_the_current_scope(toolbox):
@@ -1451,10 +1454,10 @@ def test_event_range_update_requires_evidence_and_is_reused_for_the_turn(toolbox
     req = EvidenceRequirement("trip_day", EvidenceType.PHOTO_SET, "行程第三天", conditions=(condition,))
     state = {}
     original = {"query": "海边", "requirement_id": "trip_day"}
-    rejected = build.execute(
+    initial = build.execute(
         "search_memories", original, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
     )
-    assert not rejected.ok
+    assert initial.ok and not initial.model_visible["answer_eligible"]
     exploration = build.execute(
         "search_memories",
         {**original, "exploration": True},
@@ -1630,3 +1633,92 @@ def test_oversized_group_results_do_not_expose_pages_or_satisfy_the_answer(toolb
     assert outcome.model_visible["total"] == 1660
     assert not {"value", "rows", "next_offset", "offset"} & outcome.model_visible.keys()
     assert len(outcome.observation["complete_group_rows"]) == 1660
+
+
+@pytest.mark.parametrize("state", ["pending", "resolved"])
+def test_content_candidate_search_runs_before_event_or_nearby_place_is_verified(toolbox, state):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "activity",
+        EvidenceType.PHOTO_SET,
+        "活动与附近地点",
+        conditions=(
+            QueryCondition("event", "在河边吃饭", "anchor", state=state),
+            QueryCondition("place", "海边", "mentioned", relation="near"),
+        ),
+    )
+    result = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "activity"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert result.ok and result.observation["returned_asset_ids"]
+    assert not result.model_visible["answer_eligible"]
+    assert len(result.model_visible["conditions_not_applied"]) == 2
+    assert "place" not in result.observation["filters_applied"]
+    count = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "requirement_id": "activity"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert not count.ok and count.failure_reason == "unresolved_conditions"
+
+
+def test_missing_person_data_preserves_identity_requirement_without_blocking_content_search(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "person",
+        EvidenceType.PHOTO_SET,
+        "我在海边",
+        conditions=(QueryCondition("person", "未登记的我", "depicted"),),
+    )
+    result = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "person"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert result.ok and result.observation["returned_asset_ids"]
+    assert not result.model_visible["answer_eligible"]
+    assert result.model_visible["conditions_not_applied"][0]["dimension"] == "person"
+    assert result.model_visible["conditions_not_applied"][0]["required"] is True
+    assert not any(c["dimension"] == "person" for c in result.model_visible["conditions_applied"])
+
+
+def test_unfounded_update_leaves_conditions_intact_and_still_returns_search_candidates(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    pending = QueryCondition("time", "第三天", "capture", state="pending", anchor="trip")
+    req = EvidenceRequirement("trip", EvidenceType.PHOTO_SET, "旅行第三天", conditions=(pending,))
+    state = {}
+    args = {
+        "query": "海边",
+        "requirement_id": "trip",
+        "condition_updates": [QueryCondition("time", "2019-08-01", "capture", anchor="trip").payload()],
+    }
+    result = build.execute(
+        "search_memories", args, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
+    )
+    assert result.ok and result.observation["returned_asset_ids"]
+    assert result.model_visible["condition_update_error"]["error"] == "condition_evidence_required"
+    assert result.model_visible["conditions_not_applied"][0]["value"] == "第三天"
+    assert not result.model_visible["answer_eligible"] and "trip" not in state
+    count = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", **args},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+    )
+    assert not count.ok and count.failure_reason == "condition_evidence_required"
