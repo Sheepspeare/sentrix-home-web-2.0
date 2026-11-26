@@ -1,5 +1,17 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜共同296评分齐，有限771保留539分续缺232
+
+原limited-snapshot-771任务a022a30f已核：处理244题中243有效、1失败（Luxor酒店响应为普通文本、缺少boolean accuracy）、231未请求，剩232。243有效均分43.6851%；35程序评分，209真实Judge HTTP全200/关思考/196909Token，逐response ID及完整请求/响应SHA唯一raw匹配。保存全部原响应、失败及243完整成功结果；scored_this_invocation是处理数，不能写成成功244题。旧428评分文件SHA、475固定revision全部答案及原意图118成功结果保持。
+
+此前limited缺88的recovery-2已自动接续并完成，保125原成功、只新增88有效；71真实Judge请求全200/关思考/68474Token唯一raw通过，另17程序评分。共同296现两组全齐：limited QS42.5338%、large49.4369%，差6.9032个百分点，大组51改善/31退化/214持平。不能用此Planner均开、双预算同时变化的比较归因为Planner或单上限影响。该callback ac27e27b已提前验收reconciled，迟到只读回执。
+
+有限771当前539有效、232缺分，已评均分43.0528%，未分不记0。limited-snapshot-771/recovery-1复制原475完整输入、协议、状态及失败历史，只补232，保持有限评分2并发；原目录243不重算。最终合parallel-3/baseline-limited旧83＋baseline-common-1/recovery-2的213＋本次recovery-1的475。启动以launch-registration/stage-started为准；不能重放原pipeline或原output。
+
+用户问Planner与全量，已回复同16/83证据：v6同83 QS61.45%/65476129Token优于原large，v12同16 QS56.25%/7590763Token未超过v6的62.50%/4041482；目前无同协议Planner开关对照。建议v6作为后续全量验证候选，尚无新全量launch，当前不扩大任何候选或改变冻结方案。原全量wake/30c业务/各4并发、119high、相册/raw/答卷与原保护进程均未修改。002/005未结项，11/27北京15固定数据、17汇报保持。
+
+证据：候选audit/flash-judge-20261126/limited-snapshot-771/{RESULTS,acceptance-partial,local-integrity-partial,judge-http-exact-verification,failure-diagnosis,callback-a022a30f-reconciled}及recovery-1；baseline-common-1/recovery-2/{RESULTS,acceptance,score-summary,paired-scores,judge-http-exact-verification,callback-ac27e27b-reconciled}。新阶段仅本机评分，无生产源码改动或服务部署。
+
 ## 2026-11-26｜共同296评分大组齐，有限88缺分定点接续
 
 wait d104c340结束为needs_review：large新增213/213成功，合旧83后296题QS49.4369%；limited新增125成功、1评分格式失败、87未请求，合旧83后208/296有效/88缺分。原302次HTTP全部唯一raw匹配、全200/实际关思考/298681Token，1次返回题目列表而非boolean accuracy，严格拒收并保留原请求；不能把HTTP成功当分数成功。原428分及494采集回执/426新答卷SHA保持。共同已评分208题暂为limited40.3846%/large48.5577%（38改善21退化），完整296配对待补，不混不同覆盖均分。
