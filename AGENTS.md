@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 四路观察器因home低2GiB退出，真实QA仍在运行（limited466／large147／v677／v8首16已7）。正将四旧建库gzip完整校验转存本机释放约2.5GiB，保护活动DB/raw/答卷；验收后按真实状态只读attach恢复监控。见候选audit/storage-offload-20261126及T006。
+- 11/26 四旧建库gzip已完整转存本机并验收，home恢复约4.4GiB，18表/raw/答卷/10保护PID保持。原limited471／large151继续1013，v677／83、v8 9／16；四路以新目录只读attach接续，不重发QA。见候选audit/storage-offload-20261126及T006。
 
 - 11/26 v7首16实测未接受质量；候选发现阻断已修，251业务／26部署监控回归通过。v8源码c4bd7f72逐563文件远端SHA／compile通过，待独立8300／8880局部验收后同16复测；不扩大83。见候选audit/v8-large-rerun及T006。
 
@@ -117,4 +117,4 @@
 
 | ID | 任务方向 | 状态 | 最近更新 | 一句话范围 | 记录文档 |
 |---|---|---|---|---|---|
-| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | 条件／身份／历史合并修复已授权实施，v6续83 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |
+| T006 | PhotoBench 2.0 跨平台集成 | 进行中 | 2026-11-26 | v8同16复测，磁盘恢复已验，四路只读监控接续 | [HANDOFF/T006-mainline-shared-media.md](HANDOFF/T006-mainline-shared-media.md) |

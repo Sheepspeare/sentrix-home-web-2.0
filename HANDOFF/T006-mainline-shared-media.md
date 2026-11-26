@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜旧gzip本机转存已验收，四路只读监控接续
+
+四份2718656033字节gzip均已在本机压缩SHA及解压9497915392原始字节完整SHA／size核验；远端仅释放这四份冗余压缩副本，原.archive.json及新增.offload.json保留完整恢复路径。回调后再核本机四压缩SHA／size和远端四offload回执，home约4.42GiB、10保护PIDticks保持，活动DB／答卷／raw未动，未重启QA。ops ded3bdcd及交接493a9269已push核SHA。
+
+转存wait1a9dba00已验收；四旧磁盘告警wait均reconciled不重放。恢复前真实快照原limited471／large151全1013，v677／83、v8 9／16，四组running／worker_alive且fatal_error=null，版本30c／30c／3cc／c4保持、并发4／4／2／2。以新独立output恢复四路只读attach：原两组terminal、v6 priority83、v8 target16；不得POST／部署／取消／复制DB。新wait按storage-offload-20261126/monitor-recovery-registration.json为准。
+
+v6和v8到检查点先逐UUID／固定revision完整取证、按相同题对照实际HTTP／视觉Token与事实，不能据状态或相似答案验质量，不自动扩大。Judge仍待11/30北京时间00恢复，0有效分不重试。
+
 ## 2026-11-26｜四路观察器低盘告警，旧gzip备份转存本机保留全部内容
 
 22da8147与3d304eca／286c0dcb／c414a9d9均同次home低2GiB终止观察，未停止worker。最新只读核原limited466／large147题、v677／83、新v8 7／16，四组running／worker_alive／fatal_error=null。v8 c4bd7f72已完成独立8300／8880验收及push，实际run尾0e7e57，旧v7十六答SHA与18表／10保护PID保持；不能因观察器告警重发QA。
