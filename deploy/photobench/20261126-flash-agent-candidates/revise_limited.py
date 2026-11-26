@@ -21,6 +21,14 @@ OLD_RUNS = {
     "large": "20261126-043228-2026.11.17-atm-sources-addresses-big_model-2211ea",
 }
 STAGES = {
+    "v7": {
+        "runs": {"large": "20261126-075533-2026.11.17-atm-sources-addresses-big_model-120cba"},
+        "previous_revision": "3ccfa64adef5542695e75a49e88a51fe5c1f4a8e",
+        "previous_release": "release-3ccfa64a",
+        "accepted": "v6",
+        "answer_count": 83,
+        "answer_word": "priority83",
+    },
     "v2": {
         "runs": OLD_RUNS,
         "previous_revision": "7fbb4ed85b6bde8d71d0f7ced1a7eab073c721dc",

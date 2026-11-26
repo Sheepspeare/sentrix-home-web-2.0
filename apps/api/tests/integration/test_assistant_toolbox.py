@@ -283,7 +283,11 @@ def test_photo_subject_still_requires_a_confirmed_face(toolbox, with_text, text_
     if with_text:
         requirements.append(EvidenceRequirement("text", text_type, "文字", scope=(("person", "研究机构"),)))
     outcome = build.execute(
-        "search_memories", {"query": "海边"}, scope_id=SCOPE, now=NOW, requirements=requirements
+        "search_memories",
+        {"query": "海边", "requirement_id": "photo"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=requirements,
     )
     assert outcome.failure_reason == "unresolved_person"
 
@@ -1310,9 +1314,19 @@ def test_distinct_requirement_times_do_not_become_a_single_filter(toolbox):
             for day in (1, 2)
         ),
     )
-    assert outcome.ok
-    assert set(outcome.observation["asset_ids"]) == {"asset_0", "asset_1"}
-    assert outcome.observation["filters_applied"] == {}
+    assert not outcome.ok
+    assert outcome.failure_reason == "requirement_required"
+    selected = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "p1"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(
+            EvidenceRequirement("p1", EvidenceType.PHOTO_SET, "第一日", scope=(("time", "2019年8月1日"),)),
+        ),
+    )
+    assert selected.ok
+    assert selected.observation["filters_applied"]["time"] == "2019年8月1日"
 
 
 def test_fact_cutoff_includes_earlier_days_and_excludes_next_day(toolbox):
@@ -1363,3 +1377,239 @@ def test_fact_question_reference_date_intersects_model_time_filters(toolbox, tim
     )
     assert result.model_visible["value"] == expected
     assert "reference_time" in result.observation["filters_applied"]
+
+
+# 查询条件使用独立条件契约，样例只依赖夹具中的两天媒体。
+def test_bound_capture_range_is_shared_by_search_and_statistics(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "day",
+        EvidenceType.PHOTO_SET,
+        "第一天",
+        conditions=(QueryCondition("time", "2019年8月1日至8月1日", "capture"),),
+    )
+    results = [
+        build.execute(name, args, scope_id=SCOPE, now=NOW, requirements=(req,))
+        for name, args in (
+            ("search_memories", {"query": "海边", "requirement_id": "day"}),
+            ("query_memory_facts", {"operation": "count", "subject": "asset", "requirement_id": "day"}),
+        )
+    ]
+    assert all(result.ok for result in results)
+    assert results[0].observation["filters_applied"]["time"] == "2019年8月1日至8月1日"
+    assert results[1].observation["total"] == 1
+    assert results[1].observation["filters_applied"]["time"] == ("2019-08-01T00:00:00", "2019-08-02T00:00:00")
+
+
+def test_unparsed_time_rejects_statistics_before_any_sql(toolbox, monkeypatch):
+    build, _ = toolbox
+    monkeypatch.setattr(
+        build._memory_facts, "_dispatch", lambda *args: pytest.fail("unresolved time reached SQL")
+    )
+    outcome = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "filters": {"time": "某次旅行的第三天"}},
+        scope_id=SCOPE,
+        now=NOW,
+    )
+    assert not outcome.ok
+    assert outcome.model_visible["answer_eligible"] is False
+    direct = build._memory_facts.execute(
+        {"operation": "count", "subject": "asset", "filters": {"time": "2022年3月某个周末"}},
+        scope_id=SCOPE,
+        viewer_id="owner",
+        conversation_id="test",
+        now=NOW,
+    )
+    assert direct.reason == "unparsed_time"
+
+
+def test_event_range_update_requires_evidence_and_is_reused_for_the_turn(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    condition = QueryCondition("time", "第三天", "capture", anchor="trip", state="pending")
+    req = EvidenceRequirement("trip_day", EvidenceType.PHOTO_SET, "行程第三天", conditions=(condition,))
+    state = {}
+    original = {"query": "海边", "requirement_id": "trip_day"}
+    rejected = build.execute(
+        "search_memories", original, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
+    )
+    assert not rejected.ok
+    exploration = build.execute(
+        "search_memories",
+        {**original, "exploration": True},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+    )
+    assert exploration.ok and not exploration.model_visible["answer_eligible"]
+    update = QueryCondition("time", "2019-08-01", "capture", anchor="trip", required=False).payload()
+    args = {
+        "operation": "count",
+        "subject": "asset",
+        "requirement_id": "trip_day",
+        "condition_updates": [update],
+    }
+    missing = build.execute(
+        "query_memory_facts", args, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
+    )
+    assert missing.failure_reason == "condition_evidence_required"
+    args["condition_evidence"] = {
+        "result_set_id": exploration.observation["result_set_id"],
+        "asset_handle": "photo_1",
+    }
+    answered = build.execute(
+        "query_memory_facts", args, scope_id=SCOPE, now=NOW, requirements=(req,), query_state=state
+    )
+    assert answered.ok and answered.observation["total"] == 1
+    assert answered.model_visible["conditions_applied"][0]["required"] is True
+    reused = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "requirement_id": "trip_day"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+    )
+    assert reused.ok and reused.observation["total"] == 1
+    assert reused.model_visible["resolved_anchors"] == answered.model_visible["resolved_anchors"]
+
+
+def test_hotel_mentioned_location_is_not_applied_to_capture_gps(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    req = EvidenceRequirement(
+        "hotel",
+        EvidenceType.VISIBLE_TEXT,
+        "酒店截图",
+        conditions=(QueryCondition("place", "Marseille", "mentioned"),),
+    )
+    result = build.execute(
+        "search_memories",
+        {"query": "海边", "exploration": True},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+    )
+    assert result.ok and "place" not in result.observation["filters_applied"]
+    assert result.model_visible["conditions_not_applied"][0]["role"] == "mentioned"
+
+
+def test_mixed_typed_and_legacy_scopes_require_a_selected_requirement(toolbox):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, _ = toolbox
+    typed = EvidenceRequirement(
+        "typed",
+        EvidenceType.PHOTO_SET,
+        "第一天",
+        conditions=(QueryCondition("time", "2019-08-01", "capture"),),
+    )
+    legacy = EvidenceRequirement(
+        "legacy",
+        EvidenceType.PHOTO_SET,
+        "另一天",
+        scope=(("time", "2019-08-02"),),
+    )
+    result = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(typed, legacy),
+    )
+    assert result.failure_reason == "requirement_required"
+    result = build.execute(
+        "query_memory_facts",
+        {"operation": "count", "subject": "asset", "requirement_id": "legacy"},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(typed, legacy),
+    )
+    assert result.ok
+    assert result.observation["filters_applied"]["time"] == ("2019-08-02T00:00:00", "2019-08-03T00:00:00")
+
+
+def test_failed_query_does_not_report_resolved_conditions_as_executed(toolbox):
+    build, _ = toolbox
+    result = build.execute(
+        "query_memory_facts",
+        {"operation": "invalid", "subject": "asset", "filters": {"time": "2019-08-01"}},
+        scope_id=SCOPE,
+        now=NOW,
+    )
+    assert not result.ok
+    assert result.model_visible["conditions_applied"] == []
+    assert result.model_visible["conditions_resolved"]
+    assert not result.model_visible["answer_eligible"]
+
+
+def test_exploratory_result_pages_keep_the_unresolved_conditions(toolbox, migrations_ready_db, tmp_path):
+    from sentrix.domain.retrieval.query_conditions import QueryCondition
+
+    build, result_sets = toolbox
+    state = {}
+    req = EvidenceRequirement(
+        "trip",
+        EvidenceType.PHOTO_SET,
+        "旅行第三天",
+        conditions=(QueryCondition("time", "第三天", "capture", state="pending", anchor="trip"),),
+    )
+    result = build.execute(
+        "search_memories",
+        {"query": "海边", "requirement_id": "trip", "exploration": True},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+    )
+    set_id = "exploratory_multi_page"
+    filler = _seed_plain_assets(migrations_ready_db, tmp_path, 2 * PAGE_SIZE - 2)
+    result_sets.add(
+        ResultSet(
+            id=set_id,
+            scope_id=SCOPE,
+            query="海边",
+            asset_ids=tuple(filler) + ("asset_0", "asset_1"),
+            created_at=NOW,
+        )
+    )
+    state["result_conditions"][set_id] = state["result_conditions"][result.observation["result_set_id"]]
+    page = build.execute(
+        "get_result_page",
+        {"result_set_id": set_id, "page": 2},
+        scope_id=SCOPE,
+        now=NOW,
+        requirements=(req,),
+        query_state=state,
+    )
+    assert page.ok
+    assert not page.model_visible["answer_eligible"]
+    assert page.model_visible["conditions_not_applied"] == result.model_visible["conditions_not_applied"]
+
+
+def test_oversized_group_results_do_not_expose_pages_or_satisfy_the_answer(toolbox, monkeypatch):
+    from sentrix.domain.retrieval.structured_query import GroupCount
+
+    build, _ = toolbox
+    monkeypatch.setattr(
+        build._memory_facts._structured,
+        "group_counts",
+        lambda *args: [GroupCount(group=str(n), count=1) for n in range(1660)],
+    )
+    outcome = build.execute(
+        "query_memory_facts",
+        {"operation": "group", "subject": "asset", "group_by": "place"},
+        scope_id=SCOPE,
+        now=NOW,
+    )
+    assert not outcome.ok and not outcome.model_visible["answer_eligible"]
+    assert outcome.model_visible["status"] == "query_too_broad"
+    assert outcome.model_visible["total"] == 1660
+    assert not {"value", "rows", "next_offset", "offset"} & outcome.model_visible.keys()
+    assert len(outcome.observation["complete_group_rows"]) == 1660

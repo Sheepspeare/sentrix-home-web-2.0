@@ -254,21 +254,10 @@ def test_an_unrecognised_time_is_dropped_not_passed_through():
     assert spec.constraints_for("time") == []
 
 
-def test_a_longer_relative_phrase_falls_into_a_shorter_one():
-    """**钉住一个既有缺陷，不是断言它是对的。**
-
-    ``resolve_time_expression`` 逐条做的是 ``"上上个月" in v`` 这样的子串判断，
-    所以 ``上上上上个月``（四个「上」）会被当成 ``上上个月`` 解析成两个月前。
-    用户说的是「上上上上个月」，拿到的是两个月前那个月——数字看着正常，只是错的。
-
-    同一个毛病在 ``parse_time_expression`` 里也有一份（``上上上个月`` 命中
-    ``上上个月``），那条已经记过。修法是锚定匹配（``re.search(r"(上+)个月")``
-    之后按「上」的个数推移），不在 T121c 的范围里。
-    """
+def test_repeated_previous_months_do_not_match_a_shorter_substring():
     spec = spec_of(request(operation="count", subject="asset", filters={"time": "上上上上个月"}))
-
     (time,) = spec.constraints_for("time")
-    assert time.value == "2026年7月"  # 两个月前，不是四个月前
+    assert time.value == "2026年5月"
 
 
 def test_an_unresolvable_person_produces_no_person_constraint():
@@ -315,15 +304,8 @@ def test_the_spec_carries_nothing_the_tool_did_not_ask_for():
     assert not hasattr(spec, "answer_type")
 
 
-@pytest.mark.parametrize("offset", [-1, 1.5, "64", True, None])
-def test_group_offset_must_be_a_nonnegative_integer(offset):
+@pytest.mark.parametrize("offset", [-1, 0, 64, True, None])
+def test_group_pagination_is_no_longer_a_query_parameter(offset):
     assert parse(operation="group", subject="asset", group_by="place", offset=offset) == FactRejection(
-        "unsupported_filter", "invalid_offset"
-    )
-
-
-def test_group_offset_is_preserved_and_count_rejects_pagination():
-    assert request(operation="group", subject="asset", group_by="place", offset=64).offset == 64
-    assert parse(operation="count", subject="asset", offset=64) == FactRejection(
-        "unsupported_filter", "offset_requires_group"
+        "unsupported_filter", "unsupported_argument"
     )

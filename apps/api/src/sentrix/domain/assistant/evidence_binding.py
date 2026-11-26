@@ -395,6 +395,8 @@ def facts_from_state(state: TaskState) -> tuple[Fact, ...]:
     for record in state.records:
         if record.status != "ok":
             continue
+        if record.model_visible.get("answer_eligible") is False:
+            continue
         if record.tool in {"search_memories", "get_result_page"}:
             facts.extend(_retrieval_facts(record))
         elif record.tool == "query_memory_facts":

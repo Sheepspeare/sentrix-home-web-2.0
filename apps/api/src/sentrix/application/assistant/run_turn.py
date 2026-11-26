@@ -25,6 +25,7 @@ SQLite、预算计数与十几条软门禁。2.0 的划分是：
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -72,6 +73,7 @@ from sentrix.domain.assistant.evidence_binding import (
     binding_payload,
     facts_from_state,
 )
+from sentrix.domain.assistant.evidence_history import deduplicate_evidence, referenced_tool_calls
 from sentrix.domain.assistant.evidence_ledger import (
     EvidenceLedger,
     EvidenceRequirement,
@@ -572,7 +574,10 @@ def _drop_oldest_tool_round_trip(
             names = {call.name for call in messages[start].tool_calls}
             if names & _PROTECTED_PREVIEW_TOOLS:
                 protected_start = start
+    referenced = referenced_tool_calls(messages)
     for start, end in spans:
+        if any(messages[index].tool_call_id in referenced for index in range(start + 1, end)):
+            continue
         if protect_latest_preview and start == protected_start:
             continue
         return list(messages[:start]) + list(messages[end:])
@@ -766,6 +771,7 @@ class _Session:
 
     state: TaskState
     ledger: EvidenceLedger
+    query_state: dict[str, Any] = field(default_factory=dict)
     emit: Callable[[ProgressEvent], None] | None = None
     fence: int = 0
     attempt_no: int = 1
@@ -1095,6 +1101,7 @@ class RunTurn:
                     scope_id=record.scope_id,
                     history=history,
                     has_source_text=session.has_source_text,
+                    identity_capabilities=self._toolbox.identity_capabilities(record.scope_id),
                     cancel_check=lambda: self._check_cancel(turn_id),
                     include_debug=session.include_debug,
                 )
@@ -1313,6 +1320,24 @@ class RunTurn:
     def _converse(self, session: _Session, record: TurnRecord) -> str:
         state = session.state
         messages = self._initial_messages(record, has_source_text=session.has_source_text)
+        contract = [
+            {
+                "id": item.id,
+                "description": item.description,
+                "conditions": [condition.payload() for condition in item.conditions],
+            }
+            for item in session.ledger.requirements
+        ]
+        messages[0] = replace(
+            messages[0],
+            content=messages[0].content
+            + "\n查询需求："
+            + json.dumps(contract, ensure_ascii=False)
+            + (
+                "\n查询按requirement_id引用条件；待解析条件先探索取证，"
+                "再用condition_updates及condition_evidence补全。"
+            ),
+        )
         # planner 已声明本回合需求；工具表冻结，之后不再随结果集/需求销账增删。
         # 这样同一回合的请求是 append-only，前缀缓存可以整段复用；收敛由下面两条
         # 安全阀保证：连续失败移除工具、预算耗尽只留终止动作。
@@ -1399,6 +1424,7 @@ class RunTurn:
                     for spec in frozen_specs
                     if state.trailing_failures(spec.name) < MAX_CONSECUTIVE_FAILURES
                 )
+            messages = deduplicate_evidence(messages)
             try:
                 if session.finalization_code:
                     session.finalization_calls += 1
@@ -2443,6 +2469,7 @@ class RunTurn:
             question=state.question,
             graph_enabled=session.graph_enabled,
             requirements=session.ledger.requirements,
+            query_state=session.query_state,
         )
         duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
         if call.name == "inspect_photo" and outcome.ok:
@@ -2478,7 +2505,11 @@ class RunTurn:
         )
 
         if outcome.ok:
-            satisfied_types = TOOLS_BY_NAME[call.name].satisfies
+            satisfied_types = (
+                TOOLS_BY_NAME[call.name].satisfies
+                if outcome.model_visible.get("answer_eligible") is not False
+                else ()
+            )
             if call.name == "search_memories":
                 # Retrieval can satisfy spoken-content requirements only when the
                 # returned preview actually contains a transcript. Do not let a
@@ -2553,6 +2584,12 @@ class RunTurn:
                 }
                 evidence["asset_id"] = evidence_asset_id
         evidence_signature = call.name + json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+        if (
+            outcome.ok
+            and call.name in {"inspect_photo", "read_photo_text", "read_source_text"}
+            and outcome.observation.get("asset_id")
+        ):
+            visible["evidence_key"] = hashlib.sha256(evidence_signature.encode()).hexdigest()[:24]
         new_evidence = evidence_signature not in session.evidence_signatures
         if outcome.ok:
             session.evidence_signatures.add(evidence_signature)

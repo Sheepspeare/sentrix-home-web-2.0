@@ -29,12 +29,13 @@ observation / model_visible。**这一处的切分与检索工具正好相反**�
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
-from sentrix.domain.assistant.models import AmbiguousPersonName
+from sentrix.domain.assistant.models import AmbiguousPersonName, PersonProfile
 from sentrix.domain.assistant.ports import PersonDirectory
 from sentrix.domain.assistant.reference_time import cap_at_reference_day
 from sentrix.domain.retrieval.fact_query import (
@@ -46,11 +47,14 @@ from sentrix.domain.retrieval.fact_query import (
     parse_fact_arguments,
 )
 from sentrix.domain.retrieval.ports import StructuredQueryRepository
+from sentrix.domain.retrieval.query_contracts import resolve_time_expression
 from sentrix.domain.retrieval.structured_query import StructuredFilter, derive_filter
+from sentrix.domain.retrieval.time_expression import parse_time_expression
 
 # 附几条代表观察。1.0 ``_fact_samples`` 里的 ``limit=3``。
 SAMPLE_LIMIT = 3
-GROUP_PAGE_SIZE = 64
+MAX_MODEL_GROUPS = 64
+MAX_MODEL_GROUP_CHARS = 16000
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +70,6 @@ class FactAnswer:
     samples: tuple[Mapping[str, Any], ...] = ()
     filters_applied: Mapping[str, Any] = field(default_factory=dict)
     person_names: tuple[str, ...] = ()
-    offset: int = 0
 
     @property
     def coverage(self) -> Mapping[str, Any]:
@@ -80,6 +83,12 @@ class FactAnswer:
             "complete": True,
             "scope": "current_album",
             "asset_kind": "original_only",
+            "metadata_scope": "recorded_fields_only",
+            "limitations": (
+                ["拍摄时间和行政地点仅覆盖已记录的元数据；无匹配不能证明现实中未发生该活动。"]
+                if any(key in self.filters_applied for key in ("time", "place"))
+                else []
+            ),
             "identity_scope": (
                 "named_face_entity" if self.subject is FactSubject.PERSON_APPEARANCE else None
             ),
@@ -100,15 +109,22 @@ class FactAnswer:
             "coverage": dict(self.coverage),
         }
         if self.unit == "original_asset_breakdown":
-            page = self.rows[self.offset : self.offset + GROUP_PAGE_SIZE]
-            end = self.offset + len(page)
-            visible["value"] = [dict(row) for row in page]
             del visible["rows"]
-            visible.update(
-                group_count=len(self.rows),
-                offset=self.offset,
-                next_offset=end if end < len(self.rows) else None,
-            )
+            visible["group_count"] = len(self.rows)
+            if (
+                len(self.rows) > MAX_MODEL_GROUPS
+                or len(json.dumps(self.value, ensure_ascii=False)) > MAX_MODEL_GROUP_CHARS
+            ):
+                del visible["value"]
+                visible.update(
+                    status="query_too_broad",
+                    coverage={**self.coverage, "complete": False},
+                    next_action=(
+                        "分组明细过多；先落实原问题的时间、地点等条件。保留用户全部必要范围，"
+                        "不能任意缩小范围后当作完整答案。若范围确实如此大，如实说明明细未返回；"
+                        "只需总数时用count，total为数据库计算的全部匹配资产数。"
+                    ),
+                )
         return visible
 
 
@@ -139,11 +155,17 @@ class QueryMemoryFacts:
         conversation_id: str,
         now: datetime,
         reference_day: datetime | None = None,
+        resolved_person: PersonProfile | None = None,
     ) -> FactAnswer | FactRejection:
         """跑一次统计。**失败也是一种正常返回**（``FactRejection``），不抛异常。"""
         parsed = parse_fact_arguments(arguments)
         if isinstance(parsed, FactRejection):
             return parsed
+        if parsed.time:
+            resolved = resolve_time_expression(parsed.time, now=reference_day or now)
+            if resolved is None or parse_time_expression(resolved) is None:
+                return FactRejection("unresolved_conditions", "unparsed_time")
+            parsed = replace(parsed, time=resolved)
         if not scope_id and not parsed.person:
             # 相册范围由系统注入，模型不许自己传（``ARGUMENT_KEYS`` 里没有 scope_id）。
             # 走到这里说明装配错了，不是模型错了。
@@ -153,7 +175,7 @@ class QueryMemoryFacts:
         person_names: tuple[str, ...] = ()
         if parsed.person:
             try:
-                profile = self._people.lookup(parsed.person, scope_id)
+                profile = resolved_person or self._people.lookup(parsed.person, scope_id)
             except AmbiguousPersonName:
                 return FactRejection("unresolved_person", "ambiguous_person")
             if profile is None or not profile.entity_id or not profile.confirmed:
@@ -237,7 +259,6 @@ class QueryMemoryFacts:
             rows=rows,
             samples=samples,
             person_names=person_names,
-            offset=request.offset,
             filters_applied={
                 **structured_filter.applied,
                 "scope_id": structured_filter.scope_id,

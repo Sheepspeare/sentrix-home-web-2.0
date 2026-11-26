@@ -93,6 +93,15 @@ class ToolPolicy:
             else:
                 arguments["result_set_id"] = state.current_result_set_id or ""
 
+        if call.name in {"search_memories", "query_memory_facts"} and arguments.get("condition_updates"):
+            evidence = arguments.get("condition_evidence")
+            if not isinstance(evidence, Mapping) or evidence.get("result_set_id") not in state.result_set_ids:
+                return ToolDecision(
+                    action=ToolAction.DENY,
+                    code="invalid_condition_evidence",
+                    reason="条件补证须引用本回合已检索的结果集。",
+                )
+
         # **「缺」的判据是「键不在 / 是 null / 是空串」，不是「falsy」。**
         #
         # 原来的写法是 ``not arguments.get(name)``，于是**空数组也算缺**。这对

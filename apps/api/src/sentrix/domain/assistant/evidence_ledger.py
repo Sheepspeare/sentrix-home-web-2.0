@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from sentrix.domain.retrieval.query_conditions import QueryCondition
+
 
 class EvidenceType(StrEnum):
     """S3 用到的公共证据类型。
@@ -143,6 +145,7 @@ class EvidenceRequirement:
     predicate: str = ""
     value_type: RequirementValueType | None = None
     scope: tuple[tuple[str, str], ...] = ()
+    conditions: tuple[QueryCondition, ...] = ()
 
 
 @dataclass
@@ -246,6 +249,7 @@ class EvidenceLedger:
                 "predicate": item.predicate,
                 "value_type": item.value_type.value if item.value_type else "",
                 "scope": dict(item.scope),
+                "conditions": [condition.payload() for condition in item.conditions],
             }
             for item in self.requirements
         )

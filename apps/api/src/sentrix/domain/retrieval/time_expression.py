@@ -64,34 +64,74 @@ def parse_time_expression(value: str | None) -> tuple[datetime, datetime] | None
             return None
         return datetime.min, end
 
+    try:
+        return _calendar_bounds(cleaned)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _calendar_bounds(cleaned: str) -> tuple[datetime, datetime] | None:
+    # 显式区间使用左闭右开 ISO 两端；中文日期范围包含结束日。
+    interval = re.fullmatch(r"(\d{4}-\d{2}-\d{2})/(\d{4}-\d{2}-\d{2})", cleaned)
+    if interval:
+        start, end = (datetime.fromisoformat(value) for value in interval.groups())
+        return (start, end) if start < end else None
+    day_range = re.fullmatch(
+        r"(\d{4})[年./-](\d{1,2})[月./-](\d{1,2})[日号]?\s*(?:至|到|~|—|–|-|\s+to\s+)\s*"
+        r"(?:(\d{4})[年./-])?(?:(\d{1,2})[月./-])?(\d{1,2})[日号]?",
+        cleaned,
+    )
+    if day_range:
+        y, m, d, ey, em, ed = day_range.groups()
+        start = datetime(int(y), int(m), int(d))
+        end = datetime(int(ey or y), int(em or m), int(ed)) + timedelta(days=1)
+        return (start, end) if start < end else None
+    segment = re.fullmatch(r"(\d{4})年(\d{1,2})月(上旬|中旬|下旬)", cleaned)
+    if segment:
+        y, m = int(segment[1]), int(segment[2])
+        segment_day = {"上旬": 1, "中旬": 11, "下旬": 21}[segment[3]]
+        end = datetime(y, m, segment_day + 10) if segment_day < 21 else _next_month(y, m)
+        return datetime(y, m, segment_day), end
+    comparison = re.fullmatch(
+        r"(早于|晚于|不早于|不晚于|截至|before |after |on or before |on or after )\s*(\d{4}-\d{2}-\d{2})",
+        cleaned,
+    )
+    if comparison:
+        op, raw = comparison.groups()
+        day = datetime.fromisoformat(raw)
+        if op in {"早于", "before "}:
+            return datetime.min, day
+        if op in {"不晚于", "截至", "on or before "}:
+            return datetime.min, day + timedelta(days=1)
+        if op in {"晚于", "after "}:
+            day += timedelta(days=1)
+        return day, datetime.max
     month_range = _MONTH_RANGE.fullmatch(cleaned)
     if month_range:
-        start_year, start_month = int(month_range.group(1)), int(month_range.group(2))
-        end_year = int(month_range.group(3)) if month_range.group(3) else start_year
-        end_month = int(month_range.group(4))
+        start_year, start_month = int(month_range[1]), int(month_range[2])
+        end_year = int(month_range[3]) if month_range[3] else start_year
         start = datetime(start_year, start_month, 1)
-        # 右端取**下个月一号**，所以「3 月到 5 月」包含整个 5 月。
-        # 12 月要进位到次年 1 月——漏掉这一步会让「到 12 月」变成空区间。
-        end = datetime(end_year + (end_month == 12), 1 if end_month == 12 else end_month + 1, 1)
-        return start, end
-
+        end = _next_month(end_year, int(month_range[4]))
+        return (start, end) if start < end else None
     year_range = _YEAR_RANGE.fullmatch(cleaned)
     if year_range:
-        return datetime(int(year_range.group(1)), 1, 1), datetime(int(year_range.group(2)) + 1, 1, 1)
-
-    month_day = _MONTH_DAY.search(cleaned)
+        start, end = datetime(int(year_range[1]), 1, 1), datetime(int(year_range[2]) + 1, 1, 1)
+        return (start, end) if start < end else None
+    # fullmatch 保证「2022年3月下旬」等表达不会被截成整月。
+    month_day = _MONTH_DAY.fullmatch(cleaned.removesuffix("号"))
     if month_day:
-        year, month = int(month_day.group(1)), int(month_day.group(2))
-        day = month_day.group(3)
-        if day:
-            start = datetime(year, month, int(day))
+        year, month = int(month_day[1]), int(month_day[2])
+        if month_day[3]:
+            start = datetime(year, month, int(month_day[3]))
             return start, start + timedelta(days=1)
-        start = datetime(year, month, 1)
-        return start, datetime(year + (month == 12), 1 if month == 12 else month + 1, 1)
-
+        return datetime(year, month, 1), _next_month(year, month)
     pure_year = _PURE_YEAR.fullmatch(cleaned)
     if pure_year:
-        year = int(pure_year.group(1))
+        year = int(pure_year[1])
         return datetime(year, 1, 1), datetime(year + 1, 1, 1)
-
     return None
+
+
+def _next_month(year: int, month: int) -> datetime:
+    datetime(year, month, 1)
+    return datetime(year + (month == 12), 1 if month == 12 else month + 1, 1)

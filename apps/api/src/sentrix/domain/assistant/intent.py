@@ -40,6 +40,7 @@ from sentrix.domain.assistant.evidence_ledger import (
     RequirementValueType,
 )
 from sentrix.domain.assistant.reference_time import retrospective_reference_day
+from sentrix.domain.retrieval.query_conditions import condition_schema, parse_conditions, scope_projection
 
 # **一处对 1.0 与对 2.0 自己的双重偏离（2026-10-10 回退）。**
 #
@@ -100,7 +101,7 @@ scope 的键只能是 event / time / place / person；能从问题确定的事�
 的 time 写“截至YYYY-MM-DD”，包含该日及以前；只问该日才填该日，比较历史时期时保留各自区间。
 person 只填要求出镜或确认身份的人，保留原姓名或别名；同张合照的多人用顿号连接。
 正文、幻灯片、招牌里的主体或作者放 event，不用人脸姓名筛选；要求某人的照片时另声明照片需求。
-不同人物的独立问题用各自的需求；不把排除的人、拍摄者或尚待识别的人写成人物筛选。
+不同人物的独立问题用各自的需求；不把排除的人或尚待识别的人写成出镜筛选；拍摄者写在conditions中，role=photographer。
 “我的相册”“我做过什么 / I cooked”等叙述表示当前相册的活动记录，不要求人脸身份，person 留空；
 “我出镜 / photos showing me”“我和某人的合照”才需要保留人物筛选，姓名和真实身份条件不得删除。
 任何字段都禁止输出 <...> 占位符；scope 里禁止写“未知”“unknown”“n/a”。
@@ -189,11 +190,11 @@ _ALBUM_OWNERSHIP = re.compile(
 )
 _NARRATOR_RECORD = re.compile(
     r"我(?:曾经|最近|最后|上次|以前|曾|自己|亲自|又|还|也|在|于|所|有|何时|什么时候)*"
-    r"(?:做|制作|煮|炖|烤|吃|喝|去|到|参观|游览|旅行|购买|买|预订|入住|收到|发送|拍摄|拍的|拍过)"
+    r"(?:做|制作|煮|炖|烤|吃|喝|去|到|参观|游览|旅行|购买|买|预订|入住|收到|发送)"
     r"|\bi\s+(?:(?:did|have|had|most|recently|last|ever|previously|just|personally)\s+)*"
     r"(?:make|made|cook(?:ed)?|bak(?:e|ed)|eat|ate|drink|drank|visit(?:ed)?|travel(?:led|ed)?|"
-    r"buy|bought|book(?:ed)?|stay(?:ed)?|receiv(?:e|ed)|send|sent|take|took)\b"
-    r"|\b(?:made|cooked|baked|taken|booked|bought|sent)\s+by\s+me\b",
+    r"buy|bought|book(?:ed)?|stay(?:ed)?|receiv(?:e|ed)|send|sent)\b"
+    r"|\b(?:made|cooked|baked|booked|bought|sent)\s+by\s+me\b",
     re.IGNORECASE,
 )
 _SELF_APPEARANCE = re.compile(
@@ -230,10 +231,13 @@ def planner_evidence_types(*, has_source_text: bool = False) -> tuple[str, ...]:
 def build_prompt(*, has_source_text: bool = False) -> str:
     """规划提示词的最终形态（把注册表渲染进去）。1.0 ``goal_planner.py:113`` 同形。"""
     evidence_types = planner_evidence_types(has_source_text=has_source_text)
-    return _DECLARATION_PROMPT.format(
+    prompt = _DECLARATION_PROMPT.format(
         evidence_types="\n".join(f"- {item}" for item in evidence_types),
         source_rule=_MIXED_SOURCE_RULE if has_source_text else _PHOTO_SOURCE_RULE,
     )
+    from sentrix.domain.assistant.tools import planner_query_capabilities
+
+    return prompt + "\n\n" + planner_query_capabilities()
 
 
 def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
@@ -268,6 +272,7 @@ def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
             "predicate": string,
             "value_type": {"type": "string", "enum": [item.value for item in RequirementValueType]},
             "scope": scope,
+            "conditions": condition_schema(),
             "required": {"type": "boolean"},
         },
         "required": [
@@ -277,6 +282,7 @@ def planner_response_format(*, has_source_text: bool = False) -> dict[str, Any]:
             "predicate",
             "value_type",
             "scope",
+            "conditions",
             "required",
         ],
         "additionalProperties": False,
@@ -490,6 +496,7 @@ def normalize_payload(payload: Mapping[str, Any], *, scope_id: str, default_goal
                     "predicate": str(item.get("predicate") or ""),
                     "value_type": value_type,
                     "scope": item.get("scope", {}),
+                    "conditions": item.get("conditions", []),
                 }
             )
     decl["requirements"] = normalized
@@ -562,6 +569,13 @@ def parse_declaration(
                 continue
             scope.append((key_text, value_text))
 
+        try:
+            conditions = parse_conditions(item.get("conditions", []))
+        except (ValueError, TypeError):
+            return None, "invalid_requirement"
+        if conditions:
+            scope = list(scope_projection(conditions))
+
         if reference_day is not None and not any(key == "time" for key, _ in scope):
             scope.append(("time", f"截至{reference_day.date().isoformat()}"))
 
@@ -574,6 +588,7 @@ def parse_declaration(
                 predicate=predicate,
                 value_type=value_type,
                 scope=tuple(sorted(scope)),
+                conditions=conditions,
             )
         )
     if len(requirements) < MIN_REQUIREMENTS:

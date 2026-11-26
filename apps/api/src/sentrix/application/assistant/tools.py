@@ -47,7 +47,7 @@ from sentrix.domain.assistant.evidence_ledger import (
     split_person_scope,
 )
 from sentrix.domain.assistant.models import AmbiguousPersonName, Attachment, PersonProfile
-from sentrix.domain.assistant.ports import PersonDirectory, ResultSetRepository
+from sentrix.domain.assistant.ports import IdentityResolver, PersonDirectory, ResultSetRepository
 from sentrix.domain.assistant.reference_time import cap_at_reference_day, retrospective_reference_day
 from sentrix.domain.assistant.result_set import PAGE_SIZE, ResultSet, ResultSetEntry
 from sentrix.domain.assistant.tools import MAX_DELIVERED_PHOTOS, SOURCE_TEXT_PAGE_CHARS
@@ -64,6 +64,12 @@ from sentrix.domain.memories.ports import EventRepository
 from sentrix.domain.places.ports import AssetPlaceRepository
 from sentrix.domain.retrieval.conditions import Condition, Strictness
 from sentrix.domain.retrieval.fact_query import FactRejection
+from sentrix.domain.retrieval.query_conditions import (
+    QueryCondition,
+    executable_conditions,
+    legacy_conditions,
+    parse_conditions,
+)
 from sentrix.domain.retrieval.time_expression import parse_time_expression
 from sentrix.domain.spaces.ports import SpaceRepository
 
@@ -288,9 +294,24 @@ class AssistantToolbox:
         question: str = "",
         graph_enabled: bool = True,
         requirements: Sequence[EvidenceRequirement] = (),
+        query_state: dict[str, Any] | None = None,
     ) -> ToolOutcome:
+        condition_report: dict[str, Any] = {}
+        if name in {"search_memories", "query_memory_facts"}:
+            bound = self._bind_query(
+                arguments,
+                requirements,
+                scope_id=scope_id,
+                now=now,
+                exact=name == "query_memory_facts",
+                question=question,
+                query_state=query_state,
+            )
+            if isinstance(bound, ToolOutcome):
+                return bound
+            arguments, requirements, condition_report = bound
         if name == "search_memories":
-            return self._search(
+            outcome = self._search(
                 arguments,
                 scope_id=scope_id,
                 now=now,
@@ -298,8 +319,29 @@ class AssistantToolbox:
                 question=question,
                 requirements=requirements,
             )
+            if query_state is not None and outcome.ok:
+                set_id = outcome.observation.get("result_set_id")
+                query_state.setdefault("result_conditions", {})[set_id] = condition_report
+            return dataclasses.replace(
+                outcome,
+                observation={**outcome.observation, **self._condition_result(condition_report, outcome.ok)},
+                model_visible={
+                    **outcome.model_visible,
+                    **self._condition_result(condition_report, outcome.ok),
+                },
+            )
         if name == "get_result_page":
-            return self._page(arguments, scope_id=scope_id)
+            outcome = self._page(arguments, scope_id=scope_id)
+            report = (
+                (query_state or {})
+                .get("result_conditions", {})
+                .get(outcome.observation.get("result_set_id"), {})
+            )
+            return dataclasses.replace(
+                outcome,
+                observation={**outcome.observation, **self._condition_result(report, outcome.ok)},
+                model_visible={**outcome.model_visible, **self._condition_result(report, outcome.ok)},
+            )
         if name == "query_photo_people":
             return self._photo_people(arguments, scope_id=scope_id)
         if name == "inspect_photo":
@@ -319,8 +361,216 @@ class AssistantToolbox:
                 ),
             )
         if name == "query_memory_facts":
-            return self._facts(arguments, scope_id=scope_id, now=now, question=question)
+            outcome = self._facts(arguments, scope_id=scope_id, now=now, question=question)
+            return dataclasses.replace(
+                outcome,
+                observation={**outcome.observation, **self._condition_result(condition_report, outcome.ok)},
+                model_visible={
+                    **outcome.model_visible,
+                    **self._condition_result(condition_report, outcome.ok),
+                },
+            )
         return _failure("unknown_tool", f"没有名为 {name} 的工具。")
+
+    @staticmethod
+    def _condition_result(report: dict[str, Any], ok: bool) -> dict[str, Any]:
+        return {
+            **report,
+            "conditions_applied": report.get("conditions_resolved", []) if ok else [],
+            "answer_eligible": ok and report.get("answer_eligible", True),
+        }
+
+    def identity_capabilities(self, scope_id: str) -> Mapping[str, Any]:
+        if isinstance(self._people, IdentityResolver):
+            return self._people.identity_capabilities(scope_id)
+        return {"identity_directory": "lookup_only", "photographer": "not_indexed"}
+
+    def _bind_query(
+        self,
+        arguments: Mapping[str, Any],
+        requirements: Sequence[EvidenceRequirement],
+        *,
+        scope_id: str,
+        now: datetime,
+        exact: bool,
+        question: str,
+        query_state: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any], Sequence[EvidenceRequirement], dict[str, Any]] | ToolOutcome:
+        selected = list(requirements)
+        requirement_id = str(arguments.get("requirement_id") or "")
+        if requirement_id:
+            selected = [item for item in requirements if item.id == requirement_id]
+            if not selected:
+                return _failure("unknown_requirement", "requirement_id不在本回合规划中。")
+        face_types = {
+            EvidenceType.PHOTO_SET,
+            EvidenceType.DELIVERED_PHOTO,
+            EvidenceType.PHOTO_IDENTITY,
+            EvidenceType.PERSON_PROFILE,
+            EvidenceType.VISUAL_OBSERVATION,
+        }
+        scopes = [
+            item.conditions
+            or legacy_conditions(
+                dict(item.scope),
+                face_identity=item.evidence_type in face_types
+                and str(arguments.get("source_type") or "all") == "all",
+            )
+            for item in selected
+        ]
+        if len(set(scopes)) > 1 and not requirement_id:
+            return _failure("requirement_required", "需求的查询范围不同，请用requirement_id分别查询。")
+        conditions = list(dict.fromkeys(condition for scope in scopes for condition in scope))
+        prior = query_state.get(requirement_id) if query_state is not None and requirement_id else None
+        if prior is not None:
+            conditions = list(prior["conditions"])
+        updates = arguments.get("condition_updates", [])
+        evidence = arguments.get("condition_evidence")
+        resolved_anchors = list(prior["anchors"]) if prior else []
+        if updates:
+            if not requirement_id:
+                return _failure("requirement_required", "补全条件须指定requirement_id以复用解析结果。")
+            try:
+                updates = parse_conditions(updates)
+            except (TypeError, ValueError) as error:
+                return _failure("invalid_conditions", str(error))
+            if not isinstance(evidence, Mapping):
+                return _failure(
+                    "condition_evidence_required", "补全条件需要condition_evidence的已有结果集与图片引用。"
+                )
+            result_set = self._result_sets.get(str(evidence.get("result_set_id") or ""))
+            asset_id = result_set.resolve(str(evidence.get("asset_handle") or "")) if result_set else None
+            if result_set is None or result_set.scope_id != scope_id or not asset_id:
+                return _failure("invalid_condition_evidence", "条件依据必须是当前范围内有效的结果集图片。")
+            for update in updates:
+                matching = [
+                    item
+                    for item in conditions
+                    if item.dimension == update.dimension
+                    and item.role == update.role
+                    and item.state == "pending"
+                    and item.anchor == update.anchor
+                ]
+                if not matching or update.state != "resolved":
+                    return _failure(
+                        "invalid_condition_update",
+                        "只补全已有pending条件；保留角色、anchor及必要性，已确定条件不覆盖。",
+                    )
+                conditions = [item for item in conditions if item not in matching]
+                update = dataclasses.replace(update, required=any(item.required for item in matching))
+                if update.dimension != "event":
+                    conditions.append(update)
+                resolved_anchors.append(
+                    {"condition": update.payload(), "evidence": dict(evidence), "asset_id": asset_id}
+                )
+        raw_filters = arguments.get("filters", {})
+        if not isinstance(raw_filters, Mapping):
+            return _failure("invalid_filters", "filters必须是对象。")
+        for key, value in raw_filters.items():
+            if key not in {"time", "place", "media", "person"}:
+                return _failure("unsupported_filter", f"不支持筛选字段：{key}")
+            if not isinstance(value, str):
+                return _failure("invalid_filter", "筛选值必须是字符串。")
+            if value.strip():
+                role = "depicted" if key == "person" else "asset" if key == "media" else "capture"
+                conditions.append(QueryCondition(key, value.strip(), role))
+        reference = retrospective_reference_day(question)
+        compiled = executable_conditions(tuple(dict.fromkeys(conditions)), now=reference or now, exact=exact)
+        report = compiled.report(executed=False)
+        report["requirement_id"] = requirement_id
+        if resolved_anchors:
+            report["resolved_anchors"] = resolved_anchors
+        if not report["answer_eligible"] and (exact or arguments.get("exploration") is not True):
+            return ToolOutcome(
+                observation={"status": "unresolved_conditions", **report},
+                model_visible={
+                    "status": "unresolved_conditions",
+                    **report,
+                    "next_action": "补充证据解析条件；搜索可用exploration=true探索，精确统计须落实必要条件。",
+                },
+                failure_reason="unresolved_conditions",
+            )
+        bound = {
+            key: value
+            for key, value in arguments.items()
+            if key not in {"requirement_id", "exploration", "condition_updates", "condition_evidence"}
+        }
+        bound["filters"] = {
+            key: value for key, value in compiled.filters.items() if key in {"time", "place", "media"}
+        }
+        people = [item for item in compiled.applied if item.dimension == "person"]
+        names = []
+        profiles = []
+        try:
+            for item in people:
+                cache = query_state.setdefault("identity_resolutions", {}) if query_state is not None else {}
+                key = (scope_id, item.value, item.anchor, item.relation)
+                if key not in cache:
+                    cache[key] = (
+                        self._people.resolve_identity(
+                            item.value, scope_id, anchor=item.anchor, relation=item.relation
+                        )
+                        if isinstance(self._people, IdentityResolver)
+                        else self._people.lookup(item.value, scope_id)
+                        if not item.anchor and item.relation == "is"
+                        else None
+                    )
+                profile = cache[key]
+                if profile is None or not profile.confirmed or not profile.entity_id:
+                    capabilities = dict(self.identity_capabilities(scope_id))
+                    self_expression = item.anchor.casefold() in {"我", "本人", "自己", "me", "myself"} or (
+                        item.value.casefold() in {"我", "本人", "自己", "me", "myself"}
+                        or item.value.startswith(("我妈", "我爸", "我的", "my "))
+                    )
+                    if capabilities.get("named_people") is False:
+                        reason = "no_identity_data"
+                    elif self_expression and capabilities.get("self_anchor") is False:
+                        reason = "missing_self_anchor"
+                    elif item.relation != "is" and capabilities.get("relationships") is False:
+                        reason = "no_relationship_data"
+                    else:
+                        reason = "identity_not_found"
+                    return ToolOutcome(
+                        observation={
+                            "status": "unresolved_person",
+                            "reason": reason,
+                            "identity_capabilities": capabilities,
+                            **report,
+                            "answer_eligible": False,
+                        },
+                        model_visible={
+                            "status": "unresolved_person",
+                            "reason": reason,
+                            "identity_capabilities": capabilities,
+                            "next_action": (
+                                "可补昵称或关系锚点；无新信息不要重复同一身份查询。必要身份仍未解决。"
+                            ),
+                            **report,
+                            "answer_eligible": False,
+                        },
+                        failure_reason="person_not_named_in_current_album" if exact else "unresolved_person",
+                    )
+                names.append(profile.name)
+                profiles.append(profile)
+        except AmbiguousPersonName:
+            return _failure("ambiguous_person", "身份或关系匹配多人，需要更多信息消歧。")
+        if names:
+            if exact and len(names) > 1:
+                return _failure(
+                    "unsupported_person_intersection",
+                    "当前精确统计不支持多位人物同图交集，不能将交集改成并集。",
+                )
+            bound["filters"]["person"] = "、".join(names)
+        bound["_resolved_people"] = tuple(profiles)
+        if not exact and "source" in compiled.filters:
+            requested = str(bound.get("source_type") or "all")
+            if requested != "all" and requested != compiled.filters["source"]:
+                return _failure("source_conflict", "工具来源与用户必要来源冲突。")
+            bound["source_type"] = compiled.filters["source"]
+        if query_state is not None and requirement_id and updates:
+            query_state[requirement_id] = {"conditions": tuple(conditions), "anchors": resolved_anchors}
+        # 下层只消费绑定结果，不再从全部需求拼范围。
+        return bound, (), report
 
     # ---- query_memory_facts -------------------------------------------------
 
@@ -334,7 +584,8 @@ class AssistantToolbox:
         而本工具不在那个集合里，所以「拒绝」与「空结果」在那一边是分开的。
         """
         answer = self._memory_facts.execute(
-            arguments,
+            {key: value for key, value in arguments.items() if key != "_resolved_people"},
+            resolved_person=next(iter(arguments.get("_resolved_people", ())), None),
             scope_id=scope_id,
             viewer_id="owner",
             conversation_id="tool_loop",
@@ -353,6 +604,13 @@ class AssistantToolbox:
                 failure_reason=answer.reason,
             )
         raw_filters = arguments.get("filters")
+        visible = answer.visible()
+        if visible["status"] == "query_too_broad":
+            return ToolOutcome(
+                observation={**visible, "complete_group_rows": list(answer.rows)},
+                model_visible=visible,
+                failure_reason="group_result_requires_refinement",
+            )
         requested = (
             {
                 str(key): str(value)
@@ -405,34 +663,19 @@ class AssistantToolbox:
         if source_type not in {"all", "email", "document"}:
             return _failure("invalid_source_type", "source_type 需为 all、email 或 document")
 
-        scopes = [dict(item.scope) for item in requirements]
-        # 人脸筛选只来自照片、画面或身份需求；统计、正文和转写中的主体不要求出镜。
-        face_types = {
-            EvidenceType.PHOTO_SET,
-            EvidenceType.DELIVERED_PHOTO,
-            EvidenceType.PHOTO_IDENTITY,
-            EvidenceType.PERSON_PROFILE,
-            EvidenceType.VISUAL_OBSERVATION,
-        }
-        face_scopes = (
-            [dict(item.scope) for item in requirements if item.evidence_type in face_types]
-            if source_type == "all"
-            else []
-        )
-        names = tuple(dict.fromkeys(scope["person"] for scope in face_scopes if scope.get("person")))
+        filters = arguments.get("filters", {})
+        names = (str(filters["person"]),) if filters.get("person") else ()
         try:
-            groups = [self._search_people(name, scope_id) for name in names]
-            if (
-                not groups
-                and source_type == "all"
-                and (not requirements or any(item.evidence_type in face_types for item in requirements))
-            ):
+            resolved_people = arguments.get("_resolved_people", ())
+            groups = (
+                [tuple(resolved_people)]
+                if resolved_people
+                else [self._search_people(name, scope_id) for name in names]
+            )
+            if not groups and not requirements and source_type == "all":
                 simple = _person_question(question or query)
-                exact_name = simple[0] if simple else ""
-                if not exact_name and query == question.strip().rstrip("？?。!！"):
-                    exact_name = clean_person_name(query)
-                if exact_name:
-                    person = self._people.lookup(exact_name, scope_id)
+                if simple:
+                    person = self._people.lookup(simple[0], scope_id)
                     if person and person.confirmed and person.entity_id:
                         groups = [(person,)]
         except AmbiguousPersonName:
@@ -440,8 +683,6 @@ class AssistantToolbox:
         if any(not group for group in groups):
             return _failure("unresolved_person", "无法确认提到的相册人物，请核对姓名或别名。")
 
-        if re.search(r"合照|合影", question or query) and len(groups) > 1:
-            groups = [tuple(dict.fromkeys(person for group in groups for person in group))]
         person_assets: dict[str, tuple[str, ...]] = {}
         people_by_asset: dict[str, dict[str, tuple[str, ...]]] = {}
         for group in groups:
@@ -458,10 +699,9 @@ class AssistantToolbox:
                 if asset_id in common:
                     people_by_asset.setdefault(asset_id, {}).update(names_and_aliases)
 
-        times = {scope["time"] for scope in scopes if scope.get("time")}
-        places = {scope["place"] for scope in scopes if scope.get("place")}
-        time = next(iter(times)) if len(times) == 1 else ""
-        place = next(iter(places)) if groups and len(places) == 1 else ""
+        time = str(filters.get("time") or "")
+        place = str(filters.get("place") or "")
+        media = str(filters.get("media") or "")
         bounds = parse_time_expression(time)
         conditions = [Condition("time", time, key="time")] if bounds else []
         reference_day = retrospective_reference_day(question)
@@ -472,6 +712,8 @@ class AssistantToolbox:
                 conditions.append(Condition("time", cutoff, key="reference_time"))
         if place:
             conditions.append(Condition("place", place, key="place", strictness=Strictness.SEMANTIC))
+        if media:
+            conditions.append(Condition("media", media, key="media"))
         excluded_scopes = (
             frozenset(space.id for space in self._spaces.list_all() if not space.include_in_people)
             if not scope_id and self._spaces is not None
@@ -486,6 +728,7 @@ class AssistantToolbox:
                 graph_enabled=graph_enabled,
                 linked_person_assets=tuple(people_by_asset) if groups else None,
                 time_bounds=bounds,
+                media_types=(MediaType(media),) if media else (),
                 place=place,
                 conditions=tuple(conditions),
                 excluded_scopes=excluded_scopes,
@@ -535,7 +778,7 @@ class AssistantToolbox:
                 "filters_applied": {
                     condition.key: condition.value
                     for condition in conditions
-                    if condition.dimension == "time"
+                    if condition.dimension in {"time", "place", "media"}
                 },
             },
         )
@@ -1510,17 +1753,32 @@ class AssistantToolbox:
         if not name:
             return _failure("empty_person", "person 不能为空。")
         try:
-            profile = self._people.lookup(
-                clean_person_name(name), scope_id, include_portrait=include_portrait
-            )
+            if isinstance(self._people, IdentityResolver):
+                profile = self._people.resolve_identity(
+                    clean_person_name(name),
+                    scope_id,
+                    anchor=str(arguments.get("anchor") or ""),
+                    relation=str(arguments.get("relation") or "is"),
+                )
+                if profile is not None and include_portrait and not arguments.get("anchor"):
+                    profile = self._people.lookup(name, scope_id, include_portrait=True) or profile
+            else:
+                profile = self._people.lookup(
+                    clean_person_name(name), scope_id, include_portrait=include_portrait
+                )
         except AmbiguousPersonName:
             return _failure("ambiguous_person", "有多位已确认人物匹配这个姓名，请补充信息。")
         if profile is None or not profile.confirmed:
             return ToolOutcome(
-                observation={"person": name, "found": False},
+                observation={
+                    "person": name,
+                    "found": False,
+                    "identity_capabilities": dict(self.identity_capabilities(scope_id)),
+                },
                 model_visible={
                     "person": name,
                     "found": False,
+                    "identity_capabilities": dict(self.identity_capabilities(scope_id)),
                     "note": "没有找到这位已确认人物的档案，请如实说明无法确认，不要编造。",
                 },
                 # 身份层还没建起来（S5）。封口而不是让门禁反复逼模型去查一个查不到的东西。

@@ -24,6 +24,7 @@ from enum import StrEnum
 from typing import Any
 
 from sentrix.domain.assistant.evidence_ledger import EvidenceType
+from sentrix.domain.retrieval.query_conditions import condition_schema
 
 # 检索宽度：推理模式也不放开 top-k，固定生产值。
 _SEARCH_LIMIT = 6
@@ -91,6 +92,26 @@ def _object_schema(properties: Mapping[str, Any], required: Sequence[str]) -> Ma
     }
 
 
+QUERY_CONTROLS = {
+    "requirement_id": {
+        "type": "string",
+        "description": "本次查询对应的Planner需求ID；不同需求分别查询，避免混合范围。",
+    },
+    "exploration": {
+        "type": "boolean",
+        "description": "为解析事件或身份锚点探索候选，未落实条件的候选不能作为最终结论。",
+    },
+    "condition_updates": condition_schema(),
+    "condition_evidence": _object_schema(
+        {
+            "result_set_id": {"type": "string"},
+            "asset_handle": {"type": "string"},
+        },
+        ["result_set_id", "asset_handle"],
+    ),
+}
+
+
 SEARCH_MEMORIES = ToolSpec(
     name="search_memories",
     brief="按内容词检索照片、视频、邮件或文档，返回资料预览。",
@@ -127,6 +148,10 @@ SEARCH_MEMORIES = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            **QUERY_CONTROLS,
+            "filters": _object_schema(
+                {key: {"type": "string"} for key in ("time", "place", "media", "person")}, []
+            ),
             "source_type": {
                 "type": "string",
                 "enum": ["all", "email", "document"],
@@ -304,6 +329,7 @@ QUERY_MEMORY_FACTS = ToolSpec(
     ),
     parameters=_object_schema(
         {
+            **QUERY_CONTROLS,
             "operation": {
                 "type": "string",
                 "enum": ["count", "exists", "first", "last", "group"],
@@ -321,14 +347,6 @@ QUERY_MEMORY_FACTS = ToolSpec(
                 "type": "string",
                 "enum": ["month", "place", "media", "status"],
                 "description": "只在 operation=group 时需要。status 只能配 subject=processing。",
-            },
-            "offset": {
-                "type": "integer",
-                "minimum": 0,
-                "description": (
-                    "group 分页起点，默认0；每页最多64组。按 next_offset 原参数续页，"
-                    "total是全部匹配资产数，group_count是全部组数，value仅当前页。"
-                ),
             },
             "filters": _object_schema(
                 {
@@ -586,3 +604,27 @@ def openai_tools(specs: Sequence[ToolSpec] = TOOL_SPECS) -> tuple[Mapping[str, A
     真相，而选错的那一个不会报错，只会让每一转多付两千多 token。
     """
     return tuple(spec.as_openai_tool() for spec in specs)
+
+
+def planner_query_capabilities() -> str:
+    query_tools = [spec for spec in TOOL_SPECS if spec.name in {"search_memories", "query_memory_facts"}]
+    names = ", ".join(spec.name for spec in query_tools)
+    return (
+        f"查询入口：{names}。每条需求输出conditions数组；scope仅作展示，由conditions投影。"
+        "每条件写dimension/value/role/required/anchor/relation/state；没有条件用[]。"
+        "dimension与role：time=capture/event/document；place=capture/mentioned/venue/origin/destination；"
+        "person=depicted/photographer/author/narrator/animal；media/source/quantity=asset；"
+        "quantity也可item/money/event；event=anchor。relation通常is，附近写near，人物关系写母亲/姐姐等路径。"
+        "value保留原条件；明确日期可用YYYY-MM-DD或左闭右开YYYY-MM-DD/YYYY-MM-DD。"
+        "没有年份不要补当前年；第三天/最近旅行等先state=pending并写anchor依赖的事件或需求ID。"
+        "地点角色必须区分：截图中的酒店地不等于截图拍摄地，航线出发地不等于目的地。"
+        "人物昵称保留原名；我妈妈写value=妈妈、anchor=我、relation=母亲；"
+        "我拍的写photographer，我出镜写depicted；活动叙述可写narrator且required=false。"
+        "必要身份不能删除；正文作者或机构不做人脸筛选。"
+        "统计只支持原始资产数量/拍摄时间/行政拍摄地/媒体及已确认出镜人；"
+        "商品数量、金额、旅程次数和事件日期要取正文或图像证据，不能换成照片数。"
+        "source是用户明确要求的email/document/all，模型选择某搜索渠道不新增来源限制。"
+        "Agent查询引用requirement_id；新证据解析pending条件时给condition_updates与condition_evidence照片引用。"
+        "精确统计不能忽略条件；探索可暂缺锚点，但候选不等于满足所有条件。"
+        "分组明细一次返回完整结果；过多返回query_too_broad，不分页，不任意改变用户必要范围。"
+    )

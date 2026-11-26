@@ -211,14 +211,8 @@ def test_unrecognised_time_phrases_return_none(value):
     assert resolve_time_expression(value, now=NOW) is None
 
 
-def test_a_longer_phrase_can_match_a_shorter_one_as_a_substring():
-    """**1.0 的行为，照抄，但记在这里。** 十二条分支用的都是 in（子串匹配），
-    所以「上上上个月」（三个月前）会先撞上「上上个月」（两个月前）。
-
-    这是缺陷，不是特性——但它**方向安全**：结果是「时间范围偏了一个月」，
-    不是「候选被全删」。修它属于改产品行为，要单独决定；照抄则是本项目的默认。
-    """
-    assert resolve_time_expression("上上上个月", now=NOW) == "2026年7月"
+def test_repeated_previous_months_preserve_the_full_count():
+    assert resolve_time_expression("上上上个月", now=NOW) == "2026年6月"
 
 
 def test_january_wraps_to_the_previous_december():
@@ -227,7 +221,7 @@ def test_january_wraps_to_the_previous_december():
     january = datetime(2026, 1, 15)
 
     assert resolve_time_expression("上个月", now=january) == "2025年12月"
-    assert resolve_time_expression("最近一年", now=january) == "2025年12月-2026年1月"
+    assert resolve_time_expression("最近一年", now=january) == "2025-01-15/2026-01-16"
 
 
 # ---- parse_media_type -----------------------------------------------------------

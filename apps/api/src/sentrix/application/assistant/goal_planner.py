@@ -24,10 +24,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -100,12 +101,17 @@ class GoalPlanner:
         scope_id: str,
         history: str = "",
         has_source_text: bool = False,
+        identity_capabilities: Mapping[str, Any] | None = None,
         cancel_check: Callable[[], None] | None = None,
         include_debug: bool = False,
     ) -> PlannerResult:
         # 历史折进 system 文本，不再插一条 system 消息——严格 chat template 要求 system
         # 必须在开头（1.0 ``goal_planner.py:115-117``，实测 24 题因此失败）。
         system = build_prompt(has_source_text=has_source_text) + history_prompt_suffix(history)
+        if identity_capabilities is not None:
+            system += "\n当前身份数据能力（无数据不能推断不存在）：" + json.dumps(
+                dict(identity_capabilities), ensure_ascii=False
+            )
         base = [ChatMessage(ChatRole.SYSTEM, system), ChatMessage(ChatRole.USER, question)]
 
         messages = list(base)

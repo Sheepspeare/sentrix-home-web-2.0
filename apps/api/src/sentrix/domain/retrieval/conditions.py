@@ -197,7 +197,10 @@ def _time(condition: Condition, asset: Asset, observation: Observation) -> Evide
 
 
 def _media(condition: Condition, asset: Asset) -> Evidence:
-    matched = str(asset.media_type) == condition.value
+    kind = (
+        "video" if asset.derived_kind == "video_keyframe" and asset.parent_asset_id else str(asset.media_type)
+    )
+    matched = kind == condition.value
     return Evidence(
         ConditionStatus.MATCHED if matched else ConditionStatus.CONTRADICTED,
         "asset_metadata",

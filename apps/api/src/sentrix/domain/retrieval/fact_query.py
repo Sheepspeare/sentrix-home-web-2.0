@@ -42,7 +42,7 @@ from sentrix.domain.retrieval.query_contracts import (
 )
 
 # 工具接受的顶层参数。多一个都拒——1.0 用它拦住模型自己发明的 ``scope_id``。
-ARGUMENT_KEYS = frozenset({"operation", "subject", "group_by", "filters", "offset"})
+ARGUMENT_KEYS = frozenset({"operation", "subject", "group_by", "filters"})
 FILTER_KEYS = frozenset({"time", "media", "place", "person"})
 MEDIA_VALUES = frozenset({"image", "video"})
 
@@ -96,7 +96,6 @@ class FactRequest:
     place: str = ""
     person: str = ""
     group_by: str = ""
-    offset: int = 0
 
     @property
     def groups(self) -> frozenset[str]:
@@ -145,12 +144,6 @@ def parse_fact_arguments(arguments: Mapping[str, Any]) -> FactRequest | FactReje
     if subject == FactSubject.PERSON_APPEARANCE and not person:
         return FactRejection("unresolved_person", "person_required")
 
-    offset = raw.get("offset", 0)
-    if type(offset) is not int or offset < 0:
-        return FactRejection("unsupported_filter", "invalid_offset")
-    if offset and operation != FactOperation.GROUP:
-        return FactRejection("unsupported_filter", "offset_requires_group")
-
     return FactRequest(
         operation=FactOperation(operation),
         subject=FactSubject(subject),
@@ -159,7 +152,6 @@ def parse_fact_arguments(arguments: Mapping[str, Any]) -> FactRequest | FactReje
         place=_text(filters.get("place")),
         person=person,
         group_by=group_by,
-        offset=offset,
     )
 
 

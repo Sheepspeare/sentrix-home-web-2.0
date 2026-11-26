@@ -24,6 +24,7 @@ S3 装配的是 ``NoIdentityDirectory``——那时身份层还没建起来，�
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -98,6 +99,102 @@ class EntityPersonDirectory:
             scope_id=scope_id,
             aliases=self._entities.person_aliases(entity.id),
             family_role_label=entity.family_role or "",
+        )
+
+    def identity_capabilities(self, scope_id: str) -> dict[str, object]:
+        people = [
+            entity
+            for entity in self._entities.list_entities(
+                status=ENTITY_STATUS_CONFIRMED, scope_id=scope_id or None
+            )
+            if entity.entity_type == "person"
+        ]
+        return {
+            "named_people": bool(people),
+            "self_anchor": any(entity.family_role == "自己" for entity in people),
+            "relationships": any(
+                self._family.list_effective_relationships(entity.scope_id, entity.id) for entity in people
+            ),
+            "photographer": "not_indexed",
+            "anonymous_faces": "available_independently",
+        }
+
+    def resolve_identity(
+        self, value: str, scope_id: str, *, anchor: str = "", relation: str = "is"
+    ) -> PersonProfile | None:
+        # 名称/昵称优先，只有明确关系表达才沿图走，不能从查无姓名猜关系。
+        if relation == "is" and not anchor:
+            if value.casefold() not in {"我", "本人", "自己", "me", "myself", "self"}:
+                direct = self.lookup(value, scope_id)
+                if direct is not None:
+                    return direct
+                relative = re.fullmatch(
+                    r"(?:我的?|my\s+)(妈妈|母亲|爸爸|父亲|mother|mom|father|dad)", value, re.I
+                )
+                if relative is None:
+                    return None
+                anchor, relation = "我", relative[1]
+            else:
+                anchor = "我"
+        if anchor.casefold() in {"我", "本人", "自己", "me", "myself", "self"}:
+            candidates = [
+                entity
+                for entity in self._entities.list_entities(
+                    status=ENTITY_STATUS_CONFIRMED, scope_id=scope_id or None
+                )
+                if entity.entity_type == "person" and entity.family_role == "自己"
+            ]
+            if len(candidates) > 1:
+                raise AmbiguousPersonName(anchor)
+            current = candidates[0] if candidates else None
+        else:
+            profile = self.lookup(anchor, scope_id)
+            current = self._entities.get(profile.entity_id) if profile else None
+        if current is None:
+            return None
+        aliases = {
+            "妈妈": "母亲",
+            "mother": "母亲",
+            "mom": "母亲",
+            "爸爸": "父亲",
+            "father": "父亲",
+            "dad": "父亲",
+        }
+        path = [] if relation == "is" else relation.split("/")
+        visited = {current.id}
+        for step in path:
+            predicate = aliases.get(step.strip().casefold(), step.strip())
+            # 图边的方向是subject为object的predicate，因此“我的妈妈”读指向我的母亲边。
+            ids = {
+                row.subject_entity_id
+                for row in self._family.list_effective_relationships(current.scope_id, current.id)
+                if row.object_entity_id == current.id and row.predicate == predicate
+            }
+            matches = [
+                entity
+                for identifier in ids
+                if (entity := self._entities.get(identifier)) is not None
+                and entity.status == ENTITY_STATUS_CONFIRMED
+                and entity.entity_type == "person"
+                and entity.scope_id == current.scope_id
+            ]
+            if len(matches) > 1:
+                raise AmbiguousPersonName(value)
+            if not matches or matches[0].id in visited:
+                return None
+            current = matches[0]
+            visited.add(current.id)
+        # 按稳定ID构建档案，避免同名实体再次通过名字查询产生歧义。
+        membership = self._family.get_effective_membership(current.scope_id, current.id)
+        return PersonProfile(
+            name=current.canonical_name,
+            confirmed=True,
+            entity_id=current.id,
+            scope_id=current.scope_id,
+            aliases=self._entities.person_aliases(current.id),
+            family_role_label=current.family_role or "",
+            membership=membership.membership if membership else "unknown",
+            relationships=self._relationships(current.scope_id, current.id),
         )
 
     def _current_portraits(

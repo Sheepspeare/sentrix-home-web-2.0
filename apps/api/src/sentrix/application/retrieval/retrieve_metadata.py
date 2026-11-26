@@ -76,9 +76,14 @@ class RetrieveMetadata:
             # 悄悄放过跨空间的候选。**但 None 时不能过滤**——那正是「全部相册」。
             if scope_id is not None and asset.scope_id != scope_id:
                 continue
-            if allowed_media and asset.media_type not in allowed_media:
+            media_type = (
+                MediaType.VIDEO
+                if asset.derived_kind == "video_keyframe" and asset.parent_asset_id
+                else asset.media_type
+            )
+            if allowed_media and media_type not in allowed_media:
                 continue
-            if asset.media_type in denied_media:
+            if media_type in denied_media:
                 continue
             if time_bounds and not _within(time_bounds, asset.captured_at):
                 continue

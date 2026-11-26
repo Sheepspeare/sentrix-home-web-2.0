@@ -120,6 +120,9 @@ class StubToolbox:
         self._outcomes = dict(outcomes or {})
         self.calls: list[tuple[str, Mapping[str, object]]] = []
 
+    def identity_capabilities(self, scope_id: str):
+        return {"named_people": False}
+
     def execute(
         self,
         name: str,
@@ -130,6 +133,7 @@ class StubToolbox:
         question: str = "",
         graph_enabled: bool = True,
         requirements: Sequence[EvidenceRequirement] = (),
+        query_state=None,
     ) -> ToolOutcome:
         # ``question`` 是 `inspect_photo` 要的（1.0 ``tools.py:2162-2165`` 拿它找裁剪目标）,
         # 与 ``__init__`` 那三件一样：**凡是 ``RunTurn`` 会传给真实 toolbox 的形参，

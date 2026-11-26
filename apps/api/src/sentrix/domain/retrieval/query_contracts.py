@@ -33,7 +33,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -272,18 +272,16 @@ def resolve_time_expression(value: str | None, *, now: datetime) -> str | None:
     v = str(value or "").strip()
     if not v:
         return None
-    if re.fullmatch(r"(?:截至\s*)?20\d{2}-\d{2}-\d{2}(?:\[[^\]]+\])?", v):
-        try:
-            return v if parse_time_expression(v) is not None else None
-        except ValueError:
-            return None
+    if parse_time_expression(v) is not None:
+        return f"{v}年" if re.fullmatch(r"20\d{2}", v) else v
     year, month = now.year, now.month
 
-    month_rel = re.search(r"(去年|今年|前年)\s*(\d{1,2}|[一二三四五六七八九十]+)\s*月", v)
+    month_rel = re.fullmatch(r"(去年|今年|前年)\s*(\d{1,2}|[一二三四五六七八九十]+)\s*月(.*)", v)
     if month_rel:
-        return f"{year + _BASE_YEAR[month_rel.group(1)]}年{_cn_month(month_rel.group(2))}月"
+        absolute = f"{year + _BASE_YEAR[month_rel[1]]}年{_cn_month(month_rel[2])}月{month_rel[3]}"
+        return absolute if parse_time_expression(absolute) is not None else None
 
-    season_rel = re.search(r"(去年|今年|前年)\s*(" + "|".join(_SEASONS) + ")", v)
+    season_rel = re.fullmatch(r"(去年|今年|前年)\s*(" + "|".join(_SEASONS) + ")", v)
     if season_rel:
         base = year + _BASE_YEAR[season_rel.group(1)]
         start_month, end_month = _SEASONS[season_rel.group(2)]
@@ -292,22 +290,24 @@ def resolve_time_expression(value: str | None, *, now: datetime) -> str | None:
         # 冬天跨年：12 月到次年 2 月
         return f"{base}年12月-{base + 1}年2月"
 
-    if "这两年" in v or "近两年" in v or "最近两年" in v:
+    if v == "这两年":
         return f"{year - 1}年-{year}年"
-    if "最近一年" in v or "近一年" in v:
-        prev_year, prev_month = (year - 1, month) if month > 1 else (year - 1, 12)
-        return f"{prev_year}年{prev_month}月-{year}年{month}月"
-    if "上上个月" in v:
-        pm2 = (year, month - 2) if month > 2 else (year - 1, month + 10)
-        return f"{pm2[0]}年{pm2[1]}月"
-    if "上个月" in v:
-        pm = (year, month - 1) if month > 1 else (year - 1, 12)
-        return f"{pm[0]}年{pm[1]}月"
-    if "去年" in v:
+    if v in {"最近一年", "近一年", "最近两年", "近两年"}:
+        years = 2 if "两" in v else 1
+        try:
+            start = now.replace(year=year - years)
+        except ValueError:
+            start = now.replace(year=year - years, day=28)
+        return f"{start.date().isoformat()}/{(now + timedelta(days=1)).date().isoformat()}"
+    previous_month = re.fullmatch(r"(上+)个月", v)
+    if previous_month:
+        absolute_month = year * 12 + month - 1 - len(previous_month[1])
+        return f"{absolute_month // 12}年{absolute_month % 12 + 1}月"
+    if v == "去年":
         return f"{year - 1}年"
-    if "今年" in v:
+    if v == "今年":
         return f"{year}年"
-    if "前年" in v:
+    if v == "前年":
         return f"{year - 2}年"
     if re.fullmatch(r"20\d{2}", v):
         return f"{v}年"

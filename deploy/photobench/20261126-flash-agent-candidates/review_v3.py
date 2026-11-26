@@ -1,4 +1,4 @@
-"""Deploy the reviewed large candidate, verify it, then run eleven frozen questions."""
+"""Deploy a reviewed large candidate, verify it, then run the frozen checkpoint."""
 
 import argparse
 import importlib.util
@@ -13,7 +13,8 @@ SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "192.168.0.100"]
 HOST = "192.168.0.100"
 
 
-def run(revision, audit, repo, stage="v3"):
+def run(revision, audit, repo, stage="v3", checkpoint=11):
+    assert (stage == "v7" and checkpoint == 16) or (stage != "v7" and checkpoint == 11)
     spec = importlib.util.spec_from_file_location(
         "candidate_watch", Path(__file__).with_name("watch_candidates.py")
     )
@@ -21,7 +22,7 @@ def run(revision, audit, repo, stage="v3"):
     spec.loader.exec_module(watch)
     deployment = audit / "deployment"
     deployment.mkdir()
-    watch.save(deployment / "intent.json", {"revision": revision, "group": "large", "checkpoint": 11})
+    watch.save(deployment / "intent.json", {"revision": revision, "group": "large", "checkpoint": checkpoint})
     ops = f"{BASE}/release-{revision[:8]}/deploy/photobench/20261126-flash-agent-candidates"
 
     def remote(command):
@@ -40,7 +41,7 @@ def run(revision, audit, repo, stage="v3"):
     fetch("answer-preservation.json")
     assert verification["revision"] == revision
     assert verification["memory_18_tables_unchanged"] and verification["old_answers_preserved"] == (
-        11 if stage in {"v4", "v5", "v6"} else 8
+        83 if stage == "v7" else 11 if stage in {"v4", "v5", "v6"} else 8
     )
     if stage == "v3":
         remote(
@@ -65,7 +66,8 @@ def run(revision, audit, repo, stage="v3"):
     ):
         subprocess.run(["scp", "-q", str(source), f"{HOST}:{destination}.tmp"], check=True)
         remote(f"mv {destination}.tmp {destination}")
-    return watch.run("large", audit, audit / "first-eleven", target=11)
+    output = "first-sixteen" if checkpoint == 16 else "first-eleven"
+    return watch.run("large", audit, audit / output, target=checkpoint)
 
 
 if __name__ == "__main__":
@@ -73,6 +75,7 @@ if __name__ == "__main__":
     parser.add_argument("--revision", required=True)
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--repo", type=Path, required=True)
-    parser.add_argument("--stage", choices=["v3", "v4", "v5", "v6"], default="v3")
+    parser.add_argument("--stage", choices=["v3", "v4", "v5", "v6", "v7"], default="v3")
+    parser.add_argument("--checkpoint", type=int, choices=[11, 16], default=11)
     args = parser.parse_args()
-    sys.exit(run(args.revision, args.audit, args.repo, args.stage))
+    sys.exit(run(args.revision, args.audit, args.repo, args.stage, args.checkpoint))

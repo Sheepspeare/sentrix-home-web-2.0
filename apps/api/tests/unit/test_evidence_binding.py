@@ -156,3 +156,20 @@ def test_facts_from_state_projects_structured_and_preview_facts():
     assert any(fact.value_type is RequirementValueType.DESCRIPTION for fact in facts)
     structured = next(fact for fact in facts if fact.value_type is RequirementValueType.COUNT)
     assert structured.filters_not_applied == ("place",)
+
+
+def test_exploratory_candidates_cannot_satisfy_a_required_photo_set():
+    state = TaskState(
+        turn_id="t", conversation_id="c", scope_id="home", question="第三天的照片", profile=DEFAULT_PROFILE
+    )
+    state.record(
+        ToolCallRecord(
+            call_id="c",
+            tool="search_memories",
+            signature="s",
+            status="ok",
+            observation={"asset_ids": ["a"], "total": 1},
+            model_visible={"answer_eligible": False},
+        )
+    )
+    assert facts_from_state(state) == ()

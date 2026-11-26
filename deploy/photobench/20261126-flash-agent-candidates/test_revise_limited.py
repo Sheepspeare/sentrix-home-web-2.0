@@ -15,6 +15,7 @@ import pytest
         ("large", 8879, "v4"),
         ("large", 8879, "v5"),
         ("large", 8879, "v6"),
+        ("large", 8879, "v7"),
     ],
 )
 @pytest.mark.parametrize("changed", [False, True])
