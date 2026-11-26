@@ -1,5 +1,12 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜原limited1013轨迹采集按评分旧版本恢复
+
+0fe9888f只读采集在有序进度83时遇版本保护：终态当前详情revision 33d5274f与当时评分导出d3dc7357不同，原脚本误直接比较；不是答卷丢失。84完整receipt逐文件SHA保留，初始失败终态/旧item.json均保留。两个失败题用评分保存的trace_storage.item_index和旧revision真实GET qa_id及全content/trace通过。新collect-pinned-recovery1只读采用评分原始索引/版本，另存pinned-item.json，不覆盖旧取证；新预检2题完整通过，成功receipt复用，缺阶段续采。
+
+恢复1 wakec6f5a278-e120-48a9-a9c8-e95e7899e113已注册当前主聊，listener healthy/queue/非dry-run；目录双基线audit/limited-full-final-review/trace-recovery-1。旧callback-0fe9888f-reconciled已存。QA/Judge请求0，1013有效评分及QS43.659568%不变；后续汇总预算和真实HTTP/Token/时延仍待采齐。原所有活动实验/服务/相册raw/评分保持，无远端业务修改。
+
+
 ## 2026-11-27｜原有限预算全1013结束且Flash评分全齐
 
 北京时间01:55观察原run ea4413终态completed_with_errors；业务30c67e74、20模型/30工具、4QA保持，1013唯一UUID已逐11页GET核齐。执行状态265 complete/714 partial/31 failed/3 blocked，终止原因370 step_budget_exhausted、31 model_error、265 answered、344 answered_with_gap、3 guard_blocked。处理完不等于全部答题成功。
