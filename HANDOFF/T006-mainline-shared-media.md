@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜用户确认有限771答卷全部Flash补评
+
+用户侧聊明确确认已完成771题快照全部用Qwen3.8 Flash关思考Judge、每任务2并发，并授权转主聊落实。范围固定为原83成功分＋共同296任务新增213题＋额外475题，按冻结1013定义排序且三个UUID集合互不重叠。原limited213补评与large213任务保持，不重发或修改；新增475先并行GET采集，等待当前limited评分组终态及在飞结束后接续评分，有限组整体保持2评分并发，large独立继续。额外评分用本机独立18159转同24槽网关18148，协议仅隧道URL改变，Flash关思考/温0/max2048/native_v2/noGT完全相同。
+
+新增采集helper bcefc10f本机Ruff/compile及既有UUID移动3回归通过，真实额外题GET完整content/revision预检通过，未改100/119服务。旧428分SHA保护，意图时当前limited213中118个成功评分按完整结果对象保留；新增475不含任何已分配题。输出候选audit/flash-judge-20261126/limited-snapshot-771；启动以launch-registration及pipeline-started为准。最终单列771题评分覆盖、有效QS均分/缺分，未评不记0；共同296同题对照另列，不直接比较不同范围均分。原Agent QA/4并发/版本及全量wake保持。002/005候选冻结与11月27日15时固定数据、17时汇报保持。
+
 ## 2026-11-26｜共同296题采集恢复，成功答卷保持
 
 wait e488adff失败在GET采集阶段，Judge0请求：原运行中列表index变动，qa_id核验拦截错位。两组新增213题其实全部采齐，原494回执及426新答卷文件完整保持；仅按UUID重新定位并固定revision补核limited24/large74份旧答案，旧83的答案fingerprint和全部428评分文件SHA保持。恢复helper d80408e7仅本机采集工具，3回归/Ruff/compile与真实98项补核通过，无远端业务改动。原失败记录保留、callback-e488adff-reconciled已存。
