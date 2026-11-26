@@ -2,6 +2,8 @@
 
 ## 2026-11-26｜用户授权Flash自身相册同16新对照
 
+23:39用户询问进度：GET核有限16/16已pause，大组9/16（其余7在飞），两组无fatal但尚无Judge分；有限已结束约9分钟，此前双组QA观察器等两组同时结束，评分尚未启动。现有限先行固定revision取全content/trace，再原协议每任务2并发直连Flash评分，新有效wakecaf16348-b601-4f4a-b453-60e68d36a062，目录judge-early-limited。大组原QA及wakee6cb354d保持，到终态仅补大组采集评分；须先查limited-early-judge-handoff及该评分状态，禁止重复有限任何成功采集/评分。原run/revision/答卷与全部旧分保持，0Agent新请求，有限9step_budget_exhausted/5answered_with_gap/2model_error为执行状态，不当QS。评分0覆盖时QS为空不记0。
+
 首55个实际QA HTTP全200/enable_thinking=false/HTTPS直连，实际完成请求时间窗每组峰值16、跨组合32；两组原payload仅scope/独立URL/控制路径三字段变化，同16顺序及其余配置完全一致，见started-verification及configuration-comparison。
 
 北京时间22:56:52新两run单次启动：limited20261126-225652-2026.11.17-atm-sources-addresses-current-801a7b、large20261126-225652-2026.11.17-atm-sources-addresses-current-2db84c，各16QA并发，目标同16后pause。503文件包SHAe38e1086/compile及真实配置/18表/20保护PIDticks通过，89a29157已push核SHA。首driver6be21024只在回执收集路径写错后退出（缓存实际写RAM根，prepare成功QA0）；保全部准备及失败证据，不重建库/缓存，恢复只取现有回执并首次发题，新有效wakee6cb354d-7e47-472b-af90-40d8cbf55c7a。6be回调已reconciled迟到只读。运行结果以checkpoint/started-verification为准，结束逐UUID/revision取全轨迹及原包后只新两组各2直连Flash评分。原相册32份Flash及历史15份有效分不重评。
