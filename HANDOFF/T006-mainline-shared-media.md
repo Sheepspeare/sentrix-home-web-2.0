@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜共同296评分大组齐，有限88缺分定点接续
+
+wait d104c340结束为needs_review：large新增213/213成功，合旧83后296题QS49.4369%；limited新增125成功、1评分格式失败、87未请求，合旧83后208/296有效/88缺分。原302次HTTP全部唯一raw匹配、全200/实际关思考/298681Token，1次返回题目列表而非boolean accuracy，严格拒收并保留原请求；不能把HTTP成功当分数成功。原428分及494采集回执/426新答卷SHA保持。共同已评分208题暂为limited40.3846%/large48.5577%（38改善21退化），完整296配对待补，不混不同覆盖均分。
+
+运维只读核验helper a80b0c6f新增显式核对原内容JSON有效性，6回归/Ruff/compile及独立远端SHA/真实302原包通过，未改生产评分或原prompt。额外475题已固定revision采齐并自动接上评分；有限组仍2并发。recovery-2复制limited213完整输入/状态、保留125成功及失败历史，仅补88缺分，等待475 pipeline终态后启动；原large213不重评。最终771合旧83＋recovery-2的213＋独立475，并分别报告覆盖/有效均分/缺分。回调d104c340已reconciled，原全量wake/业务版本/并发、候选冻结和截止安排保持。详见候选audit/flash-judge-20261126/baseline-common-1/recovery-1/{RESULTS,acceptance-partial,score-summary-partial,paired-scores-partial,judge-http-exact-verification}及recovery-2。
+
 ## 2026-11-26｜用户确认有限771答卷全部Flash补评
 
 用户侧聊明确确认已完成771题快照全部用Qwen3.8 Flash关思考Judge、每任务2并发，并授权转主聊落实。范围固定为原83成功分＋共同296任务新增213题＋额外475题，按冻结1013定义排序且三个UUID集合互不重叠。原limited213补评与large213任务保持，不重发或修改；新增475先并行GET采集，等待当前limited评分组终态及在飞结束后接续评分，有限组整体保持2评分并发，large独立继续。额外评分用本机独立18159转同24槽网关18148，协议仅隧道URL改变，Flash关思考/温0/max2048/native_v2/noGT完全相同。

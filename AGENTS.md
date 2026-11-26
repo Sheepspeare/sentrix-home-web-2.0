@@ -1,5 +1,7 @@
 # Sentrix 与 PhotoBench 开发约定
 
+- 11/26原large共同296评分已齐QS49.44%；limited有效208/296、1格式失败+87未评，302HTTP原包全200/关思考。保留125新成功分，仅88缺分待475阶段后接续；771全评保持2并发，见T006和baseline-common-1/recovery-2。
+
 - 11/26用户确认原limited771题全部Flash关思考补评：复用83与当前213任务，只新增475，有限组始终2评分并发、large独立继续。范围/覆盖/QS均分/缺分分报，见T006及候选audit/flash-judge-20261126/limited-snapshot-771。
 
 - 11/26共同296题采集已恢复：index变动触发UUID拦截，Judge0；494成功回执/426新答卷保持，仅补核98旧答案。准备每组2并发只评各213新题，旧428分SHA保持；原全量和候选冻结不变，见T006及baseline-common-1/recovery-1。
