@@ -1,5 +1,27 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27 01:31｜用户确认最终版全量，已接好阶段接续
+
+用户明确授权本分支Flash全1013，复用既有Flash非思考构建相册。当前bc736153原run835e7b同16完成13、3在飞、fatal=null，8答题并发；18表一致，home约54GiB。全量此时尚未启动，不能把新wrapper启动当全量启动。
+
+新增仅本机阶段编排compact-query-v3/launch-full-after-pilot.py，语法及准备输入SHA核通过；wakec50e9852-8913-4c12-bbba-da1599f6d4ea已注册本侧聊01a215f5并实际启动PID69486。它等待现有16取证/Flash评分成功，执行已有review-mechanisms及continue-full，原子从pause16改1013、0新POST、保留16答；固定16评分状态SHA后以follow-full-judging启动持续补评，每组2并发、只补缺分、原run分不写。全量与评分实际启动以full-run/started、full-scoring/process+progress、full-launch-orchestration-terminal为准。任何阶段失败先核已成功回执，不重放wrapper/QA/部署或评分成功项。旧396d3c9a仅01:35只读复核点，不能触发重复编排。
+
+用户确认验收口径：005相对原30c基线，v6仅内部参考；精简f6同16相对原大预算QS43.75%→62.5%、HTTP445→260、Token17377243→6187373，有正向证据但非最终bc或全量结论。002已有记忆够用可直接作答，核心为请求看图能执行并送对图、缺证时定向引导；代码有Planner提示及字段缺证提醒，效果与通路分开。Q052原有限bad_handle且视觉0，f6正确图视觉200；原large本来可恢复读图，不说全程不可用。Q528跨结果正确原图已核但最终门店归属不作认可。
+
+本版为100模型/600工具各reserve2、100步3600秒，HTTP含Planner/重试/内部视觉；不是20/30有限组，本优化版尚未测有限组。北京时间02前全量目标仍按真实started时间判断。只操作独立树/8303/8883及融合audit，未向主聊发消息、不用子Agent，不改其余服务或原相册/raw。
+
+## 2026-11-27｜原始002／005验收范围与最终版启动复核
+
+用户要求读取主对话，核本分支代码能否满足002／005及同16收益。主对话最近四轮已读，未向其发消息。新增只读报告audit/20261126-flash-condition-fusion/requirements-002-005-review-20261127/{REVIEW.md,metrics.json}，固定同16 UUID及来源SHA。原有限／大预算／v6／精简f6 QS为37.5／43.75／62.5／62.5%，HTTP173／445／203／260，Token2062961／17377243／4041482／6187373；f6对原基线有改善，对v6无净质量收益且Token+53.1%。回看覆盖7／7／10／12题，不能替代观察质量。发现本轮未补的代码缺口：inspect缺certainty默认supported，可有空观察；字段核验依赖Planner声明。FinalGuard局部否认、本优化版20/30和PhotoBench验收仍缺，不报两需求完成。
+
+a05新完成同16为QS50%、291HTTP／336工具／8818620记录Token，只有290完整模型观察，原包补核待做；质量未通过。最终bc736153已远端388源码/18表/旧16答/保护PID验收后push核SHA，00:59:54仅8303/8883单次启动run20261127-005954-2026.11.17-atm-sources-addresses-big_model-835e7b，8并发16后暂停，最终效果待测。现有deploy/review脚本和只读接续wait396d3c9a保持，禁止重放；全量尚未启动。旧00:55记录为阶段历史。源代码未因本次复核新增修改。
+
+## 2026-11-27 00:55｜最终条件版本等待自动接续
+
+a05b9286原run2f8763已14/16，8并发且fatal=null；无新POST/取消/重启。最终bc736153的186相关回归、Ruff与两模块mypy通过；388源码包275430cbfc85d0c612e196283fb68e255d7b700e2f2872d9c2c58d16eb4b7d87已核远端SHA/compile，尚未切服务或push。compact-query-v3/deploy-and-launch.py与review-pipeline.py都在运行，等前轮16答固定revision采齐后自动保存原答、只取消997未执行调度、验18表/保护PID、push后单次启动新16。不得重复启动这些脚本。新增final-review-wait仅读现有回执，在最终16评分完成、阶段失败或01:35复核点通知本侧聊；不会操作答题。
+
+最终16后检查review/mechanism-verification.json及Flash评分；用户已授权同run继续全1013，continue-full.py只原子改dispatch-control，不重新POST、不重答16。之后按full-judge-plan-prepared.json固定run/评分状态SHA，独立持续Flash补评分2并发。目标02:00前实际全量启动，当前尚未启动；剩余长题使时间存在风险，不能把上传或计划当完成。home约55GiB，容量充足，不执行RAM迁移。仅独立工作树/8303/8883，不写主聊、不用子Agent。业务bc提交须远端验收后由现有脚本push，再提交本轮交接文档。 独立只读接续wait396d3c9a-2766-4098-b8f1-b3c2b2cb6983已注册到本侧聊01a215f5，队列监听healthy=true；见compact-query-v3/final-review-wait-registration.json。
+
 ## 2026-11-27 00:24｜统一Planner条件表达，保留实际失败证据
 
 a05b9286已验388源码/18表/原16答/保护PID后push，00:12:54仅8303/8883单次启动2f8763同16题/8并发；当前运行不热改。前一轮f6d1ac5f已16答固定revision取证且Flash Judge齐：QS62.5%，260HTTP/281工具/6187373含视觉Token，较融合首版10532237低，仍高于v6同16的4041482，质量未接受。原答/raw保持。
