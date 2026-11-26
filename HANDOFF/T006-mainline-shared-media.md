@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜v12评分验收，转共同296题增量补评
+
+v12同16 Flash Judge已齐9/16=56.25%，0缺分；15次真实Judge HTTP按response ID与完整请求/响应SHA唯一匹配共享raw，全200、实际关思考/温0/max2048、22626Token，另1列表程序评分。旧412份评分文件逐SHA保持，累计428份有效分。回调a3d36490已reconciled；评分证据见候选audit/flash-judge-20261126/v12/{RESULTS,acceptance,score-summary,paired-scores,local-integrity,judge-http-exact-verification,callback-a3d36490-reconciled}。对v11无改善/1退化（2022三月下旬漏Great Yarmouth），对v9/v6同16各1改善/2退化；Agent Token7590763较v11仅低2.16%，综合效果未通过，继续保留v6同83成熟候选，不新增v13/v14或扩大83。002必要送图、观察及答案使用分别核验，005限额触发/完成/质量/时延分别报告，均未结项。
+
+20:27附近只读核原limited771/1013、large296/1013，均30c版本/4并发/running/fatal=null；原有效wake a38f0e0a/7a6f8cfa保持。固定两组list cap取共同296题（按冻结1013定义排序）；各复用旧83成功分，只新增213题评分；limited其余475已答未配对单列。新流程见候选audit/flash-judge-20261126/baseline-common-1：collection-intent/scope/collector-validation/real-get-preflight/source-verification。采集仅GET，每题固定qa_id/revision，所有完整content分页核read_revision，旧83答案fingerprint保持；每组2评分并发/跨组同时，沿原关思考Flash native_v2，旧428分SHA保护。登记前状态为准备，启动与wait只以launch-registration和pipeline-started/started为准；失败保留回执，只续缺阶段/缺分，不重放driver或答题。
+
+截止北京时间11/27 17:00的收敛计划不变：00:00冻结方案，15:00固定报告数据。005同83预算报告已具备可交付数据；新增共同题补评完成后合并旧166分作公平比较，未答/未分单列，不承诺大组1013截止前齐。保护原服务/119high/相册/raw/答卷/Oracle及主树修改，无新部署/QA/embedding或复制库。
+
 ## 2026-11-26｜v12同16取证完成，收敛002/005汇报
 
 v12 run86411d／8ac4fa44已16pause，4complete/12partial/0failed。全16固定revision完整content/trace分页read_revision通过；309HTTP唯一原包全200/实际关思考，Token7590763、20去重视觉、351工具、41本地预检不计HTTP，12PIDticks保持。20视觉原包均含非空图片载荷；原代表Q052图已送但视觉仅复述问题，答案数值由OCR支持；Q117正确型号/£59有OCR与视觉来源，整段质量待评。62真实读取引用回显一致。17条件更新有2次无更新错误、4语义核验实际触发（v11为0），但紫裙购买条件被重解释、角色/anchor格式错误及ACL94搜仍未解决，不能接受整体效果。新16 Flash Judge输入/协议SHA已核，旧412成功分复用；有效登记见候选audit/flash-judge-20261126/v12/launch-registration.json。回调132cf6b9已reconciled，无QA重放或扩大83。
