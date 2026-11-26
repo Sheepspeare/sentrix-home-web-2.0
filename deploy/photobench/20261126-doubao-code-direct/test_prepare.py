@@ -32,6 +32,8 @@ def test_frozen_agent_configuration_direct_cloud_and_bounded_subset(tmp_path, mo
     op.configure(group, ports, tmp_path / "data", "https://cloud.example/v1", "old-agent")
     api_env = units[0][1]
     assert api_env["SENTRIX_LLM_PROFILE"] == "local"
+    runtime = json.loads((base / group / "config/runtime_connection.json").read_text())
+    assert "reasoning_max_steps" not in runtime["product_settings"]
     assert "SENTRIX_LLM_CONFIG" not in api_env
     assert api_env["SENTRIX_AGENT_TURN_MAX_WORKERS"] == 16
     assert api_env["SENTRIX_VLM_CONTEXT_TOKENS"] == 16384

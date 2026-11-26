@@ -267,7 +267,6 @@ def configure(group, ports, data, cloud, revision):
             "deployment_profile": "server",
             "agent_wall_time_s": 180,
             "chat_timeout_s": 120,
-            "reasoning_max_steps": 100,
             "reasoning_max_model_calls": models,
             "reasoning_max_tool_calls": tools,
             "reasoning_max_search_calls": 100,
@@ -285,6 +284,7 @@ def configure(group, ports, data, cloud, revision):
     }
     product_env = load_env(BASELINE / f"{group}-api.env")
     product_env.pop("SENTRIX_LLM_CONFIG", None)
+    product_env.pop("SENTRIX_REASONING_MAX_STEPS", None)
     product_env.update(common)
     product_env.update(
         SENTRIX_DATA_DIR=data,
