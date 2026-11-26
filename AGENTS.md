@@ -1,6 +1,6 @@
 # Sentrix 与 PhotoBench 开发约定
 
-- 11/26 v6到83监控因磁盘低2GiB触警，worker正常；四份旧恢复备份无损归档已挂独立wake，验收后恢复只读监控。活动DB/最终快照/答卷/raw保持，见T006与候选audit/storage-recovery-20261126。
+- 11/26磁盘恢复已验：四份旧备份无损归档释放6.31GiB，home8.26GiB；原limited全量/large83/v6候选83三路只读监控均已接续，答题未重启。有效wait见候选audit/storage-recovery-20261126/monitor-recovery-registration.json与T006。
 
 - 11/26 有限候选v2的83题已验暂停：HTTP1206→1212/Token1703万→2364万，整体降本未通过；37题完整历史预算收尾已有实测，5分组溢出/局部缺口误拦保留诊断。原双全量和v6同run续83诊断；Judge周额度待补，见T006和候选audit。
 

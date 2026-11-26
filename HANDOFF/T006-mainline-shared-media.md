@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-26｜磁盘恢复验收完成，三路只读监控已接续
+
+四份已退休的建库恢复备份由9497915392字节无损归档为2718656033字节，逐份解压完整SHA/字节数与原件一致，压缩文件SHA再核一致，释放6.31GiB；/home可用8.26GiB。原备份内容完整保留于各自.db.gz及.db.archive.json，恢复时解压至新文件并核source_sha256后恢复原路径。活动DB、最终快照、答卷/raw保持；没有QA POST、服务切换或重启。归档工具8c63930a已真实远端验收，证据候选audit/storage-recovery-20261126/acceptance.json。
+
+原limited ea4413为256答/4并发、原large f6ebb1为71答/4并发，v6 120cba为15答/2并发，均running/无fatal_error；有限v2 f9367d仍83暂停。最近500共享HTTP均200，无模型配置告警。先注册新wake并验证初始intent/latest：limited全1013终态 3d304eca-e85f-4b90-83eb-e0990039ed2e，原large83优先 4672ab5c-a030-4a35-a9dc-5eab43414ba4，v6到83暂停 286c0dcb-2932-48de-9b47-c5fb07b19d29。三者仅观察，未修改调度或模型配置；有效表见storage-recovery-20261126/monitor-recovery-registration.json。旧fb1b011f/a375e19f/eb57d4cd及归档b2cf52da均提前验处理，迟到只读reconciled，不重复归档/挂监控/发QA。主分仍待11/30豆包周额度恢复，11/27 15统计17汇报。
+
 ## 2026-11-26｜v6只读监控触发磁盘告警，旧恢复备份开始无损归档
 
 v6到83监控eb57d4cd在15答时因/home可用空间低2GiB终止；真实worker正常、无fatal_error，原limited/large基线252/69答各4并发继续，有限v2为83答暂停。未POST、部署、取消或重做答卷。已找到四份旧建库恢复数据库合计约9.5GB，lsof核无打开、WAL空；抽样压缩比约22%。仅将这些已退休备份归档gzip，逐份解压全量SHA/size一致后释放未压缩副本，receipt保留原校验与恢复方法。活动数据库、最终相册快照、raw及答卷保持。
