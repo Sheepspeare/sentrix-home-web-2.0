@@ -700,6 +700,14 @@ class RunSuites:
         if not isinstance(repair_missing, bool):
             raise InvalidRequestError("repair_missing_judges must be a boolean")
         target_revision = str(payload.get("product_build_revision") or "").strip()
+        concurrency = payload.get("qa_concurrency")
+        if concurrency is not None and (type(concurrency) is not int or not 1 <= concurrency <= 64):
+            raise InvalidRequestError("resume qa_concurrency must be an integer from 1 to 64")
+        model_url = str(payload.get("model_base_url") or "").strip()
+        if model_url and normalize_model_base_url(model_url) != normalize_model_base_url(
+            str(self._config.public_runtime_connection_config().get("model_base_url") or "")
+        ):
+            raise InvalidRequestError("resume model_base_url must match the configured endpoint")
         if target_revision and target_revision != self._config.public_runtime_connection_config().get(
             "product_build_revision"
         ):
@@ -954,6 +962,31 @@ class RunSuites:
                 replace(request, snapshot_source="legacy_resume_current_config"),
                 self._config.public_runtime_connection_config(),
                 self._build_revision,
+            )
+        if concurrency is not None or model_url:
+            assert request.runtime_snapshot is not None
+            connection = request.runtime_snapshot.connection()
+            context = dict(request.resume_context or {})
+            context["runtime_overrides"] = {}
+            if concurrency is not None:
+                connection["execution_budgets"] = {
+                    **connection["execution_budgets"],
+                    "qa_concurrency": concurrency,
+                }
+                connection["product_settings"] = {
+                    **(connection.get("product_settings") or {}),
+                    "agent_turn_workers": concurrency,
+                }
+                context["runtime_overrides"]["qa_concurrency"] = concurrency
+            if model_url:
+                connection["model_base_url"] = normalize_model_base_url(model_url)
+                context["runtime_overrides"]["model_base_url"] = connection["model_base_url"]
+            request = replace(
+                request,
+                qa_concurrency=concurrency if concurrency is not None else request.qa_concurrency,
+                model_base_url=connection["model_base_url"],
+                runtime_snapshot=RunRuntimeSnapshot(json.dumps(connection), self._build_revision),
+                resume_context=context,
             )
         with self._lock:
             self._require_inactive()

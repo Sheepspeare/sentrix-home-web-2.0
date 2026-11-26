@@ -1114,6 +1114,57 @@ def test_resume_inherits_topology_and_budgets_instead_of_current_configuration(t
         gate.set()
 
 
+def test_resume_explicit_concurrency_and_endpoint_preserve_answers_and_budgets(tmp_path):
+    saved = _cancelled_state(reasoning=True)
+    saved["runtime_snapshot"] = {
+        "sentrix_url": "http://sentrix:8191",
+        "model_base_url": "http://previous:18148/v1",
+        "product_build_revision": "product-release",
+        "product_settings": {"agent_turn_workers": 8, "reasoning_max_model_calls": 100},
+        "execution_budgets": {"qa_concurrency": 8, "turn_timeout": 3660},
+    }
+    source = json.loads(json.dumps(saved))
+    captured, gate = [], threading.Event()
+    suites = _suites(
+        tmp_path,
+        store=FakeRunStore({"run-1": saved}),
+        new_execution=lambda request: captured.append(request) or FakeExecution(request, gate),
+    )
+    suites._config.persist_runtime_connection(
+        {
+            "sentrix_url": "http://sentrix:8191", "model_base_url": "https://cloud.example/v1",
+            "judge_url": "http://judge:1/v1", "judge_model": "judge-model",
+        }
+    )
+    try:
+        response = suites.resume_run(
+            "run-1", {"qa_concurrency": 16, "model_base_url": "https://cloud.example/v1"}
+        )
+        request = captured[0]
+        frozen = request.runtime_snapshot.connection()
+        assert response["resumed_items"] == 1
+        assert request.prior_items[0]["qa_id"] == "q1"
+        assert request.qa_concurrency == frozen["execution_budgets"]["qa_concurrency"] == 16
+        assert frozen["product_settings"] == {"agent_turn_workers": 16, "reasoning_max_model_calls": 100}
+        assert request.model_base_url == frozen["model_base_url"] == "https://cloud.example/v1"
+        assert request.turn_timeout == 3660 and request.reasoning
+        assert request.resume_context["source_runtime_snapshot"] == source["runtime_snapshot"]
+        assert saved == source
+    finally:
+        gate.set()
+
+
+@pytest.mark.parametrize("value", [True, 0, 65, "16"])
+def test_resume_rejects_invalid_explicit_concurrency(tmp_path, value):
+    with pytest.raises(InvalidRequestError, match="qa_concurrency"):
+        _suites(tmp_path).resume_run("run-1", {"qa_concurrency": value})
+
+
+def test_resume_rejects_an_endpoint_not_in_the_configured_runtime(tmp_path):
+    with pytest.raises(InvalidRequestError, match="configured endpoint"):
+        _suites(tmp_path).resume_run("run-1", {"model_base_url": "https://unknown.example/v1"})
+
+
 def test_resume_preserves_saved_reasoning_mode(tmp_path):
     saved = _cancelled_state()
     saved["reasoning"] = True
