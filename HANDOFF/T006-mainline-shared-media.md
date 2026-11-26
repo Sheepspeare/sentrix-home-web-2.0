@@ -1729,3 +1729,10 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 大预算v2复测已登记并启动：wake993ff352-d4db-477b-8ded-e02619c05fce；回执与实际run见v2-large-rerun/launch-registration.json。2并发到8暂停，有限v2原wake64799a78保持。候选部署代码及交接已push6be37684，原v1不扩大。
 
 恢复监控已登记：limited wake11d5f1f1-1668-4c47-a3ca-97939db08ce3、large wakea375e19f-e64a-4218-842e-d576c5553660，只读attach原run至83或异常。原f4ff2b2c/c9804024已处理，若迟到回调按reconciled.json核对，不再重挂。见priority-monitor-recovery-registration.json。
+
+## 2026-11-27｜历史Doubao高分与当前Flash代码复核
+
+
+- 11/27历史74.41%核查：当前334产品源333同，仅晚期压缩修复不同且未新增历史有效分；三评分提示词SHA一致/native_v2，纠正“协议不同”为裁判模型不同。当前大组共同61题旧豆包69.95%/Flash52.46%仍有差距，原因待同裁判扩大配对；见T006及historical75-code-comparison。
+
+详细报告：`/Users/jzousz/Documents/ChatGPT/产品项目/audit/20261126-flash-agent-candidates/doubao-code-flash-memory-direct/full-1013/historical75-code-comparison/RESULTS.md`。本轮只读取证；同16同裁判旧相册Doubao46.67%/Flash大40%，新Flash相册53.33%且相册不同，不据此判断全量排名。保持既有128K排空及重跑范围授权，不热改压缩逻辑。
