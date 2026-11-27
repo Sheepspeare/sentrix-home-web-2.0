@@ -21,133 +21,151 @@ PYTHON = "/home/realmagic/xy/releases/psh-b2030e1-100-20261117/.venv/bin/python"
 SOURCE = DEPLOY / "release/apps/photobench/src"
 
 
-def apply():
+def apply(resume_preserved=False):
     from photobench.application.run_execution.service import RunRequest, index_assets_by_name
     from photobench.bootstrap.container import Container
     from photobench.config import Settings
     from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
     from photobench.domain.runtime.ports import RunRuntimeSnapshot
-    from photobench.infrastructure.results.store import FileRunStore
+    from photobench.infrastructure.results.store import FileResultWriter, FileRunStore
 
-    assert not (ROOT / "intent.json").exists()
-    old_folder = OLD / "improved-limited"
-    g = json.loads((old_folder / "started.json").read_text())
-    pid = g["pid"]
-    assert "continue_four.py" in Path(f"/proc/{pid}/cmdline").read_bytes().decode()
-    save(
-        ROOT / "intent.json",
-        {
-            "old_run": g["run_id"],
-            "old_pid": pid,
-            "qa_concurrency": 16,
-            "judge_concurrency": 2,
-            "at": time.time(),
-        },
-    )
-    os.kill(pid, signal.SIGSTOP)
-    for _ in range(30):
-        if Path(f"/proc/{pid}/stat").read_text().split(") ")[1].split()[0] == "T":
-            break
-        time.sleep(0.1)
-    else:
-        raise RuntimeError("Old dispatcher pause not observed")
-    save(old_folder / "intentional-pause.json", {"reason": "authorized_upgrade16", "pid": pid})
-    old_state = FileRunStore(old_folder / "results").load_state(g["run_id"])
-    present = {v["qa_id"] for v in old_state["items"]}
-    executed = set(old_state["phases"]["qa_eval"]["agent_executed_qa_ids"])
-    outstanding = executed - present
-    _, _, product_env = process_environment(8304)
-    db_path = Path(product_env["SENTRIX_DATA_DIR"]) / "sentrix.db"
-    mapping = {}
-    with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
-        started_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(g["at"]))
-        candidates = db.execute(
-            "select distinct c.title from agent_turns t join agent_conversations c on c.id=t.conversation_id "
-            "where julianday(t.created_at) >= julianday(?)",
-            (started_at + "+00:00",),
-        ).fetchall()
-        definitions_ids = {r["qa_id"] for r in old_state["qa_snapshot"]["rows"]}
-        outstanding |= {r[0] for r in candidates if r[0] in definitions_ids} - present
-        for q in outstanding:
-            matches = db.execute(
-                "select t.id,t.conversation_id from agent_turns t join agent_conversations c "
-                "on c.id=t.conversation_id where c.title=? order by t.created_at desc",
-                (q,),
-            ).fetchall()
-            assert len(matches) == 1, (q, len(matches))
-            mapping[q] = {"turn_id": matches[0][0], "conversation_id": matches[0][1]}
-    save(ROOT / "inflight.json", mapping)
-    stable = 0
-    for _ in range(600):
+    if resume_preserved:
+        assert (ROOT / "failure.json").exists()
+        assert not (ROOT / "launched.json").exists()
+        assert not (ROOT / "api-env-before.txt").exists()
+        old_folder = OLD / "improved-limited"
+        g = json.loads((old_folder / "started.json").read_text())
+        assert Path(f"/proc/{g['pid']}/stat").read_text().split(") ")[1].split()[0] == "T"
+        old_state = FileRunStore(old_folder / "results").load_state(g["run_id"])
+        recovered = json.loads((ROOT / "salvage-input.json").read_text())["items"]
+        assert {r["qa_id"] for r in recovered} == set(json.loads((ROOT / "inflight.json").read_text()))
+        assert not ({r["qa_id"] for r in recovered} & {r["qa_id"] for r in old_state["items"]})
+        _, _, env = process_environment(8884)
+        live = get(8884, f"runs/{g['source_run']}?include_history=false")
+        _, _, product_env = process_environment(8304)
+        db_path = Path(product_env["SENTRIX_DATA_DIR"]) / "sentrix.db"
         with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
-            active = db.execute(
-                "select count(*) from agent_turns where status in ('pending','running')"
-            ).fetchone()[0]
-        stable = stable + 1 if active == 0 else 0
+            assert db.execute("select count(*) from agent_turns where status in ('pending','running')").fetchone()[0] == 0
+    else:
+        assert not (ROOT / "intent.json").exists()
+        old_folder = OLD / "improved-limited"
+        g = json.loads((old_folder / "started.json").read_text())
+        pid = g["pid"]
+        assert "continue_four.py" in Path(f"/proc/{pid}/cmdline").read_bytes().decode()
         save(
-            ROOT / "progress.json",
+            ROOT / "intent.json",
             {
-                "status": "draining",
-                "active": active,
-                "preserved": len(present),
-                "inflight": len(mapping),
+                "old_run": g["run_id"],
+                "old_pid": pid,
+                "qa_concurrency": 16,
+                "judge_concurrency": 2,
                 "at": time.time(),
             },
         )
-        if stable >= 2:
-            break
-        time.sleep(10)
-    assert stable >= 2, "Drain deadline reached; old dispatcher stays paused"
-    _, _, env = process_environment(8884)
-    live = get(8884, f"runs/{g['source_run']}?include_history=false")
-    settings = Settings(
-        config_root=Path(env["PHOTOBENCH_CONFIG_ROOT"]),
-        results_root=ROOT / "salvage",
-        data_root=Path(env["PHOTOBENCH_DATA_ROOT"]),
-        sentrix_repo_root=Path(g["evaluation_source"]).parents[2],
-        sentrix_api_url="http://127.0.0.1:8304",
-        qa_concurrency=8,
-        sentrix_service_unit=env["PHOTOBENCH_SENTRIX_SERVICE_UNIT"],
-        sentrix_start_command=env["PHOTOBENCH_SENTRIX_START_COMMAND"],
-        sentrix_pid_file=Path(env["PHOTOBENCH_SENTRIX_PID_FILE"]),
-    )
-    container = Container.build(settings)
-    connection = container.config.public_runtime_connection_config()
-    req = RunRequest(
-        album_id=live["album_id"],
-        qa_set=live["qa_set"],
-        model_profile=live["model_profile"],
-        sentrix_url="http://127.0.0.1:8304",
-        model_base_url=connection["model_base_url"],
-        run_id="salvage",
-        mode="reuse",
-        scope_id=live["scope_id"],
-        reasoning=live["reasoning"],
-        graph_enabled=live["graph_enabled"],
-        defer_scoring=True,
-        runtime_snapshot=RunRuntimeSnapshot(json.dumps(connection), container.build_revision),
-    )
-    execution = container.run_execution(req)
-    assets = index_assets_by_name(execution.client.list_assets(scope_id=live["scope_id"], limit=None))
-    definitions = {r["qa_id"]: r for r in old_state["qa_snapshot"]["rows"]}
-    recovered = []
-    for q, m in mapping.items():
-        # Reuse the evaluator's projection with existing IDs. No conversation or turn POST occurs.
-        polled = execution.client.get_turn(turn_id=m["turn_id"], timeout=60)
-        assert polled["status"] not in ("running", "pending")
-        execution.client.start_conversation = lambda m=m, **kw: {"id": m["conversation_id"]}
-        execution.client.start_turn = lambda m=m, **kw: {"turn_id": m["turn_id"]}
-        execution._await_turn = lambda *a, polled=polled, **kw: polled
-        item = execution._evaluate_one(definitions[q], live["scope_id"], assets, req)
-        assert item["execution_status"] == "completed"
-        recovered.append(item)
-    save(
-        ROOT / "salvage-input.json",
-        {"run_id": "salvage", "qa_snapshot": old_state["qa_snapshot"], "items": recovered},
-    )
+        os.kill(pid, signal.SIGSTOP)
+        for _ in range(30):
+            if Path(f"/proc/{pid}/stat").read_text().split(") ")[1].split()[0] == "T":
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("Old dispatcher pause not observed")
+        save(old_folder / "intentional-pause.json", {"reason": "authorized_upgrade16", "pid": pid})
+        old_state = FileRunStore(old_folder / "results").load_state(g["run_id"])
+        present = {v["qa_id"] for v in old_state["items"]}
+        executed = set(old_state["phases"]["qa_eval"]["agent_executed_qa_ids"])
+        outstanding = executed - present
+        _, _, product_env = process_environment(8304)
+        db_path = Path(product_env["SENTRIX_DATA_DIR"]) / "sentrix.db"
+        mapping = {}
+        with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
+            started_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(g["at"]))
+            candidates = db.execute(
+                "select distinct c.title from agent_turns t join agent_conversations c on c.id=t.conversation_id "
+                "where julianday(t.created_at) >= julianday(?)",
+                (started_at + "+00:00",),
+            ).fetchall()
+            definitions_ids = {r["qa_id"] for r in old_state["qa_snapshot"]["rows"]}
+            outstanding |= {r[0] for r in candidates if r[0] in definitions_ids} - present
+            for q in outstanding:
+                matches = db.execute(
+                    "select t.id,t.conversation_id from agent_turns t join agent_conversations c "
+                    "on c.id=t.conversation_id where c.title=? order by t.created_at desc",
+                    (q,),
+                ).fetchall()
+                assert len(matches) == 1, (q, len(matches))
+                mapping[q] = {"turn_id": matches[0][0], "conversation_id": matches[0][1]}
+        save(ROOT / "inflight.json", mapping)
+        stable = 0
+        for _ in range(600):
+            with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
+                active = db.execute(
+                    "select count(*) from agent_turns where status in ('pending','running')"
+                ).fetchone()[0]
+            stable = stable + 1 if active == 0 else 0
+            save(
+                ROOT / "progress.json",
+                {
+                    "status": "draining",
+                    "active": active,
+                    "preserved": len(present),
+                    "inflight": len(mapping),
+                    "at": time.time(),
+                },
+            )
+            if stable >= 2:
+                break
+            time.sleep(10)
+        assert stable >= 2, "Drain deadline reached; old dispatcher stays paused"
+        _, _, env = process_environment(8884)
+        live = get(8884, f"runs/{g['source_run']}?include_history=false")
+        settings = Settings(
+            config_root=Path(env["PHOTOBENCH_CONFIG_ROOT"]),
+            results_root=ROOT / "salvage",
+            data_root=Path(env["PHOTOBENCH_DATA_ROOT"]),
+            sentrix_repo_root=Path(g["evaluation_source"]).parents[2],
+            sentrix_api_url="http://127.0.0.1:8304",
+            qa_concurrency=8,
+            sentrix_service_unit=env["PHOTOBENCH_SENTRIX_SERVICE_UNIT"],
+            sentrix_start_command=env["PHOTOBENCH_SENTRIX_START_COMMAND"],
+            sentrix_pid_file=Path(env["PHOTOBENCH_SENTRIX_PID_FILE"]),
+        )
+        container = Container.build(settings)
+        connection = container.config.public_runtime_connection_config()
+        req = RunRequest(
+            album_id=live["album_id"],
+            qa_set=live["qa_set"],
+            model_profile=live["model_profile"],
+            sentrix_url="http://127.0.0.1:8304",
+            model_base_url=connection["model_base_url"],
+            run_id="salvage",
+            mode="reuse",
+            scope_id=live["scope_id"],
+            reasoning=live["reasoning"],
+            graph_enabled=live["graph_enabled"],
+            defer_scoring=True,
+            runtime_snapshot=RunRuntimeSnapshot(json.dumps(connection), container.build_revision),
+        )
+        execution = container.run_execution(req)
+        assets = index_assets_by_name(execution.client.list_assets(scope_id=live["scope_id"], limit=None))
+        definitions = {r["qa_id"]: r for r in old_state["qa_snapshot"]["rows"]}
+        recovered = []
+        for q, m in mapping.items():
+            # Reuse the evaluator's projection with existing IDs. No conversation or turn POST occurs.
+            polled = execution.client.get_turn(turn_id=m["turn_id"], timeout=60)
+            assert polled["status"] not in ("running", "pending")
+            execution.client.start_conversation = lambda m=m, **kw: {"id": m["conversation_id"]}
+            execution.client.start_turn = lambda m=m, **kw: {"turn_id": m["turn_id"]}
+            execution._await_turn = lambda *a, polled=polled, **kw: polled
+            item = execution._evaluate_one(definitions[q], live["scope_id"], assets, req)
+            assert item["execution_status"] == "completed"
+            recovered.append(item)
+        save(
+            ROOT / "salvage-input.json",
+            {"run_id": "salvage", "qa_snapshot": old_state["qa_snapshot"], "items": recovered},
+        )
     old_state["items"].extend(recovered)
     # Save a separate evidence source; never modify the old run store.
-    salvage_store = FileRunStore(ROOT / "salvage-results")
+    salvage_store = FileResultWriter(ROOT / "salvage-results")
     old_state["run_id"] = "preserved-before16"
     salvage_store.write_snapshot("preserved-before16", old_state)
     present = {v["qa_id"] for v in old_state["items"]}
@@ -256,9 +274,10 @@ def apply():
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--apply", action="store_true")
+    p.add_argument("--resume-preserved", action="store_true")
     a = p.parse_args()
     try:
-        apply()
+        apply(a.resume_preserved)
     except Exception as exc:
         save(ROOT / "failure.json", {"error": str(exc), "type": type(exc).__name__, "at": time.time()})
         raise
