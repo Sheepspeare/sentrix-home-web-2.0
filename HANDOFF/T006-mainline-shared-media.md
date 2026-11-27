@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-28｜云端再现Arrearage，四全量停止新派题（当前有效）
+
+02:04左右四Judge均needs_review，上周大与改进大原评分state已核HTTP400/Arrearage/overdue-payment，完整错误留服务器；非磁盘或模型答错。四QA3029275/76/77/78已SIGSTOP，仅暂停派题和轮询，产品在飞自然继续，未取消/重启/重发。暂停核实Tsl；答卷保存数上周大647、改进大457、改进有限485、原Planner大819；有效评分525/404/454/770。进程存活不等于调度运行，旧watch显示qa_status running及dispatch_paused false为最后快照，实际SIGSTOP优先。home23GiB。
+
+凭据恢复前不盲重试Judge或续派；需账户恢复后核一次真实请求，再先GET收回在飞已完成turn与逐UUID服务故障分类，复用成功评分，只补missing。pause_account_outage.py a3b28f7d本机检查/提交→100 SHA406e9ddd通过，远端full-disk-recovery-20261127/account-outage-pause-20261128.json保留证据和4PID。b977回调已核为真实评分账户故障，监控已退出；原2fa1d928两题补跑监控独立保留，不重挂任务。之前全量6–20小时预测不含此次账户等待，应从恢复后重估。用户停止的上周有限仍停。
+
 ## 2026-11-28｜上周大预算27服务故障补跑：25题确定，仅续2题
 
 265d2回调已核：preserved18与missing9均终态，合18有效分11.3333333、7正常3660秒无答卷计错；另2条POST outcome unknown after ReadTimeout属提交异常，不能计模型错。逐产品DB核两qa_id无恢复1启动之后的新turn，独立missing2-recovery1仅续这2题。原missing2诊断10秒超时QA0；recovery1初缺模块QA0，仅worker改用已提交延长诊断helper接续。实际PID3247518/run missing2-recovery1-1795801489，QA2后Judge2，预算100/600及128K/相册原代码保持。完整证据留100。
