@@ -1671,3 +1671,8 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 
 - 09:00补验：systemd EnvironmentFile会覆盖Environment，6433e50f改后置专用env文件，独立两服务已验新config直连HTTPS。08:59:25单次resume c726ac，继承28答，probe实际16running；后续started及全量watch仍由9d6f24e8接管。
 - limited恢复3有效wake fc9be998-396a-413d-819f-76c71709bd3c，已取齐83并进入scoring83/Judge2；旧5b4恢复因部分目录已存在失败，记录保留。
+
+
+### 2026-11-27｜后处理迁100
+
+用户明确不在本机下载取证，全部留100。a1f2f794实现loopback采集和服务端持续评分，无SSH数据下载；Ruff/compile通过，本机提交后上传逐SHA核验。远端目录 /home/realmagic/xy/benchmarks/atm-bench/experiments/flash-condition-fusion-20261126/server-postprocess-a1f2f794，PID1338702，原27成功分复用，40答时13新增进入Judge2。原QA c726ac16并发不变。旧本机follow/recovery进程均已退出，无重复Judge。新增watch-status-only仅每30秒读终态简短JSON，私有wait在本机audit/server-postprocess。完整答卷/轨迹/Judge原包不下载；已存在本机历史证据保持。
