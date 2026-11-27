@@ -1872,3 +1872,7 @@ helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机�
 旧四组wake ec1fb60a回调查实改进大Judge题aac5d481返回answer/question而非score JSON，318成功保留；独立improved-large-judge-recovery1-20261127已prepare逐成功复用，但尚未launch（先缺representative_qa，再scp写失败）。随后查实/home 100%/0可用，改进有限worker.log明确benchmark state persistence failed Errno28。QA2131201/2660987/2234599及原Planner恢复Judge2363673进程已消失，baseline大2131199、27重试2297577和改进有限Judge2664410仍存活；不能称四组正常运行。最后已读改进有限363处理354分；上周大565处理468分；改进大348处理318分，均为故障前/保存快照，尚非最终。
 
 /root所在根分区约15GB空闲，/dev/shm约27GB但需保DB。已向用户异步问是否可将已结束实验完整证据迁/var/tmp校验后保原软链或提供其他存储路径，尚未得到答案，未删除raw/答卷/DB，未迁移。后续先解决容量，核进程/DB真实在途及最后成功保存，补取已完成turn并缺题恢复，禁止按旧列表直接重POST。新大Judge恢复目录representative_qa.py本次scp失败可能含null，必须从已提交源重新传且核SHA后才launch；0新Judge，原318保留。全量监控后续会分别报存储故障，勿重复启动。
+
+## 2026-11-27｜原Planner评分485a回调核对
+
+本机latest最后观察720已处理、恢复Judge进度690有效（原始进程口径，尚未重新合并8题替换统计）；现QA2234599及Judge2363673均无进程。/home仍0可用。judge.log仅留Traceback首行，无完整错误，不能独立断言Judge具体异常。未重启或重答；存储迁移确认仍待，完整结果保留服务器。485a已本机reconciled，之后按实际固定保存点与DB已完成turn核恢复范围。
