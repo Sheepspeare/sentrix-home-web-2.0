@@ -91,6 +91,9 @@ def main(out):
                 stops = []
                 answers = []
                 errors = []
+                final_signals = []
+                error_types = []
+                context_windows = []
                 for tid in ids:
                     found = db.execute(
                         "select status,termination_reason,answer,trace_json from agent_turns where id=?",
@@ -103,10 +106,15 @@ def main(out):
                     statuses.append(status)
                     reasons.append(reason)
                     answers.append(answer or "")
+                    final_signals.extend(marks(answer or ""))
                     stops.append(trace.get("budget", {}).get("request_limits", {}).get("stop_code"))
                     signals.extend(marks(answer or ""))
                     for c in trace.get("model_calls", []) + trace.get("debug_calls", []):
                         diag = c.get("diagnostics") or {}
+                        if c.get("status") in ("error", "failed"):
+                            error_types.append(c.get("error_type") or diag.get("error_category") or "unknown")
+                            if diag.get("context_window_tokens"):
+                                context_windows.append(diag["context_window_tokens"])
                         err = (
                             str(c.get("error") or "")
                             + " "
@@ -152,6 +160,9 @@ def main(out):
                     "has_answer": bool(any(answers)),
                     "turn_ids": ids,
                     "execution_error": str(item.get("error") or "")[:500],
+                    "final_signals": sorted(set(final_signals)),
+                    "error_types": dict(collections.Counter(error_types)),
+                    "error_context_windows": sorted(set(context_windows)),
                 }
                 if signals:
                     row["classification"] = "service_or_transport_affected"
@@ -172,6 +183,13 @@ def main(out):
         answered = [r for r in rows if r["score"] is not None]
         abnormal = [r for r in rows if r["classification"] == "service_or_transport_affected"]
         normal = [r for r in answered if not r["signals"]]
+        delivered = [
+            r
+            for r in answered
+            if not r["signals"]
+            and r["termination"]
+            and all(v in ("answered", "answered_with_gap") for v in r["termination"])
+        ]
         failures = [r for r in rows if r["classification"] == "time_limit_no_answer"]
         determined = len(answered) + sum(r["score"] is None for r in failures)
         summary = {
@@ -181,6 +199,40 @@ def main(out):
             "score_sum": sum(r["score"] for r in answered),
             "scored_mean": sum(r["score"] for r in answered) / len(answered) if answered else None,
             "normal_scored_n": len(normal),
+            "normally_delivered_n": len(delivered),
+            "normally_delivered_mean": sum(r["score"] for r in delivered) / len(delivered)
+            if delivered
+            else None,
+            "service_in_final_answer": sum(bool(r["final_signals"]) for r in rows),
+            "service_signal_breakdown": dict(
+                collections.Counter(
+                    (
+                        "final_answer"
+                        if r["final_signals"]
+                        else "terminal_model_error"
+                        if "model_error" in r["termination"]
+                        else "intermediate"
+                    )
+                    for r in rows
+                    if r["signals"]
+                )
+            ),
+            "unresolved_model_error_types": dict(
+                collections.Counter(
+                    typ
+                    for r in rows
+                    if r["classification"] == "model_error_review"
+                    for typ in r["error_types"]
+                )
+            ),
+            "unresolved_context_window_questions": dict(
+                collections.Counter(
+                    str(w)
+                    for r in rows
+                    if r["classification"] == "model_error_review"
+                    for w in r["error_context_windows"]
+                )
+            ),
             "normal_scored_mean": sum(r["score"] for r in normal) / len(normal) if normal else None,
             "time_limit_no_answer": len(failures),
             "determined_with_failure_zero": determined,
