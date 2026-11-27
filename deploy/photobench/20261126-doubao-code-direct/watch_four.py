@@ -75,7 +75,11 @@ def watch(output):
                 "-o",
                 "ConnectTimeout=10",
                 "192.168.0.100",
-                f"PYTHONPATH={REMOTE}/../flash-doubao-code-flash-memory-direct-20261126/release/apps/photobench/src {PYTHON} {REMOTE}/watch_four.py --status {REMOTE}/prepared",
+                (
+                    f"PYTHONPATH={REMOTE}/../flash-doubao-code-flash-memory-direct-20261126/"
+                    f"release/apps/photobench/src {PYTHON} {REMOTE}/watch_four.py "
+                    f"--status {REMOTE}/prepared"
+                ),
             ],
             capture_output=True,
             text=True,
