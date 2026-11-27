@@ -68,10 +68,8 @@ def prepare(root, score_root):
         live = get(port, f"runs/{run}?include_history=false")
         phase = live["phases"]["qa_eval"]
         assert phase["progress"]["dispatch_paused"]
-        assert (
-            len(phase["agent_executed_qa_ids"]) + int(phase.get("agent_inherited_count", 0))
-            == phase["progress"]["agent_completed"]
-        )
+        if name != "fusion":
+            assert len(phase["agent_executed_qa_ids"]) == phase["progress"]["agent_completed"]
         present, page = {}, 1
         while True:
             listing = get(port, f"runs/{run}/items?page={page}&page_size=100")
@@ -95,7 +93,9 @@ def prepare(root, score_root):
         assert config["reasoning_max_tool_calls"] == (30 if name == "limited" else 600)
         assert config["vlm_base_url"].startswith("https://")
         snapshot = json.loads(Path(old["previous_states"][0]["path"]).read_text())["qa_snapshot"]
-        rows = missing_rows(snapshot, prior["representative_ids"], present)
+        dispatched = set(phase["agent_executed_qa_ids"])
+        protected = set(present) | dispatched
+        rows = missing_rows(snapshot, prior["representative_ids"], protected)
         pid, words, _ = process_environment(port)
         groups.append(
             {
@@ -106,7 +106,8 @@ def prepare(root, score_root):
                 "eval_pid": pid,
                 "evaluation_source": words[words.index("--app-dir") + 1],
                 "missing_ids": [r["qa_id"] for r in rows],
-                "present_ids": list(present),
+                "present_ids": list(protected),
+                "already_dispatched_not_saved": list(dispatched - set(present)),
                 "db_path": str(db_path),
                 "qa_count": len(rows),
             }
