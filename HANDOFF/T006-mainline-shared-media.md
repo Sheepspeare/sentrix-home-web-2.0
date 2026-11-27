@@ -1828,3 +1828,7 @@ QA24/24完成、同Flash native_v2有效24分=13一分11零分。按(qa_id,turn_
 账户错误：上周大22题最终答案含账户故障，另2题终态model_error含账户故障，共24应定向补跑；另1题出现账户故障后正常回答得1分，无需重跑。本周原Planner大8题最终账户故障全0，应定向补跑。上周大另3题模型接口read operation timed out，均0，属于接口超时候选；不是3660秒题目墙钟超时。原Planner另1重复工具400、2内容审核400属请求/策略错误，不能称账户宕机。本次只检查未发QA/Judge，未更改业务。当前改进两组未检出账户/连接故障；改进大旧24题重跑已替换，不再重复。
 
 上下文错误与预算/墙钟分别列：PromptTooLong历史警告不能全认定最终失败，旧16K恢复范围须逐末次错误继续核定；超过128K异常按用户要求计错不重跑。完整逐题证据仅在100/planner-large-continue16-20261127/quality-review，live_quality_review.py提交7c9a0dac，本机/服务器SHA ab3e36590e2e71d0323ce9951436a8009d1bee9de825d2b1891d1a8b2c0de220一致。工具Ruff通过。保所有活动任务。
+
+## 2026-11-27 17:32｜仅8账户故障题授权补跑
+
+用户确认本周原Planner大预算8道账户故障题定向重跑。已核此前24账户题重跑仅属改进大组，已作为其新来源替换；上周基线大组24账户+3接口读取超时仍保原结果，无本次新增补跑授权。原Planner8题严格取quality-review最终账户错误且原分0清单，定义SHA冻结，独立run account-retry-planner-1795771874，PID2287762，服务器planner-account8-retry-20261127。独立QA2，共享8297产品workers16，128K100/600冻结，原全量2234599及Judge2234604保持；QA后原native_v2关思考Flash直连Judge2，新版本单存不覆盖旧分。helper3ce3b4ef，Ruff/compile过，本机远端SHA b732123b30b7250883a43bb11bd9539b4e38731362cf8fb27d541f6979284c0c一致。主聊wake401de319-a0b4-4e16-b04f-393baf9fd791已登记，健康queue；本机只短状态audit/planner-account8-retry-20261127。回调先核阶段，仅补missing；成功后汇总和reviewer须显式接新来源，尚未替换。不要重放launch或原QA。
