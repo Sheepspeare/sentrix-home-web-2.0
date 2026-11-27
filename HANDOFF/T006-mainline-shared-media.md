@@ -1844,3 +1844,9 @@ cd97回调已核真实failed_phase=model_deploy、10秒timed out，0QA派出/0�
 ## 2026-11-27 18:11｜原Planner大预算持续评分格式失败恢复
 
 9bce回调实际仅Judge退出：batch0029 atm-27041cfb-027a-4bde-8177-e506e2b153f9返回未满足boolean accuracy，原包/失败历史保留；QA2234599保持running/16，旧Judge2234604为Z。恢复仅评分目录planner-large-judge-recovery1-20261127，549成功结果及完整diagnostic合并复用，原QA结果软链只读接续，2Judge PID2363673。实际已新增2分，最新552处理/551有效，QA与Judge均活跃；原全量/相册/配置保持。helper58d78cc4 Ruff/compile通过，远端SHA18835a229141f040fe6a792b4d697fdc74df2037e15418b0d19be0680060c694一致；wake485a1495-ca0d-43c6-a186-e8085f2bce48健康queue。9bce已reconciled，不重放；原workerQA结束可能记录旧Judge needs_review，需以新评分目录为准。质量review后续须接新评分来源；全部完整文件留100。
+
+## 2026-11-27 19:42｜原Planner8账户故障补跑验收并接汇总
+
+401de319完成已核：8处理，7答卷7有效评分共4分，另atm-ea97b84e-2be5-4394-8b79-491320978eeb墙钟3660秒无答卷，按用户计错不重跑。旧8全0，新4改善4仍错，固定分母4/8=50%、有答卷4/7=57.1429%。7JudgeHTTP全200关思考温0/2048，6426Token；按responseID唯一、完整canonical请求/响应SHA、实际非排序序列化请求SHA、usage和时间核验，无新增审计请求。直连原包request/response结构与网关旧helper不同，finalize_account8已适配真实stream=false及格式，854b70fa通过Ruff，原文件不改。
+
+服务器planner-account8-retry-20261127/accepted-version-overrides.json逐qa_id与原定义一致、旧分保留；live_quality_review df1a9f5f显式接恢复Judge和8新版本（含timeout移除旧评分置失败零），每题唯一计数。19:41:54快照原Planner614处理606有效325.0095238分，8无答卷计错后52.9331472%，有答卷53.6319346%，当前0已答待分，8旧账户故障已无。其它组快照上周大474/401分、改进有限227/227、改进大220/202，非本次8补跑对照。原QA/Judge继续，原Planner8回调已reconciled，勿重跑。上周27补跑继续原wake62dc；完整证据仅100。本次只验Judge原包，QA成本原包全核仍待，不宣称AgentHTTP已验。
