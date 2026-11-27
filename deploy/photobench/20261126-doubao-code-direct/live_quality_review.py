@@ -74,6 +74,32 @@ def main(out):
                     == "completed"
                 ):
                     scores[r["qa_id"]] = r["normalized_score"]
+        overrides_applied = 0
+        if g["name"] == "planner-large":
+            recovery = B / "planner-large-judge-recovery1-20261127/planner-large/judge"
+            for path in sorted(recovery.glob("batch-*/scoring-state.json")):
+                saved = json.loads(path.read_text())
+                for value in saved.get("scoring_results", {}).values():
+                    if (
+                        value.get("status") == "completed"
+                        and saved.get("diagnostic_results", {})
+                        .get(value.get("diagnostic_key"), {})
+                        .get("status")
+                        == "completed"
+                    ):
+                        scores[value["qa_id"]] = value["normalized_score"]
+            accepted = B / "planner-account8-retry-20261127/accepted-version-overrides.json"
+            if accepted.exists():
+                manifest = json.loads(accepted.read_text())
+                for version in manifest["version_overrides"]:
+                    newer = FileRunStore(Path(version["results"])).load_state(version["run_id"])
+                    item = next(v for v in newer["items"] if v["qa_id"] == version["qa_id"])
+                    items[version["qa_id"]] = item
+                    if version["score"] is None:
+                        scores.pop(version["qa_id"], None)
+                    else:
+                        scores[version["qa_id"]] = version["score"]
+                    overrides_applied += 1
         _, _, env = process_environment(g["product"])
         rows = []
         dbpath = Path(env["SENTRIX_DATA_DIR"]) / "sentrix.db"
@@ -194,6 +220,7 @@ def main(out):
         determined = len(answered) + sum(r["score"] is None for r in failures)
         summary = {
             "name": g["name"],
+            "accepted_retry_versions": overrides_applied,
             "processed": len(items),
             "valid_scores": len(answered),
             "score_sum": sum(r["score"] for r in answered),
