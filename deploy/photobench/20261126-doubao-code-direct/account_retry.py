@@ -157,7 +157,10 @@ def worker(root):
         },
     )
     if snapshot["rows"]:
-        result = container.run_execution(request).execute(request)
+        execution = container.run_execution(request)
+        diagnostics = execution.client.diagnostics
+        execution.client.diagnostics = lambda **kw: diagnostics(timeout=60)
+        result = execution.execute(request)
         assert result["status"] in {"completed", "completed_with_errors"}, result.get("fatal_error")
         source = container.run_store.load_state(run)
         save(
