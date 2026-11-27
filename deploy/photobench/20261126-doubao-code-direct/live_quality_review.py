@@ -66,6 +66,8 @@ def main(out):
         for s in states:
             items.update({v["qa_id"]: v for v in s["items"]})
         scoring = folder / "judge"
+        if g["name"] == "improved-limited":
+            scoring = B / "improved-limited-judge-recovery1-20261127/improved-limited/judge"
         preserved = json.loads((scoring / "preserved-scores.json").read_text())
         scores = {q: v["result"]["normalized_score"] for q, v in preserved.items()}
         for p in sorted(scoring.glob("batch-*/scoring-state.json")):

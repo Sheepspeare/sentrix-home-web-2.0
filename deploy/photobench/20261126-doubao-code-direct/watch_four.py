@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 REMOTE = "/home/realmagic/xy/benchmarks/atm-bench/experiments/full-four-continue-20261127"
+JUDGE_ROOT = None
 PYTHON = "/home/realmagic/xy/releases/psh-b2030e1-100-20261117/.venv/bin/python"
 
 
@@ -20,8 +21,12 @@ def status(root):
     for g in plan["groups"]:
         folder = root / g["name"]
         row = {k: g[k] for k in ["name", "inherited", "remaining", "concurrency"]}
+        judge_folder = JUDGE_ROOT / g["name"] if JUDGE_ROOT else folder
         for name in ["started", "qa-terminal", "terminal", "failure", "judge-failure", "judge-process"]:
-            p = folder / (name + ".json")
+            if JUDGE_ROOT and name in ["judge-failure", "judge-process"]:
+                p = judge_folder / (name + ".json")
+            else:
+                p = folder / (name + ".json")
             if p.exists():
                 d = json.loads(p.read_text())
                 if name == "started":
@@ -41,12 +46,14 @@ def status(root):
             except KeyError:
                 row["qa_status"] = "starting"
         for name in ["progress", "terminal"]:
-            p = folder / "judge" / (name + ".json")
+            p = judge_folder / "judge" / (name + ".json")
             if p.exists():
                 row["judge_" + name] = json.loads(p.read_text())
-        p = folder / "judge/preserved-scores.json"
+        p = judge_folder / "judge/preserved-scores.json"
         if p.exists():
             row["preserved_valid"] = len(json.loads(p.read_text()))
+        if JUDGE_ROOT and row.get("qa_status") in ["completed", "completed_with_errors"]:
+            row["terminal"] = row.get("judge_terminal", {"status": "running"})
         if row.get("failure") or row.get("judge-failure") or row.get("fatal_error"):
             failed = True
         if row.get("judge_terminal", {}).get("status") not in [None, "completed"]:
@@ -79,6 +86,7 @@ def watch(output):
                     f"PYTHONPATH={REMOTE}/../flash-doubao-code-flash-memory-direct-20261126/"
                     f"release/apps/photobench/src {PYTHON} {REMOTE}/watch_four.py "
                     f"--status {REMOTE}/prepared"
+                    + (f" --judge-root {JUDGE_ROOT}" if JUDGE_ROOT else "")
                 ),
             ],
             capture_output=True,
@@ -105,7 +113,9 @@ if __name__ == "__main__":
     p.add_argument("--status", type=Path)
     p.add_argument("--watch", type=Path)
     p.add_argument("--remote", default=REMOTE)
+    p.add_argument("--judge-root", type=Path)
     a = p.parse_args()
+    JUDGE_ROOT = a.judge_root
     REMOTE = a.remote
     if a.status:
         print(json.dumps(status(a.status), ensure_ascii=False))
