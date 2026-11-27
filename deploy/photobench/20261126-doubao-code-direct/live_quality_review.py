@@ -78,7 +78,7 @@ def main(out):
         dbpath = Path(env["SENTRIX_DATA_DIR"]) / "sentrix.db"
         with sqlite3.connect(dbpath.as_uri() + "?mode=ro", uri=True) as db:
             for q, item in items.items():
-                turns = item.get("turns") or []
+                turns = item.get("runtime_turns") or []
                 ids = [v.get("turn_id") for v in turns if v.get("turn_id")]
                 if not ids and item.get("turn_id"):
                     ids = [item["turn_id"]]
