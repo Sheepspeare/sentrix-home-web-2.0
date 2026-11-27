@@ -1832,3 +1832,7 @@ QA24/24完成、同Flash native_v2有效24分=13一分11零分。按(qa_id,turn_
 ## 2026-11-27 17:32｜仅8账户故障题授权补跑
 
 用户确认本周原Planner大预算8道账户故障题定向重跑。已核此前24账户题重跑仅属改进大组，已作为其新来源替换；上周基线大组24账户+3接口读取超时仍保原结果，无本次新增补跑授权。原Planner8题严格取quality-review最终账户错误且原分0清单，定义SHA冻结，独立run account-retry-planner-1795771874，PID2287762，服务器planner-account8-retry-20261127。独立QA2，共享8297产品workers16，128K100/600冻结，原全量2234599及Judge2234604保持；QA后原native_v2关思考Flash直连Judge2，新版本单存不覆盖旧分。helper3ce3b4ef，Ruff/compile过，本机远端SHA b732123b30b7250883a43bb11bd9539b4e38731362cf8fb27d541f6979284c0c一致。主聊wake401de319-a0b4-4e16-b04f-393baf9fd791已登记，健康queue；本机只短状态audit/planner-account8-retry-20261127。回调先核阶段，仅补missing；成功后汇总和reviewer须显式接新来源，尚未替换。不要重放launch或原QA。
+
+## 2026-11-27 17:35｜上周大预算27服务故障题定向补跑
+
+用户授权上周基线大预算24账户故障+3接口读取超时共27题补跑。服务器baseline-account27-retry-20261127，run baseline-account27-retry-20261127-1795772046，PID2293175，首次状态pending/存活/0已处理；独立QA2共享8306总16workers，原全量继续，100/600128K/原代码相册冻结。新答案后接Flash关思考native_v2直连Judge2；原答案轨迹分保留，完成后需显式接新版本汇总，未替换前不能报已替换。selection27严格核（账户22最终+2终止model_error，读取超时3），helperdcf94bb2本机Ruff/compile通过/已提交，远端SHA7302cd7c9ea3f218cdb0443a49bfac681b32530ea8801948aa8f06d4003bcd15一致。wakecd97a2d3-946d-4bce-bcf2-2790e3a86450健康queue已登记，短状态audit/baseline-account27-retry-20261127；完整文件仅100。原Planner8另wake401de319保持。禁止重放launch/QA，失败只续missing。
