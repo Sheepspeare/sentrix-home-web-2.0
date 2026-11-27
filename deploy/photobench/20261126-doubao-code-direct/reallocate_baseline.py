@@ -28,8 +28,13 @@ def active(port):
         ).fetchone()[0]
 
 
-def apply(root):
-    assert not (root / "intent.json").exists(), "Inspect existing receipt before retry"
+def apply(root, resume_paused=False):
+    if not resume_paused:
+        assert not (root / "intent.json").exists(), "Inspect existing receipt before retry"
+    else:
+        assert (root / "intent.json").exists()
+        assert not (root / "original-control-before.json").exists()
+        assert not (root / "launched.json").exists()
     root.mkdir(exist_ok=True)
     old = json.loads((FOUR / "prepared/baseline-limited/started.json").read_text())
     pid = old["pid"]
@@ -47,8 +52,14 @@ def apply(root):
         },
     )
     # Suspend only the independent evaluator. Product turns finish on the product service.
-    os.kill(pid, signal.SIGSTOP)
-    assert "\nState:\tT" in Path(f"/proc/{pid}/status").read_text()
+    if not resume_paused:
+        os.kill(pid, signal.SIGSTOP)
+    for _ in range(20):
+        if "\nState:\tT" in Path(f"/proc/{pid}/status").read_text():
+            break
+        time.sleep(0.1)
+    else:
+        raise RuntimeError("Dispatcher not stopped")
     save(
         FOUR / "prepared/baseline-limited/intentional-pause.json",
         {
@@ -170,9 +181,10 @@ def apply(root):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("root", type=Path)
+    p.add_argument("--resume-paused", action="store_true")
     a = p.parse_args()
     try:
-        apply(a.root)
+        apply(a.root, a.resume_paused)
     except Exception as e:
         save(
             a.root / "failure.json",
