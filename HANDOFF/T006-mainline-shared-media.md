@@ -1738,3 +1738,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 详细报告：`/Users/jzousz/Documents/ChatGPT/产品项目/audit/20261126-flash-agent-candidates/doubao-code-flash-memory-direct/full-1013/historical75-code-comparison/RESULTS.md`。本轮只读取证；同16同裁判旧相册Doubao46.67%/Flash大40%，新Flash相册53.33%且相册不同，不据此判断全量排名。保持既有128K排空及重跑范围授权，不热改压缩逻辑。
 
 - 11/27双组128K已生效（有限02:41:45、大03:22:36），16K边界89/81题；原run/evalPID与16QA/2Judge保持。正式retest须全量终态后按逐题错误补，313K异常不重跑；见T006/context-128k验收与补跑计划。
+
+- 11/27新版条件融合全1013主聊独立状态监控已登记wake37f2639a-7ae3-4918-a8aa-036d6e76a468：8883/8303 run c726ac、bc736153、16QA；服务器后处理PID1338702/2Judge，首核41处理/40分QS77.5%。仅短状态留本机，不下载轨迹答卷原包；完成/QA异常/评分异常/进程退出通知。评分protocol实际18148入口，直连说法仅QA已知，待核评分路径；不重复侧聊5761f896或业务。
