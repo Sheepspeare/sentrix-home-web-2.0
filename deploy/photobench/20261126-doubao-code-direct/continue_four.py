@@ -163,7 +163,7 @@ def judge(root, g, finished):
         "baseline-large": "large",
         "improved-large": "fusion",
     }.get(g["name"])
-    score_paths = []
+    score_paths = [Path(v) for v in g.get("previous_score_paths", [])]
     if previous_group:
         original = next(v for v in previous["groups"] if v["name"] == previous_group)
         score_paths.extend(Path(v["path"]) for v in original["previous_states"])
@@ -175,7 +175,7 @@ def judge(root, g, finished):
         score_paths.extend(
             sorted((BASE / "fusion83-account-retry-20261127/fusion/judge").glob("batch-*/scoring-state.json"))
         )
-    else:
+    elif not score_paths:
         score_paths.append(root / "improved-limited-existing-scores.json")
     preserved = {}
     for path in score_paths:
