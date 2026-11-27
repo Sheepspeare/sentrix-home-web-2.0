@@ -162,6 +162,9 @@ def worker(root, name):
         sentrix_repo_root=Path(g["evaluation_source"]).parents[2],
         sentrix_api_url=f"http://127.0.0.1:{g['product']}",
         qa_concurrency=16,
+        sentrix_service_unit=os.environ["PHOTOBENCH_SENTRIX_SERVICE_UNIT"],
+        sentrix_start_command=os.environ["PHOTOBENCH_SENTRIX_START_COMMAND"],
+        sentrix_pid_file=Path(os.environ["PHOTOBENCH_SENTRIX_PID_FILE"]),
     )
     container = Container.build(settings)
     connection = container.config.public_runtime_connection_config()
