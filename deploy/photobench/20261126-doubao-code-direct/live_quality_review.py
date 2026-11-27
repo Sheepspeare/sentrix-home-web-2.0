@@ -2,6 +2,7 @@
 
 import collections
 import json
+import re
 import sqlite3
 import sys
 import time
@@ -83,6 +84,8 @@ def main(out):
                 if not ids and item.get("turn_id"):
                     ids = [item["turn_id"]]
                 signals = marks(str(item.get("error", "")) + " " + str(item.get("answer", "")))
+                if not ids:
+                    ids = re.findall(r"turn_\d+", str(item.get("error", "")))
                 statuses = []
                 reasons = []
                 stops = []
@@ -104,7 +107,15 @@ def main(out):
                     signals.extend(marks(answer or ""))
                     for c in trace.get("model_calls", []) + trace.get("debug_calls", []):
                         diag = c.get("diagnostics") or {}
-                        err = str(c.get("error") or "") + " " + str(diag.get("error") or "")
+                        err = (
+                            str(c.get("error") or "")
+                            + " "
+                            + str(diag.get("error") or "")
+                            + " "
+                            + str(c.get("error_message") or "")
+                            + " "
+                            + str(diag.get("error_message") or "")
+                        )
                         hit = marks(err)
                         if hit:
                             signals.extend(hit)
@@ -113,7 +124,14 @@ def main(out):
                         if isinstance(h, int) and h >= 400:
                             errors.append("HTTP " + str(h) + " " + err[:400])
                     if reason == "model_error":
-                        errors.append(json.dumps(trace.get("error"), ensure_ascii=False)[:600])
+                        errors.extend(
+                            json.dumps(
+                                {k: v for k, v in c.items() if "error" in k.lower() or k == "diagnostics"},
+                                ensure_ascii=False,
+                            )[:1200]
+                            for c in trace.get("model_calls", [])
+                            if c.get("status") in ("error", "failed")
+                        )
                 # Score states already freeze the evaluated answer; statuses are separate diagnostics.
                 complete = item.get("execution_status") == "completed"
                 terminal_failure = not complete and item.get("execution_status") not in (
@@ -141,6 +159,7 @@ def main(out):
                     any(v == "timeout" for v in reasons)
                     or "timeout" in str(item.get("error", "")).lower()
                     or "timed out" in str(item.get("error", "")).lower()
+                    or "did not complete within" in str(item.get("error", "")).lower()
                 ):
                     row["classification"] = "time_limit_no_answer"
                 elif any(v == "model_error" for v in reasons):
