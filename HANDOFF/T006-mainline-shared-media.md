@@ -1880,3 +1880,9 @@ helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机�
 ## 2026-11-27｜改进有限f6c回调核对
 
 最后已保存364已处理/355有效分，比上一快照新增1；QA2660987已退出，独立Judge2664410仍存活，进度355且日志无新增错误。/home持续0可用，不能以评分进程存活判断评分可写入或全量正常；无重启/重答。9条差额须按执行状态逐题确认，不能直接称9题待评分。f6c已reconciled，存储路径确认仍待。
+
+## 2026-11-27｜上周27题磁盘故障恢复2已登记
+
+62dc回调确认为Errno28保存失败，QA2297577退出，原14保存（8completed/6timeout），未进入Judge。现场/home恢复约4.5GB（外部来源未核，不宣称本机释放）。产品8306无pending/running，按原started时间与27清单核DB：另4原turn已failed/failed/complete/partial，9题未派发。60411000 helper先GET投影已有4、独立保存18，score_existing只评有效答卷；原6timeout不重跑。只对剩9建missing9独立QA2/原100600128K，之后Judge2，旧结果不覆盖。
+
+本机Ruff/compile过，recover_account27 SHA35fda9efdca2915d3bca9f5200a3fea2fcf3f5ba13980f2ea6c9dbe22513fd2a、account_retry SHA c2117c5789fba01bb393041579f2941c0893509d0bb850333c66f95e55b5b422远端一致。新控制器wake aab21239-9e1a-4dff-a8c5-ab73988c47f3，目标主聊，服务器baseline-account27-recovery2-20261127。尚未验收prepared/实际launch，不能声称9题已实际运行；回调先查intent/prepared/failure及preserved-scoring/terminal，再给missing9单独注册终态监控。已有intent禁止重放recover脚本；失败只续缺阶段，保护旧27所有结果，完整数据仅100。原四全量磁盘失败另待恢复，未在本轮重启。
