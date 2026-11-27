@@ -12,12 +12,16 @@ B = Path("/home/realmagic/xy/benchmarks/atm-bench/experiments")
 
 
 def main():
-    import account_retry
+    from representative_qa import load
+
+    account_retry = load(
+        "account_retry_current", str(B / "baseline-account27-recovery2-20261127/account_retry-current.py")
+    )
 
     from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
 
     root = B / "baseline-account27-recovery2-20261127"
-    target = root / "missing2"
+    target = root / "missing2-recovery1"
     assert not target.exists()
     ids = {"atm-b622ef04-2a97-4477-a779-51017c478cbc", "atm-79ab440a-5da6-4cb8-900e-368234df9c36"}
     original = B / "baseline-account27-retry-20261127"
