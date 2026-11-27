@@ -185,6 +185,10 @@ def prepare(name):
 
 def launch():
     groups = [json.loads((ROOT / "prepared" / n / "prepared.json").read_text())["group"] for n in SPECS]
+    for g in groups:
+        folder = ROOT / "prepared" / g["name"]
+        g.update(read_legacy_snapshots=True,
+                 authoritative_scores=str(folder / "preserved-scores.json"))
     assert not (ROOT / "prepared/intent.json").exists()
     save(ROOT / "prepared/intent.json", {"groups": groups, "judge_concurrency_per_group": 2})
     import continue_four
