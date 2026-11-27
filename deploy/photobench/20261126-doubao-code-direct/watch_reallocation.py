@@ -18,7 +18,10 @@ def status(root):
         return json.loads(failure.read_text())
     if not (root / "intent.json").exists():
         progress = root.parent / "progress.json"
-        return {"status": "running", "transition": json.loads(progress.read_text()) if progress.exists() else "starting"}
+        return {
+            "status": "running",
+            "transition": json.loads(progress.read_text()) if progress.exists() else "starting",
+        }
     plan = json.loads((root / "intent.json").read_text())
     rows = []
     failed = False
