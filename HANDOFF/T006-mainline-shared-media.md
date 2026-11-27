@@ -1748,3 +1748,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - 11/27 10:02云端Flash返回HTTP400 Arrearage（欠费/账户状态），新版Judge48分QS77.0833%后needs_review，旧代码128K有限319分/大233分Judge同错退出；QA当时仍运行。已仅将4条活动全量dispatch-control的pause_after_completed设1，保在飞/原run/并发，原值逐组保存在服务器arrearage-pause-20261127.json，未取消/部署/重评。需账户恢复后核一次请求，再按missing恢复Judge及原dispatch；不盲重试。主聊37f监控已reconciled，不将QA running当模型健康；详见main-thread-monitor/arrearage-pause-receipt.json。
 
 - 11/27原Planner大预算恢复3回调已核：新增51有效、累计511分QS53.7038%，旧460及全部状态SHA/对象保持；末两Judge明确HTTP400 Arrearage，active0。5c4080bf已reconciled；等待账户恢复，不再启动恢复循环，之后只续缺分并按既存暂停回执恢复dispatch。
+
+- 11/27用户充值后改为先固定83代表验证、再续全量，优先旧代码自身相册有限/大组及新版融合。现场三个dispatch_paused均true，保持停派；83覆盖分别27处理25分/24处理23分/77处理48分。新版有限独立83已齐QS59.6386%（原37.3494%，23改善4退化），记录Token19351792比原+13.66%，原包完整核验仍pending。先补已有代表缺分和缺题，统一窗口/同UUID后报结论；本轮未重启QA/Judge，不自动恢复1013。详见representative83-priority-20261127/status-and-plan.json。
