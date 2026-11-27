@@ -99,7 +99,6 @@ def prepare(root, group="planner"):
 
 
 def worker(root):
-    name = root.name
     from photobench.application.run_execution.service import RunRequest
     from photobench.bootstrap.container import Container
     from photobench.config import Settings
@@ -109,7 +108,6 @@ def worker(root):
     g = plan["group"]
     folder = root
     score_root = Path(plan["score_root"])
-    previous = json.loads((score_root / "intent.json").read_text())
     snapshot = json.loads((root / "snapshot.json").read_text())
     live = get(g["port"], f"runs/{g['source_run']}?include_history=false")
     settings = Settings(
@@ -173,6 +171,13 @@ def worker(root):
         )
     else:
         source = {"run_id": run, "qa_snapshot": snapshot, "items": []}
+    score_existing(root, source, g["qa_count"], score_root)
+
+
+def score_existing(root, source, qa_count, score_root):
+    name = root.name
+    folder = root
+    previous = json.loads((score_root / "intent.json").read_text())
     # Use the same frozen production scoring protocol and audited direct HTTP adapter.
     follow = load("representative_follow", previous["follow_source"])
     scoring = folder / "judge"
@@ -208,7 +213,7 @@ def worker(root):
     status = owner.scorer.score_saved(source, owner.protocol, scoring, runner, concurrency=2)
     save(
         folder / "terminal.json",
-        {"status": status["status"], "qa_count": g["qa_count"], "scoring": status, "at": time.time()},
+        {"status": status["status"], "qa_count": qa_count, "scoring": status, "at": time.time()},
     )
 
 
