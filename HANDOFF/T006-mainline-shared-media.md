@@ -1890,3 +1890,13 @@ helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机�
 ## 2026-11-27｜27补跑恢复2已有12答卷评分完成
 
 aab21239控制器成功：18既有结果保留（原14+GET投影4），preserved-scoring完成12有效/0评分失败，QS均值52.7778%、合6.333333分；11JudgeHTTP/12018记录Token，原包唯一校验尚待，6墙钟超时计错。27全题尚未完成，不能提前替换全组汇总。剩9题missing9/PID2983173仍Ssl，home约4.2GB。新只读全程wake265d2c2b-cbe6-4b25-819a-2e1954ebb65f，本机audit/baseline-account27-missing9-monitor，account_retry --remote-root已支持嵌套路径（730d852c Ruff/compile通过）；没有重启QA。完整结果/评分/原包留100。回调先核实际阶段与磁盘，只续missing；完成后统一核27定义SHA、固定来源版本和HTTP，再显式接accepted overrides与live_quality_review。原全量磁盘失败仍另待恢复，不能宣称已全部续跑。
+
+## 2026-11-27｜用户释放空间后四全量已恢复（当前有效）
+
+用户明确要求续跑磁盘故障中断任务；/home核21–22GB可用，准备后18GB。用户此前停掉的上周有限2131198继续T，不恢复。四旧QA均已退出，恢复根full-disk-recovery-20261127：上周大继承584/剩429（GET接18旧turn）、改进大367/646（接16）、改进有限380/633（接16）、原Planner大735/278（接15）；合65既有执行GET投影独立保存，0重答，原来源及评分保留。各快照与已答互斥且各合1013；模型/相册/预算/128K冻结，产品workers均16。
+
+新QA PID3029275/3029276/3029277/3029278，各16；Judge3029280/3029282/3029281/3029279各2直连关思考native_v2。实际均running，改进大已新增1题；评分实际补到488/339/371/706（这是原始评分目录口径，原Planner8替换仍须reviewer合并）。旧等待Judge2131202/2131208/2664410仅SIGSTOP交权，禁止SIGCONT重复评分；旧改进有限2131200继续停。恢复后worker可与已有27补跑共用产品总16workers，未等待无关补跑排空；仅缺题并行，既有turn已先终态GET。
+
+本机3cf6bdab/21e7f128/e45f95d6恢复helper与68f8f27b汇总源更新，Ruff/compile通过，本机提交后同步；初版resume SHA2e6b8843aa298414cfa5264322f8590d85b44de8d48e439a6d0237136d9f349e及continue_four初版SHA b2cc04821a39628168da179911338a9dbe2c80b5afcade1bc261f25a0633b1db已核，后续两小修改已传，最后文件SHA需再落receipt。read_legacy_snapshots仅评分进程兼读JSON/split；authoritative_scores最后覆盖历史旧分，避免已选24重跑分被旧源覆盖。live_quality_review已接恢复根，原Planner8仍显式接版本。
+
+主聊有效wake b97780a4-5453-42fc-8c12-3d57879f54af，本机audit/full-disk-recovery-20261127仅短状态，全部完整文件/原包只100。已有launch禁止重放；失败分QA/Judge/存储只续missing，不放宽JSON。27补跑missing9仍原PID2983173/wake265d继续，不重复。最终需核全1013与定义SHA/答案评分指纹、HTTP/Token/时延和002005指标；65接回结果的具体失败原因待核，不能都称正常成功。
