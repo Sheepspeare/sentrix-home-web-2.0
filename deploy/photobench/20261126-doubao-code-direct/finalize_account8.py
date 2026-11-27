@@ -39,7 +39,7 @@ def main():
                 "response_id": response["id"],
                 "start": r["started_at"],
                 "end": r["finished_at"],
-                "request_sha256": digest(r["input"]),
+                "request_sha256": digest(dict(r["input"], stream=False)),
                 "response_sha256": digest(response),
                 "usage": response["usage"],
                 "group": "planner-account8",
@@ -55,8 +55,15 @@ def main():
         record = matches[0]
         with gzip.open(record["archive"], "rt") as stream:
             raw = json.load(stream)
-        assert digest(raw["request"]) == entry["request_sha256"] == record["request_sha256"]
-        assert digest(raw["response"]) == entry["response_sha256"] == record["response_sha256"]
+        assert digest(raw["request"]) == entry["request_sha256"]
+        assert (
+            hashlib.sha256(
+                json.dumps(raw["request"], ensure_ascii=False, separators=(",", ":")).encode()
+            ).hexdigest()
+            == record["request_sha256"]
+        )
+        assert digest(raw["response"]) == entry["response_sha256"]
+        assert raw["metadata"]["response_sha256"] == record["response_sha256"]
         assert record["http_status"] == 200
         assert entry["start"] <= record["started_at"] <= entry["end"]
         assert raw["response"]["usage"] == entry["usage"] == record["usage"]
