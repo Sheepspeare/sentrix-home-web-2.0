@@ -1660,3 +1660,11 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 大预算v2复测已登记并启动：wake993ff352-d4db-477b-8ded-e02619c05fce；回执与实际run见v2-large-rerun/launch-registration.json。2并发到8暂停，有限v2原wake64799a78保持。候选部署代码及交接已push6be37684，原v1不扩大。
 
 恢复监控已登记：limited wake11d5f1f1-1668-4c47-a3ca-97939db08ce3、large wakea375e19f-e64a-4218-842e-d576c5553660，只读attach原run至83或异常。原f4ff2b2c/c9804024已处理，若迟到回调按reconciled.json核对，不再重挂。见priority-monitor-recovery-registration.json。
+
+
+### 2026-11-27｜侧聊修复盘满与直连续跑
+
+- 本机Mac Data盘只剩147MiB，删除可重建VSCode ShipIt更新缓存约1.6GiB，恢复1.7GiB；100远端home仍41G/root15G，未删答卷/raw。
+- large原835e7b28答保留，原切换已取消未执行985题后答案遍历碰无内容行404；10bc2bf9限定原28UUID验SHA，显式恢复跳过已完成取消；1回归及Ruff/compile通过，远端helper SHA b9ae76ad85d3688342bb830c776e133545ef25ef0f6df0eaab0f1eebc7e87dac核符。
+- 新恢复驱动在compact-query-v3/direct-cloud-16/recovery-1，wake9d6f24e8-6ca8-43e1-948a-d24bf5b94ada；当前已configured，实际16启动看started回执，不重放。
+- limited35dfdb83题已答齐暂停；仅缺失取证与FlashJudge2继续，固定revision可与当前不同，需按固定revision核qa_id。第一恢复2f7c0d3f失败保留，第二wake5b4ace0e-f48a-443e-bbdd-2b25a10b545b。无QA重发。
