@@ -83,7 +83,7 @@ def trace_records(port, turns):
                 "answer": answer,
                 "status": status,
                 "termination": termination,
-                "stop": t.get("budget", {}).get("stop_code"),
+                "stop": t.get("budget", {}).get("request_limits", {}).get("stop_code"),
                 "planner_status": t.get("planner", {}).get("status"),
                 "planner_types": types,
                 "planner_requirements": normalized,
