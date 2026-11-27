@@ -262,7 +262,8 @@ def worker(root, name):
 
     g = next(v for v in json.loads((root / "intent.json").read_text())["groups"] if v["name"] == name)
     folder = root / name
-    idle(g["product"])
+    if not g.get("allow_shared_product"):
+        idle(g["product"])
     live = get(g["port"], f"runs/{g['source_run']}?include_history=false")
     assert live["phases"]["qa_eval"]["progress"]["dispatch_paused"]
     settings = Settings(
