@@ -267,8 +267,8 @@ def status(root):
     return result
 
 
-def watch(output):
-    remote_root = B / output.name
+def watch(output, remote_root=None):
+    remote_root = remote_root or B / output.name
     output.mkdir(parents=True, exist_ok=True)
     while True:
         response = subprocess.run(
@@ -307,6 +307,7 @@ if __name__ == "__main__":
     p.add_argument("--worker", type=Path)
     p.add_argument("--status", type=Path)
     p.add_argument("--watch", type=Path)
+    p.add_argument("--remote-root", type=Path)
     a = p.parse_args()
     if a.prepare:
         prepare(a.prepare, a.group)
@@ -323,4 +324,4 @@ if __name__ == "__main__":
     elif a.status:
         print(json.dumps(status(a.status)))
     else:
-        raise SystemExit(watch(a.watch))
+        raise SystemExit(watch(a.watch, a.remote_root))
