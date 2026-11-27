@@ -1840,3 +1840,7 @@ QA24/24完成、同Flash native_v2有效24分=13一分11零分。按(qa_id,turn_
 ## 2026-11-27 17:37｜27题补跑答题前核验超时恢复
 
 cd97回调已核真实failed_phase=model_deploy、10秒timed out，0QA派出/0新分；原失败目录完整保留。只调整独立helper实例的diagnostics等待10→60秒，fad25fd7/Ruffcompile通过，未改产品/全量配置。恢复目录baseline-account27-recovery1-20261127，复用原selection/snapshot逐字节，run baseline-account27-recovery1-20261127-1795772184/PID2297577，首核pending存活。SHA922093a61fe078667a32bb89a3ecf53850afbc290f67f2699b1846e7588f0ed4一致。新wake62dc50a5-76e5-4533-a2ba-c1c694f15299；旧cd97已reconciled不重放。QA2/产品16/后Judge2原协议保持，新结果尚未产出；完整证据仅100，回调先查实际阶段不把启动当答题已成功。
+
+## 2026-11-27 18:11｜原Planner大预算持续评分格式失败恢复
+
+9bce回调实际仅Judge退出：batch0029 atm-27041cfb-027a-4bde-8177-e506e2b153f9返回未满足boolean accuracy，原包/失败历史保留；QA2234599保持running/16，旧Judge2234604为Z。恢复仅评分目录planner-large-judge-recovery1-20261127，549成功结果及完整diagnostic合并复用，原QA结果软链只读接续，2Judge PID2363673。实际已新增2分，最新552处理/551有效，QA与Judge均活跃；原全量/相册/配置保持。helper58d78cc4 Ruff/compile通过，远端SHA18835a229141f040fe6a792b4d697fdc74df2037e15418b0d19be0680060c694一致；wake485a1495-ca0d-43c6-a186-e8085f2bce48健康queue。9bce已reconciled，不重放；原workerQA结束可能记录旧Judge needs_review，需以新评分目录为准。质量review后续须接新评分来源；全部完整文件留100。
