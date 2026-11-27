@@ -1886,3 +1886,7 @@ helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机�
 62dc回调确认为Errno28保存失败，QA2297577退出，原14保存（8completed/6timeout），未进入Judge。现场/home恢复约4.5GB（外部来源未核，不宣称本机释放）。产品8306无pending/running，按原started时间与27清单核DB：另4原turn已failed/failed/complete/partial，9题未派发。60411000 helper先GET投影已有4、独立保存18，score_existing只评有效答卷；原6timeout不重跑。只对剩9建missing9独立QA2/原100600128K，之后Judge2，旧结果不覆盖。
 
 本机Ruff/compile过，recover_account27 SHA35fda9efdca2915d3bca9f5200a3fea2fcf3f5ba13980f2ea6c9dbe22513fd2a、account_retry SHA c2117c5789fba01bb393041579f2941c0893509d0bb850333c66f95e55b5b422远端一致。新控制器wake aab21239-9e1a-4dff-a8c5-ab73988c47f3，目标主聊，服务器baseline-account27-recovery2-20261127。尚未验收prepared/实际launch，不能声称9题已实际运行；回调先查intent/prepared/failure及preserved-scoring/terminal，再给missing9单独注册终态监控。已有intent禁止重放recover脚本；失败只续缺阶段，保护旧27所有结果，完整数据仅100。原四全量磁盘失败另待恢复，未在本轮重启。
+
+## 2026-11-27｜27补跑恢复2已有12答卷评分完成
+
+aab21239控制器成功：18既有结果保留（原14+GET投影4），preserved-scoring完成12有效/0评分失败，QS均值52.7778%、合6.333333分；11JudgeHTTP/12018记录Token，原包唯一校验尚待，6墙钟超时计错。27全题尚未完成，不能提前替换全组汇总。剩9题missing9/PID2983173仍Ssl，home约4.2GB。新只读全程wake265d2c2b-cbe6-4b25-819a-2e1954ebb65f，本机audit/baseline-account27-missing9-monitor，account_retry --remote-root已支持嵌套路径（730d852c Ruff/compile通过）；没有重启QA。完整结果/评分/原包留100。回调先核实际阶段与磁盘，只续missing；完成后统一核27定义SHA、固定来源版本和HTTP，再显式接accepted overrides与live_quality_review。原全量磁盘失败仍另待恢复，不能宣称已全部续跑。
