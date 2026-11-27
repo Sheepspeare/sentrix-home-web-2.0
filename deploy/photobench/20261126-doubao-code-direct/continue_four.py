@@ -131,6 +131,8 @@ def judge(root, g, finished):
     from photobench.application.run_execution.judge import JudgeRunner
     from photobench.infrastructure.results.store import FileRunStore
 
+    if g.get("read_legacy_snapshots"):
+        os.environ.pop("PHOTOBENCH_SPLIT_RESULTS", None)
     folder = root / g["name"]
     scoring = folder / "judge"
     scoring.mkdir()
@@ -178,6 +180,10 @@ def judge(root, g, finished):
     elif not score_paths:
         score_paths.append(root / "improved-limited-existing-scores.json")
     preserved = {}
+    score_paths = list(dict.fromkeys(score_paths))
+    if g.get("authoritative_scores"):
+        authority = Path(g["authoritative_scores"])
+        score_paths = [p for p in score_paths if p != authority] + [authority]
     for path in score_paths:
         saved = json.loads(path.read_text())
         for value in saved.get("scoring_results", {}).values():

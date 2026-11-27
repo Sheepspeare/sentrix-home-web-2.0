@@ -154,6 +154,8 @@ def prepare(name):
         sources=sources,
         previous_score_paths=[str(folder / "preserved-scores.json")],
         allow_shared_product=True,
+        read_legacy_snapshots=True,
+        authoritative_scores=str(folder / "preserved-scores.json"),
     )
     assert g["inherited"] + g["remaining"] == 1013
     save(folder / "snapshot.json", snapshot)
