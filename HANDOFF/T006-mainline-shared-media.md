@@ -1836,3 +1836,7 @@ QA24/24完成、同Flash native_v2有效24分=13一分11零分。按(qa_id,turn_
 ## 2026-11-27 17:35｜上周大预算27服务故障题定向补跑
 
 用户授权上周基线大预算24账户故障+3接口读取超时共27题补跑。服务器baseline-account27-retry-20261127，run baseline-account27-retry-20261127-1795772046，PID2293175，首次状态pending/存活/0已处理；独立QA2共享8306总16workers，原全量继续，100/600128K/原代码相册冻结。新答案后接Flash关思考native_v2直连Judge2；原答案轨迹分保留，完成后需显式接新版本汇总，未替换前不能报已替换。selection27严格核（账户22最终+2终止model_error，读取超时3），helperdcf94bb2本机Ruff/compile通过/已提交，远端SHA7302cd7c9ea3f218cdb0443a49bfac681b32530ea8801948aa8f06d4003bcd15一致。wakecd97a2d3-946d-4bce-bcf2-2790e3a86450健康queue已登记，短状态audit/baseline-account27-retry-20261127；完整文件仅100。原Planner8另wake401de319保持。禁止重放launch/QA，失败只续missing。
+
+## 2026-11-27 17:37｜27题补跑答题前核验超时恢复
+
+cd97回调已核真实failed_phase=model_deploy、10秒timed out，0QA派出/0新分；原失败目录完整保留。只调整独立helper实例的diagnostics等待10→60秒，fad25fd7/Ruffcompile通过，未改产品/全量配置。恢复目录baseline-account27-recovery1-20261127，复用原selection/snapshot逐字节，run baseline-account27-recovery1-20261127-1795772184/PID2297577，首核pending存活。SHA922093a61fe078667a32bb89a3ecf53850afbc290f67f2699b1846e7588f0ed4一致。新wake62dc50a5-76e5-4533-a2ba-c1c694f15299；旧cd97已reconciled不重放。QA2/产品16/后Judge2原协议保持，新结果尚未产出；完整证据仅100，回调先查实际阶段不把启动当答题已成功。
