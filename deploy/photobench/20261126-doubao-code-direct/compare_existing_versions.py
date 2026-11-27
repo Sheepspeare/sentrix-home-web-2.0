@@ -55,8 +55,13 @@ def trace_records(port, turns):
                 toolsets.append(
                     sorted(v.get("function", {}).get("name", v.get("name", "")) for v in c.get("tools", []))
                 )
-                for v in c.get("tool_calls", []):
-                    f = v.get("function", v)
+                response = c.get("response")
+                response = response if isinstance(response, dict) else {}
+                choice = (response.get("choices") or [{}])[0]
+                message = choice.get("message") or response
+                actual = message.get("tool_calls") or c.get("tool_calls", [])
+                for v in actual:
+                    f = v.get("function", v) if isinstance(v, dict) else {"name": v}
                     actions.append({"name": f.get("name"), "arguments": f.get("arguments")})
             requirements = t.get("planner", {}).get("requirements", [])
             types = sorted(r.get("evidence_type", "") for r in requirements)
