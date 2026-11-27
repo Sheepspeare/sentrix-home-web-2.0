@@ -1858,3 +1858,11 @@ cd97回调已核真实failed_phase=model_deploy、10秒timed out，0QA派出/0�
 helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机远端SHA e98dea8f00fd599b7586692ff3c6c11927dbb5e0d18a5aee83064592aa76ec70一致。流程：全产品pending/running零两次→GET投影保存8份在途（不POST）→仅8304服务workers8改16→核diagnostics除workers外一致→合已有来源/有效分，独立续missing16QA/2Judge。原相册DB/cache不重建，其余任务保持。
 
 主聊wake601f4141-0e16-4f31-a5fe-fce1068f6caa已启动控制器并监控完成/失败。本机只短状态。回调先查服务器progress/failure/launched以及worker日志和实际进程，已有intent禁止重放apply；失败按实际阶段续缺步骤，不能重复QA。切换后还须核继承+remaining=1013、唯一qa_id、旧分保持与Judge所有权，并给新全量注册独立终态监控、更新live_quality_review来源。当前旧全量watch对停止进程的状态可能过期，不可据旧目录声称仍8QA正常派发或16已生效。
+
+## 2026-11-27｜改进有限16并发已生效并恢复持续评分
+
+601f切换回调失败已定位为存储调用误用FileRunStore.write_snapshot；8在途全部排空并GET结果已保存，未重答。358cb5ab使用FileResultWriter和--resume-preserved仅续保存后阶段；8304空闲重启并核diagnostics仅workers8→16，其余冻结。新QA PID2660987/run full-continue-improved-limited-1795783524，继承270、只续743，合1013且missing排除已答；旧2131200继续SIGSTOP。262旧成功评分复用。
+
+首启Judge2660988因PHOTOBENCH_SPLIT_RESULTS=1拒读独立salvage JSON，0新Judge批次；原错误保留。独立恢复improved-limited-judge-recovery1-20261127/PID2664410，只对该只读评分进程移除split强制环境，兼读旧JSON及分卷manifest，新增8分已实际成功，累计270有效。原QA不重启，Judge2/直连关思考原协议；live_quality_review已接新QA和恢复Judge来源。helper通过Ruff/compile，提交6e5887ba。
+
+全量有效新wake f6c2159a-a25b-4ba3-8b33-7eb3c8aa8c58，本机audit/improved-limited-continue16-monitor仅短状态，监控新QA及独立Judge；旧3ffc观察已因旧Judge失败退出，勿复用旧失败或重放601f。回调核具体阶段只missing、保成功。完整答案轨迹raw留100，其余三组/27补跑保持。
