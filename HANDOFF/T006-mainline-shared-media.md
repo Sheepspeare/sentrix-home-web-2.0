@@ -1,5 +1,11 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-28｜上周大预算27服务故障补跑：25题确定，仅续2题
+
+265d2回调已核：preserved18与missing9均终态，合18有效分11.3333333、7正常3660秒无答卷计错；另2条POST outcome unknown after ReadTimeout属提交异常，不能计模型错。逐产品DB核两qa_id无恢复1启动之后的新turn，独立missing2-recovery1仅续这2题。原missing2诊断10秒超时QA0；recovery1初缺模块QA0，仅worker改用已提交延长诊断helper接续。实际PID3247518/run missing2-recovery1-1795801489，QA2后Judge2，预算100/600及128K/相册原代码保持。完整证据留100。
+
+新wake2fa1d928-74a8-4c3e-98e7-a978c3ecfe48，audit/baseline-account27-missing2-monitor-r2；b892旧观察器仅脚本路径缺失，不能当QA失败。finalize_account27.py尚未通过完整27核验，未发布accepted overrides、尚未接主汇总。待合preserved18+missing9排除两未知+新2版本；核定义SHA/答案/评分及唯一raw。已验旧18的11JudgeHTTP，missing9的6HTTP尚待继续核；禁止重答已确定25题。四全量b977保持，当前home23GiB。代码4f9b8292/db208e65，本机Ruff/compile通过；只同步运维helper、不改产品或重启服务。
+
 ## 2026-11-27｜三版部署与已有同题核查完成
 
 上周292 Python=289ffec+3个9363d4b预期文件；原基线294/294匹配30c67e74；当前两组改进297/297匹配bc736153。实际源码上周→原46文件不同、原→bc25不同，a067未部署。三版都有Planner；4aa主要实验接线非新增Planner。128K且排除账户故障的共同有效83子集：上周→原有限58同44/升5/降9，大56同42/升6/降8；上周→bc有限58同43/升11/降4，大52同38/升13/降1。全量混合配置有效交集有限411同292/升57/降62，大328同231/升44/降53。只能说两原基线整体得分接近，不能认定等效；bc与上周有实际同题差异，保留当前全量。只读取证0新QA/Judge、不改任务。明细留100 existing-version-comparison-20261127，概要本机候选audit/existing-version-comparison-20261127/核查结论.md；指标报告“上周无规划器/本周加上”已更正。
