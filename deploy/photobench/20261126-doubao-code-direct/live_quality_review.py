@@ -46,9 +46,12 @@ def main(out):
     for root in [
         B / "full-four-continue-20261127/prepared",
         B / "planner-large-continue16-20261127/prepared",
+        B / "improved-limited-continue16-20261127/prepared",
     ]:
         for g in json.loads((root / "intent.json").read_text())["groups"]:
             if g["name"] == "baseline-limited":
+                continue
+            if g["name"] == "improved-limited" and "full-four" in str(root):
                 continue
             specs.append((root, g))
     summaries = []

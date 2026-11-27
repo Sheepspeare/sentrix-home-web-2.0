@@ -104,7 +104,9 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--status", type=Path)
     p.add_argument("--watch", type=Path)
+    p.add_argument("--remote", default=REMOTE)
     a = p.parse_args()
+    REMOTE = a.remote
     if a.status:
         print(json.dumps(status(a.status), ensure_ascii=False))
     else:

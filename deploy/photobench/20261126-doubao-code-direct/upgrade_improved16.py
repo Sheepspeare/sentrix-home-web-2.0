@@ -45,7 +45,10 @@ def apply(resume_preserved=False):
         _, _, product_env = process_environment(8304)
         db_path = Path(product_env["SENTRIX_DATA_DIR"]) / "sentrix.db"
         with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
-            assert db.execute("select count(*) from agent_turns where status in ('pending','running')").fetchone()[0] == 0
+            active = db.execute(
+                "select count(*) from agent_turns where status in ('pending','running')"
+            ).fetchone()[0]
+            assert active == 0
     else:
         assert not (ROOT / "intent.json").exists()
         old_folder = OLD / "improved-limited"
@@ -80,7 +83,8 @@ def apply(resume_preserved=False):
         with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
             started_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(g["at"]))
             candidates = db.execute(
-                "select distinct c.title from agent_turns t join agent_conversations c on c.id=t.conversation_id "
+                "select distinct c.title from agent_turns t "
+                "join agent_conversations c on c.id=t.conversation_id "
                 "where julianday(t.created_at) >= julianday(?)",
                 (started_at + "+00:00",),
             ).fetchall()
