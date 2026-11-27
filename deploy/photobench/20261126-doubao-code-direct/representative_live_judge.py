@@ -12,12 +12,12 @@ from pathlib import Path
 from representative_qa import load, process_environment, save
 
 
-def main(root, name):
+def main(root, name, recovery=False):
     plan = json.loads((root / "intent.json").read_text())
     previous_root = Path(plan["score_root"])
     previous = json.loads((previous_root / "intent.json").read_text())
     folder = root / name
-    scoring = folder / "judge"
+    scoring = folder / ("judge-recovery-1" if recovery else "judge")
     # The original QA worker uses mkdir without exist_ok after finishing QA.
     # Reserving this directory transfers final scoring ownership without stopping QA.
     scoring.mkdir()
@@ -59,6 +59,15 @@ def main(root, name):
         evaluation_options=owner.protocol["evaluation_options"],
     )
     scored = {}
+    if recovery:
+        for old in sorted((folder / "judge").glob("batch-*/scoring-state.json")):
+            state = json.loads(old.read_text())
+            for value in state.get("scoring_results", {}).values():
+                if value.get("status") == "completed":
+                    diagnostic = state["diagnostic_results"][value["diagnostic_key"]]
+                    assert diagnostic["status"] == "completed"
+                    scored[value["qa_id"]] = value
+        save(scoring / "preservation.json", {"reused_valid": len(scored)})
     batch = 0
     save(scoring / "started.json", {"at": time.time(), "run_id": run, "concurrency": 2, "direct_cloud": True})
     while True:
@@ -118,6 +127,7 @@ if __name__ == "__main__":
     p.add_argument("root", type=Path)
     p.add_argument("group")
     p.add_argument("--launch", action="store_true")
+    p.add_argument("--recovery", action="store_true")
     a = p.parse_args()
     if a.launch:
         import subprocess
@@ -126,9 +136,11 @@ if __name__ == "__main__":
         g = next(g for g in plan["groups"] if g["name"] == a.group)
         _, _, env = process_environment(g["port"])
         env["PYTHONPATH"] = g["evaluation_source"] + ":" + env.get("PYTHONPATH", "")
-        log = (a.root / (a.group + "-live-judge.log")).open("x")
+        log = (a.root / (a.group + ("-live-judge-recovery-1.log" if a.recovery else "-live-judge.log"))).open(
+            "x"
+        )
         child = subprocess.Popen(
-            [sys.executable, __file__, str(a.root), a.group],
+            [sys.executable, __file__, str(a.root), a.group] + (["--recovery"] if a.recovery else []),
             env=env,
             stdout=log,
             stderr=log,
@@ -138,7 +150,7 @@ if __name__ == "__main__":
         print(json.dumps({"group": a.group, "pid": child.pid}))
     else:
         try:
-            raise SystemExit(main(a.root, a.group))
+            raise SystemExit(main(a.root, a.group, a.recovery))
         except Exception as e:
             save(a.root / a.group / "live-judge-failure.json", {"type": type(e).__name__, "error": str(e)})
             raise
