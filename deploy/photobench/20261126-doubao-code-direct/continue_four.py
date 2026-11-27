@@ -201,7 +201,7 @@ def judge(root, g, finished):
             state = store.load_state(g["run_id"])
         except KeyError:
             if finished.wait(5):
-                raise RuntimeError("QA ended without saved state")
+                raise RuntimeError("QA ended without saved state") from None
             continue
         all_items = dict(inherited_items)
         all_items.update({v["qa_id"]: v for v in state["items"]})
