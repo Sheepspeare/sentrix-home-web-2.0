@@ -1758,3 +1758,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - 11/27用户催立即评分后已启用代表题持续Judge：各2并发、直连关思考/native_v2，PID1675407/1675408；现场已新增有效分有限7/大13（合旧至少35/37）。各judge目录由新进程预占，原QA完成后mkdir FileExistsError为已知评分交接，不能据原QA观察回调重复发题/评分。新wakec530d34d-8601-49d1-8c7d-2d45bd824941；原4402仍可能收到交接退出。源码fcf4dc1e已push/SHA验，完整原包留100，全量仍暂停。
 
 - 11/27持续Judge有限因batch14 Invalid Judge checks停评；原30成功保持，独立judge-recovery-1/PID1721166已新增1分（本补测31，总代表59），大组仍原进程本补测25分（总49）。协议不改，源码0564e282已push，waked19304ca-4937-4ee2-88e5-c20139c41ca8；c530回调reconciled，仅缺分恢复。
+
+- 11/27用户经侧聊授权融合83中24账户错误题定向重跑：原input中24答案含Access denied/overdue-payment/good standing且原分均0，selection保存逐题定义/答案SHA与源input/scoreSHA。真实云端单次探测成功、产品active0后启动独立fusion83-account-retry-20261127，QA1772467/runrepresentative83-fusion-1795754987，现场16running；持续Judge1773249各2直连关思考native_v2，wake9091ebfd-2c48-4c47-bab7-b148b2830a9f。业务bc736153/128K/100600/相册保持，原答案分全保留，其余15零分/4timeout/1缺答不重跑。全部大证据留100，仅短状态本机。helper910ccdf8已push/SHA424319ae验，完成以新24替换配对另存，原全量继续暂停。
