@@ -116,6 +116,14 @@ def apply(root, resume_paused=False):
     save(root / "runtime-before.json", connection)
     connection["product_settings"]["agent_turn_workers"] = 16
     save(runtime, connection)
+    api_env = ORIGINAL / "large-api.env"
+    text = api_env.read_text()
+    old_workers = 'SENTRIX_AGENT_TURN_MAX_WORKERS="4"'
+    assert text.count(old_workers) == 1
+    (root / "api-env-before.txt").write_text(text)
+    (root / "api-env-before.txt").chmod(0o600)
+    api_env.write_text(text.replace(old_workers, 'SENTRIX_AGENT_TURN_MAX_WORKERS="16"'))
+    api_env.chmod(0o600)
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "--user", "restart", unit], check=True, timeout=180)
     for _ in range(90):
