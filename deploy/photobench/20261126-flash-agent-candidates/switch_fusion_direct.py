@@ -65,11 +65,13 @@ def probe():
     return json.loads(subprocess.check_output([PYTHON, str(command), "--probe"], text=True))
 
 
-def answer_hashes(run):
+def answer_hashes(run, qa_ids=None):
     hashes, page = {}, 1
     while True:
         listing = api(8883, f"runs/{run}/items?page={page}&page_size=100")
         for row in listing["items"]:
+            if qa_ids is not None and row["qa_id"] not in qa_ids:
+                continue
             item = api(8883, f"runs/{run}/items/{row['index']}")["item"]
             assert item["qa_id"] == row["qa_id"]
             rev = item["trace_storage"]["revision"]
@@ -106,53 +108,74 @@ def dropin(unit, values, *, evaluation_source=None):
 
 def main(run, package):
     output = BASE / "direct-cloud16"
-    output.mkdir()
-    protected = process_ticks()
-    save(
-        output / "intent.json",
-        {
-            "at": time.time(),
-            "source_run": run,
-            "revision": REVISION,
-            "workers": 16,
-            "protected": protected,
-            "preserve_inflight": True,
-        },
-    )
-    deadline = time.monotonic() + 7500
-    while time.monotonic() < deadline:
-        live, worker = api(8883, f"runs/{run}?include_history=false"), probe()
-        progress = live["phases"]["qa_eval"]["progress"]
-        assert live["build_revision"] == REVISION and not live.get("fatal_error")
-        assert progress["dispatch_paused"]
-        save(output / "drain-progress.json", {"at": time.time(), "progress": progress, "worker": worker})
-        if not any(worker["turn_statuses"].get(k, 0) for k in ["running", "pending"]):
-            break
-        time.sleep(20)
-    else:
-        raise TimeoutError("In-flight turns still active; keep original run and inspect")
-    original = answer_hashes(run)
-    assert len(original) == progress["agent_completed"] >= 20
-    save(
-        output / "drained.json",
-        {"at": time.time(), "progress": progress, "answer_sha256": original, "worker": worker},
-    )
-    save(
-        output / "cancel-intent.json",
-        {"run_id": run, "active_turns": 0, "purpose": "cancel unstarted dispatch only; resume saved answers"},
-    )
-    save(output / "cancel-response.json", api(8883, f"runs/{run}/cancel", {}))
-    for _ in range(90):
+    recovery = output.exists()
+    if recovery:
+        prior = json.loads((output / "terminal.json").read_text())
+        assert prior["status"] == "failed" and prior["error_type"] == "HTTPError"
+        assert not (output / "configured.json").exists() and not (output / "resume-intent.json").exists()
+        drained = json.loads((output / "drained.json").read_text())
+        original = drained["answer_sha256"]
         old = api(8883, f"runs/{run}?include_history=false")
-        if (
-            old["status"] in {"cancelled", "interrupted", "completed_with_errors"}
-            and not api(8883, "active-work")["work"]
-        ):
-            break
-        time.sleep(1)
+        assert old["status"] == "cancelled" and not api(8883, "active-work")["work"]
+        assert not any(probe()["turn_statuses"].get(k, 0) for k in ["running", "pending"])
+        protected = process_ticks()
+        assert answer_hashes(run, set(original)) == original
+        save(
+            output / "recovery-verification.json",
+            {"at": time.time(), "answers_preserved": len(original), "cancel_replayed": False},
+        )
     else:
-        raise TimeoutError("Inspect original cancellation before any restart")
-    assert answer_hashes(run) == original
+        output.mkdir()
+        protected = process_ticks()
+        save(
+            output / "intent.json",
+            {
+                "at": time.time(),
+                "source_run": run,
+                "revision": REVISION,
+                "workers": 16,
+                "protected": protected,
+                "preserve_inflight": True,
+            },
+        )
+        deadline = time.monotonic() + 7500
+        while time.monotonic() < deadline:
+            live, worker = api(8883, f"runs/{run}?include_history=false"), probe()
+            progress = live["phases"]["qa_eval"]["progress"]
+            assert live["build_revision"] == REVISION and not live.get("fatal_error")
+            assert progress["dispatch_paused"]
+            save(output / "drain-progress.json", {"at": time.time(), "progress": progress, "worker": worker})
+            if not any(worker["turn_statuses"].get(k, 0) for k in ["running", "pending"]):
+                break
+            time.sleep(20)
+        else:
+            raise TimeoutError("In-flight turns still active; keep original run and inspect")
+        original = answer_hashes(run)
+        assert len(original) == progress["agent_completed"] >= 20
+        save(
+            output / "drained.json",
+            {"at": time.time(), "progress": progress, "answer_sha256": original, "worker": worker},
+        )
+        save(
+            output / "cancel-intent.json",
+            {
+                "run_id": run,
+                "active_turns": 0,
+                "purpose": "cancel unstarted dispatch only; resume saved answers",
+            },
+        )
+        save(output / "cancel-response.json", api(8883, f"runs/{run}/cancel", {}))
+        for _ in range(90):
+            old = api(8883, f"runs/{run}?include_history=false")
+            if (
+                old["status"] in {"cancelled", "interrupted", "completed_with_errors"}
+                and not api(8883, "active-work")["work"]
+            ):
+                break
+            time.sleep(1)
+        else:
+            raise TimeoutError("Inspect original cancellation before any restart")
+        assert answer_hashes(run, set(original)) == original
     live_release = BASE / "release-bc736153"
     suites = live_release / "apps/photobench/src/photobench/application/runs/suites.py"
     assert sha(suites) == OLD_SUITES_SHA
@@ -256,7 +279,7 @@ def main(run, package):
         time.sleep(1)
     else:
         raise TimeoutError("Resume already submitted; inspect actual worker before any retry")
-    inherited = answer_hashes(new)
+    inherited = answer_hashes(new, set(original))
     assert all(inherited[q] == answer for q, answer in original.items())
     assert resumed["qa_snapshot"] == old["qa_snapshot"] and resumed["build_revision"] == REVISION
     save(
