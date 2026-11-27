@@ -1,5 +1,13 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-27｜两版四组全量按缺题继续
+
+用户授权上周基线与本周基于规划器改进版继续全量；覆盖各20/30有限与100/600大预算四组。原四run仍dispatch暂停，产品在飞零后启独立missing-only快照，避免原pending队列重答代表补测。复用原始全部已处理及有限55/大59补测、融合24账户故障重跑，原始答案轨迹评分均保留。上周有限继承424/待589、大继承368/待645；本周有限继承83/待930、大继承84/待929；合并目标各1013。
+
+远端根`/home/realmagic/xy/benchmarks/atm-bench/experiments/full-four-continue-20261127/prepared`，四QA PID2131198/2131199/2131200/2131201，run后缀baseline-limited/large及improved-limited/large-1795766748。并发16/16/8/16，保持产品原上限；预算/128K/关思考/Flash自相册/冻结业务代码不变，未重建库cache。Judge独立PID2131203/2131202/2131208/2131207，各2并发云端直连native_v2原prompt/noGT温0max2048；原完整成功对象在各judge/preserved-scores.json，计372/285/83/78，缺分与新答案持续评分。融合先补原第84题已新增1有效。完整证据仅留100，本机仅短状态。
+
+运维脚本continue_four.py/test_continue_four.py、watch_four.py已本机2测试/Ruff/compile、commit98e0c9d9/540439e4/f2eead63/75cea7d9后同步；continue SHA61772ccea1963cbc81aabe27b54470ea36f53eaab75abdf71923dcb8c3e59f57，watch SHA7efa8cf3b9d0bb9671f0c757fd699d8266bcfb6b881f20454b9a3e16b8ec174e。wake ec1fb60a-5a2f-4757-9792-5ce0ab5bde0c已登记主聊01a20d13-6178-7312-b64e-a50c8a233ca5，listener healthy/queue非dry-run。简短状态本机audit/20261126-flash-agent-candidates/full-four-continuation-20261127/latest.json；失败先查对应failure/qa-terminal/judge/terminal及原包，禁止重放prepare/launch或成功QA/评分。全量完须按manifest选定答案版本与score fingerprint核合并1013，再报质量成本需求指标；约313K异常不重跑。002/005未结项。
+
 ## 2026-11-27｜有限Judge恢复2与128K切换已启动排空
 
 有限Judge原恢复1在69有效分后，atm-e388993e-fac9-44a2-a83d-d6ee44be5ee8为execution_status=timeout且无answer，旧采集器误GET answer导致404。固定revision c99b92444bd345f48117d995669bb770真实GET确认；不是Flash评分请求失败。复用已验证2ecfb13f follow/helper，旧69完整成功对象/全部state文件SHA合并保持，仅启动recovery2-limited用户单元，不动large。初验73已处理、72有效QS40.2778%、1无答卷超时、可评分缺分0，评分继续各2并发/关思考/温0max2048/native_v2/noGT/HTTPS直连。新增3分原包审计待后续增量验收；旧成功不重评。新观察wait a5e1a2b5-02c6-4c2e-889a-095b6d846c9b；e2e1b9e6已reconciled。
@@ -1760,3 +1768,37 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - 11/27持续Judge有限因batch14 Invalid Judge checks停评；原30成功保持，独立judge-recovery-1/PID1721166已新增1分（本补测31，总代表59），大组仍原进程本补测25分（总49）。协议不改，源码0564e282已push，waked19304ca-4937-4ee2-88e5-c20139c41ca8；c530回调reconciled，仅缺分恢复。
 
 - 11/27用户经侧聊授权融合83中24账户错误题定向重跑：原input中24答案含Access denied/overdue-payment/good standing且原分均0，selection保存逐题定义/答案SHA与源input/scoreSHA。真实云端单次探测成功、产品active0后启动独立fusion83-account-retry-20261127，QA1772467/runrepresentative83-fusion-1795754987，现场16running；持续Judge1773249各2直连关思考native_v2，wake9091ebfd-2c48-4c47-bab7-b148b2830a9f。业务bc736153/128K/100600/相册保持，原答案分全保留，其余15零分/4timeout/1缺答不重跑。全部大证据留100，仅短状态本机。helper910ccdf8已push/SHA424319ae验，完成以新24替换配对另存，原全量继续暂停。
+
+
+### 2026-11-27｜代表83题失败计分口径更新
+用户明确：模型找不到答案、耗尽预算或到时未交卷，应按答错计入主成绩。主报告按已测题含执行失败计分，另报有答卷有效Judge均分；待测题不提前计0，账户故障独立标记并沿既有授权定向恢复，保留原评分。现场只读核实补题limited5 timeout：4题assistant turn超过3660秒，1题POST ReadTimeout outcome unknown；large8题均assistant turn超过3660秒。仅有超时错误不足以断言一直搜索未果，具体轨迹根因待服务器核验。当前limited83已测/78有效/33分：端到端33/83=39.7590%，有答卷33/78=42.3077%；large80已测/72有效/34分：当前34/80=42.5%，另3待测，不能报最终83分。原Judge状态保持，不伪造Judge0分记录。
+
+
+### 2026-11-27 13:58｜旧代码同83双预算答题评分结束
+两组补题QA与持续Judge均终态completed_with_errors/completed，成功旧分复用。合83有限78有效33分、5执行超时，主成绩33/83=39.7590%；大75有效34分、8执行超时，主成绩34/83=40.9639%。有答卷均分42.3077%/45.3333%，不能据净1题归因预算单因素。callback d19304ca已reconciled，禁止重派旧QA/评分。融合24账户故障定向重跑23评分12分，剩1；wake9091ebfd保持。新Judge原包核验/共同UUID配对/Token时延仍待服务器完成，全量暂停。
+
+
+### 2026-11-27 14:02｜融合24账户故障题重跑评分全齐
+QA24/24完成、同Flash native_v2有效24分=13一分11零分。按(qa_id,turn_index)核24均对应原78有效分内旧0分，替换后78有效总52分；13改善/0退化/11仍零，原答案/评分保留。含其余5无答卷计错，主成绩52/83=62.6506%；有答卷52/78=66.6667%。与旧代码有限33/83、大34/83分别高22.8916/21.6867个百分点；版本设置非严格单因素，需共同UUID/成本及原包服务器核验后给推荐。完整证据只留100，callback9091ebfd已reconciled；三组代表QA与评分均结束，全1013仍暂停，不自动续跑。
+
+
+### 2026-11-27｜需求002/005代表指标阶段汇总
+用户要求先统计可得指标并整理近期进展。已产出候选audit/requirements-002-005-progress-20261127/近期进展与指标.md及view-recorded-summary.json；无需新QA/Judge。原有限与融合有限按已有83工具记录去重：成功含图HTTP200回看70→129次、覆盖35→59题（42.17→71.08%）；缺失status5/4次不作为正式派发成功。预算最终stop_code模型40→20、工具2→6，Token17026623→19351792（后者完整原包待核），质量37.35→59.64%。VIEW01完整派发、VIEW03独立视觉事实审查、全工具分类、正式排队到交付COST04及新增组原包/成本待补；旧wall_clock均值包含失败不冒充正式时延。报告区分记录统计与原包审计，不结项002/005，不自动续全量。
+
+
+### 2026-11-27｜进展报告版本范围调整
+用户要求Planner有限v2及Planner大预算改进版（v6）作为调试版本移出对外概要与表格，不作额外说明。已更新requirements-002-005-progress-20261127/近期进展与指标.md，保留原Planner双预算、旧Doubao代码双预算、条件融合双预算六组。历史证据保留。
+
+
+### 2026-11-27｜旧代码同83最终统计补齐
+旧Doubao代码由Flash答题、复用Flash自身相册的双预算83题，已从产品SQLite补回超时执行事件并在服务器核原包。本机仅保存old-code83-final-summary.json。有限82产品执行+1提交失败，HTTP1210（1208成功/2返回400）、usage Token16415096；大83执行，HTTP1854（1850成功/1返回400/3传输无响应）、usage Token38459607，3传输失败无usage明确单列。实际工具派发1284/1912，回看派发100/115，成功含图90/106，覆盖48/83及44/83；最终模型预算终止39/1、工具2/0。更新近期进展与指标.md，撤去旧部分轨迹下界及缺超时轨迹表述。有限1提交失败没有产品记录，不能虚构消耗；VIEW03独立审查、正式时延等仍未验收。无新增QA/Judge，全量保持暂停。
+
+
+### 2026-11-27｜六组83题回看图派发统计补齐
+已按服务器产品tool_call_id合并model_action与结果事件，补齐Planner有限/大预算及融合有限/大预算各83条执行记录。回看派发89/156/137/133次，成功含图70/143/129/131次，覆盖35/46/59/61题。融合大组严格以24重跑新答案替换原对应项，与质量52/83版本一致。需求002表已含六组，无空列；新汇总view83-four-groups-final-summary.json仅短数据，本机未下载答案/轨迹/原包，未发模型请求，全量暂停。
+
+
+### 2026-11-27｜六组83题预算及成本表补齐
+补入融合大预算最终83题：模型/工具/搜索限额终止均0，HTTP1392、工具实际派发1547、usage Token34390728、本地PromptTooLong146；包含24账户错误题重跑后的选定新答案，旧尝试另存不叠加。统一六组实际工具派发1284/1912/1236/2851/1251/1547，删除旧结果条数一行，修正融合有限对Planner有限工具变化为+1.21%。Planner大预算Token仍使用既有原包验收105456493，未用产品DB少2条记录的105306769覆盖。成本原包核验状态与最终汇总区分，未新发QA/Judge，未恢复全量。证据cost83-four-groups-final-summary.json；文档两表均六列齐全。
+
+- 2026-11-27：用户要求对外名称统一为“本周基于规划器改进版”，近期进展与指标.md正文、表格及概要已替换原名称，数据及历史证据路径保持。
