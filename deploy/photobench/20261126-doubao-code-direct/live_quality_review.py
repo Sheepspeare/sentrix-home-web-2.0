@@ -110,6 +110,19 @@ def main(out):
                     else:
                         scores[version["qa_id"]] = version["score"]
                     overrides_applied += 1
+        if g["name"] == "baseline-large":
+            accepted = B / "baseline-account27-recovery2-20261127/accepted-version-overrides.json"
+            if accepted.exists():
+                manifest = json.loads(accepted.read_text())
+                for version in manifest["version_overrides"]:
+                    newer = FileRunStore(Path(version["results"])).load_state(version["run_id"])
+                    item = next(v for v in newer["items"] if v["qa_id"] == version["qa_id"])
+                    items[version["qa_id"]] = item
+                    if version["score"] is None:
+                        scores.pop(version["qa_id"], None)
+                    else:
+                        scores[version["qa_id"]] = version["score"]
+                    overrides_applied += 1
         _, _, env = process_environment(g["product"])
         rows = []
         dbpath = Path(env["SENTRIX_DATA_DIR"]) / "sentrix.db"
