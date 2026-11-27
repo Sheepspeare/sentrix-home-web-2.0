@@ -97,7 +97,10 @@ def dropin(unit, values, *, evaluation_source=None):
     directory.mkdir(exist_ok=True)
     text = "[Service]\n"
     text += "EnvironmentFile=" + str(BASE.with_name("qwen38-flash-20261124") / "secrets.env") + "\n"
-    text += "".join("Environment=" + json.dumps(f"{key}={value}") + "\n" for key, value in values.items())
+    overrides = directory / "direct-cloud16.env"
+    overrides.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+    overrides.chmod(0o600)
+    text += "EnvironmentFile=" + str(overrides) + "\n"
     if evaluation_source is not None:
         text += (
             f"ExecStart=\nExecStart={PYTHON} -m uvicorn --factory photobench.main:create_app "
