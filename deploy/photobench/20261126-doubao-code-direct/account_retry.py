@@ -16,23 +16,52 @@ ROOT = B / "planner-account8-retry-20261127"
 PYTHON = "/home/realmagic/xy/releases/psh-b2030e1-100-20261117/.venv/bin/python"
 
 
-def prepare(root):
+def prepare(root, group="planner"):
+    baseline = group == "baseline"
     from photobench.domain.datasets.qa_taxonomy import qa_fingerprint
     from photobench.infrastructure.results.store import FileRunStore
 
     assert not root.exists(), "Existing retry must be inspected and reused"
     original = B / "planner-large-continue16-20261127"
-    g = json.loads((original / "prepared/planner-large/started.json").read_text())
-    audit = json.loads((original / "quality-review/planner-large-items.json").read_text())
-    selected = [r for r in audit if r["final_signals"]]
-    assert len(selected) == 8 and all(r["score"] == 0 for r in selected)
+    g = json.loads(
+        (
+            (B / "full-four-continue-20261127/prepared/baseline-large/started.json")
+            if baseline
+            else (original / "prepared/planner-large/started.json")
+        ).read_text()
+    )
+    audit = json.loads(
+        (
+            original
+            / "quality-review"
+            / ("baseline-large-items.json" if baseline else "planner-large-items.json")
+        ).read_text()
+    )
+    selected = [
+        r
+        for r in audit
+        if r["final_signals"]
+        or (
+            baseline
+            and (
+                r["signals"]
+                and "model_error" in r["termination"]
+                or not r["signals"]
+                and "ModelServiceError" in r["error_types"]
+                and any("The read operation timed out" in e for e in r["errors"])
+            )
+        )
+    ]
+    count = 27 if baseline else 8
+    assert len(selected) == count
+    assert baseline or all(r["score"] == 0 for r in selected)
     source = FileRunStore(Path(g["sources"][0]["results"])).load_state(g["source_run"])
     snapshot = copy.deepcopy(source["qa_snapshot"])
     ids = {r["qa_id"] for r in selected}
     snapshot["rows"] = [r for r in snapshot["rows"] if r["qa_id"] in ids]
-    assert len(snapshot["rows"]) == 8
+    assert len(snapshot["rows"]) == count
     snapshot["definition_sha256"] = qa_fingerprint(snapshot["rows"])
-    config = get(8297, "diagnostics")["runtime_configuration"]
+    config = get(g["product"], "diagnostics")["runtime_configuration"]
     assert config["agent_turn_workers"] == 16
     assert config["reasoning_max_model_calls"] == 100
     assert config["reasoning_max_tool_calls"] == 600
@@ -44,21 +73,21 @@ def prepare(root):
         root / "selection.json",
         {
             "items": selected,
-            "count": 8,
+            "count": count,
             "source_run": g["source_run"],
             "definition_sha256": snapshot["definition_sha256"],
             "old_scores_preserved": True,
             "at": time.time(),
         },
     )
-    g["qa_count"] = 8
+    g["qa_count"] = count
     g["missing_ids"] = [r["qa_id"] for r in snapshot["rows"]]
     save(
         root / "intent.json",
         {
             "group": g,
             "score_root": str(B / "representative83-priority-20261127"),
-            "scope": "only8accountfailure",
+            "scope": "baseline27servicefailure" if baseline else "only8accountfailure",
             "qa_concurrency": 2,
             "product_workers": 16,
             "judge_concurrency": 2,
@@ -66,11 +95,11 @@ def prepare(root):
             "at": time.time(),
         },
     )
-    print(json.dumps({"selected": 8, "product_workers": 16}))
+    print(json.dumps({"selected": count, "product_workers": 16}))
 
 
 def worker(root):
-    name = "planner-account8"
+    name = root.name
     from photobench.application.run_execution.service import RunRequest
     from photobench.bootstrap.container import Container
     from photobench.config import Settings
@@ -97,7 +126,7 @@ def worker(root):
     container = Container.build(settings)
     connection = container.config.public_runtime_connection_config()
     runtime = RunRuntimeSnapshot(json.dumps(connection), container.build_revision)
-    run = f"account-retry-planner-{int(time.time())}"
+    run = f"{root.name}-{int(time.time())}"
     request = RunRequest(
         album_id=live["album_id"],
         qa_set=live["qa_set"],
@@ -114,7 +143,7 @@ def worker(root):
         defer_scoring=True,
         turn_timeout=3660,
         runtime_snapshot=runtime,
-        resume_context={"source_run_id": g["source_run"], "reason": "authorized_only8accountfailure"},
+        resume_context={"source_run_id": g["source_run"], "reason": plan["scope"]},
     )
     save(
         folder / "started.json",
@@ -195,7 +224,7 @@ def launch(root):
         start_new_session=True,
     )
     save(root / "launch.json", {"pid": proc.pid, "at": time.time()})
-    print(json.dumps({"pid": proc.pid, "selected": 8}))
+    print(json.dumps({"pid": proc.pid, "selected": g["qa_count"]}))
 
 
 def status(root):
@@ -231,6 +260,7 @@ def status(root):
 
 
 def watch(output):
+    remote_root = B / output.name
     output.mkdir(parents=True, exist_ok=True)
     while True:
         response = subprocess.run(
@@ -241,8 +271,10 @@ def watch(output):
                 "-o",
                 "ConnectTimeout=10",
                 "192.168.0.100",
-                (f"PYTHONPATH={B}/flash-dual-baseline-20261126/release/apps/photobench/src "
-                    f"{PYTHON} {ROOT}/account_retry.py --status {ROOT}"),
+                (
+                    f"PYTHONPATH={B}/flash-dual-baseline-20261126/release/apps/photobench/src "
+                    f"{PYTHON} {remote_root}/account_retry.py --status {remote_root}"
+                ),
             ],
             capture_output=True,
             text=True,
@@ -262,13 +294,14 @@ def watch(output):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--prepare", type=Path)
+    p.add_argument("--group", choices=["planner", "baseline"], default="planner")
     p.add_argument("--launch", type=Path)
     p.add_argument("--worker", type=Path)
     p.add_argument("--status", type=Path)
     p.add_argument("--watch", type=Path)
     a = p.parse_args()
     if a.prepare:
-        prepare(a.prepare)
+        prepare(a.prepare, a.group)
     elif a.launch:
         launch(a.launch)
     elif a.worker:
