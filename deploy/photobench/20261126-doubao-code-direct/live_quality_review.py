@@ -42,18 +42,23 @@ def marks(text):
 def main(out):
     from photobench.infrastructure.results.store import FileRunStore
 
-    specs = []
-    for root in [
-        B / "full-four-continue-20261127/prepared",
-        B / "planner-large-continue16-20261127/prepared",
-        B / "improved-limited-continue16-20261127/prepared",
-    ]:
-        for g in json.loads((root / "intent.json").read_text())["groups"]:
-            if g["name"] == "baseline-limited":
-                continue
-            if g["name"] == "improved-limited" and "full-four" in str(root):
-                continue
-            specs.append((root, g))
+    recovery_root = B / "full-disk-recovery-20261127/prepared"
+    if (recovery_root / "intent.json").exists():
+        specs = [(recovery_root, g) for g in json.loads(
+            (recovery_root / "intent.json").read_text())["groups"]]
+    else:
+        specs = []
+        for root in [
+            B / "full-four-continue-20261127/prepared",
+            B / "planner-large-continue16-20261127/prepared",
+            B / "improved-limited-continue16-20261127/prepared",
+        ]:
+            for g in json.loads((root / "intent.json").read_text())["groups"]:
+                if g["name"] == "baseline-limited":
+                    continue
+                if g["name"] == "improved-limited" and "full-four" in str(root):
+                    continue
+                specs.append((root, g))
     summaries = []
     for root, g in specs:
         folder = root / g["name"]
@@ -66,7 +71,7 @@ def main(out):
         for s in states:
             items.update({v["qa_id"]: v for v in s["items"]})
         scoring = folder / "judge"
-        if g["name"] == "improved-limited":
+        if g["name"] == "improved-limited" and root != recovery_root:
             scoring = B / "improved-limited-judge-recovery1-20261127/improved-limited/judge"
         preserved = json.loads((scoring / "preserved-scores.json").read_text())
         scores = {q: v["result"]["normalized_score"] for q, v in preserved.items()}
