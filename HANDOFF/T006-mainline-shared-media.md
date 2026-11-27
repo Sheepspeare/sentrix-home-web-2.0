@@ -1,5 +1,9 @@
 # T006 主线集成与跨相册媒体共享
 
+## 2026-11-28｜27补跑余2再次受账户故障影响
+
+2fa1d928终态已核：missing2-recovery1两份答案均含Access denied/overdue-payment账户错误，两个Judge均HTTP400 Arrearage、分数null。execution_status completed只表示采集到输出，不作为正常成功。18有效11.3333333分与7正常墙钟超时保留，余2仍属服务异常待恢复，不计模型错、不发布27 accepted overrides。完整证据服务器保留；本次未重发QA/Judge。账户恢复后仅定向续2，先核旧turn/新attempt避免重复，与四全量暂停现场一起恢复；不继续盲试。
+
 ## 2026-11-28｜云端再现Arrearage，四全量停止新派题（当前有效）
 
 02:04左右四Judge均needs_review，上周大与改进大原评分state已核HTTP400/Arrearage/overdue-payment，完整错误留服务器；非磁盘或模型答错。四QA3029275/76/77/78已SIGSTOP，仅暂停派题和轮询，产品在飞自然继续，未取消/重启/重发。暂停核实Tsl；答卷保存数上周大647、改进大457、改进有限485、原Planner大819；有效评分525/404/454/770。进程存活不等于调度运行，旧watch显示qa_status running及dispatch_paused false为最后快照，实际SIGSTOP优先。home23GiB。
