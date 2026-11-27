@@ -1850,3 +1850,11 @@ cd97回调已核真实failed_phase=model_deploy、10秒timed out，0QA派出/0�
 401de319完成已核：8处理，7答卷7有效评分共4分，另atm-ea97b84e-2be5-4394-8b79-491320978eeb墙钟3660秒无答卷，按用户计错不重跑。旧8全0，新4改善4仍错，固定分母4/8=50%、有答卷4/7=57.1429%。7JudgeHTTP全200关思考温0/2048，6426Token；按responseID唯一、完整canonical请求/响应SHA、实际非排序序列化请求SHA、usage和时间核验，无新增审计请求。直连原包request/response结构与网关旧helper不同，finalize_account8已适配真实stream=false及格式，854b70fa通过Ruff，原文件不改。
 
 服务器planner-account8-retry-20261127/accepted-version-overrides.json逐qa_id与原定义一致、旧分保留；live_quality_review df1a9f5f显式接恢复Judge和8新版本（含timeout移除旧评分置失败零），每题唯一计数。19:41:54快照原Planner614处理606有效325.0095238分，8无答卷计错后52.9331472%，有答卷53.6319346%，当前0已答待分，8旧账户故障已无。其它组快照上周大474/401分、改进有限227/227、改进大220/202，非本次8补跑对照。原QA/Judge继续，原Planner8回调已reconciled，勿重跑。上周27补跑继续原wake62dc；完整证据仅100。本次只验Judge原包，QA成本原包全核仍待，不宣称AgentHTTP已验。
+
+## 2026-11-27｜改进版有限预算8→16并发切换中
+
+用户明确授权本周基于规划器改进版有限预算改16QA，Judge保持2。服务器improved-limited-continue16-20261127已保存intent并SIGSTOP旧派题2131200，核STAT=T，8个在途自然执行；当前progress=draining/active8，尚未重启8304、尚未验证16生效。旧continuation已保存179条加继承来源，不能将179误报为总进度。
+
+helper upgrade_improved16.py本机提交1e7732d0，Ruff/compile通过，本机远端SHA e98dea8f00fd599b7586692ff3c6c11927dbb5e0d18a5aee83064592aa76ec70一致。流程：全产品pending/running零两次→GET投影保存8份在途（不POST）→仅8304服务workers8改16→核diagnostics除workers外一致→合已有来源/有效分，独立续missing16QA/2Judge。原相册DB/cache不重建，其余任务保持。
+
+主聊wake601f4141-0e16-4f31-a5fe-fce1068f6caa已启动控制器并监控完成/失败。本机只短状态。回调先查服务器progress/failure/launched以及worker日志和实际进程，已有intent禁止重放apply；失败按实际阶段续缺步骤，不能重复QA。切换后还须核继承+remaining=1013、唯一qa_id、旧分保持与Judge所有权，并给新全量注册独立终态监控、更新live_quality_review来源。当前旧全量watch对停止进程的状态可能过期，不可据旧目录声称仍8QA正常派发或16已生效。
