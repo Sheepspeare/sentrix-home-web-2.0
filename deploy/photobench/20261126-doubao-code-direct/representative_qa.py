@@ -68,7 +68,10 @@ def prepare(root, score_root):
         live = get(port, f"runs/{run}?include_history=false")
         phase = live["phases"]["qa_eval"]
         assert phase["progress"]["dispatch_paused"]
-        assert len(phase["agent_executed_qa_ids"]) == phase["progress"]["agent_completed"]
+        assert (
+            len(phase["agent_executed_qa_ids"]) + int(phase.get("agent_inherited_count", 0))
+            == phase["progress"]["agent_completed"]
+        )
         present, page = {}, 1
         while True:
             listing = get(port, f"runs/{run}/items?page={page}&page_size=100")
