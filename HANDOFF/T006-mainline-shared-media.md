@@ -1668,3 +1668,6 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - large原835e7b28答保留，原切换已取消未执行985题后答案遍历碰无内容行404；10bc2bf9限定原28UUID验SHA，显式恢复跳过已完成取消；1回归及Ruff/compile通过，远端helper SHA b9ae76ad85d3688342bb830c776e133545ef25ef0f6df0eaab0f1eebc7e87dac核符。
 - 新恢复驱动在compact-query-v3/direct-cloud-16/recovery-1，wake9d6f24e8-6ca8-43e1-948a-d24bf5b94ada；当前已configured，实际16启动看started回执，不重放。
 - limited35dfdb83题已答齐暂停；仅缺失取证与FlashJudge2继续，固定revision可与当前不同，需按固定revision核qa_id。第一恢复2f7c0d3f失败保留，第二wake5b4ace0e-f48a-443e-bbdd-2b25a10b545b。无QA重发。
+
+- 09:00补验：systemd EnvironmentFile会覆盖Environment，6433e50f改后置专用env文件，独立两服务已验新config直连HTTPS。08:59:25单次resume c726ac，继承28答，probe实际16running；后续started及全量watch仍由9d6f24e8接管。
+- limited恢复3有效wake fc9be998-396a-413d-819f-76c71709bd3c，已取齐83并进入scoring83/Judge2；旧5b4恢复因部分目录已存在失败，记录保留。
