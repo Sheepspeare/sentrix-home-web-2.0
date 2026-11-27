@@ -65,6 +65,8 @@ def prepare(root, score_root):
     groups = []
     for old in prior["groups"]:
         name, port, run = old["name"], old["port"], old["run_id"]
+        if name == "fusion":
+            continue
         live = get(port, f"runs/{run}?include_history=false")
         phase = live["phases"]["qa_eval"]
         assert phase["progress"]["dispatch_paused"]
