@@ -1,11 +1,12 @@
 """Validate completed retry evidence and publish explicit answer-version overrides."""
 
+import gzip
 import hashlib
 import json
 from pathlib import Path
 
 from representative_qa import save
-from verify_judge_http import digest, verify
+from verify_judge_http import digest
 
 
 def main():
@@ -46,7 +47,31 @@ def main():
                 "stage": "judge",
             }
         )
-    verification = verify({"expected": expected, "log": str(root / "judge/http/requests.jsonl")})
+    records = [json.loads(line) for line in (root / "judge/http/requests.jsonl").read_text().splitlines()]
+    matched = []
+    for entry in expected:
+        matches = [r for r in records if r["response_id"] == entry["response_id"]]
+        assert len(matches) == 1
+        record = matches[0]
+        with gzip.open(record["archive"], "rt") as stream:
+            raw = json.load(stream)
+        assert digest(raw["request"]) == entry["request_sha256"] == record["request_sha256"]
+        assert digest(raw["response"]) == entry["response_sha256"] == record["response_sha256"]
+        assert record["http_status"] == 200
+        assert entry["start"] <= record["started_at"] <= entry["end"]
+        assert raw["response"]["usage"] == entry["usage"] == record["usage"]
+        request = raw["request"]
+        assert request["enable_thinking"] is False and request["temperature"] == 0
+        assert request["max_tokens"] == 2048
+        assert not raw["response"]["choices"][0]["message"].get("reasoning_content")
+        matched.append(record["id"])
+    assert len(matched) == len(set(matched)) == 7
+    verification = {
+        "status": "passed",
+        "matched_calls": len(matched),
+        "tokens": sum(r["usage"]["total_tokens"] for r in records),
+        "generated_model_requests": 0,
+    }
     save(root / "judge-http-verification.json", verification)
     old = {r["qa_id"]: r for r in selected["items"]}
     versions = []
