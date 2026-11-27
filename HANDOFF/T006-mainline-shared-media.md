@@ -1744,3 +1744,5 @@ QA、错误分析与对比页共用分源详情。按最新 main 调用字段展
 - 11/27 09:41原Planner大组评分中断已发现并恢复：旧follow进程85599消失、04:19停434分QS53.0607%，无terminal/错误，确切退出原因未知。恢复baseline-follow-2-large逐SHA复用434成功/97批，507已答缺73，各2Judge已实际评分；wake835d03f6，QA0，15点截止保持。旧344c03b8等待记录失联不当作活跃评分，见audit。
 
 - 11/27原大组Judge恢复2已核：新增26有效累计460/QS53.1361%；开放题953fad7c返回说明文字+缺accuracy的JSON被严格拒收，失败原包保留。恢复3复用全部460分，只续47缺分，2并发已实际运行，wake5c4080bf-7b33-4e17-877d-07bc8e775cde；835d回调已reconciled，QA0/协议不改。
+
+- 11/27 10:02云端Flash返回HTTP400 Arrearage（欠费/账户状态），新版Judge48分QS77.0833%后needs_review，旧代码128K有限319分/大233分Judge同错退出；QA当时仍运行。已仅将4条活动全量dispatch-control的pause_after_completed设1，保在飞/原run/并发，原值逐组保存在服务器arrearage-pause-20261127.json，未取消/部署/重评。需账户恢复后核一次请求，再按missing恢复Judge及原dispatch；不盲重试。主聊37f监控已reconciled，不将QA running当模型健康；详见main-thread-monitor/arrearage-pause-receipt.json。
